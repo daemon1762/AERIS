@@ -1,0 +1,23 @@
+# Build outputs
+**/bin/
+**/obj/
+*.dll
+*.pdb
+*.mdb
+*.cache
+*.tmp
+
+# IDE/editor state
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Local KSP/runtime artifacts
+GameData/AERISFlightControl/PluginData/
