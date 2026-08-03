@@ -1,0 +1,39 @@
+AERIS v0.18.0.0 CP2 runtime diagnosis
+Input: AERISFlightControl(20).zip / Video_2026-07-26_18-28-07.mkv
+Date: 2026-07-26
+
+RESULT
+- Bidirectional manual calibration: PASS in this session.
+- ND runway/facility presentation after database revision: FAIL.
+- AIRFIELDS compact-window presentation: FAIL.
+- Runtime exception/crash evidence: none found in the supplied AERIS session log.
+
+RUNTIME EVIDENCE
+09:29:32.281 [RUNWAY_CALIBRATION] save verified; records=1; fullRoundTrip=True; committedReadback=True; reciprocalPairSchema=3.
+09:30:33.542 [RUNWAY_CALIBRATION] THRESHOLD B MARKED ... reciprocalPair=True.
+09:30:37.957 [RUNWAY_CALIBRATION] RECIPROCAL PAIR GENERATED ... localizerPair=True; approachValidation=INDEPENDENT.
+09:30:46.979 [AIRFIELD_RELOAD] atomic commit ... CERTIFIED 13 RWY / 19 APP.
+
+VIDEO EVIDENCE
+- AIRFIELDS list and detail text overflow/overlap in the 520 px-wide window.
+- Complete accumulated build identity occupies multiple overlapping rows above the controls.
+- After airfield database revisions, the ND header reads NAV DATA and runway/airport symbols are absent at multiple ranges.
+
+SOURCE CAUSE — ND
+AERISNavigationDisplay.CaptureNavigationSnapshot built runwaySources/facilitySources and updated capturedDatabaseRevision, but did not call AERISPerformanceRuntime.SubmitNavigationDisplay. DrawLocal rejects a Prepared frame whose DatabaseRevision differs from the registry. Therefore each airfield commit invalidated the old frame and no replacement frame could be published.
+
+SOURCE CAUSE — UI
+- Full AERISBuildVersion.Display was rendered in the compact window.
+- Airfield rows used a fixed 22 px single-line button.
+- Long details used ordinary non-wrapped labels.
+- Shipped and loaded defaults opened several categories.
+
+CORRECTION
+- Submit AERISNavigationDisplaySnapshot through the shared scheduler.
+- Commit captured revision only when submission succeeds; retry rejected submits after 0.5 seconds.
+- Use compact semantic-version UI title while retaining full log identity.
+- Wrap airfield labels and rows; use two-line runway rows.
+- Default all categories closed and migrate existing settings once.
+
+CP2 STATUS
+OPEN pending native Mono/xbuild and field verification of this correction plus remaining Auto Preload acceptance.

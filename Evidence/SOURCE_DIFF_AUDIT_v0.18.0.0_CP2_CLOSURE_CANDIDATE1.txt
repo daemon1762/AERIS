@@ -1,0 +1,21 @@
+Source diff audit — CP2 Closure Candidate 1
+
+Changed source:
+- Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+- Source/AERISFlightControl/Terrain/AERISTerrainCoastlinePolicy.cs (new)
+- Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs
+- Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+- Source/AERISFlightControl/AERISFlightControl.csproj
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+
+Package/test/document changes:
+- build_ubuntu.sh
+- GameData/AERISFlightControl/AERISFlightControl.version
+- Tools/selftest_v01800_cp2_closure_candidate1.py
+- Tools/run_v01800_cp2_acceptance.py
+- Tools/verify_v01800_cp2_static.py
+- current README, acceptance, test card, handover, evidence
+
+Frozen control scope:
+- Autopilot and Ground Stability source files are not edited.
+- LAND retains no FlightCtrlState/MainThrottle/OnFlyByWire authority.

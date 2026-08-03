@@ -1,0 +1,30 @@
+AERIS v0.18.0.0 CP3 Gate 5 Candidate 2 residual black-flash diagnosis
+Date: 2026-08-01
+Evidence: user runtime package AERISFlightControl(46).zip
+
+RESULT: Candidate 2 REJECTED — presentation continuity improved but residual flash remains.
+
+Key runtime evidence from 2026-08-01_131934_session.log:
+- Candidate 2 identity confirmed.
+- CP3 Gate4C telemetry samples: DIRECT=142, BUILDING=3 at 5 s telemetry cadence.
+- Normal-flight residual event at 13:32:37:
+  front=BUILDING; range=160000; back_foundation=0.931;
+  ready_gf=16/67; required_gf=16/72; history_surface_range=160000.
+- Five seconds earlier FRONT was DIRECT and swaps advanced 2287 -> 2313 by the event,
+  proving a recently committed complete GPU FRONT existed.
+- The latch age ceiling therefore was not the cause.
+- Candidate 2 CanPresentLatchedFront rejected any frontTerrainGeneration !=
+  visible.TerrainGeneration. A generation rollover can occur while the old complete GPU FRONT
+  remains geographically self-consistent for its own projection. This created a one-frame
+  presentation gap before the new generation committed.
+- Terrain OFF -> AUTO also intentionally releases GPU resources; a rebuild event at 13:30:12
+  is not the same root cause and remains covered by the non-black standby background contract.
+
+Candidate 3 corrective contract:
+1. Do not treat TerrainGeneration mismatch as a display-latch invalidity.
+2. Allow the last complete GPU FRONT to bridge generation rollover only when body name and
+   body radius still match and FRONT age <= 8 s.
+3. Publish the latched FRONT projection to all world-locked ND layers.
+4. This bridge is display-only; LAND/safety authority never consumes stale presentation data.
+5. Keep CPU terrain draw=0 and keep rejected GUI.matrix temporal warp quarantined.
+6. Add gen_bridge_frames, gen_bridge_rejects, front_gen and current_gen telemetry.

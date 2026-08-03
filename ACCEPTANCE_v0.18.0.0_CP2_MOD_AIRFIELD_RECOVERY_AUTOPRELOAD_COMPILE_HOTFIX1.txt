@@ -1,0 +1,36 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+Mod Airfield Recovery Hotfix 1 + Auto Preload Progression 1 Compile Hotfix 1
+
+Reported native build failure
+- Terrain/AERISTerrainPreloadBuilder.cs(619,17): CS0103 AERISLog does not exist
+- Terrain/AERISTerrainPreloadBuilder.cs(1056,13): CS0103 AERISLog does not exist
+
+Root cause
+- The new COMPLETE and PROMOTE telemetry calls referenced a nonexistent AERISLog type.
+- The project logger is AERISFlightControl.Logging.AERISLogger.
+
+Implemented compile fix
+- Replaced both AERISLog.Info calls with AERISLogger.Info.
+- Preserved [PRELOAD_AUTO] COMPLETE and PROMOTE telemetry text.
+- Added a dedicated static regression that rejects any AERISLog member reference in the preload builder.
+- Updated build/package identity only; runtime thresholds and algorithms are unchanged.
+
+Static/package acceptance
+- Dedicated compile hotfix selftest: 9/9 PASS
+- CP2 package static verification: 163/163 PASS
+- C# definite-assignment regression: 22/22 PASS
+- Full acceptance with manifest: 44/44 scripts PASS
+- Internal manifest: 402 files, file set and all hashes PASS
+- ZIP CRC: PASS
+- Clean re-extraction acceptance: 44/44 scripts PASS
+- Frozen flight-control files: 8/8 byte-identical to baseline
+- Legacy NAV: absent
+- LAND/runway survey/preload progression: control-free
+
+Not executed in this environment
+- Native Mono/xbuild against KSP/Unity references
+- KSP runtime airfield re-survey
+- Multi-body automatic preload progression
+
+Checkpoint status
+- CP2 remains OPEN until the user native build and runtime field evidence pass.

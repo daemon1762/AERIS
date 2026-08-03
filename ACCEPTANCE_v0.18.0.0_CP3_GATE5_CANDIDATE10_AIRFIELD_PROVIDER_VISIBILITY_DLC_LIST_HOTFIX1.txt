@@ -1,0 +1,25 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Integrated Acceptance Candidate 10
+Airfield Provider Visibility / DLC List Hotfix 1
+
+Scope
+- Hide cached/configured Kerbal Konstructs and Stock Launchsites Expansion runway entries when the current runtime provider does not expose that facility.
+- Apply the same availability gate to SYSTEM > AIRFIELDS, LAND selection and ND airfield/runway presentation.
+- Preserve cached evidence and the 40-runway field-verified calibration baseline; hiding is presentation/selection isolation, not data deletion.
+- Show Making History Dessert Airfield as a non-selectable PENDING placeholder when Making History is installed but runway geometry is not exposed in the current session/save.
+- Never invent Dessert threshold coordinates. Woomerang remains LaunchPad and is not a fixed-wing runway row.
+- Preserve Candidate 9 fixed UI geometry and 4 Hz heavy UI telemetry caching.
+
+Static acceptance target
+- Candidate 10 selftest PASS.
+- Full CP3 Gate 5 successor acceptance PASS.
+- Candidate 9/8 inherited regressions PASS after successor-aware scope adjustment.
+- build_ubuntu.sh executable bit preserved.
+- Frozen terrain/GPU/BANK and runway calibration data byte-identical.
+
+Runtime pending
+- Native Ubuntu build.
+- KSP runtime: KK absent => no KK/SLE runway rows and no ND/LAND exposure.
+- MH installed => Dessert Airfield PENDING placeholder visible even if runtime 0/1.
+- MH absent => Dessert Airfield hidden.
+- Installed airport providers => only currently detected facilities become visible.

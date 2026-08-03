@@ -1,0 +1,34 @@
+AERIS Flight Control v0.18.0.0 DEV CP2.5
+MAP DRAM CACHE FOUNDATION HOTFIX 1 — ACCEPTANCE CONTRACT
+
+SCOPE
+- One shared AERISMapDramCache is created by AERISBootstrap.
+- Airport, physical runway and direction/localizer-glide metadata are deep-cloned into an atomic revision snapshot after the airfield registry commits.
+- Terrain preload Tile/LOD/chunk-location metadata is loaded from the manifest at startup and atomically published into the same cache.
+- Normal Terrain Contains/TryGetChunkId lookup is DRAM-only when the shared cache is present.
+- Repair, reindex, invalidation and committed-manifest paths republish or revoke metadata.
+- DIAGNOSTICS exposes revision, counts, estimated bytes, publish latency, lookup hit/miss and synchronous-SSD violation telemetry.
+
+HARD BOUNDARIES
+- No terrain compressed payload, decoded height array, mesh, material, RenderTexture or GPU object is retained by AERISMapDramCache.
+- Current-body terrain payload residency and forward-corridor memory preload remain CP3.
+- SSD Preload Builder and asynchronous payload reads remain active and separate.
+- No AP, AA, PROTECT, FlightState, propulsion or LAND control authority is added.
+- No curated runway A/B geodetic defaults or Track B data are added.
+
+STATIC ACCEPTANCE
+- Gate 4 dedicated self-test must pass 50/50.
+- Gates 1, 2 and 3 dedicated self-tests must remain green.
+- Full CP2.5 regression runner must pass every script.
+- Project compile list, Python syntax, JSON, bash syntax, C# delimiter/lexical audit,
+  manifest, ZIP CRC and clean re-extract acceptance must pass.
+
+RUNTIME ACCEPTANCE
+- Native Mono/xbuild succeeds against KSP 1.12.5 references.
+- SYSTEM > DIAGNOSTICS shows CP2.5 MAP DRAM CACHE — METADATA ONLY.
+- After Flight airfield commit, AIRFIELD/RWY/ILS-DIR counts are nonzero where registry data exists.
+- Terrain index count/chunk count match the currently available preload database metadata.
+- Preload progress causes deterministic terrain index revision/count updates.
+- SYNC SSD remains 0 — PASS during ordinary ND display, runway selection and Terrain lookup.
+- AERIS log contains [CP2.5/MAP_DRAM] AIRFIELD and TERRAIN_INDEX publications.
+- AERIS has no ERROR/FATAL/Exception attributable to Gate 4.

@@ -1,0 +1,43 @@
+PASS: Registry braces balanced
+PASS: Registry parens balanced
+PASS: AERISWindow braces balanced
+PASS: AERISWindow parens balanced
+PASS: ND braces balanced
+PASS: ND parens balanced
+PASS: validation normalizes runtime provider presence after retaining cache evidence
+PASS: stale cached ProviderDetected state is explicitly cleared
+PASS: only current provider records re-authorize provider presence
+PASS: registry exposes one provider-aware presentation gate
+PASS: base-game stock remains always presentable
+PASS: KK/SLE configured or cached facilities require current runtime detection
+PASS: local USERCFG data is not accidentally tied to an external mod provider
+PASS: Making History installation state can expose the DLC placeholder without inventing provider geometry
+PASS: SelectAirfield rejects unavailable provider facilities
+PASS: SelectableDirectionCount returns zero for unavailable provider facilities
+PASS: SelectableDirectionAt cannot leak hidden provider geometry
+PASS: AIRFIELDS counting/drawing and LAND selector apply provider visibility
+PASS: DLC runway without geometry is represented as a PENDING placeholder row
+PASS: DLC placeholder clearly states missing runway geometry/status
+PASS: DLC placeholder is explicitly non-operational until geometry exists
+PASS: both ND navigation snapshot and facility-symbol paths filter unavailable providers
+PASS: Dessert Airfield remains a DiscoveryOnly DLC definition
+PASS: Candidate 10 does not invent unverified Dessert runway thresholds
+PASS: Woomerang remains excluded from the fixed-wing runway list
+PASS: AIRFIELDS summary counters do not advertise hidden mod runways as live UI entries
+PASS: REGISTERED summary is presentation-scoped
+PASS: Candidate 9 4 Hz heavy UI telemetry cache remains
+PASS: only AIRFIELDS rows, including DLC placeholder, retain variable-size wrapping
+PASS: build_ubuntu.sh remains executable
+PASS: unrelated quality/control boundary byte-identical: Terrain/AERISTerrainTileSystem.cs
+PASS: unrelated quality/control boundary byte-identical: Terrain/AERISTerrainGpuTileRasterizer.cs
+PASS: unrelated quality/control boundary byte-identical: Autopilot/AERISBankDirector.cs
+PASS: unrelated quality/control boundary byte-identical: Landing/AERISExpansionStatus.cs
+PASS: Stock/DLC foundation data remains byte-identical
+PASS: 40-runway field-verified calibration baseline remains byte-identical
+PASS: Candidate 10 tab/build identity exact
+PASS: Candidate 10 AVC identity
+PASS: README documents provider-aware list and DLC placeholder
+PASS: Gate 5 acceptance executes Candidate 10 regression
+PASS: Candidate 10 acceptance document present
+PASS: Candidate 10 runtime test card present
+[v0.18.0.0 CP3 Gate 5 Candidate 10 Airfield Provider Visibility / DLC List Hotfix 1] 42/42 PASS

@@ -1,0 +1,24 @@
+SOURCE DIFF AUDIT — CP2.5 INTEGRATED ACCEPTANCE CANDIDATE 1
+BASE: CP2.5 Map DRAM Cache Foundation Hotfix 2
+
+RUNTIME SOURCE CHANGE
+- Source/AERISFlightControl/UI/AERISWindow.cs
+  - Add zero-count guard for USER CALIBRATED — MANUAL.
+  - Force stale expanded state false and persist it.
+  - Draw a disabled stable header and return before child layout.
+  - Restore GUI.enabled in finally.
+
+IDENTITY / ACCEPTANCE CHANGES
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+- GameData/AERISFlightControl/AERISFlightControl.version
+- build_ubuntu.sh
+- Tools/run_v01800_cp25_acceptance.py
+- Tools/selftest_v01800_cp25_integrated_acceptance_candidate1.py
+- Acceptance, Docs and Evidence files for Candidate 1.
+
+UNCHANGED PROTECTED AREAS
+- Airfields default data and runway coordinates.
+- Landing registry geometry/certification implementation.
+- Autopilot, AA, PROTECT, FlightState and Integrations.
+- Terrain payload/cache implementation and Map DRAM Hotfix 2 runtime logic.
+- FlightCtrlState, throttle, brakes, steering and propulsion authority.

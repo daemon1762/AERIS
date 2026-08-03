@@ -1,0 +1,27 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Integrated Acceptance Candidate 5 — Manual Authority + Native Spawn Altitude Hotfix 1
+
+PURPOSE
+- Retire non-stock automatic runway certification as operational authority.
+- Keep automatic authority only for base-game Stock runways.
+- Require USER CALIBRATED two-point A/B for DLC, Kerbal Konstructs, Stock Launchsites Expansion and UserCfg runways.
+- Purge/quarantine prior non-stock automatic certified cache records.
+- Fix MOD native spawn warp altitude by converting provider ASL to terrain-relative AGL before KSP Set Position physics easing.
+
+MANDATORY RUNTIME ACCEPTANCE
+1. Startup remains airport=NONE / runway=NONE.
+2. Stock KSC/Island configured geometry remains selectable.
+3. DLC/KK/SLE/UserCfg automatic results never appear as selectable automatic Certified authority.
+4. A non-stock runway without A/B appears PENDING / MANUAL A/B REQUIRED.
+5. MARK A + MARK B followed by rescan produces USER CALIBRATED authority and reciprocal directions.
+6. Old non-stock automatic cache cannot restore automatic Certified authority after restart.
+7. Sandbox WARP TO MOD NATIVE SPAWN appears only for live KK/SLE providers.
+8. Warp telemetry reports native_alt_asl, terrain_alt_asl and target_agl; target_agl is small and finite.
+9. Warp does not spawn thousands of metres above the runway and does not cause immediate RUD.
+10. Career/Science do not expose the warp action.
+11. CPU terrain draw remains 0 and Gate 5 Terrain/ND contracts remain unchanged.
+
+FAIL CLOSED
+- Terrain altitude unavailable => warp refused.
+- Native spawn AGL outside -100..500 m => warp refused.
+- No live provider/native spawn => warp refused.

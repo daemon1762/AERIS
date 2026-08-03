@@ -1,0 +1,28 @@
+AERIS FLIGHT CONTROL v0.18.0.0
+CP3 GATE 3.1 FOUNDATION UI COMPILE HOTFIX 1
+
+STATUS
+- Previous Gate 3.1 package: REJECTED for native C# compilation.
+- Failure: UI/AERISWindow.cs referenced FoundationGlobalCount,
+  FoundationFarCount, FoundationMissingCount and FoundationRequestedCount,
+  but AERISTerrainTileSystem exposed none of those members (CS1061).
+
+REPAIR
+- Added four read-only owner getters to AERISTerrainTileSystem.
+- Each getter returns the existing lastFoundation* counter; no second state,
+  setter, cache owner or telemetry owner was introduced.
+- SYSTEM UI remains unchanged and now compiles against the declared contract.
+- Added a source-level member-resolution regression guard for all direct
+  DisplayTiles.Foundation* references.
+- Updated tab, assembly, build and AVC identity to COMPILE HOTFIX 1.
+
+FROZEN BOUNDARIES
+- Viewport-authoritative FAR planner unchanged.
+- Resident Cache, Predictive Forward Corridor, Map DRAM, Preload Database,
+  AA, AP, PROTECT, LAND and Track B data unchanged.
+- No synchronous SSD read, Flight safety-lane work, Render Ready or GPU Ready
+  implementation added.
+
+NATIVE ACCEPTANCE
+- Assistant environment has no Mono/xbuild or KSP references.
+- User must run build_ubuntu.sh and confirm native compile plus KSP smoke.

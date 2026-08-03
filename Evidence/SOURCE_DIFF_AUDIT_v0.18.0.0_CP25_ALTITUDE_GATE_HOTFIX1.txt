@@ -1,0 +1,49 @@
+AERIS v0.18.0.0 CP2.5 Altitude Gate Hotfix 1 — SOURCE DIFF AUDIT
+
+Frozen baseline SHA-256: adeb18f1d3865dc9708a3075f3836938fb1b34e162d0a2579f01d200ddd8d8eb
+Track: A only
+Track B curated runway defaults: DEFERRED / UNCHANGED
+
+Changed package files:
+ADDED     ACCEPTANCE_v0.18.0.0_CP2.5_ALTITUDE_GATE_HOTFIX1.txt
+ADDED     Docs/CP25_ALTITUDE_GATE_HOTFIX_1_v0.18.0.0_ja.md
+ADDED     Docs/ND_CP25_ALTITUDE_GATE_HOTFIX_1_TEST_CARD_v0.18.0.0_ja.md
+MODIFIED  GameData/AERISFlightControl/AERISFlightControl.version
+MODIFIED  README.md
+MODIFIED  Source/AERISFlightControl/AERISFlightControl.csproj
+MODIFIED  Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+MODIFIED  Source/AERISFlightControl/Terrain/AERISTerrainAwareness.cs
+MODIFIED  Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs
+MODIFIED  Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+MODIFIED  Source/AERISFlightControl/Terrain/AERISTerrainRasterWorker.cs
+MODIFIED  Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs
+ADDED     Source/AERISFlightControl/Terrain/AERISTerrainViewportActivationPolicy.cs
+MODIFIED  Source/AERISFlightControl/UI/AERISFlightInstrument.cs
+MODIFIED  Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+ADDED     Tools/run_v01800_cp25_acceptance.py
+ADDED     Tools/selftest_v01800_cp25_altitude_gate_hotfix1.py
+MODIFIED  build_ubuntu.sh
+
+Track B preservation hashes:
+Source/AERISFlightControl/Landing
+  baseline_tree_sha256=0f228776c861e7cc9a617ae6a709f2c8bfcaf2ed789d76f323603cbb7a3fc3bd
+  working_tree_sha256 =0f228776c861e7cc9a617ae6a709f2c8bfcaf2ed789d76f323603cbb7a3fc3bd
+  files=20 result=IDENTICAL
+GameData/AERISFlightControl/Airfields
+  baseline_tree_sha256=bf86a338ddf2242e8a0c6cdbf17002cfc433c6e58bec567103457071455e3bda
+  working_tree_sha256 =bf86a338ddf2242e8a0c6cdbf17002cfc433c6e58bec567103457071455e3bda
+  files=2 result=IDENTICAL
+
+Static acceptance before manifest:
+  CP2.5 dedicated assertions: 43/43 PASS
+  Existing CP1/CP2 regression scripts: 56/56 PASS
+  Python tool syntax: PASS
+  bash -n build_ubuntu.sh: PASS
+  C# lexical delimiter audit: 131 files / no finding
+
+Unavailable in this container:
+  Native Mono/xbuild compile against KSP 1.12.5 assemblies
+  KSP runtime/flight boundary acceptance
+
+Safety boundary:
+  No control-authority write was added. FDI/AP/AA/PROTECT are outside the altitude gate.

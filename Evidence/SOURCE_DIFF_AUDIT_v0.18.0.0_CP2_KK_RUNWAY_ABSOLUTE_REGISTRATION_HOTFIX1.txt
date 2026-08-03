@@ -1,0 +1,25 @@
+AERIS v0.18.0.0 CP2 KK Runway Absolute Registration Hotfix 1
+SOURCE DIFF AUDIT
+
+Baseline:
+AERISFlightControl-v0.18.0.0_DEV_CP2_RunwayPresentationUIHotfix1_PreloadFastPath1_Source
+
+Changed functional files:
+- Landing/AERISRunwaySurveyContracts.cs
+- Landing/AERISRunwaySnapshotBuilder.cs
+- Landing/AERISRunwayGeometryWorker.cs
+- Landing/AERISOperationalRunwayResolver.cs
+- Landing/AERISAirfieldModels.cs
+
+Changed package/test files:
+- build identity and AVC metadata
+- README
+- dedicated static self-test
+- current CP2 verifier and acceptance runner
+- test card, handover and acceptance evidence
+
+Frozen control files are verified byte-identical against the baseline:
+BANK, HDG, PITCH, V/S, ALT, ACC, VEL, Ground Stability.
+
+Safety result:
+Absolute placement is required for KK/SLE. Missing, excessive, off-axis or heading-inconsistent launch anchors fail closed with AbsolutePlacementInvalid.

@@ -1,0 +1,17 @@
+Candidate 14 source scope:
+CHANGED runtime:
+- Terrain/AERISTerrainTileSystem.cs: BodyHasSolidSurface becomes strictly body-local/fail-closed.
+- Terrain/AERISTerrainPreloadBuilder.cs: unsupported bodies are skipped before plan creation, filtered from status, and rejected by manual generation paths.
+CHANGED package/test identity:
+- AERISBuildVersion.generated.cs
+- build_ubuntu.sh
+- AERISFlightControl.version
+- README.md
+- Gate 5 runner / Candidate 13 successor-safe identity regression / Candidate 14 selftest/docs.
+UNCHANGED operational boundaries:
+- UI/AERISWindow.cs
+- Landing/AERISAirfieldRegistry.cs
+- Terrain/AERISTerrainGpuTileRasterizer.cs
+- Autopilot/AERISBankDirector.cs
+- DLC/runway defaults and 41 physical runway baseline.
+No surface-less stored data is destructively deleted by this hotfix.

@@ -1,0 +1,68 @@
+AERIS v0.18.0.0 CP2 KK Runway Axis Reference Hotfix 2
+Baseline: Mod Airfield Recovery Hotfix 1 + Auto Preload Progression 1 Compile Hotfix 1
+
+Changed, added or removed files excluding this audit and manifest: 16
+
+ACCEPTANCE_v0.18.0.0_CP2_KK_RUNWAY_AXIS_REFERENCE_HOTFIX2.txt
+  baseline -
+  current  3e17d6c365cae1ec19a31d3bf14d5acb85ed9b0c44911c14fb44f285c96a246a
+
+Docs/CP2_KK_RUNWAY_AXIS_REFERENCE_HOTFIX_2_v0.18.0.0_ja.md
+  baseline -
+  current  c0e293b4a426d5c98682402dbd4bd3d88be204a01e597398204f324a0a75130d
+
+Docs/ND_CP2_KK_RUNWAY_AXIS_REFERENCE_HOTFIX_2_TEST_CARD_v0.18.0.0_ja.md
+  baseline -
+  current  d16b7eca4ad01aeb74566172b769026e2610f429cae0f80aaaa715bad26f4067
+
+Evidence/RUNTIME_DIAGNOSIS_AERISFlightControl16_CP2_AXIS_REFERENCE_HOTFIX2.txt
+  baseline -
+  current  f96739a2fd6c062a7b9c033f7e22835313d70c0479ed2819cff1c4e0d6eacbc5
+
+GameData/AERISFlightControl/AERISFlightControl.version
+  baseline 4a60bfbfc3661f2b6d30413b888fe3929c0bd7acdc18846629ebae9940e189ff
+  current  4d42b8a46cd876357d9f3030d2885f60fd3509b027e2b868a72a92443b0cfec3
+
+README.md
+  baseline 1d25582a800487818ed808e5e878d057a2dd53d91b3afef6d7947e0aafe5586c
+  current  d38a7aa36b9fe33f1e2ecc4ec1ecef6cd051ecd432108e85eefd523dba0fc84d
+
+Source/AERISFlightControl/Landing/AERISOperationalRunwayResolver.cs
+  baseline 62dee313a312231dd31ad51cf9797983394bc9553c15e45808be83284a16667f
+  current  d72fb423579dfd13099b26ea64184fbe84489aaed2fc4f6bcdb206feea19e540
+
+Source/AERISFlightControl/Landing/AERISRunwayGeometryWorker.cs
+  baseline da1bc0b6444903f6f2f8b5be67550b9d4573ff5f5bd2a3a88ca88d41342115f9
+  current  30e75d9d5639cf177512cf95c0a7a04f84c989a0417f8c143dd683a474f07c64
+
+Source/AERISFlightControl/Landing/AERISRunwaySurveyContracts.cs
+  baseline 3fecbf839f53818896efe64c51e7f77104cbe32e76e3d2dd7feb35de8c596ad4
+  current  cb7a1d8e4a78ab2d001a786b7130933b243b8d886ba374f527c01d7a87f40e1f
+
+Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+  baseline 302ff42501c9494b698ad99ef466447a712a72d515daeecb3614dfbbe5006185
+  current  0aaa12b33350a5c5b17bc4ca9f1f06eeb387aad522dcbe636d0be5c8a3935eef
+
+Tools/run_v01800_cp2_acceptance.py
+  baseline f1e6dcf0c78fe1ab462d2421cc10ddf8682523876bb4bc61a1c6008c3fcc885f
+  current  e06d6ba6c337d20de18393211bcb5ca3340bf62aadf15663a65a6d185dd9e647
+
+Tools/selftest_v01800_cp2_kk_runway_axis_reference_hotfix2.py
+  baseline -
+  current  1de40180a9fda289b17002c9d5ce7f0d432bfed0c93d3356205579bde773e417
+
+Tools/selftest_v01800_cp2_kk_runway_axis_registration_hotfix1.py
+  baseline 7c1709acb53b1185078c6d48453cb22347c511950d970d2000eb94d65e524afc
+  current  7ca63bf6d022d31fad8244a2cd021f13d3984615a9d7946383d6d5a1a514c69e
+
+Tools/selftest_v01800_cp2_mod_airfield_recovery_autopreload1.py
+  baseline 6c64a8b088083ed4432e639361494d950eba54623836a9986aad66c0151b6a59
+  current  a58da41fdec5e461de4ab3d556b300c74bad7fef8b141cbfa849f50ef1078b3a
+
+Tools/verify_v01800_cp2_static.py
+  baseline 45a1e2605b934541e28157b1a84651616fd2bd22e58feab306b6e010df7b4f93
+  current  c58b03757eaac64a6b9bd243a776a26b28c93c9204d2e3a0b26c4a0aae351a1b
+
+build_ubuntu.sh
+  baseline b78041a53b9658d784f6a9e89a5df6db4e8b9ed8503ad36f85e1d300ac002d2a
+  current  4d96f79f40b8051b9daad65f220806cd5ce309c2f052b24b0d021edeb546d673

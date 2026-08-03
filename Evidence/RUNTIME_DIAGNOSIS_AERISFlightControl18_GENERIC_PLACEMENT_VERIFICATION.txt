@@ -1,0 +1,44 @@
+AERISFlightControl(18) runtime diagnosis
+Date: 2026-07-26
+Purpose: derive an airport-independent observed-placement check
+
+1. Runtime stability
+- Hotfix 3 loaded and completed its airfield survey.
+- Kramax witness library reported KRAMAX 22 / USER 0.
+- No fatal exception was required to explain the runway error.
+
+2. Kola certified geometry from AirfieldCertificationCache.cfg
+- provider UUID: 98523c92-9ea3-48e0-82ce-18672e0b6883
+- basis: AnchorSurfaceScan
+- state: Certified
+- threshold A: -4.0460519614916342, -72.142698408004165
+- opposite end: -4.2760802241856384, -72.075185095331548
+- length: 2509.934935678582 m
+- width: 77.742763235022636 m
+- centerline uncertainty: 0.75 m
+- cache claimed absolute placement valid.
+
+3. Independent observed vessel point
+Latest session ND alignment logged the vessel parked at approximately:
+- latitude: -4.1754577
+- longitude: -72.1147287
+- ASL: 24.4 m
+The user screenshot shows this point on the visible physical runway while the certified ND runway line is displaced.
+
+4. Spherical cross-check on Kerbin radius 600000 m
+- certified route bearing: approximately 163.6863 deg
+- route length: approximately 2509.9349 m
+- vessel distance from threshold A: approximately 1386.2669 m
+- along-track: approximately 1382.6341 m
+- absolute cross-track: approximately 100.2940 m
+- corridor gate: max(width/2 + 12, uncertainty*3 + 12)
+  = max(50.8714, 14.2500)
+  = 50.8714 m
+
+The vessel is inside the longitudinal extent but approximately 49.42 m beyond the allowed lateral corridor. This is sufficient to identify a placement mismatch without knowing the airport name.
+
+5. Design consequence
+A generic CHECK HERE operation can safely compare a parked vessel on the visible runway with any selected certified runway. When longitudinal and elevation windows are valid but cross-track exceeds the uncertainty-aware corridor, AERIS must persist a provider-specific quarantine and require two-point user calibration. The production method must contain no Kola name, UUID, or coordinate branch.
+
+6. Safety consequence
+The previous CP2 candidate overlay was diagnostic only and is removed from the final candidate. The new operation is explicit, ground/stationary gated, observation-only, and fail-closed.

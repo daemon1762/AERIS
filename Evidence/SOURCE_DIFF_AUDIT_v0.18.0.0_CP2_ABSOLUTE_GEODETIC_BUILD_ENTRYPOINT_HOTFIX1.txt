@@ -1,0 +1,26 @@
+SOURCE DIFF AUDIT — CP2 ABSOLUTE GEODETIC BUILD ENTRYPOINT HOTFIX 1
+
+BASE
+AERISFlightControl-v0.18.0.0_DEV_CP2_ManualRunwayAbsoluteGeodeticEndpointAuthorityHotfix1_Source.zip
+
+CHANGED
+- build_ubuntu.sh: synchronize current DISPLAY identity.
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs: append Build Entrypoint Hotfix 1 identity.
+- GameData/AERISFlightControl/AERISFlightControl.version: synchronize current metadata.
+- README.md: prepend current checkpoint description.
+- Tools/verify_v01800_cp2_static.py: require current exact generated identity and metadata.
+- Tools/run_v01800_cp2_acceptance.py: add dedicated regression.
+- Tools/selftest_v01800_cp2_absolute_geodetic_build_entrypoint_hotfix1.py: new.
+- Current design/test/evidence/acceptance records: new.
+- MANIFEST_SHA256.txt: regenerated.
+
+UNCHANGED RUNTIME LOGIC
+- Landing/AERISRunwaySnapshotBuilder.cs
+- Landing/AERISRunwayGeometryWorker.cs
+- Landing/AERISRunwayWitnessLibrary.cs
+- all AP/AA/PROTECT/LAND/Terrain/Preload operational code
+
+SAFETY
+- No control authority added.
+- No old NAV restored.
+- No user calibration data included.

@@ -1,0 +1,24 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Integrated Acceptance Candidate 2
+Presentation Latch / Runway Lock Hotfix 1
+
+Candidate 1 status: REJECTED by runtime evidence.
+
+Acceptance contract
+- GPU-only terrain presentation remains mandatory; CPU terrain draw must remain 0.
+- Temporal GUI/affine warp remains quarantined and cannot become presentation authority.
+- A complete same-body/same-generation GPU FRONT may remain visible, unwarped, for at most
+  8 seconds while a new exact BACK is prepared.
+- The ND must consume the actual presented FRONT projection for world-fixed symbology so
+  runway/terrain map lock cannot diverge during a latch interval.
+- runwayMapLockErrorPx telemetry must be measured against the actual presented FRONT.
+- Runway endpoint ticks/numbers are allowed only at 5/10/20 km; 40/80/160 km must omit them.
+- Explicit Terrain OFF may release GPU resources. OFF->AUTO rebuild uses blue standby rather
+  than CPU terrain or a near-black fallback.
+- Startup airport/runway remains NONE/NONE.
+- FAR remains normal persistent base; Virtual Route/Local do not create persistent identities.
+- FULL BOOST, synchronous normal-path SSD reads, and Flight Safety lane occupation remain prohibited.
+
+Static acceptance requires the current Gate 5 runner, Candidate 2 dedicated checks, inherited
+Gate 4C contracts, C# regression checks, manifest validation, ZIP CRC and clean-extract replay.
+Native Mono/xbuild and KSP runtime acceptance remain user-environment tests.

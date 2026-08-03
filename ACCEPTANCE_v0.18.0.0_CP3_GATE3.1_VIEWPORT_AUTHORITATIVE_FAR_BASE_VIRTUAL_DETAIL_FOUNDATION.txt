@@ -1,0 +1,42 @@
+AERIS Flight Control v0.18.0.0
+CP3 GATE 3.1 VIEWPORT-AUTHORITATIVE FAR BASE & VIRTUAL DETAIL FOUNDATION
+
+STATUS
+- STATIC ACCEPTANCE CANDIDATE
+- NATIVE COMPILE REQUIRED
+- KSP 1.12.5 RUNTIME SMOKE REQUIRED
+
+ARCHITECTURE DECISION
+- FAR is the sole persistent terrain display authority for normal ND operation.
+- GLOBAL is retained only as an unconditional coarse bootstrap/fallback layer.
+- ROUTE and LOCAL remain quality names but are no longer current-body background-population targets.
+- Existing exact ROUTE/LOCAL payloads may be bridged from RAM/SSD.
+- New exact LOCAL/LAND generation remains demand-gated to selected LAND/runway endpoints.
+- Temporal/spatial virtual-detail reconstruction is deferred to CP3 Gate 4B.
+
+DEFECTS CLOSED BY THIS CHECKPOINT
+- LOW-quality fixed 3x3 FAR planning that left rotated TRACK UP viewport wedges permanently unrequested.
+- GPU pending=0 with viewport coverage below 100% because the planner did not request the real viewport footprint.
+- Global/Far resident population consuming RAM while ROUTE/LOCAL quality was incorrectly treated as mandatory persistent payload.
+- Predictive corridor requesting unavailable ROUTE/LOCAL payloads during cruise.
+
+REQUIRED CONTRACT
+1. Global/Far foundation keys are derived from the actual ND projection, including 1.30 horizontal scale, TRACK UP heading, aircraft anchor and render orientation.
+2. The sampled viewport receives a one-tile guard ring.
+3. All foundation requests are admitted before profile-limited exact/corridor work.
+4. FAR, not GLOBAL, is the completion authority; GLOBAL may appear first as fallback without delaying FAR completion semantics.
+5. LOW/MEDIUM/HIGH quality cannot clip the FAR foundation to a fixed 3x3 square.
+6. Current-body background population accepts only GLOBAL and FAR.
+7. ROUTE/LOCAL cruise detail is admitted only when an exact payload already exists in RAM or the preload database.
+8. Predictive Forward Corridor warms FAR payload only until virtual-detail reconstruction exists.
+9. LAND ARM with a selected runway preserves exact LOCAL/LAND endpoint generation and pins.
+10. Missing FAR foundation tiles are visible in SYSTEM telemetry and periodic CP3 logs.
+11. UI tab, generated version, build-time version and AVC identity all name CP3 Gate 3.1.
+12. AA/AP/PROTECT/FlightState/LANDING/Integrations/Track B, Map DRAM and Preload Database remain frozen.
+13. FULL BOOST remains absent, synchronous SSD reads remain absent and no Flight safety-lane work is introduced.
+
+DEFERRED
+- Render-ready height/land/validity/source-LOD buffers: CP3 Gate 4A.
+- AERIS Terrain Temporal Reconstruction and virtual ROUTE/LOCAL synthesis: CP3 Gate 4B.
+- Exact feature residuals and microtile policy beyond LAND/runway endpoints: later Gate 4 work.
+- GPU READY ownership/lifecycle: CP3 Gate 4C.

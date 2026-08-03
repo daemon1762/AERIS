@@ -1,0 +1,24 @@
+AERIS Flight Control v0.17.0.6 acceptance summary
+
+Final packaged-tree acceptance:
+- 15 / 15 scripts PASS
+- 702 / 702 assertions PASS
+
+Added regression scope:
+- canonical Prefab/source-asset cache identity
+- live/LOD geometry excluded from persistence key
+- runtime survey geometry retained
+- provider-authored placement with bounded runtime fallback
+- local-hierarchy transform composition without floating-origin world cancellation
+- full survey safety contract included in cache key
+- cache miss reason and evidence logging
+
+Frozen invariants:
+- BANK reference SHA-256 unchanged
+- LAND remains observation/control-free
+- Legacy NAV remains absent
+- asynchronous writer/archive contracts retained
+
+Native KSP compile and field acceptance:
+- not performed in this container
+- required next: RUNWAY_REGISTRY_TEST_CARD_v0.17.0.6_ja.md

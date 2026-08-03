@@ -1,0 +1,75 @@
+AERIS Flight Control v0.18.0.0 DEV CP2 RUNWAY MAP LOCK HOTFIX 1
+================================================================
+
+Purpose
+-------
+Replace CP2 Closure Candidate 1 after submitted runtime video/log evidence showed
+that runway symbols did not remain geographically locked to the rendered terrain.
+
+Submitted-evidence finding
+--------------------------
+- Island Airfield runway endpoints were rendered from accurate geodetic positions.
+- Coarse GPU terrain tiles were stretched into one four-corner screen rectangle.
+- Interior terrain features therefore moved relative to runways as map centre,
+  heading, range, LOD, Preview/Final and fallback selection changed.
+- A secondary residual error was possible because prepared runway tangent-frame
+  vectors were subtracted from a live-centre tangent vector.
+
+Implemented correction
+-----------------------
+- Every GPU terrain vertex retains its exact geographic unit-sphere position.
+- Fill, water, contour and coastline vertices are projected from the live ND centre
+  with one spherical azimuthal-equidistant projection.
+- Four-corner tile rectangles are no longer used as terrain draw transforms.
+- Dynamic projected meshes retain CPU access and are marked dynamic.
+- Prepared runway symbols retain exact endpoint latitude/longitude.
+- Runway draw and mouse hit-testing both project endpoints from the live ND centre.
+- Runtime diagnostics identify geometryProjection=SPHERICAL_VERTEX.
+
+Numerical regression model
+--------------------------
+- The submitted Global-tile rectangle reproduces more than 40 m of runway/terrain
+  displacement at the tested Island Airfield reference point.
+- The new spherical terrain projection and live runway geodesic agree below 5 cm
+  in the independent reference calculation.
+
+Static acceptance before manifest
+---------------------------------
+- CP2 acceptance runner: 35/35 scripts PASS.
+- Dedicated runway/map lock test: 51/51 PASS after final metadata/dynamic-mesh checks.
+- CP2 static package verification: 140/140 PASS.
+- C# definite-assignment regression: 22/22 PASS.
+- Terrain tile/cache/GPU foundation: 272/272 PASS.
+- Runway/terrain safety: 70/70 PASS.
+
+Frozen control-source audit
+---------------------------
+BYTE-IDENTICAL to CP2 Closure Candidate 1:
+- BANK:  bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7
+- HDG:   65e5648a3cbe558813a154dc293e79f428ab4cf640828494ee270ade04096427
+- PITCH: ed3714fddf88908d95ccc69c95240f43264151354d77708a3f9aac54d15a46c0
+- V/S:   b5eb74b360316e50df8a8cc1a3b0fe1b632913218a5db868164a79caafcafa49
+- ALT:   63ea5fe8cd2642870f3d6259d17e15e914057e622f33f9cd5347533b7fd8ffcf
+- ACC:   17b8f089a771e87e37888626c382f014fbd0740a4ee2da132eeb0345f3850da3
+- VEL:   959eb6732942861037a94c90c8e42d3c456cf1445b88b65439f9fb7767fdcf6f
+- Ground Stability:
+         bc2f74dbe76fe31346412ecf4e70f16adbd80827a1be4de2fc236e44b57cda9c
+
+Safety boundaries
+-----------------
+- LAND remains observation/planning/display only.
+- No FlightCtrlState, throttle or FlyByWire write was added.
+- Legacy NAV remains absent.
+- CP3 and new NAV remain blocked until submitted KSP runtime evidence passes the
+  Runway Map Lock test card.
+
+Not performed in the construction environment
+---------------------------------------------
+- Native Mono/KSP-reference C# build.
+- KSP 1.12.5 startup and Unity GPU execution.
+- Real PQS, actual frame timing and long-duration runtime validation.
+
+Required field evidence
+-----------------------
+Use Docs/ND_CP2_RUNWAY_MAP_LOCK_TEST_CARD_v0.18.0.0_ja.md and submit video plus
+AERIS logs. CP2 is OPEN until that card passes.

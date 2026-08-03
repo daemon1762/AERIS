@@ -1,0 +1,39 @@
+AERIS v0.18.0.0 CP2 Runway Witness / Anchor Scan / Calibration Hotfix 3
+Source-diff audit against KK Runway Axis Reference Hotfix 2
+
+Changed functional areas:
+- Landing/AERISAirfieldModels.cs
+  Adds Provisional state, certification bases, witness/calibration failures, M27-M29 evidence.
+- Landing/AERISRunwaySurveyContracts.cs
+  Algorithm 1690, Runway Detector Revision 3, immutable witness and debug fields.
+- Landing/AERISRunwayWitnessLibrary.cs
+  New read-only Kramax RW/Stop parser and AERIS-owned two-point calibration persistence.
+- Landing/AERISRunwaySnapshotBuilder.cs
+  Copies witness endpoints into local ENU and includes witness/revision in fingerprints.
+- Landing/AERISRunwayGeometryWorker.cs
+  Protected-candidate boundary, launch-anchor physical seed, 2D connectivity flood,
+  25m cross-section stable-width extraction, plan match/conflict, provisional fallback.
+- Landing/AERISOperationalRunwayResolver.cs
+  Certification-basis propagation and non-operational CP2 debug candidate conversion.
+- Landing/AERISAirfieldRegistry.cs
+  Witness lifecycle, calibration APIs, Provisional handling, isolated debug airfields.
+- Landing/AERISRunwayCertificationCache.cs
+  Schema 8 and compatibility chain.
+- Settings/AERISSettings.cs and factory CFG
+  CP2 debug/provisional UI state.
+- UI/AERISWindow.cs / UI/AERISNavigationDisplay.cs / Performance pipeline
+  CP2 diagnostic controls and non-selectable candidate overlay.
+- build/version/README/docs/tests
+  Hotfix 3 identity and acceptance boundary.
+
+Safety audit:
+- No new FlightCtrlState write.
+- No new MainThrottle write.
+- No pitch/roll/yaw/brake/wheel-steer/gear/flap/airbrake control path.
+- Kramax data is read-only and not guidance authority.
+- User calibration records positions only.
+- Provisional and witness-conflict candidates are never operational/ARM eligible.
+- Legacy NAV remains absent; new NAV remains blocked.
+
+Mandatory CP2-close debt:
+All CP2 debug display code/settings/logging must be deleted after field diagnosis and before CP2 CLOSE. Witness, anchor scan, calibration and Provisional fail-safe remain.

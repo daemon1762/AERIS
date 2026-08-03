@@ -1,0 +1,19 @@
+AERIS14 Runway Presentation/UI findings — 2026-07-25
+
+Inputs:
+- Video_2026-07-25_20-24-08.mkv, 661.247 sec, 1920x1200, 30 fps
+- AERISFlightControl(12).zip
+- Screenshot from 2026-07-25 20-35-02.png
+
+Findings:
+1. In-range runway motion relative to terrain was not reproduced in this session.
+2. KolaIsland was selected while its reported distance was approximately 36 km and ND Range was 20 km. The yellow runway-like mark was therefore an off-scale presentation, not an in-range runway line.
+3. The off-scale pointer used plot.center although TRACK UP placed the aircraft at anchorV=0.75. This produced a stable but geographically misleading mark inside the map.
+4. KSC ground position at approximately lat -0.0478505, lon -74.6671899 was about 12.6 m cross-track from the configured KSC runway centerline, inside the 70 m runway width. No gross KSC registry translation was demonstrated.
+5. The top-right CLR SEL button overlapped usable map space. The requested order is ARM, CENTER, approach direction, SELECT, CLEAR.
+
+Disposition:
+- Fix off-scale pointer geometry and visual language.
+- Move CLEAR to the preview panel immediately right of SELECT.
+- Add an approach-direction toggle immediately left of SELECT.
+- Preserve Runway Map Lock and Preload Fast Path 1.

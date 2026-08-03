@@ -1,0 +1,45 @@
+AERIS v0.18.0.0 CP3 Gate 5 Candidate 1 runtime diagnosis
+Evidence: AERISFlightControl(45).zip + Video_2026-08-01_21-08-35.mkv
+Date: 2026-08-01
+Decision: CANDIDATE 1 REJECTED
+
+Observed defects
+1. Short ND terrain black/blank transition during otherwise normal flight.
+2. Runway symbol can look like a floating/following I-shaped marker relative to terrain.
+
+Runtime evidence
+- CP3_GATE4C_VIRTUAL_DETAIL samples: 342
+- DIRECT: 335
+- BUILDING: 7
+- CPU terrain draw remained 0.
+- ready_build_violation remained 0.
+- Examples of uncommanded/normal-flight BUILDING evidence:
+  12:13:20 front=BUILDING range=80000-equivalent FAR state, back_foundation=0.857,
+           ready_gf=16/30 required_gf=16/35.
+  12:22:14 front=BUILDING range=160000-equivalent FAR state, back_foundation=0.900,
+           ready_gf=20/72 required_gf=20/80.
+  12:22:49 front=BUILDING range=160000-equivalent FAR state, back_foundation=0.986,
+           ready_gf=16/71 required_gf=16/72.
+- Additional BUILDING samples correspond to startup/range or explicit display-mode rebuilds.
+
+Root cause
+- Candidate 1 stops presenting an old complete FRONT when the requested projection moves
+  outside its strict compatibility window, even though the replacement BACK has not yet
+  completed. Because CPU fallback is correctly forbidden, the ND exposes the standby/build
+  background for the transition.
+- Terrain presentation and world-fixed ND overlays did not share one committed presentation
+  projection. Overlays could advance with the requested/current projection while terrain was
+  still showing a previously committed FRONT, making runway geometry appear to float/follow.
+- At 40 km and above the runway body becomes very short while fixed-size endpoint threshold
+  ticks remain visible, making the symbol resemble an I/H marker.
+
+Candidate 2 corrective contract
+- Keep the last complete same-body/same-generation GPU FRONT visible without affine/GUI warp
+  while the exact next BACK is constructed; maximum latch age 8 seconds.
+- Publish the exact committed FRONT projection and use it for Terrain-adjacent world symbology:
+  runway/facility, traffic, trail, track vector and ownship map position.
+- Alignment/map-lock telemetry must use the actually presented FRONT projection.
+- Suppress runway endpoint threshold ticks and endpoint numbers above 20 km.
+- Preserve CPU terrain draw = 0 and keep temporal GUI warp quarantined.
+- If Terrain OFF released GPU resources, use normal ocean-map standby during OFF->AUTO rebuild
+  instead of the near-black LAND background.

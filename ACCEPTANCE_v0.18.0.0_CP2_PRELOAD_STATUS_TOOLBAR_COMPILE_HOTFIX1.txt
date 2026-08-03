@@ -1,0 +1,68 @@
+AERIS Flight Control v0.18.0.0 DEV CP2 Preload Status Toolbar Compile Hotfix 1
+================================================================================
+
+STATUS
+------
+Development checkpoint only. Not a final v0.18.0.0 release.
+CP2 remains pending native build and KSP runtime acceptance.
+CP3 remains BLOCKED.
+
+PROVENANCE
+----------
+Base artifact:
+  AERISFlightControl-v0.18.0.0_DEV_CP2_PreloadStatusToolbar_Source.zip
+Base SHA-256:
+  fe28b0598ccf137756288b63e626b3f344c5d1dc80e30d58614fc026f3b55e55
+
+USER NATIVE COMPILE FAILURE
+---------------------------
+Terrain/AERISTerrainTileSystem.cs(1435,41): CS0117
+AERISTerrainDisplayMode does not contain a definition for Auto.
+
+ROOT CAUSE
+----------
+AERISTerrainDisplayMode declares Automatic, Topographic, Relative and Off.
+RefreshTerrainRequestGeneration() alone referenced the nonexistent Auto member
+when settings was null. Static brace and definite-assignment checks did not
+validate enum member names.
+
+FIX
+---
+- Replace AERISTerrainDisplayMode.Auto with AERISTerrainDisplayMode.Automatic.
+- Extend the compile regression to parse the enum declaration, enumerate every
+  AERISTerrainDisplayMode.<member> reference in all C# sources and reject any
+  undeclared member.
+- Build display/package metadata identifies Compile Hotfix 1.
+- No intentional Terrain behavior, Toolbar behavior, AP, LAND or NAV change.
+
+STATIC ACCEPTANCE
+-----------------
+Premanifest full acceptance:
+  30 / 30 scripts PASS
+  2244 / 2244 assertions PASS
+Manifest-inclusive full acceptance:
+  31 / 31 scripts PASS
+  2247 / 2247 assertions PASS
+
+SAFETY BOUNDARIES
+-----------------
+- Autopilot directory must remain byte-identical to the accepted Toolbar base.
+- AERISBankDirector.cs baseline SHA-256 remains:
+  bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7
+- Landing directory must remain byte-identical to the accepted Toolbar base.
+- LAND remains observation/planning/display only and control-free.
+- Legacy NAV remains absent.
+- New NAV remains unimplemented and BLOCKED.
+- No new worker pool or thread.
+
+NOT TESTED IN ARTIFACT ENVIRONMENT
+----------------------------------
+- Native Mono/xbuild compilation.
+- ToolbarControl.dll API/link compatibility in KSP 1.12.5.
+- KSP runtime, Unity rendering and Preload runtime behavior.
+
+USER RUNTIME GATE
+-----------------
+Re-run xbuild through build_ubuntu.sh. Stop and submit the complete terminal
+output if any error remains. After a successful build, continue the existing
+CP2 Preload Terrain test card.

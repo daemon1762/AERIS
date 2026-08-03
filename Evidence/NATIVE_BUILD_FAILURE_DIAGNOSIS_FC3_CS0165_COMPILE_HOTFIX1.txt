@@ -1,0 +1,20 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+Generic Runway Placement Final Candidate 3 Compile Hotfix 1
+Native Build Failure Diagnosis — 2026-07-26
+
+OBSERVED NATIVE ERROR
+Landing/AERISAirfieldRegistry.cs(1368,47): error CS0165:
+Use of unassigned local variable `stored'
+
+ROOT CAUSE
+- `stored` was declared without an initializer.
+- The condition used `witnessLibrary == null || RecordPlacementMismatch(... out stored)`.
+- When the left side was true, C# short-circuit evaluation skipped the out assignment.
+- The failure branch then read `stored`, violating definite-assignment rules.
+
+FIX
+- Initialize `stored` to `string.Empty` before evaluating the condition.
+
+BOUNDARY
+- Compile-only correction.
+- No runway geometry, placement threshold, persistence, preload, UI, LAND or control behavior changed.

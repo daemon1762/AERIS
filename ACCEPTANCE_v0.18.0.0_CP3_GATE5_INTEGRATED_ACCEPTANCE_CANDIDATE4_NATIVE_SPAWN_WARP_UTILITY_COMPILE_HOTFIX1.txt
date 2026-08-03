@@ -1,0 +1,16 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Integrated Acceptance Candidate 4 — Native Spawn Warp Utility — Compile Hotfix 1
+
+PURPOSE
+- Fix native Mono/xbuild CS1061 caused by unsupported Orbit.Clone() and Vessel.SetOrbit().
+- Keep MOD-native spawn authority unchanged.
+
+RUNTIME CONTRACT
+- Sandbox Flight scene only.
+- One AIRFIELDS action per physical registered MOD runway/site.
+- Target position/orientation comes only from the MOD provider's current native launch transform.
+- No runway-direction-specific target, threshold interpolation, inset, staging, or AERIS-generated spawn point.
+- Direct relocation uses KSP Vessel.SetRotation, Vessel.SetPosition, and Vessel.SetWorldVelocity.
+- World velocity is body.getRFrmVel(spawnPosition), yielding zero initial surface-relative translational velocity.
+- Orbit.Clone / Vessel.SetOrbit / Orbit.UpdateFromStateVectors are prohibited in this utility.
+- Candidate 3 terrain generation bridge and all accepted Gate 4C behavior remain frozen.

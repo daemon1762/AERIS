@@ -1,0 +1,30 @@
+AERIS v0.18.0.0 CP3 Gate 5 Candidate 12 Compile Hotfix 2 — Source Diff Audit
+
+Observed user native-build failure:
+- Compile Hotfix 1 dedicated selftest: PASS 10/10.
+- Candidate 12 DLC baseline regression: PASS 58/58.
+- Candidate 11 inherited regression: FAIL only at `Candidate 11 lineage identity retained in successor build`.
+- Failure occurs after build_ubuntu.sh regenerated AERISBuildVersion.generated.cs and before xbuild.
+
+Root cause:
+- Candidate 11 test searched decorated lineage `CANDIDATE 11 — DLC PLACEHOLDER MANUAL A/B HOTFIX 1` in generated.cs.
+- Packaged generated.cs contained that string only in a historical comment.
+- build_ubuntu.sh generation template omitted that historical Candidate 11 comment.
+- Stable runtime Display lineage uses normalized `CANDIDATE 11 DLC PLACEHOLDER MANUAL A B HOTFIX 1` and survives regeneration.
+
+Changes:
+- Tools/selftest_v01800_cp3_gate5_candidate11_dlc_placeholder_manual_ab_hotfix1.py: use normalized stable lineage in generated source + build script.
+- Tools/selftest_v01800_cp3_gate5_candidate12_compile_hotfix1.py: convert its own exact-current identity assertion to successor-safe normalized lineage.
+- build_ubuntu.sh: current Compile Hotfix 2 identity; preserve Candidate 11 historical marker in generated template.
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs: Compile Hotfix 2 identity.
+- GameData/AERISFlightControl/AERISFlightControl.version: Compile Hotfix 2 identity prefix.
+- Tools/run_v01800_cp3_gate5_acceptance.py: add Compile Hotfix 2 regression.
+- New acceptance/test-card/evidence and README note.
+
+Protected operational boundary:
+- No changes to AERISWindow operational UI implementation.
+- No changes to AERISAirfieldRegistry / runway resolver / witness runtime logic.
+- No changes to Terrain/GPU pipeline.
+- No changes to AP/FBW/PROTECT.
+- No changes to 01_Stock_DLC_Foundation.cfg or 03_Field_Verified_Runway_Calibrations.cfg.
+- Dessert exact A/B default and RWY 36/18 remain unchanged.

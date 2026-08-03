@@ -1,0 +1,44 @@
+AERIS13 INPUT EVIDENCE INDEX
+Generated: 2026-07-25 Asia/Tokyo
+
+INPUT SOURCE ZIP
+Name: AERISFlightControl-v0.18.0.0_DEV_CP2_PreloadStatusToolbar_CompileHotfix1_Source(2).zip
+SHA-256: 50e469b0add6ce8a21e6218ddecca106676d5bb9eaaa908ff1e828515c03dfe8
+Supplied checksum: MATCH
+ZIP integrity: PASS
+
+INPUT LOG ZIP
+Name: AERISFlightControlログ(1).zip
+SHA-256: 34bcab7ba413574c6c85f7266d609fed2ab9231b1f5e97e4738df04a9ddc20dc
+ZIP integrity: PASS
+
+PRIMARY SESSION LOG
+Relative path: Logs/Sessions/2026-07-24_114853_session.log
+SHA-256: 4773da7c061d3abb9bbce2e341f36754dab4c524fb8a1d3e9832944a172872ba
+
+PRIMARY PERFORMANCE CSV
+Relative path: Logs/Sessions/2026-07-24_114853_520_performance_runtime.csv
+SHA-256: 815c4b46dd0b29cb5900938ab193c730b6af90ed36543af4f7f7bdcc21e711ec
+Rows: 902
+Columns: 138
+
+PRIMARY FLIGHTDATA ZIP
+Relative path: FlightData/2026-07-24_115714_365_000001_ARA-2_95d62e2f.zip
+SHA-256: 43f9732c6c05b0c6649c6bf22efdcd5f86cd4236982f4cf1eaed4e16e9ddf5c4
+ZIP entries: 16
+CRC: PASS
+
+IMAGE
+Name: 9ACB1A51-215A-4387-AE23-CCD2DD90F747.jpeg
+Purpose: AP/BANK golden-behaviour reference only
+
+VIDEO
+No video file was present in the current attachment set.
+
+AERIS13 BASELINE
+Copied unchanged to Docs/AERIS13_Baseline/.
+All nine baseline documents must be retained and read before CP3 runway/approach work.
+
+INTERPRETATION BOUNDARY
+The supplied runtime evidence predates Field Render Consistency Hotfix 1.
+It proves the fault condition, not the post-fix result.

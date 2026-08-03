@@ -1,0 +1,34 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Integrated Acceptance Candidate 13
+Final UI / Preload Policy Hotfix 1
+
+SCOPE
+- Freeze automatic preload to the accepted default policy. User-visible preload configuration is ON/OFF only.
+- Remove preload debug presentation except per-body completion percentage.
+- Remove persistent preload capacity limits and per-body BodyCap enforcement.
+- Remove per-body Priority / Quality / BodyCap controls and their mutation routes.
+- Per-body preload UI operations are BUILD, PAUSE/RESUME, DELETE and REBUILD only.
+- Default PROTECT Parking Hold and automatic reverse thrust ON, including one-time legacy settings migration.
+- Remove PROTECT live debug/numeric telemetry presentation.
+- Remove SYSTEM diagnostic presentation while retaining runtime telemetry/logging owners.
+- Present installed Making History runways in VANILLA RUNWAYS; hide them when Making History is absent.
+
+FIXED PRELOAD POLICY
+- Enabled mode: AggressiveIdle
+- Producer profile: Balanced
+- Idle threshold: 5 seconds
+- Persistent preload storage: unlimited (long.MaxValue)
+- Legacy per-body tuning/state overrides are discarded on load; progress/cursors/paused state are retained.
+- User can still manually BUILD, PAUSE/RESUME, DELETE and REBUILD each body.
+
+AUTHORITY / SAFETY
+- DLC remains AERISAirfieldSource.Dlc internally and Dessert remains UserCalibrated / field-verified authority.
+- DLC presentation category change does not grant automatic certification.
+- Making History installation/runtime availability continues to gate DLC presentation.
+- Dessert RWY 36/18 geometry is unchanged.
+- 41 physical runway / 82 reciprocal direction shipped baseline is unchanged.
+- Terrain GPU rasterizer, BANK director and Airfield Registry operational authority remain frozen.
+
+LIFECYCLE
+STATIC acceptance required before native KSP build/runtime acceptance.
+CP3 remains OPEN until user runtime acceptance is complete.

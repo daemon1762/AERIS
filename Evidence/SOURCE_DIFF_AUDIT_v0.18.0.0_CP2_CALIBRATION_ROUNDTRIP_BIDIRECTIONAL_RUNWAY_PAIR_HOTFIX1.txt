@@ -1,0 +1,42 @@
+Base:
+AERISFlightControl-v0.18.0.0_DEV_CP2_GenericRunwayPlacementVerification_FinalCandidate3_CompileHotfix1_Source.zip
+
+Changed production files:
+- Source/AERISFlightControl/Landing/AERISRunwayWitnessLibrary.cs
+  * ConfigNode three-shape root resolution on load/save verification
+  * temporary and committed readback verification
+  * rollback after committed readback failure
+  * calibration schema 3
+  * reciprocal direction pair persistence and validation
+  * reciprocal runway pair UI/log summary
+- Source/AERISFlightControl/Landing/AERISRunwayGeometryWorker.cs
+  * user two-endpoint witness enables both direction candidates
+  * certification basis records reciprocal pair generation
+- Source/AERISFlightControl/Landing/AERISOperationalRunwayResolver.cs
+  * strict reciprocal pair invariant
+  * endpoint reversal, heading, stable-ID validation
+  * explicit pair generation runtime evidence
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+- build_ubuntu.sh
+
+Changed/added verification files:
+- Tools/selftest_v01800_cp2_calibration_roundtrip_hotfix1.py
+- Tools/selftest_v01800_cp2_bidirectional_runway_pair_hotfix1.py
+- Tools/selftest_v01800_cp2_generic_runway_placement_verification_final_candidate3.py
+- Tools/run_v01800_cp2_acceptance.py
+- Tools/verify_v01800_cp2_static.py
+
+Added documentation/evidence:
+- Docs/CP2_CALIBRATION_ROUNDTRIP_BIDIRECTIONAL_RUNWAY_PAIR_HOTFIX_1_v0.18.0.0_ja.md
+- Docs/ND_CP2_CALIBRATION_ROUNDTRIP_BIDIRECTIONAL_RUNWAY_PAIR_HOTFIX_1_TEST_CARD_v0.18.0.0_ja.md
+- Evidence/RUNTIME_DIAGNOSIS_AERISFlightControl19_CALIBRATION_SAVE_RECIPROCAL_PAIR.txt
+- this audit
+
+Unchanged safety boundaries:
+- no legacy NAV
+- no new NAV
+- no LAND control authority
+- no flight-control writes
+- no user calibration data shipped
+- no CP2 debug display reintroduced
+- no airport-specific production branch

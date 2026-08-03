@@ -1,0 +1,27 @@
+Source diff audit
+Base: CP2 Responsive AIRFIELDS UI Layout Resize Hotfix 1
+Target: CP2 Manual Calibrated Runway Separation Preservation Hotfix 1
+
+Changed runtime files:
+- Landing/AERISAirfieldRegistry.cs
+  Adds an early UserCalibrated preservation return before generic quarantine.
+- Landing/AERISRunwayWitnessLibrary.cs
+  Refuses automatic endpoint clearing when a complete A/B calibration exists.
+- UI/AERISWindow.cs
+  Separates automatic/provider and manual-calibrated certified entries; disables
+  CHECK HERE for the manual category while retaining explicit MARK A/B/CLEAR.
+- Settings/AERISSettings.cs
+  Adds independently persisted, closed-by-default manual category expansion state;
+  layout migration revision advances to 2.
+- GameData/AERISFlightControl/Config/AERISSettings.cfg
+  Ships the new category closed.
+- Properties/AERISBuildVersion.generated.cs / build_ubuntu.sh
+  Update build identity only.
+
+No changes:
+- AP/AA/PROTECT control laws
+- LAND write authority
+- Terrain pipeline / preload
+- Runway survey geometry generation
+- ND terrain rendering
+- Legacy NAV remains absent

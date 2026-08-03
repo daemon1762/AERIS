@@ -1,0 +1,31 @@
+AERISFlightControl(23) / Video_2026-07-26_22-55-52(1).mkv diagnosis
+====================================================================
+
+Observed persisted calibration:
+- schema=3
+- KolaIsland hasStart=True
+- KolaIsland hasEnd=True
+- reciprocalDirectionPair=True
+- direction headings are reciprocal
+
+Observed runtime success:
+- [RUNWAY_CALIBRATION] RECIPROCAL PAIR GENERATED
+- [RUNWAY_CERT_BASIS] Kola Island basis=UserCalibrated
+- [RUNWAY_PLACEMENT] absolutePlacementValid=True
+- [AIRFIELD_RELOAD] CERTIFIED 13 RWY / 19 APP
+
+Observed presentation failure:
+- AIRFIELDS still displayed Kola automatic directions as FAILED / USER CALIBRATION REQUIRED.
+- Top calibration text retained the earlier placement-quarantine message.
+- ND title showed 12 RWY while the committed registry reported 13 certified runways.
+
+Source cause:
+- AIRFIELDS filtered Certified rows by basis but did not suppress non-manual rows superseded by an authoritative manual pair.
+- ND CaptureNavigationSnapshot selected the first two finite directions, irrespective of certification state or basis.
+- CalibrationStatus was not rebuilt from persisted witness state during reload.
+
+Hotfix boundary:
+- Completed manual pair becomes authoritative for that physical-runway airfield.
+- Superseded provider directions are removed from ordinary counts, categories, state and selection.
+- ND publishes only certified directions and prioritizes the manual reciprocal pair.
+- No airport-name-specific handling.

@@ -1,0 +1,37 @@
+AERIS v0.18.0.0 DEV CP2 KK RUNWAY ABSOLUTE REGISTRATION HOTFIX 1 PRELOAD FAST PATH 1
+ACCEPTANCE EVIDENCE
+
+Baseline:
+AERISFlightControl-v0.18.0.0_DEV_CP2_RunwayPresentationUIHotfix1_PreloadFastPath1_Source
+
+Implemented safety boundary:
+- KK/SLE placed static origin and launch transform are captured independently.
+- Launch anchor heading, longitudinal interval and bounded lateral correction are validated.
+- Missing or inconsistent absolute placement fails with AbsolutePlacementInvalid.
+- Invalid absolute placement cannot produce an operational runway, LAND ARM, LOC/GS or track token.
+- Only KK/SLE source fingerprints receive Absolute Placement Revision 1; stock cache identity is unchanged.
+
+Static acceptance before manifest:
+- dedicated absolute-registration test: 38/38 PASS
+- CP2 static package verification: 153/153 PASS
+- C# definite-assignment regression: 22/22 PASS
+- runway map lock + preload fast path regression: 100/100 PASS
+- full CP2 acceptance before manifest: 39/39 scripts PASS
+- internal manifest: 376 files, 3/3 PASS
+- final full CP2 acceptance with manifest: 40/40 scripts PASS
+- modified C# brace/parenthesis/bracket balance: PASS
+
+Frozen control source comparison against baseline:
+- BANK: byte-identical
+- HDG: byte-identical
+- PITCH: byte-identical
+- V/S: byte-identical
+- ALT: byte-identical
+- ACC: byte-identical
+- VEL: byte-identical
+- Ground Stability: byte-identical
+
+Native status:
+- Mono/xbuild and KSP/Unity reference assemblies are unavailable in the packaging environment.
+- Native C# compilation and KSP field validation remain unexecuted.
+- CP2 remains OPEN until KolaIsland and multiple KK/SLE airports pass the attached recorded field test.

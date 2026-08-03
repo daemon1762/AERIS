@@ -1,0 +1,83 @@
+Candidate 11 source diff audit against Candidate 10
+Scope: DLC placeholder manual A/B field-capture entry + endpoint display + identity/tests/docs.
+
+--- /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate10_AirfieldProviderVisibilityDlcListHotfix1_Source/Source/AERISFlightControl/UI/AERISWindow.cs	2026-08-02 07:46:11.632472624 +0000
++++ Source/AERISFlightControl/UI/AERISWindow.cs	2026-08-02 08:12:34.212417179 +0000
+@@ -447,7 +447,16 @@
+    WrappedAirfieldLabel("Provider: DLC / "+(string.IsNullOrEmpty(airfield.SourceMod)?"SquadExpansion":airfield.SourceMod));
+    WrappedAirfieldLabel(registry.DlcRunwayPresentationText(airfield));
+    WrappedAirfieldLabel("RUNWAY GEOMETRY: NOT EXPOSED / NOT CALIBRATED — LAND ARM AND ND RUNWAY PRESENTATION INHIBITED.");
+-   WrappedAirfieldLabel("When the DLC facility is exposed in the current session, use the normal provider entry and manual A/B calibration before operational use.");
++   WrappedAirfieldLabel("MANUAL A/B CALIBRATION IS AVAILABLE HERE EVEN BEFORE PROVIDER RUNWAY GEOMETRY IS EXPOSED.");
++   WrappedAirfieldLabel(registry.UserRunwayCalibrationSummary(airfield));
++   WrappedAirfieldLabel(registry.UserRunwayCalibrationEndpointSummary(airfield));
++   GUILayout.BeginHorizontal();
++   if(SmallButton("MARK A"))HandleDlcPlaceholderCalibrationMark(registry,airfield,true);
++   if(SmallButton("MARK B"))HandleDlcPlaceholderCalibrationMark(registry,airfield,false);
++   if(SmallButton("CLEAR")){string message;registry.ClearUserRunwayCalibration(airfield,out message);runwayCalibrationMessage=message;}
++   GUILayout.EndHorizontal();
++   if(!string.IsNullOrEmpty(runwayCalibrationMessage))WrappedAirfieldLabel(runwayCalibrationMessage);
++   WrappedAirfieldLabel("Park at each physical runway end (<= 5 m/s), MARK A then MARK B. The stored BODY-FIXED GEODETIC ABSOLUTE coordinates shown above can be promoted into the DLC default baseline after field verification.");
+    GUILayout.EndVertical();
+   }
+   bool DirectionMatchesCategory(AERISAirfieldRegistry registry,AERISAirfieldDefinition airfield,AERISRunwayDirectionDefinition direction,AERISRunwayCertificationState state,bool manualCalibratedOnly){
+@@ -549,6 +558,13 @@
+    else{string checkLabel="CHECK HERE — VERIFY CURRENT VESSEL AGAINST THIS RUNWAY";if(GUILayout.Button(checkLabel,airfieldActionButtonStyle,GUILayout.Width(FixedAirfieldActionWidth),GUILayout.Height(AirfieldActionButtonHeight))){string message;registry.VerifyRunwayPlacement(airfield,runway,direction,FlightGlobals.ActiveVessel,out message);runwayCalibrationMessage=message;}}
+    GUILayout.BeginHorizontal();if(SmallButton("MARK A"))HandleRunwayCalibrationMark(registry,airfield,true);if(SmallButton("MARK B"))HandleRunwayCalibrationMark(registry,airfield,false);if(SmallButton("CLEAR")){string message;registry.ClearUserRunwayCalibration(airfield,out message);runwayCalibrationMessage=message;}GUILayout.EndHorizontal();
+   }
++  void HandleDlcPlaceholderCalibrationMark(AERISAirfieldRegistry registry,AERISAirfieldDefinition airfield,bool thresholdA){
++   string message;bool ok=registry.MarkUserRunwayCalibration(airfield,thresholdA,FlightGlobals.ActiveVessel,out message);runwayCalibrationMessage=message;
++   // Keep the DLC placeholder detail open after either point. Candidate 11 is a
++   // field-capture bridge: a complete A/B pair may exist before KSP exposes a
++   // runtime runway object, so do not redirect into an empty certified category.
++   if(ok){settings.AirfieldsPendingExpanded=true;settings.Save();}
++  }
+   void HandleRunwayCalibrationMark(AERISAirfieldRegistry registry,AERISAirfieldDefinition airfield,bool thresholdA){
+    string message;bool ok=registry.MarkUserRunwayCalibration(airfield,thresholdA,FlightGlobals.ActiveVessel,out message);runwayCalibrationMessage=message;
+    if(!ok||!registry.HasStoredUserCalibration(airfield))return;
+--- /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate10_AirfieldProviderVisibilityDlcListHotfix1_Source/Source/AERISFlightControl/Landing/AERISRunwayWitnessLibrary.cs	2026-08-02 06:00:22.000000000 +0000
++++ Source/AERISFlightControl/Landing/AERISRunwayWitnessLibrary.cs	2026-08-02 08:12:34.212417179 +0000
+@@ -434,6 +434,28 @@
+             return "NO USER CALIBRATION";
+         }
+ 
++        internal string CalibrationEndpointSummary(AERISAirfieldDefinition airfield)
++        {
++            if (airfield == null) return "A/B ABSOLUTE GEO: NO AIRFIELD";
++            for (int i = 0; i < user.Count; i++)
++            {
++                AERISRunwayWitness value = user[i];
++                if (value == null || !MatchesAirfieldIdentity(value, airfield)) continue;
++                string a = value.HasStart && value.Start != null && value.Start.IsFinite
++                    ? "A LAT " + value.Start.LatitudeDeg.ToString("0.00000000", CultureInfo.InvariantCulture) +
++                      " LON " + value.Start.LongitudeDeg.ToString("0.00000000", CultureInfo.InvariantCulture) +
++                      " ALT " + value.Start.ElevationMeters.ToString("0.00", CultureInfo.InvariantCulture) + "M"
++                    : "A NOT MARKED";
++                string b = value.HasEnd && value.End != null && value.End.IsFinite
++                    ? "B LAT " + value.End.LatitudeDeg.ToString("0.00000000", CultureInfo.InvariantCulture) +
++                      " LON " + value.End.LongitudeDeg.ToString("0.00000000", CultureInfo.InvariantCulture) +
++                      " ALT " + value.End.ElevationMeters.ToString("0.00", CultureInfo.InvariantCulture) + "M"
++                    : "B NOT MARKED";
++                return "A/B ABSOLUTE GEO — " + a + " | " + b;
++            }
++            return "A/B ABSOLUTE GEO — A NOT MARKED | B NOT MARKED";
++        }
++
+         AERISRunwayWitness FindOrCreateCalibration(AERISAirfieldDefinition airfield,
+             out bool created)
+         {
+--- /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate10_AirfieldProviderVisibilityDlcListHotfix1_Source/Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs	2026-08-02 07:46:33.156471870 +0000
++++ Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs	2026-08-02 08:12:34.212417179 +0000
+@@ -1860,6 +1860,12 @@
+                 : witnessLibrary.CalibrationSummary(airfield);
+         }
+ 
++        internal string UserRunwayCalibrationEndpointSummary(AERISAirfieldDefinition airfield)
++        {
++            return witnessLibrary == null ? "A/B ABSOLUTE GEO: RUNWAY WITNESS LIBRARY DISABLED"
++                : witnessLibrary.CalibrationEndpointSummary(airfield);
++        }
++
+         internal bool HasStoredUserCalibration(AERISAirfieldDefinition airfield)
+         {
+             return witnessLibrary != null && witnessLibrary.HasUsableCalibration(airfield);

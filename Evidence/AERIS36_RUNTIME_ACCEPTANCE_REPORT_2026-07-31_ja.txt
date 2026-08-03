@@ -1,0 +1,62 @@
+AERIS v0.18.0.0 CP2.5 Candidate 4
+Full Boost Downstream Commit Hotfix 1
+Runtime Acceptance Report — AERIS36 / 2026-07-31
+
+結論
+- Downstream Commit Hotfix 1 の主目的（FULL停止後のSTANDARD復帰）は PASS。
+- FULL中／STOP後／Flight Safety後／KSP再起動後にデータ破棄・永久停止は再現しなかった。
+- ただしFULL BOOSTの性能目標は未達。今回の同一天体区間ではSTANDARDよりtile/sが低い。
+
+ビルド識別
+- FULL BOOST DOWNSTREAM COMMIT HOTFIX 1 をロード。
+
+手動FULL 1回目
+- 開始: 2026-07-31 00:24:44.037 UTC
+- 停止: 2026-07-31 00:26:06.130 UTC（MANUAL）
+- FULL中 tile: 3586 -> 5721（+2135 / 81.56s = 26.18 tile/s）
+- requiredDropped: 0
+- scheduler dropped: 0
+- failed: 0
+- Encode active最大: 44 / cap 44
+- SSD jobs最大: 2 / cap 2
+
+STOP後STANDARD復帰
+- 2026-07-31 00:26:06.977 -> 00:27:58.814 UTC
+- tile: 5727 -> 7840（+2113 / 111.84s = 18.89 tile/s）
+- pipelineはFULL残留154からSTANDARD 44へdrain
+- requiredDropped: 0
+- encodeReject: 0
+- writeReject: 0
+- scheduler dropped: 0
+- 永久停止なし
+
+FULL 2回目とFlight Safety
+- 開始: 2026-07-31 00:27:59.787 UTC
+- 自動停止: 2026-07-31 00:28:40.430 UTC（FLIGHT_SAFETY）
+- FULL中 requiredDropped: 0
+- Flight中は非Flight Preloadが抑制されるため進捗停止は仕様通り。
+- 非Flightへ復帰後、2026-07-31 00:39:23.453 -> 00:39:32.826 UTCで tile 8829 -> 9118（+289）と再開。
+
+再起動確認
+- 次セッションでFULL自動再開なし。
+- STANDARDで tile 9164 -> 13157 まで継続。
+- Map DRAM summary: synchronousSSD=0 / PASS。
+
+AA lifecycle
+- explicit stock callback cleanup active を確認。
+- destroyed SyncModuleControlSurface callback: 0件。
+
+性能比較（参考）
+- FULL直前STANDARD: +3547 / 85.49s = 41.49 tile/s
+- FULL 1回目: +2135 / 81.56s = 26.18 tile/s
+- FULLは安定性PASSだが、今回の同一天体区間では約37%遅い。
+- FULL時はoutstanding 192/192、resultRequired最大237、FPS約14～15まで低下し、RESULT BACKPRESSUREが主律速。
+
+正式判定
+- Downstream Commit修正: PASS
+- FULL停止後STANDARD復帰: PASS
+- Flight Safety停止と復帰: PASS
+- 非永続性: PASS
+- データ保全: PASS
+- FULL性能向上: FAIL / 要再調整
+- Candidate 4 CP2.5最終クローズ: 性能要件を含めるならOPEN

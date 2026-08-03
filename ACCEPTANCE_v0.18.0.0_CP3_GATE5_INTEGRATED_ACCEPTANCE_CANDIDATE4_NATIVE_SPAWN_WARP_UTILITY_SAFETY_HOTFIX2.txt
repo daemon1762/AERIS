@@ -1,0 +1,30 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Integrated Acceptance Candidate 4 — Native Spawn Warp Utility — Safety Hotfix 2
+
+PURPOSE
+- Fix destructive touchdown after native-spawn warp observed in field video/log 2026-08-02.
+- Preserve the MOD provider live LaunchPadTransform as location/orientation authority.
+- Replace direct unpacked-vessel SetPosition/SetRotation/SetWorldVelocity transport with KSP stock SetVesselPosition physics easing.
+
+FIELD FINDING
+- Cape Kerman native launch transform resolved correctly at approximately lat 24.808821, lon -83.567630, ASL 79.4 m.
+- Direct relocation left the aircraft above the runway under normal gravity; the craft impacted roughly one second later and broke apart.
+
+CONTRACT
+1. Sandbox Flight only. Career/Science UI remains absent.
+2. One WARP TO MOD NATIVE SPAWN action per physical runway; no RWY-direction target.
+3. Live provider LaunchPadTransform remains authoritative for lat/lon/ASL/forward.
+4. No runway-threshold interpolation, inset, staging coordinate or synthesized spawn point.
+5. Relocation MUST call FlightGlobals.fetch.SetVesselPosition with easeToSurface=true.
+6. Easing gravity multiplier is 0.05.
+7. Repeated warp is blocked for 12 seconds while stock easing settles the vessel.
+8. Direct vessel.SetPosition, vessel.SetRotation, vessel.SetWorldVelocity, GoOffRails, Orbit Clone/SetOrbit are forbidden in the utility.
+9. Warp does not select airport/runway, alter certification/calibration, or command LAND/AP/FlightCtrlState.
+10. Candidate 3 Terrain Generation Bridge and accepted Gate 4C behavior remain frozen.
+
+RUNTIME ACCEPTANCE
+- Native warp reaches the MOD spawn location without vessel destruction.
+- No immediate part explosion/RUD during the easing interval.
+- Re-click within 12 s is refused with STOCK PHYSICS EASING ACTIVE.
+- After settling, aircraft remains usable and registration UI continues to function.
+- Test at least one KK runway; preferably also one long/short runway with a different heading.

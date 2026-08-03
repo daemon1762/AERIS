@@ -1,0 +1,29 @@
+Source diff audit
+Baseline: CP2 ND Navigation Snapshot Publish / AIRFIELDS UI Collapse Hotfix 1
+Current: CP2 Responsive AIRFIELDS UI Layout / Resize Hotfix 1
+
+FUNCTIONAL SOURCE CHANGES
+- Source/AERISFlightControl/UI/AERISWindow.cs
+  - Screen-bounded window dimension clamps.
+  - Screen-space resize pointer anchor.
+  - Larger dedicated resize grip/footer.
+  - CalcHeight-based wrapped controls.
+  - Responsive main/SYSTEM tab grids.
+  - Narrow AIRFIELDS heading/reload vertical layout.
+  - Width-dependent AIRFIELDS viewport reservation.
+  - Human-readable failure identifiers.
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+  - Current Hotfix identity appended.
+
+TEST / EVIDENCE CHANGES
+- Existing ND publish/UI collapse test updated to accept dynamic height allocation.
+- New responsive UI/resize regression test added to full CP2 acceptance.
+- Design, runtime diagnosis, test card, acceptance evidence added.
+
+UNCHANGED SAFETY BOUNDARIES
+- No FlightCtrlState/throttle/brake/steering/gear/flap/airbrake write.
+- No AP/APP propulsion change.
+- No LAND control authority.
+- No old NAV restoration.
+- No calibration schema or runway geometry change.
+- No CP2 survey-debug UI restoration.

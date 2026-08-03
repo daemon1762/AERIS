@@ -1,0 +1,39 @@
+AERIS13の引継ぎを開始する。
+
+最初に次を読むこと。
+1. 00_README_ja.md
+2. 01_FINAL_HANDOVER_ja.md
+3. 02_RUNWAY_BY_RUNWAY_RESPONSE_ja.md
+4. 03_ADAPTIVE_GLIDE_PATH_POLICY_ja.md
+5. 04_FAILURE_CODE_RESPONSE_MAP_ja.md
+6. 05_EVIDENCE_INTEGRITY_REPORT_ja.md
+7. 06_POST_HOTFIX_FIELD_TEST_CARD_ja.md
+
+確定前提:
+- APは完成済み。AP/BANK制御則は変更禁止。
+- 20°BANK参照画像がゴールド回帰基準。
+- 旧NAVは完全削除済み。新NAVは未搭載。
+- LANDは独立した観測・表示・認証基盤で、操舵権限なし。
+- 基準ソースはv0.17.0.2、SHA-256は
+  0c20572af23d47741c82bed7eaaa2e5d737ca861d68ff7b9a1b243abf7f00db7
+- v0.17.0.2のソース受入は12/12、561/561合格。
+- 旧ログの全件0はDISC_STOCK_KSPのID衝突によるatomic reject。
+- v0.17.0.2はその衝突を修正済みだが、添付KSP(4).logは飛行シーン前で終わり、実機commit成功は未実証。
+- 現行認証器は3.0°固定、中心線16点のPQS地形検査だけ。
+- ApproachA/BAvailableは実質常時true。
+- ManualRequired/PairedThresholdsが実行時に強制されていない。
+- 現行CERTIFIEDを精密自動着陸認証と扱わない。
+
+次の作業:
+まず06_POST_HOTFIX_FIELD_TEST_CARDどおり、v0.17.0.2の起動走査と手動走査2回の実機証拠を確認する。証拠がなければ成功を推定しない。
+
+精密認証の実装を再開する場合:
+1. survey methodをfail-closedで強制
+2. 物理滑走路と両進入方向を分離
+3. 横幅を持つ地形・Static・障害物・進入復行回廊
+4. 方向別に3.0～6.0°を0.1°刻みで調べ、最小安全角を選択
+5. 機体別の降下率/AoA/推力/フレア/停止距離適合
+6. 高負荷モデルの指紋キャッシュ
+
+片方向が不合格でも反対方向まで失格にしない。角度変更で曖昧な幾何、横方向障害、復行不能を隠さない。実装変更前に、証拠とコード上の事実を分けて報告すること。
+

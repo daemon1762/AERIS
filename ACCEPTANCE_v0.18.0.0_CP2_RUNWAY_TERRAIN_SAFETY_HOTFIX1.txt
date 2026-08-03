@@ -1,0 +1,29 @@
+AERIS Flight Control v0.18.0.0 DEV CP2 RUNWAY TERRAIN SAFETY HOTFIX 1
+
+STATIC ACCEPTANCE TARGET
+- CP2 acceptance runner: 34/34 scripts PASS, including internal manifest.
+- Dedicated runway/terrain safety selftest: 70/70 assertions PASS.
+- CP2 terrain tile/GPU foundation: 272/272 assertions PASS.
+- C# definite-assignment/static compile regression: 22/22 PASS.
+- Lexical C# structure: balanced.
+- ZIP CRC: no errors.
+- Clean re-extraction: full acceptance rerun required and performed before delivery.
+
+SAFETY AUDIT
+- BANK byte-identical to Alignment Diagnostic Hotfix 1 baseline.
+- HDG, PITCH, V/S, ALT, ACC, VEL and Ground Stability byte-identical.
+- Legacy NAV absent.
+- LAND remains control-free.
+- Invalid runway direction cannot be certified, armed or exported as a Track Token.
+
+IMPLEMENTED
+- Runway heading/end-point invariant, reciprocal auto-correction and rejection boundary.
+- Correct-approach-side LOC/GS N/A logic.
+- Explicit GPU TOPO/REL vertex colours from elevation and aircraft ASL.
+- Fixed blue water, split land/water meshes, land-only contours and thick coastline band.
+- AUTO capability fallback versus forced ON.
+
+UNAVAILABLE IN CREATION ENVIRONMENT
+- Native Mono/xbuild compile against KSP 1.12.5 assemblies.
+- KSP/Unity runtime and actual GPU rendering.
+- Field validation remains governed by ND_CP2_RUNWAY_TERRAIN_SAFETY_TEST_CARD_v0.18.0.0_ja.md.

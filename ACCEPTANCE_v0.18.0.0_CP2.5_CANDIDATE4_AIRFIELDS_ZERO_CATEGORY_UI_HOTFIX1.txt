@@ -1,0 +1,9 @@
+AERIS v0.18.0.0 CP2.5 Candidate 4 Airfields Zero-Category UI Hotfix 1
+- all six AIRFIELDS categories share count==0 early return
+- zero-count expanded state forced false and persisted
+- disabled header with GUI.enabled restoration
+- no toggle, None label, row or detail layout for count==0
+- nonzero category behavior preserved
+- runtime source change limited to UI/AERISWindow.cs
+- Track B runway data unchanged
+- CP3 payload residency excluded

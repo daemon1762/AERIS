@@ -1,0 +1,5 @@
+AERIS v0.18.0.0 CP2.5 Candidate 4 Full Boost Backpressure Compile Hotfix 1
+- Correct frozen CP2 build identity generation.
+- Legacy CP2 verifier reads Cp2FrozenBaselineDisplay.
+- Runtime behavior/source unchanged.
+- Native xbuild and KSP runtime acceptance pending user environment.

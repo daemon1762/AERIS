@@ -1,0 +1,7 @@
+AERIS35 runtime discovery, 2026-07-30.
+Build loaded: CP2.5 Candidate 4 Full Boost Backpressure Compile Hotfix 1.
+FULL start: 13:14:54.
+FULL stop: 13:18:19.
+After STOP, telemetry reached pipeline=0/64, outstanding=0/96, encode=176/114, ssd=6/1 and remained fixed through the observed session while requiredDropped stayed 0.
+Diagnosis: Terrain Block required path worked, but CPU Encode and SSD Super Batch still used best-effort SubmitLatest and could lose completion ownership under queue/result pressure.
+Correction in this package: both downstream stages use SubmitRequired and share a bounded total result ownership budget below 256.

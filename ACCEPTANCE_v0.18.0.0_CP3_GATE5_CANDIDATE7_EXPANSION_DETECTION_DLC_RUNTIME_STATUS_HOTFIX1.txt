@@ -1,0 +1,15 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Integrated Acceptance Candidate 7
+Expansion Detection / DLC Runtime Status Hotfix 1
+
+PASS requires:
+- Making History and Breaking Ground installation state are detected independently of runway exposure.
+- GameData/SquadExpansion/MakingHistory and Serenity disk checks run only on a ThreadPool worker.
+- Current-session loaded state is derived from AssemblyLoader.loadedAssemblies without disk access.
+- AIRFIELDS shows EXPANSIONS status separately from DLC RUNWAY runtime exposure.
+- Dessert Airfield reports AVAILABLE, SAVE-LOCKED / NOT EXPOSED, RESTART REQUIRED, or NOT INSTALLED as appropriate.
+- The legacy "DLC 0/1" source label is clarified as "DLC RWY 0/1".
+- DLC installation never grants automatic runway certification authority.
+- Base-game Stock remains the sole automatic certification authority; DLC/MOD/USERCFG remain manual A/B authority.
+- Candidate 6 field-verified runway default baseline remains unchanged and packaged.
+- No Terrain/ND presentation, AP, AA, PROTECT, Performance, Map DRAM, or preload runtime behavior is changed by this hotfix.

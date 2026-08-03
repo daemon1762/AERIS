@@ -1,0 +1,24 @@
+Runtime observation imported for Candidate 3 baseline selection
+Source: user-provided AERISFlightControl(33).zip
+Observed build: CP2.5 Integrated Acceptance Candidate 2
+Session: 2026-07-30_004747
+
+Confirmed from AERIS-owned log:
+- Candidate 2 DLL loaded and shutdown normally.
+- CP2.5 Map DRAM summary result=PASS.
+- airfields=93; runways=43; directions=86.
+- terrainTiles=149; terrainChunks=4.
+- guardedSSD=766; allowedSSD=766; synchronousSSD=0.
+- No AERIS ERROR/FATAL/Exception entry was identified by the integration audit.
+
+Configuration at capture:
+- navigationDisplayMode = Always
+- flightInstrumentDisplayMode = Always
+- terrainPreloadMode = AggressiveIdle
+- terrainPreloadSpeedProfile = Balanced
+
+Limitation:
+- The archive did not include KSP.log.
+- No [AA/CONTROL_SURFACE_LIFECYCLE] activation line appeared in the AERIS log.
+- Therefore this archive does not by itself close Candidate 2's destroyed-callback runtime criterion.
+- Candidate 3 retains Candidate 2's static lifecycle contract and requires the KSP.log transition check in its test card.

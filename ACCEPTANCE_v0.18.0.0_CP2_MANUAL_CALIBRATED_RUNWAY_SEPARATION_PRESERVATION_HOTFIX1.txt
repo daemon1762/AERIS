@@ -1,0 +1,40 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+Manual Calibrated Runway Separation / Preservation Hotfix 1
+
+Runtime evidence reviewed:
+- Video_2026-07-26_22-55-52.mkv
+- AERISFlightControl(22).zip
+
+Finding:
+- Manual A/B registration completed and reciprocal directions were generated.
+- A later generic CHECK HERE action called placement quarantine on a UserCalibrated
+  direction, cleared the saved A/B endpoints, and removed the manual runway from
+  AIRFIELDS/ND after database reload.
+
+Repair:
+- Registry-level UserCalibrated preservation guard before generic quarantine.
+- Storage-level complete A/B pair preservation guard before endpoint clearing.
+- Separate AIRFIELDS categories:
+    CERTIFIED — AUTOMATIC / PROVIDER
+    USER CALIBRATED — MANUAL
+- Manual category closed by default and persisted independently.
+- CHECK HERE hidden for manual entries; explicit CLEAR is required before replacement.
+
+Static acceptance before manifest:
+- Dedicated hotfix regression: 26/26 PASS.
+- Full CP2 acceptance: 51/51 scripts PASS.
+
+Final package acceptance target/result:
+- Manifest-inclusive full CP2 acceptance: 52/52 scripts PASS.
+- Manifest file set and SHA-256 verification: PASS.
+- ZIP CRC: PASS.
+- Clean re-extraction acceptance: 52/52 scripts PASS.
+- Source and clean re-extraction file/byte comparison: PASS.
+
+Safety boundaries:
+- Manual directions remain operationally selectable.
+- No AP/AA/PROTECT control law changes.
+- No LAND control-authority changes.
+- No FlightCtrlState, throttle, brake, steering, gear, flap, airbrake or APP writes added.
+- Legacy NAV remains removed.
+- CP2 remains OPEN pending native Mono/xbuild and KSP runtime validation.

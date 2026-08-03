@@ -1,0 +1,12 @@
+AERIS Flight Control v0.18.0.0
+CP3 GATE 4A — RENDER-READY HEIGHT FIELD & GPU-ONLY FAR PRESENTATION — COMPILE HOTFIX 1
+
+ACCEPTANCE CONTRACT
+
+1. AERISTerrainRasterWorker.cs remains excluded from AERISFlightControl.csproj.
+2. The retired CPU-raster-only AERISTerrainGridSnapshot contract is not referenced by any compiled source.
+3. AERISTerrainAwareness no longer exposes TryCaptureGridSnapshot; GPU-only presentation consumes immutable render-ready tile height fields.
+4. CPU terrain presentation, CPU safety fallback, UNKNOWN_TERRAIN fill and mixed CPU/GPU composition remain prohibited.
+5. Gate 4A FAR FRONT/BACK, render-ready, Resident Cache, LAND, Map DRAM and frozen flight-control boundaries remain unchanged.
+6. The in-game UI/build version reports CP3 GATE 4A COMPILE HOTFIX 1 and does not regress to an older checkpoint label.
+7. Existing Gate 4A and inherited acceptance suites remain PASS.

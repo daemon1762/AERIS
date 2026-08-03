@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+import sys
+sys.dont_write_bytecode = True
+from v01640_testlib import ROOT, CheckSuite, sha256
+
+suite = CheckSuite("v0.16.4.0 internal manifest verification")
+manifest = ROOT / "MANIFEST_SHA256.txt"
+suite.check(manifest.is_file(), "MANIFEST_SHA256.txt exists")
+expected = {}
+if manifest.is_file():
+    for number, line in enumerate(manifest.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        parts = line.split("  ", 1)
+        if len(parts) != 2 or len(parts[0]) != 64:
+            suite.check(False, f"manifest line {number} format", line)
+            continue
+        expected[parts[1]] = parts[0].lower()
+actual = sorted(str(p.relative_to(ROOT)).replace('\\', '/') for p in ROOT.rglob('*')
+                if p.is_file() and p.name != "MANIFEST_SHA256.txt" and
+                "__pycache__" not in p.parts and p.suffix.lower() != ".pyc")
+suite.equal(sorted(expected), actual, "manifest file set matches package")
+bad = [name for name in actual if expected.get(name) != sha256(ROOT / name)]
+suite.check(not bad, "all manifest hashes match", ", ".join(bad[:10]))
+suite.finish()

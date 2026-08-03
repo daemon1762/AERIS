@@ -1,0 +1,75 @@
+AERIS v0.18.0.0 CP2.5 FINAL CLOSURE SOURCE DIFF AUDIT
+Baseline: AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate4_AirfieldsZeroCategoryUIHotfix1_Source
+Current: AERISFlightControl-v0.18.0.0_DEV_CP2.5_FinalClosure_CP3EntryBaseline_StandardPreloadOnly_Source
+
+Changed files: 19
+ADDED  ACCEPTANCE_v0.18.0.0_CP2.5_FINAL_CLOSURE_STANDARD_PRELOAD_ONLY.txt
+  baseline=-
+  current =dac05e2ae4e3708970b0f22086c0f7e7aa33b6f4eda0130aa84477e84fe0b655
+ADDED  Docs/CP25_FINAL_CLOSURE_STANDARD_PRELOAD_ONLY_v0.18.0.0_ja.md
+  baseline=-
+  current =d92c5d038921b36414b91db8a61eadf77e976bce8ca0781e847f2b1cb0267d10
+ADDED  Docs/CP3_CURRENT_BODY_RESIDENT_CACHE_START_HERE_v0.18.0.0_ja.md
+  baseline=-
+  current =16bc1bd69bd15e864dbe00616ba7285d08d08a7415ff745dcfa59ba886fa4127
+ADDED  Docs/ND_CP25_FINAL_CLOSURE_SMOKE_TEST_CARD_v0.18.0.0_ja.md
+  baseline=-
+  current =9a12f6f7440e7d86cfdc3e9f5cc56fb694951f8c453e4af4e0a012f057e59802
+ADDED  Evidence/AERIS36_RUNTIME_ACCEPTANCE_REPORT_2026-07-31_ja.txt
+  baseline=-
+  current =a071261fd53cb6e919a75200128846494d7b5535629f3a6bc7ed0d5f15c139bf
+ADDED  Evidence/CP25_FINAL_CLOSURE_DECISION_2026-07-31.txt
+  baseline=-
+  current =d2527c3c337e9fdb5d81d940d265d00f565a214102fc1fc79df90c1decde5055
+MODIFIED  GameData/AERISFlightControl/AERISFlightControl.version
+  baseline=3976c1697ed4691d65467d22f4b7eb59c787046fcfc0891824dd2dcb78559f0c
+  current =8ea457fccaa906247e9415361f84040589adcdb376439b99e62a356ad010f8a4
+MODIFIED  README.md
+  baseline=47df780b7a4338e86ab26c8198568ee56f65041344ed667ea5d857f8574b7221
+  current =bfda7c39655bf4ba7c12fc5e3e75494c4660b8632d9bc8cc394b2e2c7ed035b5
+MODIFIED  Source/AERISFlightControl/Performance/AERISWorkerScheduler.cs
+  baseline=fa6fcc42e70b2bfc421d532e6e9719da1e96f0ce94359b4664b1ef38ba54a654
+  current =2c9fc6067e7a5c8fbf4e67e58e706e4e70ac548f2dfe6acf2eb503992b9aa5cc
+MODIFIED  Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+  baseline=7bd738ae6b78c1ce58869c4fdce17945d0e3bbc5c784ca5aa6b341cb3794a9b0
+  current =412269ec95ccca3d3a498b0969956bc478cd99e027683516ff1a762f45897521
+MODIFIED  Source/AERISFlightControl/Terrain/AERISTerrainBlockPipeline.cs
+  baseline=d39def4033c9d37fe46d90a9d678b1d438738140189feb5e473a6ddde4b01e5a
+  current =bd7fc15ce8200d17e3d47bcb53a1cdda127b2a539d572215255da8c81463c938
+MODIFIED  Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs
+  baseline=fdb94bdb4abc742477ebd3763b57afd32747404c0cff1e4da7a01c42b1759318
+  current =db9eeca47663a9916beded4ad6315c1d62449fa9788ac46b60676380f672ec07
+MODIFIED  Source/AERISFlightControl/Terrain/AERISTerrainPreloadContracts.cs
+  baseline=1664be55de113a8cab6b03cd7b13546be151fd014ed24b2758249f3d86470972
+  current =afcebe7d648b600259919c8ff9219a2d7e0ee6d43f51a536be7cc0699e2026f7
+MODIFIED  Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs
+  baseline=edbc58a32150d06b40c20287bb0814318e0571ffc05d571090c22813f8b48bc4
+  current =d845c1498d37685d766e4a28f8f0c68aed031b11509854583968a179f9b52c35
+MODIFIED  Source/AERISFlightControl/UI/AERISWindow.cs
+  baseline=cec70118a316762494a793a62208303bda5a8009441309440a6819465c3f4e74
+  current =431825c50eded6906bd91457077db0f9924e62dadbc20119325f59fb645260d9
+MODIFIED  Tools/run_v01800_cp25_acceptance.py
+  baseline=fb2da2a9de431bf50cecd6da860941cd0bd2998482581a10ec5ab477d7cf918f
+  current =09fecf7bb66037c7d28a9f3d6cee1289351fa9464bd9a100d14065e32f9f5e63
+ADDED  Tools/selftest_v01800_cp25_final_closure_standard_preload_only.py
+  baseline=-
+  current =e1b9a2c03550f165cd6b004a89324d464c506bacbe51a5b8044324b84a61ca5e
+MODIFIED  Tools/selftest_v01800_cp2_preload_status_toolbar.py
+  baseline=5106e48a041f5a0e1bb9f95d18e2eba56148953a59e2dc119549dc104f589860
+  current =51d746ab1967643af633503e40d84ea3515720d3bd2d93b7ba8d85ccfef21b5d
+MODIFIED  build_ubuntu.sh
+  baseline=bca0bbbcf2a473a5aaecffbdadf270e9ebdb0551e68a0eb540480e4188e24b75
+  current =4927c4ecc2549ca1a877ded6d1e5fe8199ac247e35e08d4f9d9c1ad24707aa3c
+
+Runtime code boundary:
+- MODIFIED: Source/AERISFlightControl/Performance/AERISWorkerScheduler.cs
+- MODIFIED: Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+- MODIFIED: Source/AERISFlightControl/Terrain/AERISTerrainBlockPipeline.cs
+- MODIFIED: Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs
+- MODIFIED: Source/AERISFlightControl/Terrain/AERISTerrainPreloadContracts.cs
+- MODIFIED: Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs
+- MODIFIED: Source/AERISFlightControl/UI/AERISWindow.cs
+
+Frozen boundaries: AA/AP/PROTECT/FlightState/Landing/Integrations/Airfields data unchanged.
+Track B runway coordinates/data unchanged.
+CP3 Current Body Resident Cache implementation absent.

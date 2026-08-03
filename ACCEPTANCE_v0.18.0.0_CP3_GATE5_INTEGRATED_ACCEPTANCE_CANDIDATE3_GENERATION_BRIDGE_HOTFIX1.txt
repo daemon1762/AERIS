@@ -1,0 +1,24 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 — Integrated Acceptance Candidate 3 — Generation Bridge Hotfix 1
+
+Purpose
+- Remove the residual normal-flight one-frame black flash left by Candidate 2.
+- Preserve the last complete GPU FRONT across a short TerrainGeneration rollover.
+
+Hard contracts
+- CPU terrain presentation = 0.
+- No GUI.matrix temporal terrain warp.
+- Same celestial body and same body radius required for generation bridge.
+- Latched FRONT age ceiling remains 8 s.
+- Latched FRONT projection is the authority for all world-locked ND symbology while bridged.
+- LAND/safety data authority never uses the stale presentation FRONT.
+- Normal Route/Local persistent generation remains disabled; Virtual Detail remains FAR-derived.
+- Startup airport/runway remains NONE/NONE.
+
+Runtime PASS criteria
+- No visible black flash during normal 80/160 km, 250–350 m/s TRACK UP flight and tile/generation boundaries.
+- front=LATCHED is permitted as a short continuity state; latch_age <= 8 s.
+- ready_build_violation=0 and cpu_terrain_draw=0.
+- runwayMapLockErrorPx <= 0.25 px.
+- No AERIS ERROR/exception evidence.
+- Terrain OFF -> AUTO may rebuild after resource release, but standby background must not be black.

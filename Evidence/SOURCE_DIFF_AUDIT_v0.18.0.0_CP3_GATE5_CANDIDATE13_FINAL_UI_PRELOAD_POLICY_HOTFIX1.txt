@@ -1,0 +1,21 @@
+Candidate 13 Final UI / Preload Policy Hotfix 1 — source scope audit
+
+User requirements implemented:
+1) PRELOAD setting mutation reduced to ON/OFF only; accepted defaults are fixed internally.
+2) PRELOAD debug presentation removed except completion percentage.
+3) Persistent PRELOAD capacity limit removed (long.MaxValue); per-body cap enforcement disabled.
+4) Per-body Priority / Quality / BodyCap controls and mutation APIs removed.
+5) Per-body UI operations reduced to BUILD, PAUSE/RESUME, DELETE, REBUILD.
+6) PROTECT Parking Hold and Reverse Thrust Auto default ON; one-time policy-revision migration added for preserved legacy settings.
+7) PROTECT live debug/numeric telemetry presentation removed.
+8) SYSTEM DIAGNOSTICS and internal diagnostic telemetry presentation removed. Runtime telemetry/logging owners remain for acceptance evidence.
+9) Installed DLC runways are grouped under VANILLA RUNWAYS; Making History absence continues to suppress DLC presentation.
+
+Important implementation details:
+- Legacy `terrainPreloadMode` is read only as an ON/OFF migration source. Legacy speed/storage/idle settings are not persisted or honored.
+- Legacy preload state files cannot restore old modes, per-body Priority/Quality overrides, or BodyCap values.
+- Automatic enabled policy = AggressiveIdle + Balanced + 5 s idle.
+- Manual body BUILD remains possible even when automatic preload is OFF.
+- DLC category presentation does not change internal Source=Dlc or UserCalibrated authority.
+- Dessert field-verified geometry/config is unchanged.
+- No CPU terrain fallback, GUI.matrix warp, new control authority, or non-Stock automatic certification is introduced.

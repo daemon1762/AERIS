@@ -1,0 +1,43 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Integrated Acceptance Candidate 8
+ND Phantom Runway / Performance Hotfix 1
+
+SCOPE
+- Fix ND phantom/off-screen runway preview-selection caused by projection-authority mismatch.
+- Preserve explicit selected-runway edge-pointer behavior.
+- Reduce ND main-thread allocations and redundant runway projection work without reducing visual quality.
+- Reduce verified Map DRAM terrain-index publish overhead.
+- Activate runtime load shedding for background PQS preload work under measured frame/ND pressure.
+- Preserve all CP3 authority, GPU-only, manual-runway, LAND and safety boundaries.
+
+STATIC ACCEPTANCE REQUIREMENTS
+1. Candidate 8 selftest PASS.
+2. Full CP3 Gate 5 successor suite PASS.
+3. Existing Candidate 7 / Candidate 6 / Candidate 5 / Gate 4C regression suites remain PASS.
+4. Candidate 6 field-verified runway calibration default remains byte-identical.
+5. Terrain tile contracts and GPU rasterizer quality contracts remain byte-identical to Candidate 7.
+6. Airfield registry/certification authority remains byte-identical to Candidate 7.
+7. Autopilot BANK authority remains byte-identical to Candidate 7.
+8. ND hit-testing and rendering share the same presented GPU FRONT projection.
+9. Off-screen non-selected runways cannot become click-preview candidates.
+10. CPU terrain presentation and GUI.matrix temporal warp remain absent.
+11. Build/UI/AVC identity names Candidate 8.
+
+NATIVE / RUNTIME REQUIREMENTS
+- Native Ubuntu xbuild succeeds against KSP 1.12.5 references.
+- Game starts from a fully terminated process.
+- Tab/UI reports Candidate 8.
+- Phantom runway regression card passes.
+- All six ND ranges retain Candidate 7 visual quality.
+- No terrain black wedge/warp/CPU fallback.
+- Explicitly selected off-scale runway edge pointer still works.
+- CLEAR/NONE leaves no tracking runway pointer.
+- Runtime preload load-shed occurs under high ND/frame pressure and returns to full budget when pressure clears.
+- Map DRAM routine publish logging is coalesced without lookup regressions.
+- Long-run AP/PROTECT/LAND regression is clean.
+
+CURRENT STATUS
+STATIC: PASS — Candidate 8 selftest 50/50; full Gate 5 suite 18/18
+NATIVE BUILD: PENDING USER ENVIRONMENT
+KSP RUNTIME: PENDING
+CP3 CLOSE: NOT AUTHORIZED

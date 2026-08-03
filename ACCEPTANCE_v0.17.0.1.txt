@@ -1,0 +1,42 @@
+AERIS Flight Control v0.17.0.1 — source acceptance record
+Date: 2026-07-23
+Artifact state: final compile-hotfix source tree with internal manifest
+
+PASS  verify_v01701_static.py                 147/147
+PASS  verify_v01701_build_entrypoint.py         11/11
+PASS  selftest_v0170_generation_scheduler.py    34/34
+PASS  selftest_v0170_async_recording.py         67/67
+PASS  selftest_v0170_pc1_golden.py              45/45
+PASS  selftest_v0164_consensus_runway.py         15/15
+PASS  selftest_v0164_reload_land_ui.py           53/53
+PASS  selftest_v01630_legacy_nav_removal.py      44/44
+PASS  selftest_v01630_foundation_data_display.py 40/40
+PASS  selftest_v01630_user_layout_ui.py          79/79
+PASS  verify_v01701_manifest.py                    3/3
+
+TOTAL: 538/538 assertions; 11/11 scripts PASS
+SOURCE/MODEL SUBTOTAL: 535/535 assertions
+C# tree-sitter syntax: 108/108 files PASS
+build_ubuntu.sh bash syntax: PASS
+AERISFlightControl.csproj XML parse: PASS
+Internal manifest: 174/174 files matched
+StringComparison namespace-resolution regression: PASS
+BANK source SHA-256: bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7
+Compiled/cache artifacts in source tree: none
+
+Product-code delta from v0.17.0.0:
+- UI/AERISWindow.cs: StringComparison.Ordinal -> System.StringComparison.Ordinal
+- Properties/AERISBuildVersion.generated.cs: 0.17.0.0 -> 0.17.0.1
+- Autopilot directory: byte-identical
+- Performance directory: byte-identical
+- Landing directory: byte-identical
+
+Environment limitations:
+- xbuild, msbuild, dotnet, csc and mcs: NOT FOUND
+- desktop/laptop KSP Assembly-CSharp.dll: NOT FOUND
+- native KSP compilation: NOT RUN in the packaging environment
+- KSP launch/flight/performance/GPU/disk-fault acceptance: NOT RUN
+
+The reported user-side CS0103 is closed by explicit System.StringComparison resolution
+and protected by a new static regression. Native KSP compilation remains the next
+acceptance gate and must not be inferred from source/static/model checks.

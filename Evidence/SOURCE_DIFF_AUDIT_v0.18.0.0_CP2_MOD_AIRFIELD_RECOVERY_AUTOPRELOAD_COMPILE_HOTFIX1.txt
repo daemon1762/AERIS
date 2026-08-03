@@ -1,0 +1,56 @@
+AERIS v0.18.0.0 CP2 Mod Airfield Recovery + Auto Preload Progression Compile Hotfix 1
+Baseline: Mod Airfield Recovery Hotfix 1 + Auto Preload Progression 1
+
+Changed or added files excluding this audit and manifest: 13
+
+ACCEPTANCE_v0.18.0.0_CP2_MOD_AIRFIELD_RECOVERY_AUTOPRELOAD_COMPILE_HOTFIX1.txt
+  baseline -
+  current  59fc5e43be082eadea4935144c592e09c0d87499f2eec0dec0fabfc80cf4fff2
+
+Docs/CP2_MOD_AIRFIELD_RECOVERY_AUTOPRELOAD_COMPILE_HOTFIX_1_v0.18.0.0_ja.md
+  baseline -
+  current  114dc1257b74c2b94eaa928840fb4b7f4cd58cc9ba5c567bf0612230c9ad5261
+
+Docs/HANDOVER_AERIS14_v0.18.0.0_CP2_MOD_AIRFIELD_RECOVERY_AUTOPRELOAD_COMPILE_HOTFIX1_ja.md
+  baseline -
+  current  9427e8da7f3337f2a114137245ebcd35bb50b8dd5b1b6818c81b9782efbe8bf7
+
+Docs/ND_CP2_MOD_AIRFIELD_RECOVERY_AUTOPRELOAD_COMPILE_HOTFIX_1_TEST_CARD_v0.18.0.0_ja.md
+  baseline -
+  current  c6329c9e2bfb56466fa92815df13243b508a393b8d866f9b8f13fb33b8cc3ebe
+
+Evidence/FROZEN_CONTROL_HASH_AUDIT_v0.18.0.0_CP2_MOD_AIRFIELD_RECOVERY_AUTOPRELOAD_COMPILE_HOTFIX1.txt
+  baseline -
+  current  ab420aa22d0f750a852b232e6662356b18662b6e223d905ee8359fc62afff2a8
+
+GameData/AERISFlightControl/AERISFlightControl.version
+  baseline 7195023f889dee2e012ec5fe5ee45934e950f7882785d57500b3298141cb98aa
+  current  4a60bfbfc3661f2b6d30413b888fe3929c0bd7acdc18846629ebae9940e189ff
+
+README.md
+  baseline ed2fe3a6883f0475fc878a4ff99c696f67600d3aede1a76672af0ca713ea7213
+  current  1d25582a800487818ed808e5e878d057a2dd53d91b3afef6d7947e0aafe5586c
+
+Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+  baseline 3a334b1a98b8b6f551fc89fb37043868cb7c49c4db8afadd041c9b015bd0cdbe
+  current  302ff42501c9494b698ad99ef466447a712a72d515daeecb3614dfbbe5006185
+
+Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs
+  baseline 217d674de643031d854955e94fb4d9e9fb10b71792d7de1c98441b5fd7a86dc1
+  current  b24912f5d14129a7293f8e2d162d8c465f8ab96d4a69c12a2603e452e274f77d
+
+Tools/run_v01800_cp2_acceptance.py
+  baseline 269c3f34ef9e549b88a969d861fa6a2eadce3a108d5a84a9d8feb786b0a84076
+  current  f1e6dcf0c78fe1ab462d2421cc10ddf8682523876bb4bc61a1c6008c3fcc885f
+
+Tools/selftest_v01800_cp2_mod_airfield_recovery_autopreload_compile_hotfix1.py
+  baseline -
+  current  72a976d64a26d8ecadb37280fd32f2fcbaf66f28fd2548d7541b6debced2394c
+
+Tools/verify_v01800_cp2_static.py
+  baseline 8a55189390970b8cfd1224b699b78d85dcd27fbd90c7e0cd48a57231ff3ec74f
+  current  45a1e2605b934541e28157b1a84651616fd2bd22e58feab306b6e010df7b4f93
+
+build_ubuntu.sh
+  baseline 5b2eb0badc86cf48d15f832745277491e3ed086f285fae93c69934d46b33dc63
+  current  b78041a53b9658d784f6a9e89a5df6db4e8b9ed8503ad36f85e1d300ac002d2a

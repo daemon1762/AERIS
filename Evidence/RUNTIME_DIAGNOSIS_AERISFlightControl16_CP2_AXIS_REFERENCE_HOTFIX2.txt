@@ -1,0 +1,57 @@
+AERISFlightControl(16).zip runtime diagnosis
+Source session: 2026-07-26_010340_session.log
+Build: v0.18.0.0 ... MOD AIRFIELD RECOVERY HOTFIX 1 AUTO PRELOAD PROGRESSION 1 COMPILE HOTFIX 1
+
+Observed startup cache:
+[AIRFIELD_CACHE] load accepted; certified=12; failures=40.
+
+Observed failed commit:
+REGISTERED 43 RWY / 86 APP
+CERTIFIED 3 RWY / 6 APP
+FAILED 40 RWY / 80 APP
+MEASURED 1 / CACHE 0 / FAILED 40 / REVALIDATE 12
+
+Representative new FailureRecord code:
+- Dundard's Edge Runway: AbsolutePlacementInvalid
+- Kola Island: AbsolutePlacementInvalid
+- Mahi Runway: AbsolutePlacementInvalid
+- Goldpool Runway: AbsolutePlacementInvalid
+- Uberdam Airfield: AbsolutePlacementInvalid
+- Cape Kerman: AbsolutePlacementInvalid
+- Kojave Sands: AbsolutePlacementInvalid
+- Polar Research Alpha: AbsolutePlacementInvalid
+- Sandy Island: AbsolutePlacementInvalid
+
+Only visible passing MOD runway in the latest re-survey:
+Dull Spot Runway
+meshRunwayHeadingDeg=179.28
+launchTransformHeadingDeg=359.26
+axisRegistrationValid=True
+absolutePlacementValid=True
+
+Contrasting prior valid physical placements from the same archive:
+- Dundard's Edge: heading 133.57; launch cross after 0.00 m
+- Kola Island: heading 163.69; launch cross after 0.00 m
+- Mahi: heading 130.62; launch cross after 0.00 m
+- Uberdam: heading 137.65; launch cross after 0.00 m
+- Kojave Sands: heading 140.88; launch cross after 0.00 m
+- Sandy Island: heading 136.14; launch cross after 0.00 m
+
+Root cause in source:
+ApplyAxisRegistrationConstraint compared measured pavement heading against
+snapshot.DeclaredHeadingDeg. For KK/SLE this is commonly static model-instance
+orientation (often 0 deg), not the internally rotated runway mesh/designator.
+The 15-degree broad gate therefore rejected most non-0/180 runways. Dull Spot
+passed only because 179.28 deg is axis-equivalent to 0 deg.
+
+Correction:
+- Use LaunchAnchorHeadingDeg for the independent broad axis reference.
+- Keep measured pavement PCA as authoritative axis truth.
+- Keep 15-degree fail-closed reference gate.
+- Bump CurrentAxisRegistrationRevision from 1 to 2 for targeted re-survey.
+- Rename diagnostic to axisReferenceErrorDeg.
+
+Auto preload observation:
+Kerbin FAR_GLOBAL COMPLETE was logged repeatedly. The short session did not
+provide proof of another-body selection or PROMOTE, so Auto Preload remains
+runtime-unverified beyond Kerbin COMPLETE recognition.

@@ -1,0 +1,65 @@
+name	code	seconds	last
+selftest_v01630_foundation_data_display.py	0	1.379	[v0.16.3.0 foundation data/display] 40/40 PASS
+selftest_v01630_legacy_nav_removal.py	0	1.641	[v0.16.3.0 legacy NAV removal] 44/44 PASS
+selftest_v01630_user_layout_ui.py	0	1.158	[v0.16.3.0 FDI/ND user-layout UI] 79/79 PASS
+selftest_v0164_consensus_runway.py	0	1.914	[v0.16.4.0 deterministic consensus-runway reference cases] 15/15 PASS
+selftest_v0164_reload_land_ui.py	0	1.703	[v0.16.4.0 reload, LAND freeze, AIRFIELDS and ND contract] 56/56 PASS
+selftest_v01702_runway_registry_identity.py	0	1.622	[v0.17.0.2 stock/DLC runway-registry identity regression] 20/20 PASS
+selftest_v01703_startup_cache_archive.py	0	1.891	[v0.17.0.3 startup/cache/archive field-hotfix regression] 48/48 PASS
+selftest_v0170_async_recording.py	0	2.508	[v0.17.0.0 asynchronous recording and archive integrity] 67/67 PASS
+selftest_v0170_generation_scheduler.py	0	1.292	[v0.17.0.0 generation, latest-wins and permit model] 34/34 PASS
+selftest_v0170_pc1_golden.py	0	2.151	[v0.17.0.0 PC1, display and safety invariants] 45/45 PASS
+selftest_v01800_adaptive_approach_foundation.py	0	1.778	[v0.18.0.0 adaptive approach planning foundation] 30/30 PASS
+selftest_v01800_cache_roundtrip_determinism.py	0	2.545	[v0.18.0.0 Gate-0 cache round-trip determinism] 23/23 PASS
+selftest_v01800_cache_schema7_physical_aliases.py	0	1.138	[v0.18.0.0 schema-7 physical cache aliases] 18/18 PASS
+selftest_v01800_canonical_source_cache.py	0	2.228	[v0.18.0.0 canonical source-geometry cache regression] 46/46 PASS
+selftest_v01800_cp1_nd_core.py	0	2.494	[v0.18.0.0 CP1 ND core, PLAN and runway-display verification] 92/92 PASS
+selftest_v01800_cp25_altitude_gate_hotfix1.py	0	1.915	[v0.18.0.0 CP2.5 altitude gate hotfix 1] 43/43 PASS
+selftest_v01800_cp25_integrated_acceptance_candidate1.py	0	1.075	[v0.18.0.0 CP2.5 Integrated Acceptance Candidate 1] 21/21 PASS
+selftest_v01800_cp25_integrated_acceptance_candidate2.py	0	1.458	[v0.18.0.0 CP2.5 Integrated Acceptance Candidate 2] 42/42 PASS
+selftest_v01800_cp25_integrated_acceptance_candidate3.py	0	2.654	[v0.18.0.0 CP2.5 Integrated Acceptance Candidate 3] 62/62 PASS
+selftest_v01800_cp25_integrated_acceptance_candidate4.py	0	1.974	[v0.18.0.0 CP2.5 Integrated Acceptance Candidate 4] 73/73 PASS
+selftest_v01800_cp25_land_separation_hotfix1.py	0	1.323	[v0.18.0.0 CP2.5 LAND separation hotfix 1] 45/45 PASS
+selftest_v01800_cp25_map_dram_cache_foundation_hotfix1.py	0	2.070	[v0.18.0.0 CP2.5 Map DRAM Cache Foundation Hotfix 1] 50/50 PASS
+selftest_v01800_cp25_map_dram_cache_foundation_hotfix2.py	0	2.146	[v0.18.0.0 CP2.5 Map DRAM Cache Foundation Hotfix 2] 77/77 PASS
+selftest_v01800_cp25_quality_migration_hotfix1.py	0	1.029	[v0.18.0.0 CP2.5 quality migration hotfix 1] 39/39 PASS
+selftest_v01800_cp2_absolute_geodetic_build_entrypoint_hotfix1.py	0	2.273	[v0.18.0.0 CP2 absolute geodetic build entrypoint hotfix 1] 16/16 PASS
+selftest_v01800_cp2_alignment_diagnostic_hotfix1.py	0	1.459	[v0.18.0.0 CP2 Alignment Diagnostic Hotfix 1] 28/28 PASS
+selftest_v01800_cp2_bidirectional_runway_pair_hotfix1.py	0	1.919	[v0.18.0.0 CP2 bidirectional runway pair hotfix 1] 29/29 PASS
+selftest_v01800_cp2_calibration_roundtrip_hotfix1.py	0	1.243	[v0.18.0.0 CP2 calibration round-trip hotfix 1] 21/21 PASS
+selftest_v01800_cp2_closure_candidate1.py	0	2.298	[v0.18.0.0 CP2 closure candidate 1] 31/31 PASS
+selftest_v01800_cp2_csharp_compile_regression.py	0	2.117	[v0.18.0.0 CP2 C# definite-assignment compile regression] 25/25 PASS
+selftest_v01800_cp2_field_render_consistency_hotfix1.py	0	1.439	[v0.18.0.0 CP2 Field Render Consistency Hotfix 1] 47/47 PASS
+selftest_v01800_cp2_generic_runway_placement_fc3_compile_hotfix1.py	0	1.539	[v0.18.0.0 CP2 Generic Runway Placement FC3 Compile Hotfix 1] 9/9 PASS
+selftest_v01800_cp2_generic_runway_placement_verification_final_candidate3.py	0	3.004	[v0.18.0.0 CP2 generic runway placement verification final candidate 3] 199/199 PASS
+selftest_v01800_cp2_kk_runway_absolute_registration_hotfix1.py	0	1.812	[v0.18.0.0 CP2 KK runway absolute registration hotfix 1] 38/38 PASS
+selftest_v01800_cp2_kk_runway_axis_reference_hotfix2.py	0	1.891	[v0.18.0.0 CP2 KK runway axis reference hotfix 2] 29/29 PASS
+selftest_v01800_cp2_kk_runway_axis_registration_compile_hotfix1.py	0	1.850	[v0.18.0.0 CP2 KK runway axis registration compile hotfix 1] 10/10 PASS
+selftest_v01800_cp2_kk_runway_axis_registration_hotfix1.py	0	8.811	[v0.18.0.0 CP2 KK runway axis registration hotfix 1] 47/47 PASS
+selftest_v01800_cp2_manual_calibrated_runway_separation_preservation_hotfix1.py	0	1.403	[v0.18.0.0 CP2 manual calibrated runway separation preservation hotfix 1] 26/26 PASS
+selftest_v01800_cp2_manual_calibration_reflection_hotfix1.py	0	2.272	[v0.18.0.0 CP2 manual calibration reflection hotfix 1] 29/29 PASS
+selftest_v01800_cp2_manual_runway_absolute_geodetic_endpoint_authority_hotfix1.py	0	2.374	[v0.18.0.0 CP2 manual runway absolute geodetic endpoint authority hotfix 1] 23/23 PASS
+selftest_v01800_cp2_manual_runway_designation_grouping_hotfix1.py	0	2.505	[v0.18.0.0 CP2 manual runway designation grouping hotfix 1] 25/25 PASS
+selftest_v01800_cp2_mod_airfield_recovery_autopreload1.py	0	1.413	[v0.18.0.0 CP2 mod airfield recovery + auto preload progression 1] 48/48 PASS
+selftest_v01800_cp2_mod_airfield_recovery_autopreload_compile_hotfix1.py	0	2.246	[v0.18.0.0 CP2 mod-airfield recovery / auto-preload compile hotfix 1] 9/9 PASS
+selftest_v01800_cp2_nd_auxiliary.py	0	1.905	[v0.18.0.0 CP2 ND auxiliary symbology and provider contracts] 176/176 PASS
+selftest_v01800_cp2_nd_publish_airfields_ui_hotfix1.py	0	2.097	[v0.18.0.0 CP2 ND publish and airfields UI collapse hotfix 1] 48/48 PASS
+selftest_v01800_cp2_preload_status_toolbar.py	0	1.577	[v0.18.0.0 CP2 FMJ-style Preload status toolbar] 52/52 PASS
+selftest_v01800_cp2_preload_terrain_integration.py	0	1.821	[v0.18.0.0 CP2 Preload Terrain integrated foundation] 622/622 PASS
+selftest_v01800_cp2_render_hotfix2.py	0	2.164	[v0.18.0.0 CP2 progressive HD overlay and profile persistence] 29/29 PASS
+selftest_v01800_cp2_responsive_airfields_ui_resize_hotfix1.py	0	1.970	[v0.18.0.0 CP2 responsive airfields UI and resize hotfix 1] 30/30 PASS
+selftest_v01800_cp2_runway_map_lock_hotfix1.py	0	1.315	[v0.18.0.0 CP2 runway/map geodetic lock hotfix 1] 52/52 PASS
+selftest_v01800_cp2_runway_map_lock_hotfix2_compile_hotfix1.py	0	1.269	[v0.18.0.0 CP2 runway map lock hotfix 2 compile hotfix 1] 5/5 PASS
+selftest_v01800_cp2_runway_map_lock_hotfix2_preload_fastpath1.py	0	1.448	[v0.18.0.0 CP2 runway map lock hotfix 2 + preload fast path 1] 100/100 PASS
+selftest_v01800_cp2_runway_presentation_ui_hotfix1.py	0	0.943	[v0.18.0.0 CP2 runway presentation UI hotfix 1] 11/11 PASS
+selftest_v01800_cp2_runway_terrain_safety_hotfix1.py	0	1.980	[v0.18.0.0 CP2 runway/terrain safety hotfix 1] 70/70 PASS
+selftest_v01800_cp2_supply_pipeline_hotfix3.py	0	2.241	[v0.18.0.0 CP2 Terrain Supply Hotfix 3 pipeline] 85/85 PASS
+selftest_v01800_cp2_terrain_tiles.py	0	2.540	[v0.18.0.0 CP2 terrain tile, cache and GPU-display foundation] 272/272 PASS
+selftest_v01800_physical_runway_federation.py	0	1.730	[v0.18.0.0 physical runway federation] 33/33 PASS
+selftest_v01800_schema7_identity_migration.py	0	2.074	[v0.18.0.0 failure-hint identity compaction regression] 27/27 PASS
+selftest_v01800_submetre_provider_frame_cache.py	0	2.290	[v0.18.0.0 sub-metre provider-frame cache regression] 31/31 PASS
+verify_v01800_cp1_build_entrypoint.py	0	1.637	[v0.18.0.0 CP1 build-entry regression verification] 10/10 PASS
+verify_v01800_cp1_static.py	0	2.070	[v0.18.0.0 CP1 static package verification] 28/28 PASS
+verify_v01800_cp2_build_entrypoint.py	0	1.849	[v0.18.0.0 CP2 build entrypoint verification] 12/12 PASS
+verify_v01800_cp2_static.py	0	1.540	[v0.18.0.0 CP2 static package verification] 168/168 PASS
+verify_v01800_gate0_static.py	0	3.642	[v0.18.0.0 Gate 0 static verification] 194/194 PASS

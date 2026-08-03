@@ -1,0 +1,35 @@
+AERIS Flight Control v0.18.0.0 DEV CP2.5 Altitude Gate Hotfix 1
+
+Scope:
+- Track A only; no curated runway/default coordinate changes.
+- Central ASL activation policy: OFF at >=40500 m, ON below 39500 m, hold between.
+- Preload Builder continues while the flight Terrain viewport is OFF.
+- ND/Terrain/runway/airport/LAND drawing and navigation snapshot updates stop.
+- Flight fallback requests, CPU raster jobs, GPU mesh jobs and RenderTexture resources stop/clear.
+- Published PQS grid is invalidated on OFF transition to prevent stale reactivation.
+- FDI/AP/AA/PROTECT/FlightState remain outside the altitude gate.
+
+Static acceptance:
+- Dedicated CP2.5 assertions: 43/43 PASS.
+- Existing CP1/CP2 regression scripts: 56/56 PASS before manifest.
+- Python syntax, bash syntax and C# delimiter audit: PASS.
+- Landing source and packaged Airfields trees: byte-identical to frozen CP2 baseline.
+
+HHC-4 field acceptance, 2026-07-28:
+- Runtime plugin load and high-energy ballistic flight: PASS.
+- OFF at 40,500.2 m ASL and ON at 39,499.5 m ASL: PASS.
+- Exactly one OFF/ON boundary pair with no hysteresis chatter: PASS.
+- ND visually disappears while FDI/AP UI remains: PASS.
+- MASTER/BANK/HDG/PITCH and BANK active trace continue while OFF: PASS.
+- Current-position Terrain publication resumes 91 ms after ON and reaches full
+  requested coverage in approximately 6.1 seconds: PASS by log.
+
+Carried to CP2.5 integrated acceptance:
+- A one-frame stale-Terrain flash at reactivation was not visually observable
+  because KSP was minimized/covered during the 39.5 km crossing.
+- Active Preload progress continuity was not directly observable because no
+  PRELOAD progress line was emitted in the session.
+
+Verdict:
+- Gate 1 central altitude activation implementation: PASS.
+- No corrective Gate 1 code change is indicated.

@@ -1,0 +1,15 @@
+AERIS v0.18.0.0 DEV CP2 KK RUNWAY AXIS REGISTRATION COMPILE HOTFIX 1
+
+Functional source modification:
+- Landing/AERISRunwayGeometryWorker.cs
+  - local `aspect` in primitive loop renamed to `primitiveAspect`
+  - refined PCA local `aspect` renamed to `surfaceAspect`
+  - no numeric expression, threshold, branch, or data flow changed
+
+Packaging/test modifications:
+- build/version identity
+- compile regression selftest
+- documentation and acceptance evidence
+
+Frozen systems intentionally unchanged:
+BANK, HDG, PITCH, V/S, ALT, ACC, VEL, Ground Stability, Preload Fast Path, ND projection.

@@ -1,0 +1,24 @@
+AERIS v0.18.0.0 CP2.5 Candidate 4 Full Boost Backpressure Hotfix 1
+
+ACCEPTANCE CONTRACT
+
+1. Terrain Block jobs use commit-required scheduler admission.
+2. Commit-required queue admission never evicts an admitted job.
+3. Commit-required results are never evicted by best-effort result pressure.
+4. STANDARD global outstanding block limit is 96.
+5. FULL global outstanding block limit is 192, below the 256 result queue boundary.
+6. Worker failure/stale terminal invokes Commit(null) and retires owner credit.
+7. Rejected admission preserves the sampled block for retry without PQS resampling.
+8. FULL stall/drop detection auto-stops to STANDARD and resets only Preload Builder transient work.
+9. Persisted Terrain Database payload and manifest format are unchanged.
+10. UI exposes outstanding/result/reject/drop/recovery/auto-stop telemetry.
+11. Flight safety stop, manual-only FULL activation and non-persistence remain.
+12. AA/AP/PROTECT/LAND/Runway Track B remain frozen.
+
+RUNTIME PASS
+
+- requiredDropped=0
+- outstanding<=192 in FULL
+- continuous block/tile progress during FULL
+- manual STOP resumes STANDARD without KSP restart
+- no persistent pending-block deadlock

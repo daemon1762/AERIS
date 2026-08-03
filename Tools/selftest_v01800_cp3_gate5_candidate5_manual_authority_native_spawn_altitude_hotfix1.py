@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+sys.dont_write_bytecode=True
+from v01700_testlib import ROOT,SOURCE,CheckSuite,read,strip_csharp_comments_and_literals
+suite=CheckSuite('v0.18.0.0 CP3 Gate 5 Candidate 5 Manual Authority + Native Spawn Altitude Hotfix 1')
+registry=read(SOURCE/'Landing/AERISAirfieldRegistry.cs')
+cache=read(SOURCE/'Landing/AERISRunwayCertificationCache.cs')
+warp=read(SOURCE/'Landing/AERISSandboxNativeSpawnWarpUtility.cs')
+ui=read(SOURCE/'UI/AERISWindow.cs')
+version=read(SOURCE/'Properties/AERISBuildVersion.generated.cs')
+build=read(ROOT/'build_ubuntu.sh')
+avc=read(ROOT/'GameData/AERISFlightControl/AERISFlightControl.version')
+for name,text in (('registry',registry),('cache',cache),('warp',warp),('ui',ui)):
+ c=strip_csharp_comments_and_literals(text)
+ suite.check(c.count('{')==c.count('}'),name+' braces balanced')
+ suite.check(c.count('(')==c.count(')'),name+' parens balanced')
+# Authority policy
+suite.check('AutomaticCertificationAllowed(AERISProviderFacilityRecord record)' in registry,'automatic certification policy helper exists')
+suite.check('record.Source == AERISAirfieldSource.Stock' in registry,'only base-game Stock is automatic certification authority')
+suite.check('airfield.Source == AERISAirfieldSource.Stock;' in registry,'configured trusted geometry is Stock-only')
+suite.check('MANUAL A/B REQUIRED — NON-STOCK AUTO CERT DISABLED' in registry,'non-stock survey status explicitly requires manual A/B')
+suite.check('AERISRunwayFailureCode.UserCalibrationRequired' in registry,'non-stock unresolved runways use manual-calibration-required state')
+suite.check('!AutomaticCertificationAllowed(record) &&' in registry and '!witness.UserCalibrated' in registry,'non-stock automatic survey is gated by user calibration')
+suite.check('!snapshot.RunwayWitnessUserCalibrated' in registry,'worker result has defense-in-depth non-stock automatic rejection')
+suite.check('EnforceCertificationAuthorityPolicy()' in registry,'final staged registry is authority-sanitized')
+suite.check('NON-STOCK AUTOMATIC GEOMETRY IS DIAGNOSTIC ONLY' in registry,'quarantined geometry is explicitly diagnostic only')
+suite.check('direction.ClassificationConfidence = 0.0;' in registry and 'direction.GeometryConfidence = 0.0;' in registry,'quarantined automatic geometry cannot remain confidence authority')
+suite.check('PurgeNonStockAutomaticAuthority()' in cache,'cache has non-stock automatic authority purge')
+suite.check('record.Airfield.Source == AERISAirfieldSource.Stock' in cache,'cache purge retains Stock automatic authority')
+suite.check('AERISRunwayCertificationBasis.UserCalibrated' in cache,'cache purge retains manual A/B authority')
+suite.check('POLICY PURGED' in cache,'cache purge is visible in status')
+suite.check('CachedAuthorityAllowed(cached.Airfield)' in registry,'undiscovered cache cannot bypass authority policy')
+# UI policy
+suite.check('return record != null && record.Source == AERISAirfieldSource.Stock;' in registry,'registry retains base-game Stock-only automatic authority policy')
+suite.check('VANILLA RUNWAYS' in ui and 'dlcVanilla' in ui,'successor VANILLA category may include installed field-verified DLC without granting automatic authority')
+suite.check('airfield.Source!=AERISAirfieldSource.Stock' in ui,'non-stock calibration controls have explicit branch')
+suite.check('NON-STOCK RUNWAY: AUTOMATIC / PROVIDER GEOMETRY IS NOT OPERATIONAL AUTHORITY.' in ui,'non-stock UI explains manual authority')
+suite.check('MARK A' in ui and 'MARK B' in ui,'manual A/B registration remains available')
+# Warp altitude semantics
+suite.check('double nativeAltitudeAsl = body.GetAltitude' in warp,'provider live transform ASL is measured')
+suite.check('AERISOperationalRunwayResolver.TryTerrainSample' in warp,'terrain ASL is sampled at native spawn')
+suite.check('double spawnAltitudeAgl = nativeAltitudeAsl - terrainAltitudeAsl;' in warp,'native ASL is converted to surface-relative AGL')
+suite.check('spawnAltitudeAgl = Math.Max(2.0, spawnAltitudeAgl);' in warp,'small physics-easing clearance is retained')
+suite.check('spawnAltitudeAgl, inclinationDeg, headingDeg, true, true,' in warp,'KSP Set Position receives AGL rather than native ASL')
+suite.check('native_alt_asl=' in warp and 'terrain_alt_asl=' in warp and 'target_agl=' in warp,'warp telemetry records altitude conversion')
+suite.check('WARP REFUSED — TERRAIN ALTITUDE UNAVAILABLE' in warp,'warp fails closed without terrain altitude')
+suite.check('WARP REFUSED — MOD NATIVE SPAWN ALTITUDE INVALID' in warp,'implausible spawn AGL fails closed')
+suite.check('FlightGlobals.fetch.SetVesselPosition' in warp,'KSP stock Set Position remains transport authority')
+suite.check('EaseGravityMultiplier = 0.05' in warp,'KSP physics easing remains enabled')
+suite.check('RuntimeLaunchTransform' in warp and 'live.position' in warp and 'live.forward.normalized' in warp,'MOD live native spawn horizontal frame remains authority')
+code=strip_csharp_comments_and_literals(warp)
+for forbidden in ('vessel.SetPosition(', 'vessel.SetRotation(', 'vessel.SetWorldVelocity(', 'SetOrbit(', '.Clone()', 'direction.Threshold', 'direction.OppositeThreshold'):
+ suite.check(forbidden not in code,'unsafe/synthesized warp path absent: '+forbidden)
+# Version/package identity
+suite.check('DEV CP3 GATE 5 INTEGRATED ACCEPTANCE CANDIDATE 5 MANUAL AUTHORITY NATIVE SPAWN ALTITUDE HOTFIX 1' in version and 'CANDIDATE 5 MANUAL AUTHORITY NATIVE SPAWN ALTITUDE HOTFIX 1' in build,'Candidate 5 identity retained in successor history')
+suite.check('AERIS Flight Control v0.18.0.0 DEV CP3 GATE 5 INTEGRATED ACCEPTANCE CANDIDATE ' in version,'generated display includes current successor semantic/version prefix')
+suite.check('Candidate 5 Manual Authority + Native Spawn Altitude Hotfix 1' in avc,'Candidate 5 AVC history retained')
+suite.check((ROOT/'ACCEPTANCE_v0.18.0.0_CP3_GATE5_INTEGRATED_ACCEPTANCE_CANDIDATE5_MANUAL_AUTHORITY_NATIVE_SPAWN_ALTITUDE_HOTFIX1.txt').is_file(),'Candidate 5 acceptance contract included')
+suite.check((ROOT/'Docs/ND_CP3_GATE5_CANDIDATE5_MANUAL_AUTHORITY_NATIVE_SPAWN_ALTITUDE_HOTFIX1_TEST_CARD_v0.18.0.0_ja.md').is_file(),'Candidate 5 runtime test card included')
+suite.finish()

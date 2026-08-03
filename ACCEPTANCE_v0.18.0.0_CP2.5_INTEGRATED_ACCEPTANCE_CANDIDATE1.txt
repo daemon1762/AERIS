@@ -1,0 +1,53 @@
+AERIS Flight Control v0.18.0.0 DEV CP2.5
+INTEGRATED ACCEPTANCE CANDIDATE 1 — ACCEPTANCE CONTRACT
+
+PURPOSE
+- Run one integrated KSP acceptance pass across every implemented CP2.5 gate.
+- Preserve the frozen CP2 baseline and Gate 1-4 runtime contracts.
+- Repair the AIRFIELDS UI fault observed when USER CALIBRATED — MANUAL contains zero entries.
+
+UI HOTFIX
+- When the manual-calibrated category count is zero, persisted expanded state is forced to collapsed.
+- The zero-count header remains visible but is disabled and cannot create child layout.
+- GUI.enabled is restored after drawing the disabled header.
+- Automatic/provider, provisional, failed, pending and revalidation category behaviour remains unchanged.
+
+GATE 1 — ALTITUDE ACTIVATION
+- Terrain viewport turns OFF at or above 40,500 m ASL.
+- It remains OFF through the hysteresis band and turns ON only below 39,500 m ASL.
+- Preload Builder, FDI, AP, AA, PROTECT and FlightState remain independent.
+
+GATE 2 — QUALITY MODEL
+- Public Terrain quality remains AUTO / LOW / MEDIUM / HIGH.
+- LAND remains developer-only and cannot masquerade as a normal quality option.
+- Revision-2 settings migration and restart persistence remain valid.
+
+GATE 3 — LAND SEPARATION
+- LAND detail requires capability plus active LAND demand.
+- Normal cruise and runway selection alone cannot activate LAND detail.
+- DISARM revokes LAND requests immediately while SSD preload continues.
+
+GATE 4 — MAP DRAM CACHE
+- Airfield, runway, ILS-direction and Terrain Tile/LOD metadata use immutable DRAM snapshots.
+- Runtime normal lookup uses the DRAM list and stable-ID indexes.
+- Guarded startup/maintenance SSD operations are observed and allowed.
+- Forbidden normal-lookup synchronous SSD operations remain zero.
+- Shutdown summary reports synchronousSSD=0 and result=PASS.
+
+HARD BOUNDARIES
+- No Track B runway coordinate/default data changes.
+- No terrain payload residency, decoded height arrays, mesh or GPU residency; these remain CP3.
+- No AP, AA, PROTECT, FlightState, propulsion, landing-control or FlightCtrlState authority changes.
+
+STATIC ACCEPTANCE
+- Integrated candidate dedicated self-test passes.
+- Every Gate 1-4 and frozen CP1/CP2 regression script passes.
+- C# lexical/delimiter, Python, JSON, XML and bash checks pass.
+- Manifest verification, ZIP CRC and clean re-extract full acceptance pass.
+
+RUNTIME ACCEPTANCE
+- Native Mono/xbuild succeeds against KSP 1.12.5.
+- AIRFIELDS page with USER CALIBRATED — MANUAL (0) remains stable and cannot expand.
+- Window resize, scrolling and every other category remain usable.
+- Gate 1 boundary flight, Gate 2 UI/persistence, Gate 3 ARM/DISARM and Gate 4 DRAM/SSD telemetry pass in one package.
+- AERIS has no attributable ERROR/FATAL/Exception.

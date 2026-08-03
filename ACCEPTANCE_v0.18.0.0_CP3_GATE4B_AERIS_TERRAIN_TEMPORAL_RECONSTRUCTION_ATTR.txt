@@ -1,0 +1,13 @@
+AERIS v0.18.0.0 CP3 GATE 4B — AERIS TERRAIN TEMPORAL RECONSTRUCTION (ATTR)
+
+PASS requires:
+1. Gate 4A GPU-only contract remains: CPU terrain presentation is absent and cpu_terrain_draw=0.
+2. FAR remains the normal-flight authoritative resident terrain base; Route/Local are virtual presentation quality or exact/LAND-only bridges.
+3. A complete GPU FRONT may be reprojected only for the same body/radius/terrain generation and only when the affine reconstruction covers the full current viewport.
+4. History older than 20 seconds, excessive geometric distortion, insufficient coverage, or confidence below 0.35 is rejected.
+5. BACK reconstruction is differential: a stable identical view/content revision does not redraw and swap every Repaint.
+6. A BACK may become FRONT only after viewport-authoritative FAR foundation reaches >=99.9% and all required FAR entries are ready.
+7. No CPU safety fallback, UNKNOWN_TERRAIN fill, main-thread synchronous SSD read, FULL BOOST, or SafetyLand worker usage is introduced.
+8. LAND exact data remains separate from reconstructed display quality.
+9. Protected AA/AP/PROTECT/FlightState/Landing/Integrations/Airfields and frozen Map DRAM/Preload Database remain byte-identical.
+10. Native Mono/xbuild and KSP runtime acceptance remain user-side requirements.

@@ -1,0 +1,41 @@
+AERIS Flight Control v0.18.0.0 DEV CP2.5
+INTEGRATED ACCEPTANCE CANDIDATE 2 — ACCEPTANCE CONTRACT
+
+PURPOSE
+- Preserve the functionally accepted CP2.5 Candidate 1 baseline.
+- Repair SyncModuleControlSurface stock GameEvents ownership at start/destroy boundaries.
+- Re-run the complete Gate 1-4 and frozen CP1/CP2 regression matrix.
+
+AA CONTROL SURFACE EVENT LIFECYCLE HOTFIX
+- SyncModuleControlSurface explicitly redeclares the Unity OnDestroy message because the stock ModuleControlSurface cleanup method is non-virtual.
+- The stock ModuleControlSurface.OnDestroy implementation is invoked exactly once.
+- Stock private callbacks are removed before and after the stock cleanup through their native GameEvents Remove(delegate) API.
+- A pre-OnStart cleanup prevents duplicate callbacks if a live module receives another lifecycle start.
+- The managed callback set covers OnEditorPartEvent, OnPartActionUIShown, OnPartActionUIDismiss, onVariantApplied and onVesselReferenceTransformSwitch.
+- Reflection failure is contained, reported once and never allowed to skip the stock OnDestroy call.
+- No Harmony dependency is introduced.
+
+CONTROL-LAW FREEZE
+- CtrlSurfaceUpdate is byte-identical to Candidate 1.
+- Mirror/deploy initialization after base.OnStart is unchanged.
+- No AP, AA control law, FlightCtrlState, MainThrottle, authorityLimiter or actuator behaviour changes.
+
+CANDIDATE 1 PRESERVATION
+- Empty USER CALIBRATED — MANUAL (0) UI remains non-interactive and layout-safe.
+- Gate 1 altitude activation, Gate 2 quality migration, Gate 3 LAND separation and Gate 4 Map DRAM contracts remain unchanged.
+- Track B runway data remains untouched.
+- Terrain payload residency remains CP3.
+
+STATIC ACCEPTANCE
+- Candidate 2 dedicated lifecycle self-test passes.
+- Candidate 1 and every Gate 1-4 / frozen CP1/CP2 regression script passes.
+- C# lexical/delimiter, Python, JSON, XML and bash checks pass.
+- Manifest verification, ZIP CRC and clean re-extract full acceptance pass.
+
+RUNTIME ACCEPTANCE
+- Native Mono/xbuild succeeds against KSP 1.12.5.
+- KSP.log records [AA/CONTROL_SURFACE_LIFECYCLE] explicit stock callback cleanup active.
+- Flight -> Space Center/Main Menu -> Flight, editor transitions, vessel switch and vessel destruction produce zero KSPCF cleanup lines owned by AERISFlightControl:SyncModuleControlSurface.
+- No AERIS-attributable ERROR/FATAL/Exception occurs.
+- BANK/HDG/PITCH/AP behaviour remains unchanged during representative flight.
+- Candidate 1 Gate 1-4 integrated smoke checks remain valid.

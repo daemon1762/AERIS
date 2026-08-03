@@ -1,0 +1,59 @@
+AERIS Flight Control v0.17.0.2 — source acceptance record
+Date: 2026-07-23
+Artifact state: final runway-registry identity hotfix source tree with internal manifest
+
+PASS  verify_v01702_static.py                  150/150
+PASS  verify_v01702_build_entrypoint.py          11/11
+PASS  selftest_v0170_generation_scheduler.py     34/34
+PASS  selftest_v0170_async_recording.py          67/67
+PASS  selftest_v0170_pc1_golden.py               45/45
+PASS  selftest_v01702_runway_registry_identity.py 20/20
+PASS  selftest_v0164_consensus_runway.py          15/15
+PASS  selftest_v0164_reload_land_ui.py            53/53
+PASS  selftest_v01630_legacy_nav_removal.py       44/44
+PASS  selftest_v01630_foundation_data_display.py  40/40
+PASS  selftest_v01630_user_layout_ui.py           79/79
+PASS  verify_v01702_manifest.py                     3/3
+
+TOTAL: 561/561 assertions; 12/12 scripts PASS
+SOURCE/MODEL SUBTOTAL: 558/558 assertions
+C# tree-sitter syntax: 108/108 files PASS
+build_ubuntu.sh bash syntax: PASS
+AERISFlightControl.csproj XML parse: PASS
+Internal manifest: 183/183 files matched
+Stock/DLC independent-identity regression: PASS
+KK/SLE grouped-airfield regression: PASS
+Attached-log collision ID DISC_STOCK_KSP generation: BLOCKED
+BANK source SHA-256: bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7
+Compiled/cache artifacts in source tree: none
+
+Evidence reviewed:
+- Screencast: 152.641 s, 1924x1111, VP8; FAILED/REV 0/LAST NEVER and
+  zero airfield/runway/approach counts reproduced visually.
+- AERISFlightControl(48).log and KSP(3).log: STARTUP generation 1 and
+  MANUAL generations 2/3 all reject the staged database for duplicate
+  Kerbin / DISC_STOCK_KSP after runway snapshot capture.
+- 2026-07-23_023322_863_000001_ARA-2_3317133d.zip: archive integrity PASS;
+  CVR confirms both manual reload requests and the same rejection.
+
+Product-code delta from v0.17.0.1:
+- Landing/AERISAirfieldProviders.cs: KSP facilities no longer share literal
+  ProviderGroup "KSP".
+- Landing/AERISAirfieldRegistry.cs: only KK/SLE group multiple records into an
+  airfield; Stock/DLC identity is provider-site based; diagnostics are one-line.
+- UI/AERISWindow.cs: AIRFIELDS exposes full registry RESULT text.
+- Version declarations: 0.17.0.1 -> 0.17.0.2.
+- Autopilot directory: byte-identical.
+- Performance directory: byte-identical.
+- Other Landing source files: byte-identical.
+
+Environment limitations:
+- xbuild, msbuild, dotnet, csc and mcs: NOT FOUND
+- desktop/laptop KSP Assembly-CSharp.dll: NOT FOUND
+- native v0.17.0.2 KSP compilation: NOT RUN in the packaging environment
+- KSP startup/manual runway reload and actual provider counts: NOT RUN
+- KSP launch/flight/performance/GPU/disk-fault acceptance: NOT RUN
+
+The source/model regression closes the exact staged-registry collision proven by
+the supplied video and logs without weakening fail-closed validation. Native build
+and Docs/RUNWAY_REGISTRY_TEST_CARD_v0.17.0.2_ja.md remain the next acceptance gate.

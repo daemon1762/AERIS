@@ -1,0 +1,24 @@
+PASS: Gate 0 static verification — [v0.18.0.0 Gate 0 static verification] 194/194 PASS
+PASS: Python syntax 130/130
+PASS: JSON/version syntax
+PASS: build_ubuntu.sh syntax
+PASS: no compiled/cache artifacts
+PASS: runtime-code change scope is exact — Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs, Source/AERISFlightControl/UI/AERISWindow.cs, Source/AERISFlightControl/Terrain/AERISTerrainPreloadContracts.cs, Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs
+PASS: protected tree exact: Source/AERISFlightControl/AA
+PASS: protected tree exact: Source/AERISFlightControl/Autopilot
+PASS: protected tree exact: Source/AERISFlightControl/Protect
+PASS: protected tree exact: Source/AERISFlightControl/Landing
+PASS: protected tree exact: Source/AERISFlightControl/FlightState
+PASS: protected tree exact: Source/AERISFlightControl/Integrations
+PASS: protected tree exact: GameData/AERISFlightControl/Airfields
+PASS: protected file exact: Source/AERISFlightControl/Performance/AERISWorkerScheduler.cs
+PASS: protected file exact: Source/AERISFlightControl/Terrain/AERISTerrainBlockPipeline.cs
+PASS: protected file exact: Source/AERISFlightControl/Terrain/AERISTerrainPreloadDatabase.cs
+PASS: forbidden absent: FlightInputHandler.state
+PASS: forbidden absent: MainThrottle =
+PASS: forbidden absent: RunwayMasterCorrection
+PASS: forbidden absent: CURATED_RUNWAY_GEODETIC_DEFAULTS
+PASS: forbidden absent: CurrentBodyResidentCache
+PASS: forbidden absent: ComputeShader.Dispatch
+PASS: forbidden absent: AsyncGPUReadback.Request
+TOTAL 23/23 PASS

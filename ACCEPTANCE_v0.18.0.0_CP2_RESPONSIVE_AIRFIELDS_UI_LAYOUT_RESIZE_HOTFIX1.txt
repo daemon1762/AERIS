@@ -1,0 +1,61 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+Responsive AIRFIELDS UI Layout / Resize Hotfix 1
+
+Status: STATIC ACCEPTANCE PASS — KSP RUNTIME VALIDATION REQUIRED
+CP2 status: OPEN
+
+BASELINE
+- AERISFlightControl-v0.18.0.0_DEV_CP2_NDPublish_AirfieldsUICollapseHotfix1_Source.zip
+- Baseline SHA-256: 62a6fe32da7f86db7549c8b897cbd568f064c07277ce7a48137cb17b0218ffb4
+
+INPUT RUNTIME EVIDENCE
+- AERISFlightControl(21).zip
+- SHA-256: eb068bf160c878efb3fec1fdd7892d1f0a000eb0d49682faea3ddc43efabc9ad
+- Video_2026-07-26_19-50-07.mkv
+- SHA-256: 6922e3eb36d4c1af14492b6f07d3a2d33bd3369790566a35e5b095ea189b0f2d
+
+OBSERVED DEFECTS
+- AIRFIELDS runway rows rendered multi-line text in a fixed 38 px control.
+- CHECK HERE rendered a long action label in a fixed 36 px control.
+- Long failure identifiers had no readable word boundaries.
+- Several tab/category/status controls retained fixed one-line heights.
+- Event.delta accumulation used a moving window-local resize reference and produced unstable jumps.
+- A persisted 920 px height could exceed the observed 864 px game viewport.
+
+IMPLEMENTED REPAIR
+- Wrapped controls measure their current text at the current width with GUIStyle.CalcHeight.
+- AIRFIELDS rows, action controls, category controls, MASTER, Virtual Attitude, main tabs and SYSTEM tabs grow vertically when needed.
+- Narrow layouts use fewer tab columns and stack the AIRFIELDS heading/reload action.
+- PascalCase and underscore/hyphen identifiers are converted to spaced labels.
+- Resize uses a fixed screen-space pointer origin and supports intermediate sizes.
+- Maximum window dimensions are clamped to the active screen with a 12 px safety margin.
+- Resize grip and footer pointer target were enlarged.
+- Existing default-collapsed AIRFIELDS categories remain unchanged.
+
+SAFETY BOUNDARY
+- No runway certification, calibration schema, reciprocal runway-pair or cache algorithm change.
+- No ND navigation snapshot content change.
+- No AP/APP/FlightCtrlState write path added.
+- Legacy NAV remains absent.
+- LAND remains observation-only.
+- CP2 runway-survey debug display remains absent.
+- No user calibration data, binary build output or Python cache is included.
+
+STATIC ACCEPTANCE
+- Dedicated responsive AIRFIELDS UI/resize regression: 30/30 PASS.
+- Existing ND publish/AIRFIELDS UI regression: 45/45 PASS.
+- Complete CP2 script set before manifest: 50/50 scripts PASS.
+- Complete CP2 script set with final manifest: 51/51 scripts PASS.
+- Internal manifest file set: PASS.
+- Internal manifest SHA-256 values: PASS.
+- ZIP CRC: PASS.
+- Clean independent extraction acceptance: 51/51 scripts PASS.
+- Original/clean-extraction file set and byte hashes: PASS.
+
+NOT PERFORMED IN THIS ENVIRONMENT
+- Native Mono/xbuild compilation against the user's KSP installation.
+- KSP/Unity runtime validation.
+- Runtime pointer resizing, narrow-width wrapping and restart persistence.
+
+CP2 CLOSE GATE
+CP2 remains OPEN until the user confirms native build and the supplied runtime test card without overlap, truncation, GUILayout errors, ND regression or loss of reciprocal runway calibration.

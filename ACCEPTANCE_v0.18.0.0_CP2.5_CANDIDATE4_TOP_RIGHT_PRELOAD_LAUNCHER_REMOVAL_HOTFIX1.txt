@@ -1,0 +1,12 @@
+AERIS Flight Control v0.18.0.0
+CP2.5 Candidate 4 Top-Right Preload Launcher Removal Hotfix 1
+
+ACCEPTANCE CONTRACT
+
+1. The independent top-right on-screen `AERIS PRELOAD` launcher is absent in every non-Flight scene.
+2. The existing ToolbarControl-owned AERIS button remains the only non-Flight entry point for the Preload control window.
+3. Closing the Preload window leaves no replacement overlay or floating launcher on screen.
+4. `START PRELOAD BOOST — FULL` and `STOP PRELOAD BOOST — FULL` remain only inside the PRELOAD MAPS page.
+5. Candidate 4 standard/FULL throughput, CPU encode, SSD super-batch, Flight safety and diagnostics remain unchanged.
+6. ND/FDI display policy, AA lifecycle, AP, PROTECT, LAND, Map DRAM and runway data remain unchanged.
+7. No FlightInputHandler, MainThrottle, runway-authority or CP3 resident-cache authority is added.

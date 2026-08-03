@@ -1,0 +1,16 @@
+Source diff audit — CP2 Runway Map Lock Hotfix 1
+
+Changed functional areas:
+- Terrain/AERISTerrainGpuTileRasterizer.cs
+  Carries exact geographic tile bounds into the GPU raster result.
+- Terrain/AERISTerrainGpuTileRenderer.cs
+  Replaces rectangle-stretched tile rendering with per-vertex spherical projection; retains dynamic CPU-accessible meshes.
+- Performance/AERISNavigationDisplayPipeline.cs
+  Preserves exact runway endpoint latitude/longitude in prepared snapshots.
+- UI/AERISNavigationDisplay.cs
+  Projects runway endpoints and hit tests from the live ND centre on each repaint.
+- Properties/AERISBuildVersion.generated.cs, build_ubuntu.sh, AVC metadata, README and current checkpoint verification.
+- New dedicated selftest and current field-test/handover documents.
+
+Frozen control areas are not intentionally modified.
+Native Mono/KSP/Unity runtime verification remains user-environment work.

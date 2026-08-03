@@ -1,0 +1,55 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+KK Runway Axis Reference Hotfix 2 + Auto Preload Progression 1
+
+STATUS
+- CP2: OPEN
+- Static source acceptance: PASS
+- Native Mono/xbuild: NOT RUN in packaging environment (mono/xbuild/msbuild/mcs/csc unavailable)
+- KSP runtime: NOT YET VERIFIED
+- CP3/new NAV authorization: NOT GRANTED
+
+INPUT RUNTIME EVIDENCE
+- AERISFlightControl(16).zip is retained as FAIL/diagnostic evidence only.
+- Latest observed commit: REGISTERED 43 RWY / 86 APP; CERTIFIED 3 RWY / 6 APP;
+  FAILED 40 RWY / 80 APP; MEASURED 1 / CACHE 0 / FAILED 40 / REVALIDATE 12.
+- The archive did not prove Auto Preload progression beyond Kerbin FAR_GLOBAL COMPLETE.
+
+ROOT CAUSE
+Axis Registration Hotfix 1 compared the measured pavement PCA heading with
+snapshot.DeclaredHeadingDeg. For KK/SLE, DeclaredHeadingDeg commonly represents
+the static model-instance orientation, not an internally rotated runway mesh.
+This rejected valid non-0/180-degree runways as AbsolutePlacementInvalid.
+
+CORRECTION
+- Use LaunchAnchorHeadingDeg as the independent broad world-space axis reference.
+- Keep measured runway-surface PCA as the authoritative physical axis.
+- Preserve 12-degree bounded surface correction and 15-degree fail-closed
+  launch-reference sanity gate.
+- Remove DeclaredHeadingDeg from ApplyAxisRegistrationConstraint.
+- Rename diagnostic field to AxisReferenceErrorDeg.
+- Bump CurrentAxisRegistrationRevision from 1 to 2 for targeted KK/SLE re-survey.
+- Add [RUNWAY_AXIS] axisReference=LAUNCH_ANCHOR telemetry.
+
+STATIC ACCEPTANCE
+- Full CP2 acceptance without manifest: 44/44 scripts PASS.
+- Dedicated Axis Reference Hotfix 2 regression: 29/29 checks PASS.
+- Inherited Axis Registration Hotfix 1 regression: 47/47 checks PASS.
+- Mod Airfield Recovery + Auto Preload regression: 48/48 checks PASS.
+- Legacy NAV remains absent.
+- LAND foundation remains control-free.
+- No source/build/runtime binary or Python cache is included.
+
+RUNTIME PASS GATES
+1. Native Mono/xbuild completes successfully against KSP 1.12.5 assemblies.
+2. Build identity contains AXIS REFERENCE HOTFIX 2.
+3. Axis revision 2 causes affected KK/SLE entries to be re-surveyed.
+4. Dundard's Edge, Kola Island, Mahi, Uberdam, Kojave Sands and Sandy Island log:
+   axisReference=LAUNCH_ANCHOR; axisRegistrationValid=True.
+5. Those runways log absolutePlacementValid=True and align with physical pavement.
+6. Certification recovers from 3 RWY / 6 APP to at least the prior 14 RWY / 24 APP
+   field level, with representative airports visible/selectable in AIRFIELDS/LAND/ND.
+7. A second KSP launch reuses stable certified cache records.
+8. Auto Preload proves next-body selection, COMPLETE, PROMOTE, restart inheritance,
+   and final Point-only Land high-detail progression.
+
+CP2 MUST REMAIN OPEN UNTIL ALL RUNTIME GATES PASS.

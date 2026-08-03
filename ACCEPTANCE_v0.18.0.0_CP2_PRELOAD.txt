@@ -1,0 +1,76 @@
+AERIS Flight Control v0.18.0.0 DEV CP2 Preload Terrain Integration
+
+Checkpoint status:
+- Source implementation and deterministic/static regression complete.
+- Native Mono/xbuild compilation NOT TESTED in assistant environment.
+- KSP 1.12.5 / Unity / PQS / GPU / long-running field behavior NOT TESTED.
+- This is a DEV checkpoint, not a final release or RC.
+
+Integrated scope:
+- Gate 0 Physical Runway Canonical Federation / schema 7.
+- CP1 ND core, fixed ranges, orientation, PLAN and runway display.
+- CP2 Terrain Tile / LOD / GPU terrain / quality and auxiliary ND layers.
+- Compile Hotfix 1 definite-assignment corrections.
+- Render Hotfix 2 partial-coverage and profile persistence corrections.
+- Terrain Supply Hotfix 3 latest-view cancellation, preview/final and partial overlay.
+- Preload Terrain Map Builder.
+- Versioned compressed Preload Terrain Database.
+- Asynchronous shared-scheduler terrain loading.
+- Terrain Block Pipeline for database misses.
+- Preload management UI, capacity, priority, persistence and telemetry.
+
+Deterministic acceptance before internal manifest:
+- 29 / 29 scripts PASS.
+- 2167 / 2167 assertions PASS.
+
+Expected and independently rechecked package acceptance with manifest:
+- 30 / 30 scripts PASS.
+- 2170 / 2170 assertions PASS.
+
+Preload integrated foundation dedicated suite:
+- 526 / 526 assertions PASS.
+
+Additional packaging/static hardening:
+- all five Preload core sources included in brace/parenthesis/bracket checks.
+- current README, design, test card, checkpoint and handover required.
+- source package excludes TerrainCache and TerrainPreloadDatabase runtime trees.
+- current test card requires the PreloadTerrainIntegration package name.
+
+Late checkpoint defect found and fixed:
+- periodic runway/current-point snapshots previously advanced Builder point generations
+  even when their semantic content had not changed.
+- points are now sanitized, deterministically sorted and signature-compared.
+- only a changed point set resets point scans and advances Builder generation.
+- identical two-second refreshes cannot repeatedly cancel a slow in-progress Tile.
+
+Safety and regression boundaries:
+- complete Autopilot source directory is byte-identical to the inherited Hotfix 3 base.
+- BANK SHA-256 is bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7.
+- Landing source directory is byte-identical to the inherited Hotfix 3 base.
+- LAND foundation remains control-free.
+- legacy NAV classes and entry points remain absent.
+- new NAV remains unimplemented and BLOCKED.
+- terrain sources contain no flight-control write.
+- no terrain-owned ThreadPool, Task.Wait or Task.Result.
+- no Safety/LAND reserved scheduler lane is used by terrain.
+
+Terminology:
+- official names are Preload Terrain Map Builder, Preload Terrain Database,
+  PRELOAD TERRAIN MAPS and PRELOAD MAP STORAGE.
+- former terrain-system terminology is absent from Source, Docs, README and GameData.
+
+Not tested in assistant environment:
+- native C# compilation against KSP/Unity assemblies.
+- KSP startup and all non-Flight scene lifecycle.
+- Main Menu PQS availability timing.
+- actual input latency in VAB/SPH while Builder runs.
+- real storage latency adaptation and coalesced throughput.
+- Linux/Windows atomic-replace behavior under forced interruption.
+- real corruption recovery and terrain-MOD selective invalidation.
+- actual GPU progressive composition.
+- real first-visible-Tile latency and viewport coverage convergence.
+- multi-hour bounded RAM/VRAM/Disk/queue behavior.
+
+Field gate:
+Use Docs/ND_CP2_PRELOAD_TERRAIN_TEST_CARD_v0.18.0.0_ja.md.
+CP3 must not start until native build and CP2 field acceptance pass.

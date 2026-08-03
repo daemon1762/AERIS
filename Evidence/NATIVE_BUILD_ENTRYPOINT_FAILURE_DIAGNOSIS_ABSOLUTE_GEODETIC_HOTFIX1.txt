@@ -1,0 +1,26 @@
+AERIS v0.18.0.0 CP2 — Native Build Entrypoint Failure Diagnosis
+Date: 2026-07-27
+
+INPUT
+- User terminal transcript after running the Absolute Geodetic Endpoint Authority Hotfix 1 desktop commands.
+
+OBSERVED
+- ZIP SHA-256: OK.
+- Standalone CP2 acceptance: 55/55 scripts PASS.
+- build_ubuntu.sh then announced a build identity ending at MANUAL RUNWAY DESIGNATION GROUPING HOTFIX 1.
+- The build-time acceptance rerun failed one identity assertion: 167/168 PASS.
+- No Mono/xbuild CoreCompile result followed.
+
+ROOT CAUSE
+- The packaged generated C# identity was current.
+- build_ubuntu.sh retained a stale DISPLAY value and overwrote the generated C# file before acceptance/xbuild.
+- The current geodetic runtime implementation was not implicated.
+
+CORRECTION
+- Synchronize build_ubuntu.sh, generated C# identity, AVC metadata and README.
+- Add a dedicated exact identity parity regression.
+- Keep acceptance before xbuild.
+
+VERDICT
+- Previous package: static source acceptance PASS, native build NOT REACHED.
+- Build Entrypoint Hotfix 1: requires user-environment native Mono/xbuild confirmation.

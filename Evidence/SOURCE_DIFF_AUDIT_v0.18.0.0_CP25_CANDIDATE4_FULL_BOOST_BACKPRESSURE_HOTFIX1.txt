@@ -1,0 +1,44 @@
+AERIS v0.18.0.0 CP2.5 Candidate 4 Full Boost Backpressure Hotfix 1
+SOURCE DIFF AUDIT
+
+Changed existing files:
+- GameData/AERISFlightControl/AERISFlightControl.version
+- Source/AERISFlightControl/Performance/AERISWorkerScheduler.cs
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+- Source/AERISFlightControl/Terrain/AERISTerrainBlockPipeline.cs
+- Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs
+- Source/AERISFlightControl/Terrain/AERISTerrainPreloadContracts.cs
+- Source/AERISFlightControl/UI/AERISWindow.cs
+- Tools/run_v01800_cp25_acceptance.py
+- Tools/selftest_v01800_cp25_candidate4_top_right_preload_launcher_removal_hotfix1.py
+- build_ubuntu.sh
+
+Added files:
+- ACCEPTANCE_v0.18.0.0_CP2.5_CANDIDATE4_FULL_BOOST_BACKPRESSURE_HOTFIX1.txt
+- Docs/CP25_CANDIDATE4_FULL_BOOST_BACKPRESSURE_HOTFIX_1_v0.18.0.0_ja.md
+- Docs/ND_CP25_CANDIDATE4_FULL_BOOST_BACKPRESSURE_HOTFIX_1_TEST_CARD_v0.18.0.0_ja.md
+- Evidence/RUNTIME_DISCOVERY_FULL_BOOST_BACKPRESSURE_AERIS34_2026-07-30.txt
+- Tools/selftest_v01800_cp25_candidate4_full_boost_backpressure_hotfix1.py
+- Evidence/SOURCE_DIFF_AUDIT_v0.18.0.0_CP25_CANDIDATE4_FULL_BOOST_BACKPRESSURE_HOTFIX1.txt (this audit)
+
+Removed files:
+- none
+
+Runtime code boundary:
+- Performance/AERISWorkerScheduler.cs: commit-required admission/result protection and telemetry.
+- Terrain/AERISTerrainBlockPipeline.cs: bounded outstanding credits, retry admission and transient recovery.
+- Terrain/AERISTerrainPreloadBuilder.cs: FULL stall/drop fail-safe, STANDARD recovery and diagnostics.
+- Terrain/AERISTerrainPreloadContracts.cs: backpressure/recovery telemetry fields.
+- UI/AERISWindow.cs: diagnostics display only.
+- Properties/AERISBuildVersion.generated.cs: identity only.
+
+Protected tree hashes (Candidate 4 launcher-removal base == Backpressure Hotfix 1):
+- PASS Source/AERISFlightControl/AA 8d3237fc169e9ebbc862c8c900786cad82340abc521ef8b61c2db79792cb604c
+- PASS Source/AERISFlightControl/Autopilot c933a2a801b43ad9826f995c6f279e8f01ba8349c3fb5809dab89379b6596c1d
+- PASS Source/AERISFlightControl/Protect e5a72298b6fb0b6d8b424887d90168d0a96af3989ccba7d4b9a24c5e1c2b2a74
+- PASS Source/AERISFlightControl/FlightState 9fdefc98b876a1e66d9939fdcbced14d8088a43b2318033e694fb9f4d66968b2
+- PASS Source/AERISFlightControl/Integrations 919902796d0688e132c122957dda205c01227b9f4e4f59a441449c296d3de8e8
+- PASS Source/AERISFlightControl/Landing f4311badefe489b013b79dd07773b171560fb7f96fc452a5768cc79a279da91e
+- PASS GameData/AERISFlightControl/Airfields 9d75cb38cb0b5b5b873581593703c6377f0d52f9abc3c5042a1500afce146fcb
+
+No Track B runway data, AA/AP/PROTECT/LAND or flight-control authority changes.

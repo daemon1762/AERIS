@@ -1,0 +1,12 @@
+AERIS v0.18.0.0 CP3 GATE 4B ATTR PRESENTATION RECOVERY HOTFIX 1
+
+1. Gate 4B GPU-only FAR authority remains active; CPU terrain draw count is hard zero.
+2. FAR history foundation is captured for an overscan range while the visible ND range remains unchanged.
+3. Projection refresh no longer depends only on ViewGeneration/content revision.
+4. If DIRECT and temporal presentation both fail while FAR foundation is complete, BACK refresh is forced immediately.
+5. A complete forced BACK may swap only under the existing complete FAR authority condition.
+6. ready==required plus back_foundation==1.000 must not remain BUILDING for >=1 second; such a condition logs CP3_GATE4B_READY_BUILDING_VIOLATION and fails runtime acceptance.
+7. CPU safety fallback, UNKNOWN_TERRAIN and compiled CPU raster worker remain absent.
+8. Large zoom-out without authoritative FAR coverage remains fail-closed; no terrain is invented.
+9. Map DRAM remains metadata-only; no synchronous SSD read or SafetyLand lane work is added.
+10. Track B runway data and AA/AP/PROTECT/LAND control authority remain frozen.

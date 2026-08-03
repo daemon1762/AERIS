@@ -1,0 +1,21 @@
+AERIS Flight Control v0.18.0.0
+CP3 GATE 4A — RENDER-READY HEIGHT FIELD & GPU-ONLY FAR PRESENTATION
+
+ACCEPTANCE CONTRACT
+
+1. The current-body FAR foundation is the sole normal terrain presentation base.
+2. CPU code may decode, validate, classify and build immutable render-ready height fields.
+3. CPU terrain raster presentation, CPU safety fallback, UNKNOWN_TERRAIN fill and mixed CPU/GPU terrain composition are prohibited.
+4. Only the GPU FRONT RenderTexture may be presented to the ND.
+5. The GPU BACK RenderTexture remains invisible until every planned FAR foundation tile is complete and GPU-ready.
+6. BACK-to-FRONT swap requires FAR foundation coverage >= 0.999 and ready FAR count >= planned FAR count.
+7. A previously complete compatible GPU FRONT buffer may remain visible while a new BACK buffer is built.
+8. If no complete FRONT exists, the ND reports TERRAIN GPU BUILDING and does not substitute CPU terrain.
+9. Missing ROUTE/LOCAL detail leaves the complete GPU FAR base visible; detail incompleteness cannot create holes.
+10. Render-ready height fields contain no UnityEngine.Object and survive GPU resource release within their independent budget.
+11. ND OFF, altitude-gated viewport suspension, scene transition and GPU disable release GPU Mesh/Material/RenderTexture resources.
+12. Dispose also releases render-ready CPU data and demotes Resident Cache presentation state.
+13. Resident states may promote RAM RESIDENT -> RENDER READY -> GPU READY and demote safely.
+14. CPU terrain draw count is permanently zero and emitted as cpu_terrain_draw=0 telemetry.
+15. Current-body-only ownership, generation rejection, Map DRAM separation, no synchronous SSD read, no Flight safety-lane work and FULL BOOST absence remain mandatory.
+16. Temporal reprojection, jittered reconstruction and virtual ROUTE/LOCAL synthesis are not part of Gate 4A; they remain Gate 4B work.

@@ -1,0 +1,27 @@
+SOURCE DIFF AUDIT — CP2 MANUAL RUNWAY DESIGNATION GROUPING HOTFIX 1
+
+Baseline: AERISFlightControl-v0.18.0.0_DEV_CP2_ManualCalibrationReflectionHotfix1_Source
+Candidate: AERISFlightControl-v0.18.0.0_DEV_CP2_ManualRunwayDesignationGroupingHotfix1_Source
+
+Production/build metadata differences:
+Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP2_ManualCalibrationReflectionHotfix1_Source/Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP2_ManualRunwayDesignationGroupingHotfix1_Source/Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs differ
+Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP2_ManualCalibrationReflectionHotfix1_Source/Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP2_ManualRunwayDesignationGroupingHotfix1_Source/Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs differ
+Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP2_ManualCalibrationReflectionHotfix1_Source/Source/AERISFlightControl/UI/AERISWindow.cs and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP2_ManualRunwayDesignationGroupingHotfix1_Source/Source/AERISFlightControl/UI/AERISWindow.cs differ
+Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP2_ManualCalibrationReflectionHotfix1_Source/build_ubuntu.sh and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP2_ManualRunwayDesignationGroupingHotfix1_Source/build_ubuntu.sh differ
+Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP2_ManualCalibrationReflectionHotfix1_Source/GameData/AERISFlightControl/AERISFlightControl.version and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP2_ManualRunwayDesignationGroupingHotfix1_Source/GameData/AERISFlightControl/AERISFlightControl.version differ
+Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP2_ManualCalibrationReflectionHotfix1_Source/README.md and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP2_ManualRunwayDesignationGroupingHotfix1_Source/README.md differ
+
+Functional changes:
+- AERISAirfieldRegistry normalizes UserCalibrated direction DisplayName from HeadingDeg before validation and cache save.
+- Physical runway DisplayName becomes a deterministic sorted reciprocal designation.
+- StableId, Id, geometry, certification state and selection keys are preserved.
+- AIRFIELDS rows are keyed and counted by physical runway, not reciprocal direction.
+- Group row shows airfield once and all matching RWY direction labels on the second line.
+- Expanded group renders independent direction details and one calibration action set.
+
+Safety assertions:
+- No Kola-specific branch.
+- No geometry detector, approach validation, Terrain, preload or control-authority change.
+- Manual and automatic/provider category separation remains.
+- CP2 debug overlay remains absent.
+- Legacy NAV remains absent.

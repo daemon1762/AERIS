@@ -1,0 +1,26 @@
+PASS: terrain tile system source exists
+PASS: navigation display source exists
+PASS: disk-write availability is initialized before the synchronization scope
+PASS: disk-write availability declaration precedes lock scope
+PASS: disk-write availability is assigned from the read-aware limit inside lock scope
+PASS: disk writes reserve the last I/O slot while reads are pending
+PASS: disk-write availability is not block-scoped inside lock
+PASS: initialized availability is consumed after lock scope
+PASS: traffic frame is initialized before short-circuit expression
+PASS: traffic frame short-circuit acquisition remains intact
+PASS: invalid traffic frame is explicitly cleared
+PASS: definitely assigned traffic frame reaches map interaction
+PASS: GPU Draw has the explicit progressive draw-state return type
+PASS: navigation display initializes progressive draw state
+PASS: navigation display assigns renderer result before use
+PASS: every progressive renderer exit returns the initialized state field
+PASS: progressive draw-state enum is compiled in shared terrain contracts
+PASS: preview slope interval variables are assigned before use
+PASS: RAM preview telemetry accepts the already imported generic collection contract
+PASS: terrain display mode enum can be parsed
+PASS: all terrain display mode references resolve to declared enum members
+PASS: terrain request generation uses Automatic, never the nonexistent Auto member
+PASS: runway placement quarantine detail is initialized before short-circuit
+PASS: runway placement stored initialization precedes witness-library null gate
+PASS: uninitialized runway placement quarantine detail cannot regress
+[v0.18.0.0 CP2 C# definite-assignment compile regression] 25/25 PASS

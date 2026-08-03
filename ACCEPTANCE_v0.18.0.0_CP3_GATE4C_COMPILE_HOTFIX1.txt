@@ -1,0 +1,11 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 4C Compile Hotfix 1
+
+Purpose:
+- Fix build_ubuntu.sh invoking the obsolete Gate 4B Geometry Integrity acceptance runner.
+- Make the build entrypoint invoke run_v01800_cp3_gate4c_acceptance.py.
+- Update current tab/build/AVC identity to Gate 4C Compile Hotfix 1.
+
+No runtime terrain, ND geometry, runway-label, AA/AP/PROTECT/LAND control logic changes.
+
+Native xbuild: user-environment verification required.

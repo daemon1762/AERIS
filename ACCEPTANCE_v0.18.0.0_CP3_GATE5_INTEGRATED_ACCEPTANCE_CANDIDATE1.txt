@@ -1,0 +1,29 @@
+AERIS Flight Control v0.18.0.0
+CP3 GATE 5 — INTEGRATED ACCEPTANCE CANDIDATE 1
+
+Purpose:
+- Final CP3 integration acceptance only.
+- Production runtime behavior remains frozen at accepted Gate 4C Compile Hotfix 1.
+- Added/changed scope: version identity, static acceptance, test card, runtime evidence analyzer.
+
+Required field evidence:
+- startup neutral airport/runway
+- scene transitions
+- >=2 celestial bodies
+- 40 km hysteresis OFF/HOLD/ON
+- ND AUTO/OFF/AUTO
+- Terrain AUTO/OFF/AUTO
+- ranges 5/10/20/40/80/160 km
+- TRACK UP and NORTH UP
+- LAND ARM/DISARM
+- >=30 min active CP3 resident flight telemetry
+- cpu_terrain_draw=0
+- ready_build_violation=0
+- terrain_gpu_failures=0
+- terrain DB CRC/hash/decompress failures=0
+- resident RAM never exceeds budget
+- scene exit resident RAM returns to zero; GPU release contract remains present and no post-exit terrain presentation occurs
+- synchronousSSD=0 / MAP_DRAM summary PASS
+- no ERROR or exception
+
+Final closure requires runtime analyzer OVERALL: PASS plus video visual acceptance.

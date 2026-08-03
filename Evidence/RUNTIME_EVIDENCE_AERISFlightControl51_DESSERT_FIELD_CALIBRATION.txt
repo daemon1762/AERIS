@@ -1,0 +1,22 @@
+AERIS18 / Candidate 12 source-field evidence
+Input archive: AERISFlightControl(51).zip
+Source record: AERISFlightControl/PluginData/UserRunwayCalibrations.cfg
+name = Dessert Airfield
+coordinateFrame = BODY_FIXED_GEODETIC_ABSOLUTE
+hasStart = True
+hasEnd = True
+reciprocalDirectionPair = True
+directionAHeadingDeg = 0.9663908930630335
+directionBHeadingDeg = 180.96639089306302
+startLat = -6.5996178022817782
+startLon = -144.04085510339206
+startAlt = 822.713678324013
+endLat = -6.4482987102736748
+endLon = -144.0382863593405
+endAlt = 822.6041791010648
+
+Derived only for display/metadata:
+RWY 36 / RWY 18 by the existing AERIS runway-number contract.
+Great-circle A/B distance using Kerbin radius 600000 m: 1584.835184 m.
+
+Authority decision: exact user-marked A/B coordinates are shipped as DLC defaults and may not be replaced by inferred non-Stock provider geometry.

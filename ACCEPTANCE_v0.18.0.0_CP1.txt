@@ -1,0 +1,74 @@
+AERIS Flight Control v0.18.0.0 DEV CP1 acceptance record
+==========================================================
+
+Checkpoint scope
+----------------
+CP1 covers Gate 1-2 only:
+- ND performance/runtime layer separation
+- immutable navigation capture and shared-scheduler preprocessing
+- fixed 5/10/20/40/80/160 km ranges
+- TRACK UP / NORTH UP
+- PLAN drag / CENTER / RECENTER
+- registered runway shapes always displayed
+- click Preview followed by explicit SELECT
+- existing observation-only LAND overlay coexistence
+
+It is not the final v0.18.0.0 release, not a LAND completion build,
+and does not implement the new NAV.
+
+Static and regression acceptance
+--------------------------------
+Pre-manifest clean-tree run:
+- 21 / 21 scripts PASS
+- 976 / 976 assertions PASS
+
+Manifest-inclusive final run:
+- 22 / 22 scripts PASS
+- 979 / 979 assertions PASS
+
+Major CP1 suites:
+- CP1 static package verification: 28 / 28
+- CP1 build entrypoint verification: 10 / 10
+- CP1 ND core, PLAN and runway display: 92 / 92
+- Gate 0 static verification: 194 / 194
+- Physical runway federation: 33 / 33
+- Schema-7 physical cache aliases: 17 / 17
+- Adaptive approach control-free foundation: 30 / 30
+- Existing generation/scheduler regression: 34 / 34
+- Async recording/archive regression: 67 / 67
+- PC1/display/safety invariants: 45 / 45
+- Startup/cache/archive regression: 48 / 48
+- Runway identity regression: 20 / 20
+- Legacy NAV removal: 44 / 44
+- Foundation display: 40 / 40
+- FDI/ND user layout: 79 / 79
+
+Safety and provenance
+---------------------
+- BANK source SHA-256:
+  bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7
+- AP/BANK control source remains frozen by the golden/static suites.
+- Legacy NAV classes and automation entry points remain absent.
+- New NAV remains unimplemented and BLOCKED until independent LAND completion.
+- LAND and Adaptive Approach remain observation/planning/display only.
+- ND preprocessing uses the existing shared Performance Runtime scheduler.
+- ND preprocessing cannot consume the reserved Safety/LAND lane.
+- No ND-owned ThreadPool, Task.Run, Unity object or KSP object crosses the worker boundary.
+
+Package hygiene
+---------------
+- Internal MANIFEST_SHA256.txt file-set and hash verification: PASS
+- ZIP CRC verification: PASS
+- Independent clean re-extraction and complete acceptance: PASS
+- No DLL, EXE, PDB, pyc, __pycache__, build output or temporary cache included.
+
+Not executed in the assistant environment
+-----------------------------------------
+- Native xbuild/C# compilation
+- KSP/Unity assembly loading
+- Actual KSP rendering and mouse interaction
+- Scene/vessel/body transition runtime test
+- Runtime performance CSV validation
+
+These are explicitly delegated to the CP1 field test card. No native/runtime
+PASS is claimed by this record.

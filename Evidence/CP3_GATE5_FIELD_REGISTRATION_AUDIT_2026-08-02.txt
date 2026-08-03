@@ -1,0 +1,37 @@
+AERIS CP3 Gate 5 Candidate 6 — Field Registration Audit
+Date: 2026-08-02
+
+Input evidence
+- User registration session video duration: 3412.787 s (56:52.787), 2560x1440/30 fps.
+- AERISFlightControl field package: final UserRunwayCalibrations.cfg.
+- Baseline SHA-256: b9fd40fd1a8fcf2cb6f5f33900c88b6b5e3b5b6c6d070c2544c2829de43a9347
+
+Calibration integrity
+- 40 physical non-stock runway calibration records.
+- 40/40 hasStart=True and hasEnd=True.
+- 40/40 reciprocalDirectionPair=True.
+- 40/40 BODY_FIXED_GEODETIC_ABSOLUTE.
+- 40 unique providerStableRecordId values.
+- Endpoint-derived direction A heading equals stored directionAHeadingDeg within floating-point precision.
+- Kerbin great-circle physical lengths: min 419.516 m, median 2198.750 m, max 4458.470 m.
+- Maximum A/B elevation difference: 5.949 m.
+
+Coverage
+- Current non-stock survey catalog resolves to 40 physical runway identities: 39 direct provider UUID records plus one TSC paired-threshold physical runway.
+- Calibration file covers all 40 physical identities.
+- Registration session logged 40 completed THRESHOLD B MARKED events.
+- Two extra THRESHOLD A events were operator retries; final committed file contains one complete pair per physical runway.
+
+Runtime health during registration
+- AERIS [ERROR] records: 0.
+- Exception/EXCEPTION records: 0.
+- Native Spawn altitude conversion was active (native ASL -> terrain-relative target AGL).
+- Final shutdown Map DRAM summary: synchronousSSD=0; result=PASS.
+
+Visual review notes
+- The long registration video shows repeated physical-end A/B placement across varied KSR/SLE/KK runway types.
+- Black Krags (~781.5 m) and Green Peaks (~419.5 m) are shorter than model-name nominal lengths but the video shows the marked endpoints correspond to the visible physical runway ends; they are retained as field authority rather than overwritten by model-name inference.
+
+Decision
+PASS for promotion as the shipped FIELD-VERIFIED MANUAL-AUTHORITY DEFAULT BASELINE.
+The data remains UserCalibrated authority and must not be reclassified as automatic certification.

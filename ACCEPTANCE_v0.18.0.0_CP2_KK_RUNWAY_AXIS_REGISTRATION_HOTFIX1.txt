@@ -1,0 +1,51 @@
+AERIS v0.18.0.0 DEV CP2 KK RUNWAY AXIS REGISTRATION HOTFIX 1
+ACCEPTANCE RECORD
+
+BASELINE
+AERISFlightControl-v0.18.0.0_DEV_CP2_KKRunwayAbsoluteRegistrationHotfix1_PreloadFastPath1_Source
+
+STATIC / NUMERIC ACCEPTANCE
+- KK runway axis registration dedicated selftest: 46/46 PASS
+- CP2 static package verification: 158/158 PASS
+- C# definite-assignment static regression: 22/22 PASS
+- Runway Map Lock Hotfix 2 + Preload Fast Path 1 regression: 100/100 PASS
+- Full CP2 acceptance before manifest: 40/40 scripts PASS
+- Internal manifest verification: 3/3 PASS
+- Full CP2 acceptance with manifest: 41/41 scripts PASS
+- Internal manifest file set: 382 files
+- ZIP CRC verification: PASS
+- Clean re-extraction full acceptance: 41/41 scripts PASS
+
+DEDICATED NUMERIC STRESS CASE
+- True runway axis: 157.0 deg
+- Faulty legacy/provider axis: 163.7 deg
+- Dense, attached, same-semantic apron intentionally contaminates whole-mesh PCA
+- Naive whole-mesh PCA is materially wrong
+- Continuity/uniformity-scored stripe search selects runway direction within 1.0 deg
+- Refined PCA recovers physical axis within 0.25 deg
+
+FROZEN SOURCE SHA-256 (BASELINE == HOTFIX)
+- BANK: bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7
+- HDG: 65e5648a3cbe558813a154dc293e79f428ab4cf640828494ee270ade04096427
+- PITCH: ed3714fddf88908d95ccc69c95240f43264151354d77708a3f9aac54d15a46c0
+- V/S: b5eb74b360316e50df8a8cc1a3b0fe1b632913218a5db868164a79caafcafa49
+- ALT: 63ea5fe8cd2642870f3d6259d17e15e914057e622f33f9cd5347533b7fd8ffcf
+- ACC: 17b8f089a771e87e37888626c382f014fbd0740a4ee2da132eeb0345f3850da3
+- VEL: 959eb6732942861037a94c90c8e42d3c456cf1445b88b65439f9fb7767fdcf6f
+- Ground Stability: bc2f74dbe76fe31346412ecf4e70f16adbd80827a1be4de2fc236e44b57cda9c
+- Preload Builder: ea0d0c8d7f213820955d3002cffc43b4ae578511a2cfc1cb46099a93d176b07f
+- Preload Database: 549d05b10bf0fb830ed23e2456e8e451b970908aac94214c6806cb4a90fcbcf4
+- ND Map Projection: 234d33de975ab0edd1a779d85681740c5ce04533db47181d706d114b37ebdd03
+
+SAFETY
+- LAND remains control-free
+- no FlightCtrlState or throttle authority added
+- no independent runway-surface axis => certification rejected
+- legacy NAV remains absent
+
+UNEXECUTED IN BUILD ENVIRONMENT
+- Native Mono/xbuild compile against KSP/Unity assemblies
+- KSP runtime KK mesh survey
+- KolaIsland field alignment validation
+
+CP2 remains OPEN until native build and field video/log acceptance.

@@ -1,0 +1,46 @@
+AERIS CP2.5 Gate 1 field acceptance — HHC-4 ballistic flight
+Date: 2026-07-28
+Inputs:
+- Video_2026-07-28_09-16-04.mkv
+- AERISFlightControl(27).zip
+
+Flight envelope:
+- Maximum recorded surface speed: 2100.0098 m/s at 33,062.9369 m ASL.
+- Maximum recorded altitude: 42,752.2953 m ASL at 2,025.6127 m/s.
+
+Activation policy evidence:
+- Initial ON: 00:18:08.730, Kerbin, 74.1 m ASL.
+- Altitude OFF: 00:36:07.464, 40,500.2 m ASL.
+  Nearest FDR sample: 40,501.0715 m, 2,070.0479 m/s.
+- Altitude ON: 00:39:40.446, 39,499.5 m ASL.
+  Nearest FDR sample: 39,498.2265 m, 1,989.4745 m/s.
+- OFF interval: 212.982 seconds.
+- Exactly one altitude OFF and one altitude ON transition; no hysteresis chatter.
+
+Control-system regression:
+- MASTER remained armed at both boundary samples.
+- BANK, HDG and PITCH modes remained armed.
+- BANK active trace continued throughout the Terrain viewport OFF interval.
+- No AERIS ERROR or exception was recorded in the flight interval.
+
+Terrain/ND evidence:
+- Video confirms the ND disappears during ascent while FDI/AP/main control UI remain visible.
+- No ND/TERRAIN_ALIGN publication occurs during the altitude-OFF interval.
+- Reactivation publishes a current-position frame 91 ms after ON:
+  center and vessel both 0.1191507,59.4374908; deltaPx=0.0,0.0;
+  visualCoverage=0.066.
+- Coverage reaches 0.909 after about 2.1 s and 1.000 after about 6.1 s.
+
+Items not directly observed:
+- KSP was minimized/covered by the desktop during the 39.5 km reactivation, so a
+  one-frame stale-Terrain flash cannot be visually ruled out from this video.
+- No active PRELOAD progress line was emitted in this session, so live Preload
+  continuation was not directly demonstrated. Static ordering still keeps the
+  Preload Builder outside the altitude gate.
+
+Verdict:
+- Gate 1 central altitude activation implementation: PASS.
+- Boundary values, hysteresis, ND suspension and AP/AA continuity: PASS.
+- Visual stale-frame reactivation check: CARRIED TO INTEGRATED ACCEPTANCE.
+- Active Preload-progress continuity observation: CARRIED TO INTEGRATED ACCEPTANCE.
+- No Gate 1 code correction is indicated by this field test.

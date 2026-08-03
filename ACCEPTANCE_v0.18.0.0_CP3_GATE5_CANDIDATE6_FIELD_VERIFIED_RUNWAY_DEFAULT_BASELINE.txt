@@ -1,0 +1,21 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Integrated Acceptance Candidate 6 — Field-Verified Runway Default Baseline
+
+Purpose
+- Promote the completed 2026-08-02 user field-registration set to the shipped non-stock runway default baseline.
+- Preserve Candidate 5 authority policy: base-game Stock may auto-authorize; DLC/MOD/UserCfg require manual-authority data.
+- Seed defaults only when PluginData/UserRunwayCalibrations.cfg does not exist. Never overwrite an existing per-install file.
+
+Baseline evidence
+- 40 Calibration records.
+- 40/40 have finite BODY_FIXED_GEODETIC_ABSOLUTE A/B endpoints.
+- 40/40 reciprocalDirectionPair=True.
+- 40 unique providerStableRecordId values.
+- 40 physical non-stock runway identities covered (TSC paired threshold launch sites collapse to one physical runway).
+- Endpoint-derived heading agrees with stored directionAHeadingDeg within floating-point precision.
+- Field session contained 40 completed THRESHOLD B MARKED events and zero AERIS ERROR/Exception records.
+
+Safety boundaries
+- Defaults are USER CALIBRATED manual authority; they are not automatic certification output.
+- Existing user PluginData calibration wins and is never overwritten.
+- Terrain/ND/AP/AA/PROTECT and Candidate 3 generation bridge remain frozen.

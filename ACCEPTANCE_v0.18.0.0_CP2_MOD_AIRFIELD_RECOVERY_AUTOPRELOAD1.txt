@@ -1,0 +1,46 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+MOD Airfield Recovery Hotfix 1 + Auto Preload Progression 1
+
+Input evidence
+- Runtime build: KK Runway Axis Registration Hotfix 1 + Preload Fast Path 1 Compile Hotfix 1
+- Startup cache before revalidation: certified=12, failures=29
+- Runtime registry after revalidation: REGISTERED 43 RWY / CERTIFIED 3 RWY / FAILED 40 RWY
+- Failure distribution: AbsolutePlacementInvalid=14; SurfaceSlopeExceeded=12; InsufficientEvidence=7; RunwayWidthUnresolved=6; WholeSiteBoundsOnly=1
+- Preload state: Kerbin High/Far at cursor 3621; all remaining solid bodies retained at Far but never selected after Kerbin completion
+
+Implemented recovery
+- Independent pavement-axis evidence cannot be overwritten by nearby metadata/primitive orientations.
+- Candidate axes within 12 degrees of a supported independent surface axis are re-registered to that physical axis.
+- Physical/usable/threshold along distances are preserved through axis re-registration.
+- Larger corrections, weak support and designator mismatch remain fail-closed.
+- Surface slope uses Runway/Pavement/Centerline evidence only; decorative/airport support geometry cannot cause a false slope rejection.
+- KK_MOD_AIRFIELD_RECOVERY revision invalidates only affected KK/SLE fingerprints.
+
+Implemented automatic preload progression
+- Completed automatic targets are persisted and excluded from selection.
+- Completed Kerbin yields to Mun, Minmus and other solid bodies.
+- State V2 preserves V1 read compatibility.
+- Once broad Far coverage completes, High/Pinned bodies with registered points automatically receive point-only Land refinement.
+- Point-only refinement does not trigger global Route generation.
+- Manual quality selections override automatic promotion.
+
+Static acceptance
+- Dedicated recovery/progression selftest: 48/48 PASS
+- CP2 package static verification: 163/163 PASS
+- C# definite-assignment regression: 22/22 PASS
+- Existing acceptance without manifest: 42/42 scripts PASS
+- Manifest verification: 3/3 PASS
+- Full acceptance with manifest: 43/43 scripts PASS
+- Internal manifest file set: 395 files
+- Frozen flight-control files: 8/8 byte-identical to baseline
+- Legacy NAV: absent
+- LAND/runway survey/preload progression: control-free
+
+Not executed in this environment
+- Native Mono/xbuild against KSP/Unity references
+- KSP runtime re-survey and final certified runway count
+- Multi-body automatic progression to completion
+- Long-duration storage/cross-platform test
+
+Checkpoint status
+- CP2 remains OPEN until native build and runtime field evidence pass.

@@ -1,0 +1,36 @@
+AERIS SOURCE DIFFERENTIAL AUDIT
+Baseline: DEV CP2 PRELOAD STATUS TOOLBAR COMPILE HOTFIX 1
+Current:  DEV CP2 FIELD RENDER CONSISTENCY HOTFIX 1
+
+PRODUCT C# DELTA
+11 files changed, 309 insertions, 86 deletions
+
+EXPECTED CHANGED C# FILES
+a58f016ec3e475eb85b1603df9f7a85e9663272d76d46bcb06354f470d41ee8e  Properties/AERISBuildVersion.generated.cs
+44285423d9cbedc35d1cf24ab324dec84ba141daae1a6f120eeb28bc2f52ca82  Terrain/AERISTerrainBlockPipeline.cs
+d2c535dff22c493395c3ebc2b4b7a592a2d1c14ed3b01b400630be8e55773b6c  Terrain/AERISTerrainGpuTileRenderer.cs
+78e92652c448a82a888be83065b53a65a32eb88573669b192310542f5c0a3991  Terrain/AERISTerrainPerformance.cs
+4b92986cf34c7871b9bfcb2448ae627c9862f9034369ec63df664cd21d01e272  Terrain/AERISTerrainPreloadBuilder.cs
+0e1005681e4f41b6b05fb973528bca3b2a7d1f75a22da06a3bb2fd0b18101433  Terrain/AERISTerrainPreloadCodec.cs
+0c4e951fd1739053d22e7893e77fbce0f52f0d366ee3c90705bc9f6e5f2d2fd0  Terrain/AERISTerrainPreloadDatabase.cs
+bd0d2eabf8c8bfe8904f847cc0fb5813eda28a7707ae6d23fcb6f14c77b831c0  Terrain/AERISTerrainTileCache.cs
+74618cd7c0d76e83a2bbeec8ea7c199e1e1b1f884de3b09f6d966a10df7cd4c5  Terrain/AERISTerrainTileContracts.cs
+c24caa97ba8f6d792bc548dd2e0dcc76f0189d3584fa034b3fe22155117587a2  Terrain/AERISTerrainTileSystem.cs
+9be60658606d62044ea96c131b0bc37d3380dee1c3da3543f22d6d4f17cab91b  UI/AERISNavigationDisplay.cs
+
+BYTE-IDENTICAL PROTECTED TREES
+Autopilot  10 files  tree-sha256 8f73c77da92e63c08372de88bed459e79a13ae5cd5790f64554be8c568567e3e
+Landing    19 files  tree-sha256 ff6f3d38f9759fd7da85eda061e1ca3aab43af47105dbaf81d2c16d18048aa04
+Performance 9 files  tree-sha256 a47aa4e2512e5629325e9608df3af644e9a9f6b66215c622a7425be30bb4687f
+AA         50 files  tree-sha256 682a9ac35566b0bba2352e5c58b39aa5097d2a81bc2249baaf37d66eece6a312
+
+BANK GOLDEN SOURCE
+bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7  Autopilot/AERISBankDirector.cs
+
+BOUNDARY RESULTS
+AP/BANK control law: unchanged
+LAND flight-control authority: not added
+Legacy NAV forbidden symbols: absent
+New NAV capability: absent / BLOCKED
+Dedicated Terrain ThreadPool: not added
+CP3 adaptive glide/3D corridor implementation: not included

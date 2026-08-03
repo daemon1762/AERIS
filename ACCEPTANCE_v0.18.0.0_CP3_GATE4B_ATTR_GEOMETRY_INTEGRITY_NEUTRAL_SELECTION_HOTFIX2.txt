@@ -1,0 +1,8 @@
+CP3 Gate 4B Geometry Integrity & Neutral Selection Hotfix 2
+- temporal GUI.matrix presentation path is non-authoritative
+- exact current-projection GPU FRONT only
+- CPU terrain draw count remains zero
+- startup airport selection NONE
+- startup runway selection NONE
+- no first-selectable-airfield fallback
+- no first-direction fallback during restore

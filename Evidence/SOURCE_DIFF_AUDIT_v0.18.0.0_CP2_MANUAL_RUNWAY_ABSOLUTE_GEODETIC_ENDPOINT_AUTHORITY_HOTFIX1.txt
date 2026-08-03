@@ -1,0 +1,31 @@
+Source diff audit — CP2 Manual Runway Absolute Geodetic Endpoint Authority Hotfix 1
+
+Baseline:
+  AERISFlightControl-v0.18.0.0_DEV_CP2_ManualRunwayDesignationGroupingHotfix1_Source
+
+Changed runtime files:
+  Source/AERISFlightControl/Landing/AERISRunwaySnapshotBuilder.cs
+    - removed Unity world/local-basis conversion from user/Kramax witness projection
+    - added double-precision body-fixed spherical inverse projection
+  Source/AERISFlightControl/Landing/AERISRunwayGeometryWorker.cs
+    - explicit user geodetic endpoint authority details
+  Source/AERISFlightControl/Landing/AERISRunwayWitnessLibrary.cs
+    - explicit coordinateFrame save/log marker
+  Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+    - build identity suffix
+
+Changed validation/package files:
+  Tools/verify_v01800_cp2_static.py
+  Tools/run_v01800_cp2_acceptance.py
+  Tools/selftest_v01800_cp2_manual_runway_absolute_geodetic_endpoint_authority_hotfix1.py
+  Docs/*ABSOLUTE_GEODETIC_ENDPOINT_AUTHORITY*
+  Evidence/*AERISFlightControl24*
+  ACCEPTANCE_v0.18.0.0_CP2_MANUAL_RUNWAY_ABSOLUTE_GEODETIC_ENDPOINT_AUTHORITY_HOTFIX1.txt
+  MANIFEST_SHA256.txt
+
+Scope exclusions:
+  no Kola-specific runtime branch
+  no old NAV restoration
+  no LAND/AP/AA/APP control authority change
+  no CP2 runway survey debug overlay restoration
+  no user calibration data included in distribution

@@ -1,0 +1,32 @@
+AERIS v0.18.0.0 CP2.5 Candidate 4 Top-Right Preload Launcher Removal Hotfix 1
+SOURCE DIFF AUDIT
+
+Changed existing files:
+- GameData/AERISFlightControl/AERISFlightControl.version
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+- Source/AERISFlightControl/UI/AERISWindow.cs
+- Tools/run_v01800_cp25_acceptance.py
+- Tools/selftest_v01800_cp25_integrated_acceptance_candidate3.py
+- build_ubuntu.sh
+
+Added files:
+- ACCEPTANCE_v0.18.0.0_CP2.5_CANDIDATE4_TOP_RIGHT_PRELOAD_LAUNCHER_REMOVAL_HOTFIX1.txt
+- Docs/CP25_CANDIDATE4_TOP_RIGHT_PRELOAD_LAUNCHER_REMOVAL_HOTFIX_1_v0.18.0.0_ja.md
+- Docs/ND_CP25_CANDIDATE4_TOP_RIGHT_PRELOAD_LAUNCHER_REMOVAL_HOTFIX_1_TEST_CARD_v0.18.0.0_ja.md
+- Tools/selftest_v01800_cp25_candidate4_top_right_preload_launcher_removal_hotfix1.py
+
+Removed files:
+- none
+
+Runtime code boundary:
+- Source/AERISFlightControl/UI/AERISWindow.cs: removes independent top-right launcher only.
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs: identity only.
+
+Protected file hashes (Candidate 4 == Hotfix 1):
+- PASS Source/AERISFlightControl/Performance/AERISWorkerScheduler.cs 6be25104ba1d2b0b890e3fa2adbfc74b5df1aed7d47398d50de9966f32b765ee
+- PASS Source/AERISFlightControl/Terrain/AERISTerrainBlockPipeline.cs 94dde68be33357bfe0b67773c57e171d69a94760bbe9cf21ec0afcc251888f27
+- PASS Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs 2bde72029a151446e75fbc38888331ccea10ac3ee0d56105a4f8294ee2978de3
+- PASS Source/AERISFlightControl/Terrain/AERISTerrainPreloadContracts.cs 58d5636b645ada68b149509314f19203cfdfd91c3382158a6cb973f49bc392fb
+- PASS Source/AERISFlightControl/Terrain/AERISTerrainPreloadDatabase.cs de4325530b019d812fdc4566fe767758f559d6b21d7a295df56cd24a34124df9
+- PASS Source/AERISFlightControl/AA/SyncModuleControlSurface.cs 93d5161d9280e26e45ee3cfe6a3083f0e58a518216d67815d8534430151f6336
+- PASS Source/AERISFlightControl/Core/AERISBootstrap.cs a13d2c5a23ac6d189ac53386bd43e8c464a5aa6b505b33365b29f763a78ff7c6

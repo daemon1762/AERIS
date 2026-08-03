@@ -1,0 +1,32 @@
+AERIS v0.18.0.0 DEV CP3 GATE 3 PREDICTIVE FORWARD CORRIDOR
+
+IMPLEMENTED
+- Horizontal ground-speed / ground-track / turn-rate prediction
+- Bounded 30-420 second, maximum 250 km curved forward corridor
+- Local / Route / Far staged predictive requests
+- Viewport / selected LAND runway / corridor / background priority
+- Centerline-only corridor pin leases
+- Global foundation, viewport, LAND and runway reason-specific pins
+- LAND LOD current-body RAM promotion only while LAND demand is active
+- LAND excluded from cruise background population
+- ND OFF / altitude gate / scene / body / reset / shutdown pin release
+- Gate 3 tab and SYSTEM corridor telemetry
+
+NOT IMPLEMENTED IN GATE 3
+- RENDER READY
+- GPU READY
+- GPU resource residency
+- Other-body RAM residency
+- Flight-control writes
+- FULL BOOST
+
+STATIC ACCEPTANCE REQUIRES
+- Gate 3 dedicated test PASS
+- inherited CP2.5 regression PASS
+- manifest exact match
+- ZIP CRC PASS
+- clean extract tree/hash equality
+
+NATIVE ACCEPTANCE REQUIRES
+- Mono/xbuild PASS
+- KSP runtime test card PASS

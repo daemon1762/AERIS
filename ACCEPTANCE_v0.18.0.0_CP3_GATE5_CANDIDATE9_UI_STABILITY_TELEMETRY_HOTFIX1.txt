@@ -1,0 +1,37 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 — Integrated Acceptance Candidate 9
+UI Stability / Telemetry Hotfix 1
+
+STATUS: STATIC ACCEPTANCE CANDIDATE
+NATIVE BUILD: PENDING USER ENVIRONMENT
+KSP RUNTIME: PENDING
+CP3 CLOSE: NOT AUTHORIZED
+
+SCOPE
+- Ban content-driven wrapping/resizing/reflow for AERIS-owned button controls.
+- Sole variable-size exception: SYSTEM > AIRFIELDS airport/runway selection rows.
+- LAND airfield selector remains fixed-size.
+- Legacy AA GUI is unreachable in the current AERIS host; the Gate-5-frozen AA tree remains byte-identical.
+- Rate-limit display-only heavy telemetry snapshots to 4 Hz while a relevant UI is open.
+- Cache PRELOAD status so IMGUI Layout/Repaint/input events cannot repeatedly traverse the terrain preload database index.
+- Preserve Candidate 8 ND quality, terrain LOD, GPU rasterizer, flight authority, and field-verified runway baseline.
+- Preserve hidden-window zero-work guards.
+- Preserve build_ubuntu.sh executable permission as a release contract.
+
+RUNTIME ACCEPTANCE REQUIRED
+1. Compare FPS with AERIS/Preload UI closed vs open in the same scene/camera.
+2. Confirm no large persistent FPS collapse attributable to AERIS UI.
+3. Exercise every AERIS tab/window width and status-string change. No non-AIRFIELD button may change size or reflow because of text.
+4. Confirm SYSTEM > AIRFIELDS airport/runway selection rows alone may grow/shrink to show names.
+5. Confirm LAND selector, MASTER, tabs, preload controls, AIRFIELDS action buttons, NAV/FDI buttons remain fixed.
+6. Confirm ND visual quality/terrain detail is unchanged from Candidate 8.
+7. Submit AERIS log + KSP.log + video/FPS evidence.
+
+STATIC ACCEPTANCE RESULTS
+- Candidate 9 dedicated regression: 107/107 PASS.
+- Gate 5 integrated regression: 19/19 scripts PASS.
+- Candidate 8 inherited regression: 50/50 PASS.
+- Historical responsive AIRFIELDS regression: 24/24 PASS after superseding old global-wrap expectations.
+- Historical ND/AIRFIELDS publish regression: 48/48 PASS.
+- build_ubuntu.sh mode: executable (0755).
+- Native KSP compile/runtime remains pending user environment.

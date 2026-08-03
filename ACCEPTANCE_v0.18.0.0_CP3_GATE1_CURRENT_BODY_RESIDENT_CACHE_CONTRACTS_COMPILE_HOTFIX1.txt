@@ -1,0 +1,29 @@
+AERIS Flight Control v0.18.0.0 DEV CP3 Gate 1
+Current Body Resident Cache Contracts Compile Hotfix 1
+
+ROOT CAUSE
+- CP2.5 Final Closure removed FULL BOOST scheduler helpers.
+- Three calls to ApplyStandardSchedulerState(bool) and the state field remained.
+- The STANDARD-only helper definition was removed with the FULL BOOST code.
+- Static acceptance checked the calls but did not require the definition.
+
+FIX
+- Restore one private ApplyStandardSchedulerState(bool) bridge in
+  AERISTerrainPreloadBuilder.
+- Route only to AERISPerformanceRuntime.Current.Scheduler.
+  SetStandardPreloadThroughput(active).
+- Fail safely while the performance runtime is unavailable.
+- Commit standardSchedulerApplied only after a successful scheduler call.
+- Add a compile-regression test requiring one definition and three call sites.
+
+UNCHANGED
+- CP3 Gate 1 Current Body Resident Cache contracts and disconnected payload route.
+- Map DRAM and Terrain Preload Database ownership.
+- STANDARD throughput limits and Flight suspension behavior.
+- AA, AP, PROTECT, LAND, FlightState, Integrations, and Track B runway data.
+- FULL BOOST remains absent.
+
+NATIVE STATUS
+- User native xbuild before hotfix: FAIL, CS0103 at lines 473, 487, 2252.
+- Artifact environment native xbuild: NOT AVAILABLE.
+- Corrected user native xbuild and KSP smoke: PENDING.

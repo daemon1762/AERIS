@@ -1,0 +1,81 @@
+AERIS14 SOURCE DIFF AUDIT
+Date: 2026-07-25 JST
+Baseline: AERISFlightControl-v0.18.0.0_DEV_CP2_FieldRenderConsistencyHotfix1_Source
+Current:  AERISFlightControl-v0.18.0.0_DEV_CP2_AlignmentDiagnosticHotfix1_Source
+
+CHANGED FILES (11)
+GameData/AERISFlightControl/AERISFlightControl.version
+  baseline f8facf81841ee31decdb6cbca54202dd3e778180218f89e707fb1b9bf6ae18ee
+  current  43ca82c0029831e5a9ba49958a67630f5352462892197f8834ce7ca0bb0e69a7
+GameData/AERISFlightControl/Config/AERISSettings.cfg
+  baseline e070437eaa0af5cd0ef5da4174a5b18e4518399b167d901bb3bad446d3cfebf2
+  current  fc8e049a48caa3cc3e321f197ab1bc88f960e47e66866aa5df1d99bb6d5d9af6
+README.md
+  baseline 269389a4bee4c8bc933e8b17f6f2b7a7b959410eeb821b8ab223ad5b070a78da
+  current  52ed8451cba7f27b0687bc6644d6dcad5b33b5193622f3c7aa05703c2cc661f4
+Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs
+  baseline 26210275e8c99f9ab5506a24e096026c95391ab7d1cddd80c2d4a3271add4b7b
+  current  16b0ce73a54a3d80df9ebac24774cac4cc5fb297d41e3bc605655c07c1d42cbd
+Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+  baseline a58f016ec3e475eb85b1603df9f7a85e9663272d76d46bcb06354f470d41ee8e
+  current  fc39b80132413380f5a4b86a60fa3956ff3701f98c64ac0376ea7f6470e0e938
+Source/AERISFlightControl/Settings/AERISSettings.cs
+  baseline 981376882767b972190aef2ce8853e6bcd970e7c356e3f9986c49c348249ec6e
+  current  a530abf274235ca31cf7fbbb28dc6a459afb2985db4db63c5e085477eca6ee64
+Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+  baseline d2c535dff22c493395c3ebc2b4b7a592a2d1c14ed3b01b400630be8e55773b6c
+  current  95e499f3a3322c65c1c5f436ca9bd20c7aed5315d0d0b742f0a5dfba4a2abd48
+Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+  baseline 9be60658606d62044ea96c131b0bc37d3380dee1c3da3543f22d6d4f17cab91b
+  current  f823284b9a02b91210005697c8cf2299e6a9b33d87fe03c8b7449147893dc92c
+Tools/run_v01800_cp2_acceptance.py
+  baseline cd26664d89744b8899add508f189ffe9a10c68867518644bf4817d80357c003c
+  current  ed789a7a987e3c6d153fae5a77768c9a0d9e358ca5ee0b2371ce20dc5e31ef10
+Tools/verify_v01800_cp2_static.py
+  baseline 5a10694db12617db64165b03c3806ee8b45f30d30eb34986d058f76fb010e6cc
+  current  384be47244bd13b5153aa80e61a4b8c520d1cbd96772880a50bc01e32b4674f7
+build_ubuntu.sh
+  baseline ad175f79069b0c542e6f5788164a4c632030f6613271e67b18c020c4563d0c3a
+  current  bd288c0a599247aa8b769a6ed8dc08ddfebdf5b3fafae6e8fac2b371624ca9be
+
+ADDED FILES (6)
+ACCEPTANCE_v0.18.0.0_CP2_ALIGNMENT_DIAGNOSTIC_HOTFIX1.txt
+  current  fdc9e941a37ff6b2b9fcb0eae40d8487e7cbe41d798035804f6664c88ea57764
+Docs/CP2_ALIGNMENT_DIAGNOSTIC_HOTFIX_1_v0.18.0.0_ja.md
+  current  b11b15d27a9213ff2a2cc021b069103ea8ee2140d6016706e100ffdfe27c8a14
+Docs/HANDOVER_AERIS14_v0.18.0.0_CP2_ALIGNMENT_DIAGNOSTIC_HOTFIX1_ja.md
+  current  cd6aec1a414b030b87a530b59fa57bc638b73b583e56f76eaf354b70e13572e4
+Docs/ND_CP2_ALIGNMENT_DIAGNOSTIC_TEST_CARD_v0.18.0.0_ja.md
+  current  99609578c5f1c2bb5ffd32d3b9b383d2ee820bb8947a761e78546e7a30019586
+Evidence/AERIS14_VIDEO_LOG_REVIEW_2026-07-25.txt
+  current  05aed2164ee3e2e8a9c81d27677b8f36c32add3aef409a391d75edd7eee0f48d
+Tools/selftest_v01800_cp2_alignment_diagnostic_hotfix1.py
+  current  4d1b02b6f6ec0b2dc71884ac6ae6831707aa6c52117d8e14c81c48bc90cc88e9
+
+REMOVED FILES (0)
+NONE
+
+FROZEN CONTROL FILES
+Source/AERISFlightControl/Autopilot/AERISBankDirector.cs: BYTE-IDENTICAL
+  sha256 bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7
+Source/AERISFlightControl/Autopilot/AERISHdgDirector.cs: BYTE-IDENTICAL
+  sha256 65e5648a3cbe558813a154dc293e79f428ab4cf640828494ee270ade04096427
+Source/AERISFlightControl/Autopilot/AERISPitchDirector.cs: BYTE-IDENTICAL
+  sha256 ed3714fddf88908d95ccc69c95240f43264151354d77708a3f9aac54d15a46c0
+Source/AERISFlightControl/Autopilot/AERISVerticalSpeedDirector.cs: BYTE-IDENTICAL
+  sha256 b5eb74b360316e50df8a8cc1a3b0fe1b632913218a5db868164a79caafcafa49
+Source/AERISFlightControl/Protect/GroundStabilityProtection.cs: BYTE-IDENTICAL
+  sha256 bc2f74dbe76fe31346412ecf4e70f16adbd80827a1be4de2fc236e44b57cda9c
+
+INTENTIONAL SOURCE/CONFIG CHANGES
+- Settings/AERISSettings.cs
+- Landing/AERISAirfieldRegistry.cs
+- Terrain/AERISTerrainGpuTileRenderer.cs
+- UI/AERISNavigationDisplay.cs
+- Config/AERISSettings.cfg
+- checkpoint/version/build metadata
+- acceptance tests and documentation
+
+SCOPE DECISION
+No AP director or Ground Stability code change is authorized in this checkpoint.
+stale scheduler and false-liftoff changes are explicitly deferred.

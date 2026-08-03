@@ -1,0 +1,65 @@
+AERIS v0.18.0.0 CP2.5 LAND Separation Hotfix 1 — SOURCE DIFF AUDIT
+
+Baseline package: AERISFlightControl-v0.18.0.0_DEV_CP2.5_QualityMigrationHotfix1_Source.zip
+Baseline ZIP SHA-256: e18b2733fb0b950aa1f3250a61bcb207ab1c15bdd00e0542d543149c4d8e3522
+Track: A only. Curated runway/default-coordinate Track B remains deferred.
+
+IMPLEMENTED CONTRACT
+- One central data-only AERISTerrainLandDetailActivationPolicy.
+- Developer capability does not activate LAND detail by itself.
+- Current operational input is independent LAND ARM. Approach and Auto Landing slots are explicit but inactive.
+- LAND performance profile and selected-runway LAND request lane share the same activation result.
+- DISARM, capability OFF, scene reset, or altitude-gated viewport OFF revokes runtime LAND detail.
+- Frozen CP2 SSD Preload Builder and automatic FAR_GLOBAL -> LAND_SITES promotion are unchanged.
+
+CHANGED FILES
+ADD	ACCEPTANCE_v0.18.0.0_CP2.5_LAND_SEPARATION_HOTFIX1.txt	old=-	new=0824bc7905aa3defdc415cd7a6a15ba941da0930b5102964018ac0287f1d27db
+ADD	Docs/ND_CP25_LAND_SEPARATION_HOTFIX_1_TEST_CARD_v0.18.0.0_ja.md	old=-	new=74ef8464217b3fa81c0cb0c36e78f8465f285b02639a3896a15a0ec8ac4bec13
+MODIFY	Docs/ND_CP25_QUALITY_MIGRATION_HOTFIX_1_TEST_CARD_v0.18.0.0_ja.md	old=5e0474bfe66d08adc6efccecd6ba8256abe03cbdb546d1d0b37ab8325805d8db	new=7e526d6ed0f36ef25f5eac3d9cf2e43cc8b49101111b431337b6648e90ba794e
+MODIFY	GameData/AERISFlightControl/AERISFlightControl.version	old=d99a84779730f4cf950342f137976e95a0d3ccba32e9df3717cd54512bcf191f	new=8cdb79415f6903531d06c38c05c62abc67c4bff196bc4e3c0db0e32a6bec9489
+MODIFY	GameData/AERISFlightControl/Config/AERISSettings.cfg	old=c323be46d93b85892e4b78a960fe992410c9a3dcd816f63d43936fbd02775d93	new=943b09993c8391348514b2458e71cad58d0001e39839fd60fa5b67cb2a91c02d
+MODIFY	README.md	old=fea53d35c65cc5e243564849dd6e5f93655d3fd028181e9fde6731d6ce51c500	new=86e24235a36371213a63c4531d61472666441b3eff0038bad2e183086ce4b7f5
+MODIFY	Source/AERISFlightControl/AERISFlightControl.csproj	old=24db007d9f13fe66b3d7f38c4194f1f1e47f08da8fc5e0ce1187dc1d474adb86	new=43d65be468515826c12ba4c09d4e4030c3c29c4ddf4541d457666cad407638be
+MODIFY	Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs	old=fd8bd631fe67b79acbf9508e58a7987864cf13b5ee0c5d737836a15ab5e2c4a9	new=4e5387135b0b7481009bc2f05642c38a1c264fe5605ed22a9e73c860f3cdb5ba
+MODIFY	Source/AERISFlightControl/Settings/AERISSettings.cs	old=7313064a1984284bda02b945428a249d51b915519a934e291a574a7363fdba0e	new=71d940afd049677e0d068ea0061c41000b57a271dc2da7ad8c1b22600dc59ef8
+MODIFY	Source/AERISFlightControl/Terrain/AERISTerrainAwareness.cs	old=0094d4b11527aafe87bb13231447acb9ae4ae8b23622134e2b809c55825c869f	new=2a4d0a933d3d7bd973571aef363956b52f21942cfc97859ace63606d2e35d537
+ADD	Source/AERISFlightControl/Terrain/AERISTerrainLandDetailActivationPolicy.cs	old=-	new=98d771b41c12b2d2f12157b326b49750610e45e50ad0f18d9f6ea66f4c55fb9d
+MODIFY	Source/AERISFlightControl/Terrain/AERISTerrainPerformance.cs	old=8c8682f60bead9aecf0ec167a2f177200bfaa5c64d0808f0235627f0241eeb23	new=ce29ebe8ed446d8bdb11d375107b805b7c81339a82864f444ff7dbf1a2789864
+MODIFY	Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs	old=198529823f792fe740db7db0b1f8da4807db5549e1d295b345a22c9ccc0185b2	new=fb28df39b12416b24887494241e2d4ee22a3a09ea731e3233722486cfbdd1f05
+MODIFY	Source/AERISFlightControl/UI/AERISWindow.cs	old=7ef8d178056ffc12a81c0aacfda261f823af55a59619e9442d1efbe3ccb89f96	new=414f88e05b0259e8144782b0341f2ac0635a1b5f0ff5317b2948e8b1948e5da9
+MODIFY	Tools/run_v01800_cp25_acceptance.py	old=b54027e71456827b2ee97880c01a33810a3dd8b8ec79ed7d78ead1a061f57a46	new=4c7bf2cc2f1c05d64275e5b3fe78e55c1ffe6710ee500a95bfe58d6e9a452859
+MODIFY	Tools/selftest_v01800_cp25_altitude_gate_hotfix1.py	old=6fc9d71318ed7408dd7e6f35d5e120b990b7f7f09d2cdffc87ffa4f04e6c228a	new=8856cb15b64fdba29b1d95575e3964342affc43280dd75e4117c541b70beedeb
+ADD	Tools/selftest_v01800_cp25_land_separation_hotfix1.py	old=-	new=4c3cb4246967ac788891b84ea36d130215313c955ea220687bdfdd8289f9916a
+MODIFY	Tools/selftest_v01800_cp25_quality_migration_hotfix1.py	old=50bd9bafbbcc90a7cd3aebe73169fbf342bb6e38d2dde06005a0df0566074444	new=30309103b5e441b1bcd4cf1744653ae74d3ae7f85072357493a51939aec8d475
+MODIFY	build_ubuntu.sh	old=b59bb89259218414374186f7315bd109bb3cbfbff30ff4800917a892b3c03b0b	new=38d93d3da4aa1af3a606b66b64c608b4b10f1bdbc5cfbebe96b825220e36a020
+
+PROTECTED TREE COMPARISON
+PASS	Source/AERISFlightControl/Landing	files=20	sha256=52d6cde8ed1c7808fb5763928f78b3f55fc22e24a6e2f7c9a07971687971d22a
+PASS	GameData/AERISFlightControl/Airfields	files=2	sha256=37026d8ffa07938d881f58b1b74fb74442dcd567e972af71fd123e3d9265722f
+PASS	Source/AERISFlightControl/AA	files=50	sha256=b8ea67f01f524fbda2ff3fd9d2a7d2f73c0707407647970deb75f0c9dac187ca
+PASS	Source/AERISFlightControl/Autopilot	files=10	sha256=8ed3a114c52ea852a1d560323a8af0e7be91eb51200b4ce16d32eb7b693a683e
+PASS	Source/AERISFlightControl/Protect	files=2	sha256=f22b7e2f2de1a283c1077462cda689dcbc94a812e30f71191e0762571a01e5b0
+PASS	Source/AERISFlightControl/FlightState	files=2	sha256=7dfed9cb4255480a30af6eb88367f5d9437a513f70c3c36a4878a27c509312ff
+PASS	Source/AERISFlightControl/Integrations	files=2	sha256=aef4618b11237c9ac1a496590c252dd516a446b391b0a11b112c18a77d6bfa0d
+PASS	Source/AERISFlightControl/Core	files=3	sha256=a1c6171311d07e499b484fe1bc14edd007008cc4f98337f94c38fc519c6555f9
+
+STATIC ACCEPTANCE BEFORE FINAL MANIFEST
+PASS	Gate 3 dedicated assertions	45/45
+PASS	Gate 2 quality migration regression	39/39
+PASS	Gate 1 altitude gate regression	43/43
+PASS	All CP2.5 runner scripts without manifest	58/58
+PASS	C# lexical delimiter audit	132/132 source files
+PASS	Python source compilation	120/120 scripts
+PASS	JSON/.version parse
+PASS	build_ubuntu.sh bash syntax
+PASS	No DLL/PDB/MDB/SO/EXE/PYC, bin, obj, or __pycache__ artifacts
+
+UNEXECUTED IN BUILD ENVIRONMENT
+- Mono/xbuild native compilation against KSP 1.12.5 reference assemblies.
+- KSP runtime activation/disarm/altitude interaction test.
+- GPU/PQS and long-duration I/O field validation.
+
+SAFETY BOUNDARY
+- No FlightCtrlState, MainThrottle, AP target, AA, PROTECT, propulsion, or vessel-control write was added.
+- Landing and packaged Airfields trees are byte-identical to Gate 2.
+- CP3 Current-Body Resident Cache is not implemented in this hotfix.

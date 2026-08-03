@@ -1,0 +1,34 @@
+AERIS Flight Control v0.18.0.0
+CP3 GATE 1 — CURRENT BODY RESIDENT CACHE CONTRACTS
+
+ACCEPTED STATIC SCOPE
+- Adds AERISCurrentBodyResidentCache as a separate owner from Map DRAM.
+- Defines INDEXED / SSD READY / DECODED / RAM RESIDENT / RENDER READY / GPU READY.
+- Defines current-body identity by body name, radius, environment hash and LOD.
+- Defines scope, body and database generations in AERISResidentCommitToken.
+- Rejects stale-generation and foreign-body commits.
+- Provides separately-accounted RAM budget, LRU eviction and lease-based pinning.
+- Clears entries and invalidates tokens on body/database transition, scene reset and shutdown.
+- Tracks independent Resident Cache telemetry.
+- Synchronizes only the current body scope while altitude-gated viewport rendering is off.
+- Keeps unsupported/non-PQS bodies inactive without per-frame generation churn.
+
+NOT CONNECTED IN GATE 1
+- No SSD payload reads.
+- No decode jobs.
+- No RAM-resident commits from the live Terrain pipeline.
+- No viewport, Predictive Forward Corridor or LAND request connection.
+- No Render Ready or GPU Ready resource creation.
+- No main-thread synchronous disk I/O.
+- No Flight safety-lane use.
+
+FROZEN BOUNDARIES
+- AERISMapDramCache remains byte-identical and metadata-only.
+- Terrain Preload Database remains byte-identical.
+- FULL BOOST remains absent.
+- Track B airfield/runway data is unchanged.
+- AA, AP, PROTECT, LAND, FlightState and Integrations protected trees are unchanged.
+
+NATIVE STATUS
+- Static source acceptance is included.
+- Native Mono/xbuild compile and KSP runtime smoke remain user-environment tests.

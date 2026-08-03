@@ -1,0 +1,28 @@
+Source diff audit — CP2 Runway Map Lock Hotfix 2 + Preload Fast Path 1
+
+Changed scope:
+- Terrain/AERISNdMapProjection.cs (new)
+- Terrain/AERISTerrainGpuTileRenderer.cs
+- UI/AERISNavigationDisplay.cs
+- Terrain/AERISTerrainPreloadContracts.cs
+- Terrain/AERISTerrainPreloadBuilder.cs
+- Terrain/AERISTerrainPreloadDatabase.cs
+- Terrain/AERISTerrainBlockPipeline.cs
+- Terrain/AERISTerrainTileSystem.cs
+- Settings/AERISSettings.cs
+- UI/AERISWindow.cs
+- Performance/AERISPerformanceRuntime.cs
+- AERISFlightControl.csproj
+- build/version/readme/docs/tests/manifest
+
+Frozen flight-control scope:
+BANK, HDG, PITCH, V/S, ALT, ACC, VEL and Ground Stability are not intentionally modified.
+
+Runtime limitation:
+Native Mono/KSP execution was unavailable in the packaging environment. Static and mathematical verification does not replace field video/log acceptance.
+
+Preload boundary-sample fast path:
+- Reuses exact boundary/edge PQS samples across adjacent Tiles and compatible LOD coordinates.
+- Cache is bounded to 131072 entries and keyed by body identity, radius, environment hash and nanodegree coordinates.
+- Cache hits do not consume PQS query tokens.
+- Hit/miss/ratio telemetry is exposed in status and CSV.

@@ -1,0 +1,85 @@
+AERIS v0.18.0.0 CP3 Gate 5 Candidate 8
+Runtime diagnosis source: user-supplied AERISFlightControl(50).zip and Video_2026-08-02_13-37-54.mkv
+Date: 2026-08-02
+
+OBSERVED USER DEFECT
+- ND displays a runway that should not be visible and the symbol/pointer follows the aircraft.
+- Candidate 7 contains two projection authorities during a GPU FRONT latch:
+  1) rendered terrain/world-fixed symbols use AERISTerrainGpuTileRenderer.PresentedProjection;
+  2) PreviewRunwayAt hit-testing rebuilt a live requested projection from vessel/PLAN state.
+- PreviewRunwayAt ignored the endpoint inside/outside booleans and measured the mouse distance to every projected runway segment.
+- Therefore an off-screen runway could be previewed/selected against a projection that was not the currently presented map. Once selected, DrawSelectedRunwayEdgePointer correctly tracks that selected off-scale runway, producing the reported “runway from nowhere that follows me” symptom.
+
+CANDIDATE 8 FIX
+- PreviewRunwayAt consumes the same PresentedProjection used by the visible GPU FRONT whenever terrain presentation is active.
+- Runway preview candidates must intersect the visible map by exact A/B/center projection.
+- A conservative local-distance pre-cull rejects only runways that cannot possibly intersect the viewport.
+- Selected runway edge-pointer behavior is retained by bypassing that pre-cull for explicitly selected runways.
+
+PERFORMANCE EVIDENCE FROM 2026-08-02 SESSION
+Session: AERISFlightControl/Logs/Sessions/2026-08-02_043206_session.log
+Performance CSV: 2026-08-02_043206_682_performance_runtime.csv
+
+High-frequency diagnostic tags:
+- TRACE: 3817
+- CP2.5/MAP_DRAM: 1408
+- ND/TERRAIN_ALIGN: 988
+- PRELOAD_PIPELINE: 964
+- PROTECT: 665
+- CP3_GATE4C_VIRTUAL_DETAIL: 399
+- CP3_TELEMETRY: 239
+
+Map DRAM terrain-index publishes:
+- terrain-index publishes: 1407
+- cumulative publish CPU time: 1204.971 ms
+- mean: 0.856 ms
+- median: 0.787 ms
+- p95: 1.572 ms
+- max: 5.832 ms
+- cumulative tile references traversed by full snapshot rebuilds: 8,086,317
+
+Performance CSV highlights:
+- frame_p95_ms: median 46.006 / p95 55.806
+- gpu_frame_ms: median 31.789 / p95 34.527
+- frame_ema_ms: median 15.725 / p95 34.067
+- preload_builder_pqs_ms: median 0.0004 / p95 18.676 / max 37.627
+- nd_repaint_ema_ms: median 4.484 / p95 8.542
+- nd_texture_upload_ema_ms: median 1.894 / p95 3.995
+- nd_capture_ema_ms: median 0.643 / p95 0.947
+- terrain_contour_worker_ema_ms: median 0.386 / p95 1.062
+- terrain_mesh_worker_ema_ms: median 0.077 / p95 0.250
+- navigation_display_worker_p95_ms: median 0.042 / p95 0.131
+- aeris_main_p95_ms: median 0.025 / p95 0.314
+
+PERFORMANCE CHANGES
+1. ND runway rendering:
+   - one shared AERISNdMapProjection per repaint instead of rebuilding it for A/B/center of every runway;
+   - conservative off-screen pre-cull before spherical trigonometric projection.
+2. ND instrumentation:
+   - terrain tile telemetry snapshot allocation reduced from every Repaint to 2 Hz;
+   - GC memory probe reduced to 1 Hz Repaint sampling;
+   - Stopwatch object allocation removed from ND draw timing.
+3. Map DRAM:
+   - unchanged immutable terrain-index wrapper objects are reused;
+   - airfield/terrain byte estimates are cached by domain;
+   - deterministic sorting removed from DRAM-only publication (persistent manifest remains sorted);
+   - routine INDEX_COMMIT INFO logs are coalesced at 64-publish intervals.
+4. Terrain preload:
+   - the already-existing runtime load-scale policy is now actually applied to background PQS sampling;
+   - load shedding changes per-frame throughput only, never tile resolution, LOD, sample data, or GPU presentation quality.
+5. Timing probes:
+   - AERISTerrainBlockPipeline and GPU renderer/upload timings use Stopwatch.GetTimestamp without per-call Stopwatch allocations.
+
+QUALITY / SAFETY BOUNDARY
+- No fixed ND range was removed or reduced.
+- No terrain tile resolution or LOD contract was changed.
+- No coastline/contour/color policy was changed.
+- GPU-only FAR presentation remains mandatory; CPU terrain presentation is not added.
+- No GUI.matrix temporal terrain warp is added.
+- Candidate 6 field-verified manual runway baseline is unchanged.
+- Airfield certification authority is unchanged.
+- No flight-control authority is added to ND/performance code.
+
+RUNTIME STATUS
+- Root-cause correction and performance hotfix: STATIC PASS (Candidate 8 50/50; Gate 5 18/18).
+- Native KSP build and in-game runtime regression are still required before Gate 5 closure.

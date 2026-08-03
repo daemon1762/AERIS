@@ -1,0 +1,41 @@
+Source diff audit — CP2 Manual Calibration Reflection Hotfix 1
+================================================================
+
+Base:
+AERISFlightControl-v0.18.0.0_DEV_CP2_ManualCalibratedRunwaySeparationPreservationHotfix1_Source
+
+Changed runtime files:
+- Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs
+- Source/AERISFlightControl/Landing/AERISRunwayWitnessLibrary.cs
+- Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+- Source/AERISFlightControl/UI/AERISWindow.cs
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+
+Changed build/acceptance integration:
+- build_ubuntu.sh
+- Tools/verify_v01800_cp2_static.py
+- Tools/run_v01800_cp2_acceptance.py
+- Tools/selftest_v01800_cp2_generic_runway_placement_verification_final_candidate3.py
+
+Added verification/evidence:
+- Tools/selftest_v01800_cp2_manual_calibration_reflection_hotfix1.py
+- Docs/CP2_MANUAL_CALIBRATION_REFLECTION_HOTFIX_1_v0.18.0.0_ja.md
+- Docs/ND_CP2_MANUAL_CALIBRATION_REFLECTION_HOTFIX_1_TEST_CARD_v0.18.0.0_ja.md
+- Evidence/RUNTIME_DIAGNOSIS_AERISFlightControl23_MANUAL_PAIR_NOT_REFLECTED.txt
+- ACCEPTANCE_v0.18.0.0_CP2_MANUAL_CALIBRATION_REFLECTION_HOTFIX1.txt
+- this file
+
+Behavioral scope:
+- manual pair reflection
+- separate manual AIRFIELDS category
+- superseded provider-row suppression
+- persisted calibration-status refresh
+- certified manual-pair ND publication and selection
+
+Explicitly unchanged:
+- cache schema
+- user-calibration schema and coordinates
+- Terrain/Preload algorithms
+- AP/AA/APP/LAND control authority
+- old NAV removal boundary
+- CP2 runway-survey debug removal boundary

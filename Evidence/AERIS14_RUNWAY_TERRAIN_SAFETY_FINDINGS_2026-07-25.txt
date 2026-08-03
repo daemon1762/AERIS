@@ -1,0 +1,37 @@
+AERIS14 VIDEO / LOG FINDINGS — RUNWAY AND TERRAIN SAFETY
+Date: 2026-07-25
+
+INPUTS REVIEWED
+- Video_2026-07-25_11-14-05.mkv
+- AERISFlightControl(8).zip (compiled mod and runtime logs)
+
+CONFIRMED FINDINGS
+1. MOD runway direction mismatch
+   - KolaIsland RWY 34 registration heading and threshold-to-opposite-end bearing were approximately reciprocal.
+   - The ND LAND funnel could therefore appear on the wrong side of the runway.
+   - The same geometry would be unsafe as a future automatic-landing handoff.
+
+2. GPU REL colour failure
+   - Low terrain remained red while the aircraft climbed well above it.
+   - The colour did not follow aircraft-to-terrain clearance.
+
+3. GPU TOPO colour failure
+   - User independently observed TOPO rendering defects.
+   - Both failures shared the shader palette scale/offset dependency.
+
+4. Coastline presentation
+   - Land colour could interpolate into water across mixed land/water triangles.
+   - Water and coastline were insufficiently distinct.
+
+IMPLEMENTED RESPONSE
+- Heading/bearing invariant and reciprocal endpoint normalization.
+- Certification/ARM/Track Token rejection when geometry remains inconsistent.
+- Correct-approach-side LOC/GS gating and N/A display.
+- Explicit elevation-metre vertex colours for TOPO/REL.
+- Fixed blue water, separate land/water clipped meshes.
+- Land-only contours and dedicated thick coastline band.
+- GPU AUTO capability fallback distinct from forced GPU ON.
+
+NOT CLAIMED
+- Native Mono compilation was unavailable in the creation environment.
+- KSP/Unity/GPU runtime validation remains the user field gate.

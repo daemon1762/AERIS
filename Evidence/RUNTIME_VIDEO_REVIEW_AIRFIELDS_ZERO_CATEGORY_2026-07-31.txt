@@ -1,0 +1,7 @@
+AERIS v0.18.0.0 CP2.5 AIRFIELDS ZERO-CATEGORY UI — PRE-FIX VIDEO REVIEW
+Input video: Video_2026-07-31_09-19-53.mkv
+Duration: 1793.547 s
+Reviewed before source modification as requested.
+Observed: AERIS UI scene transitions and Candidate 4 runtime operation. AIRFIELDS page dwell was insufficient for a complete visual count-by-count proof.
+Source correlation: DrawAirfieldCategory had a count==0 disabled/early-return path only when manualCalibratedOnly==true. All other categories could preserve expanded=true and enter empty child layout. This exactly matches the reported category-zero gap mechanism.
+Decision: generalize the disabled, forced-collapsed, no-child-layout path to every AIRFIELDS category.

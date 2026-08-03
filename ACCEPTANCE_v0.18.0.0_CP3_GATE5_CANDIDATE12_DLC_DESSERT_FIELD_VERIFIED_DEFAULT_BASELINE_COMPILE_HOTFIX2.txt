@@ -1,0 +1,23 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Candidate 12 DLC Dessert Field-Verified Default Baseline — Compile Hotfix 2
+
+Purpose:
+- Fix the remaining inherited Candidate 11 lineage regression that passed in the packaged tree but failed after build_ubuntu.sh regenerated AERISBuildVersion.generated.cs.
+- Make Gate 5 selftests deterministic before and after generated-version refresh.
+- Preserve Candidate 12 runtime behavior and the 41 physical runway / 82 reciprocal direction field-verified baseline.
+
+Root cause:
+Compile Hotfix 1 replaced the old exact-current Candidate 11 identity assertion with a lineage assertion, but that assertion still searched for the decorated UiCheckpoint spelling (em dash + A/B slash) inside AERISBuildVersion.generated.cs. The packaged generated file contained a historical comment with that spelling, while build_ubuntu.sh regenerated the file without that comment before running Gate 5 tests. The runtime Display lineage itself used the stable normalized spelling and was present throughout.
+
+Correction:
+- Candidate 11 inherited regression now validates the normalized Display lineage token in both generated version source and build_ubuntu.sh.
+- Compile Hotfix 1 inherited regression is likewise successor-safe: it validates its normalized lineage rather than owning the current UiCheckpoint.
+- build_ubuntu.sh generated-source template also retains the Candidate 11 historical marker for traceability.
+- Compile Hotfix 2 owns exact current UiCheckpoint/AVC identity.
+- Dedicated regression verifies the normalized lineage and historical marker contracts.
+
+Acceptance boundary:
+- No operational AERIS C# control/UI/ND/LAND/Terrain logic changed except generated build identity text/template comments.
+- Dessert RWY 36/18 exact field-verified authority is unchanged.
+- 41 physical runways / 82 reciprocal directions unchanged.
+- Native xbuild and runtime remain user-environment acceptance items after static regression.

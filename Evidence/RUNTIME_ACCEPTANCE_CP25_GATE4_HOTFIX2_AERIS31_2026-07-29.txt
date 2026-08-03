@@ -1,0 +1,35 @@
+CP2.5 GATE 4 HOTFIX 2 — RUNTIME ACCEPTANCE EVIDENCE
+Source: AERISFlightControl(31).zip / Video_2026-07-29_22-24-27.mkv
+Date: 2026-07-29
+
+AIRFIELD ATOMIC PUBLISH
+revision=12
+sourceRevision=1
+airfields=93
+runways=43
+directions=86
+publish_ms=0.982
+normalLookup=DRAM_ONLY
+
+SHUTDOWN SUMMARY
+revision=14
+airfieldRevision=1
+terrainRevision=718
+airfields=93
+runways=43
+directions=86
+terrainTiles=1821
+terrainChunks=39
+guardedSSD=338
+allowedSSD=338
+lookupAirfield=567065/13585
+lookupTerrain=514/61373
+synchronousSSD=0
+result=PASS
+
+AERIS attributable ERROR=0
+AERIS attributable FATAL=0
+AERIS attributable Exception=0
+
+OBSERVED UI ISSUE FOR INTEGRATED CANDIDATE
+USER CALIBRATED — MANUAL had zero entries. Empty-category expansion/persisted expanded state caused an AIRFIELDS UI layout fault. Candidate 1 forces the zero-count manual category closed and draws a disabled header without child layout.

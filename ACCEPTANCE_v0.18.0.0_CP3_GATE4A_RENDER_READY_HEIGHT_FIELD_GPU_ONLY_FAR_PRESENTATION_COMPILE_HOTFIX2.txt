@@ -1,0 +1,20 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 4A Render-Ready Height Field & GPU-Only FAR Presentation Compile Hotfix 2
+
+Purpose
+- Restore the GPU automatic-capability predicate accidentally removed during Gate 4A renderer restructuring.
+- Do not restore CPU terrain presentation or retired raster contracts.
+
+Native compile defect fixed
+- AERISTerrainGpuTileRenderer.Draw() referenced AutomaticGpuCapabilityAvailable().
+- Gate 4A Compile Hotfix 1 omitted the method body, causing CS0103 under Mono/xbuild.
+- Compile Hotfix 2 restores the same deterministic capability predicate used by the accepted Gate 3.1 renderer:
+  SystemInfo.supportsRenderTextures
+  SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGB32)
+  SystemInfo.graphicsShaderLevel >= 20
+
+Safety boundaries
+- CPU terrain drawing remains disabled.
+- AERISTerrainRasterWorker remains excluded from the csproj.
+- GPU FRONT/BACK and FAR-complete atomic swap contracts are unchanged.
+- No synchronous SSD read or Flight safety-lane work is added.

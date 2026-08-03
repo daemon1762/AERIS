@@ -1,0 +1,14 @@
+Candidate 12 Compile Hotfix 1 source audit
+
+Runtime operational logic changed: NONE.
+Changed files are limited to version identity, inherited regression assertions, Gate 5 runner, and hotfix documentation/tests.
+
+Failure reproduced from user build:
+- Candidate 12 own regression: 58/58 PASS
+- Candidate 11 inherited regression: FAIL: Candidate 11 tab/build identity exact
+- build stopped before xbuild due set -e and Gate 5 runner non-zero exit.
+
+Correction:
+- Candidate 11 exact-current identity assertion -> successor-safe lineage assertion.
+- Candidate 12 baseline exact-current identity assertion -> successor-safe lineage assertion.
+- Compile Hotfix 1 owns the exact current UiCheckpoint assertion.

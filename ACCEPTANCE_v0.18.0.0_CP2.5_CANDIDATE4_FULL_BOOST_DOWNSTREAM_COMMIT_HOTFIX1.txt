@@ -1,0 +1,14 @@
+AERIS v0.18.0.0 CP2.5 Candidate 4 Full Boost Downstream Commit Hotfix 1
+
+Scope:
+- CPU Encode and SSD Super Batch jobs use AERISWorkerScheduler.SubmitRequired.
+- Required completions are non-evictable and receive Commit(null) on terminal failure/stale completion.
+- STANDARD encode commitments: 16..32.
+- FULL encode commitments: 32..56.
+- STANDARD write commitments: 1.
+- FULL write commitments: 2.
+- FULL worst-case terrain downstream result ownership: 192 block + 56 encode + 2 write = 250 <= scheduler nominal result capacity 256.
+- Admission rejection retains work and does not consume an encode retry.
+- Manual STOP lowers producer/encode/write limits to STANDARD while already admitted required work drains normally.
+- Runtime acceptance requires required-drop = 0, continuing tile progress after STOP, and no fixed encode/write ownership for 12 seconds.
+- Track B runway data and CP3 payload residency remain unchanged.

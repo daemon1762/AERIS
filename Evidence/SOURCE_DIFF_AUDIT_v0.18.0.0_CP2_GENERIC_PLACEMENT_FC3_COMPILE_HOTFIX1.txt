@@ -1,0 +1,22 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+Generic Runway Placement Final Candidate 3 Compile Hotfix 1
+Source Difference Audit — 2026-07-26
+
+BASE
+AERISFlightControl-v0.18.0.0_DEV_CP2_GenericRunwayPlacementVerification_FinalCandidate3_Source.zip
+SHA-256 54b5f833a72635c9ed0788a2f68419c416ca1f4f8ae02a315e9adc5d4ee6a519
+
+PRODUCTION CHANGE
+Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs
+- `string stored;`
++ `string stored = string.Empty;`
+
+METADATA / EVIDENCE / TEST CHANGES
+- Build identity and .version NAME append COMPILE HOTFIX 1.
+- README documents the compile-only fix.
+- Dedicated compile-hotfix design, test card, diagnosis and acceptance evidence added.
+- Dedicated static regression added to CP2 runner.
+- Common C# compile regression extended with the same definite-assignment guard.
+
+NO FUNCTIONAL CHANGE
+- Geometry, thresholds, quarantine format, calibration schema, preload, ND/LAND/AP authority unchanged.

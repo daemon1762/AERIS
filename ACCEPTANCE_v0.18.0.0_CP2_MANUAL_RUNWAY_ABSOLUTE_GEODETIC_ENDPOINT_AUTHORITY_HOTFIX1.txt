@@ -1,0 +1,36 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+Manual Runway Absolute Geodetic Endpoint Authority Hotfix 1
+
+Static acceptance status: PASS
+Runtime closure status: CP2 OPEN
+
+Implemented correction:
+- MARK A / MARK B remain body-fixed latitude, longitude and elevation endpoints.
+- Manual endpoint projection no longer uses Unity world vectors or provider local
+  East/North handedness.
+- Double-precision spherical inverse geodesy derives local east/north distance from
+  the absolute body-fixed coordinates.
+- User-calibrated runway axes cannot be realigned to mesh or launch-anchor axes.
+- Stable IDs, reciprocal direction pairing, manual grouping and saved endpoints are
+  preserved.
+
+Observed AERISFlightControl(24) failure reproduced:
+- stored A->B heading: approximately 195.85 degrees
+- erroneous runtime heading: approximately 163.67 degrees
+- east-axis sign reflection reproduces the erroneous value
+
+Completed static acceptance:
+- dedicated absolute-geodetic endpoint regression: 23/23 PASS
+- complete CP2 acceptance including manifest: 55/55 scripts PASS
+- internal manifest: file set and all SHA-256 PASS
+
+Required native/runtime acceptance before CP2 closure:
+- Mono/xbuild PASS on the target KSP installation
+- existing Kola A/B retained without re-registration
+- registered direction remains approximately RWY 20 / RWY 02
+- ND line coincides with the physical runway at both endpoints and center
+- both reciprocal directions remain selectable
+- re-survey, scene transition and restart preserve placement
+- Auto Preload Progression closure requirements remain separately satisfied
+
+This record does not declare native/runtime PASS or CP2 CLOSED.

@@ -1,0 +1,43 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+Generic Runway Placement Final Candidate 3 Compile Hotfix 1
+Acceptance Record — 2026-07-26
+
+STATUS
+- CP2: OPEN pending native Mono/xbuild rerun and KSP field acceptance.
+- CP3/new NAV: NOT AUTHORIZED.
+- Packaging environment native Mono/xbuild: NOT AVAILABLE.
+- User-observed FC3 native build: FAIL CS0165 before this hotfix.
+
+ROOT CAUSE
+- VerifyRunwayPlacement declared `string stored;`.
+- `witnessLibrary == null || RecordPlacementMismatch(... out stored)` can short-circuit before assigning stored.
+- The failure branch then read stored, causing Mono/xbuild CS0165 definite-assignment failure.
+
+FIX
+- Initialize `stored` to `string.Empty` before evaluating the short-circuit condition.
+- Existing fail-closed fallback, mismatch persistence and resurvey behavior are retained.
+- No runway geometry, placement threshold, calibration schema, preload, UI, LAND or control behavior changed.
+
+STATIC ACCEPTANCE
+- Full CP2 suite without manifest: 46/46 scripts PASS.
+- Dedicated FC3 Compile Hotfix 1 regression: 9/9 PASS.
+- Shared C# definite-assignment regression: 25/25 PASS.
+- Existing Generic Placement Final Candidate 3 regression: 195/195 PASS.
+- Kola-independent production verification boundary retained.
+- Legacy NAV absent; LAND/control authority additions none.
+- Binary/build/runtime/python-cache and user calibration data excluded.
+
+FINAL PACKAGE INTEGRITY
+- Full CP2 suite with internal manifest: 47/47 scripts PASS.
+- MANIFEST_SHA256.txt file set and every hash: PASS.
+- ZIP CRC: PASS.
+- Independent clean extraction: 47/47 scripts PASS.
+- Source and clean-extracted file sets/content: identical.
+
+FIELD ACCEPTANCE REQUIRED
+- Native Mono/xbuild PASS with no CS0165 or later compile error.
+- Build identity ends in FINAL CANDIDATE 3 COMPILE HOTFIX 1.
+- Kola and generic airport CHECK HERE / manual calibration gates PASS.
+- Auto Preload COMPLETE / PROMOTE / restart inheritance PASS.
+- No runtime ERROR, exception, control-authority regression or removed debug path.
+- CP2 remains OPEN until every field gate passes.

@@ -1,0 +1,31 @@
+SOURCE DIFF AUDIT — CP2.5 INTEGRATED ACCEPTANCE CANDIDATE 2
+BASE: AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate1_Source
+TARGET: AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate2_Source
+
+RUNTIME CODE CHANGE:
+- Source/AERISFlightControl/AA/SyncModuleControlSurface.cs
+  - explicit stock GameEvents cleanup before OnStart registration
+  - explicit non-virtual OnDestroy bridge
+  - callback cleanup before and after base.OnDestroy
+  - no Harmony dependency
+
+CONTROL LAW:
+- CtrlSurfaceUpdate byte-identical to Candidate 1
+- declaration-plus-body SHA-256: 75c6dc1ad382544c56960048c36387aa2b6c45a4aa9306bcb9b69cb6ca463f90
+
+PROTECTED TREES:
+- UI: identical
+- Landing: identical
+- Terrain: identical
+- Autopilot: identical
+- Protect: identical
+- FlightState: identical
+- Integrations: identical
+- Airfields data: identical
+- AA excluding SyncModuleControlSurface.cs: identical
+
+TRACK B:
+- no runway coordinate/default data changes
+
+CP3 BOUNDARY:
+- no Current-Body Resident Cache or terrain payload residency

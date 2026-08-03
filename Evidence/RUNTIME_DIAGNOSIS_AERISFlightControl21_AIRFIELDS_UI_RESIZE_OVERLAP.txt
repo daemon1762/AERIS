@@ -1,0 +1,34 @@
+AERISFlightControl(21) / Video_2026-07-26_19-50-07 runtime diagnosis
+Date: 2026-07-26
+
+INPUT SHA-256
+- AERISFlightControl(21).zip: eb068bf160c878efb3fec1fdd7892d1f0a000eb0d49682faea3ddc43efabc9ad
+- Video_2026-07-26_19-50-07.mkv: 6922e3eb36d4c1af14492b6f07d3a2d33bd3369790566a35e5b095ea189b0f2d
+- Source baseline ZIP: 62a6fe32da7f86db7549c8b897cbd568f064c07277ce7a48137cb17b0218ffb4
+
+RUNTIME STATUS
+- Correct ND NAVIGATION SNAPSHOT PUBLISH AIRFIELDS UI COLLAPSE HOTFIX 1 build loaded.
+- [ERROR] count: 0.
+- Exception count: 0.
+- Kola reciprocal pair generation and cache round-trip remained successful.
+
+OBSERVED UI FAILURE
+- Video shows AIRFIELDS runway rows rendering two or more text lines inside fixed-height controls.
+- Source allocated 38px for runway rows and 36px for CHECK HERE, independent of text width.
+- At narrow and medium window widths, text descenders and second lines overlap neighbouring controls.
+- Failure codes were rendered as unbroken enum names such as ANCHORSURFACEUNRESOLVED.
+
+OBSERVED RESIZE FAILURE
+- Runtime log recorded resize starts/saves including:
+  520 x 920 -> 828 x 920 with drag delta +308,+503
+  later start at 537 x 920
+  537 x 920 -> 1050 x 920 with drag delta +888,+825
+  1050 x 920 -> 440 x 903 with drag delta -625,-17
+- The moving-grip Event.delta accumulator made intermediate sizing difficult.
+- Config ended at 1050 x 920 while the recorded display height was lower than the hard-coded 920 maximum.
+
+REPAIR BOUNDARY
+- Replace fixed-height long controls with CalcHeight-based vertical growth.
+- Use a fixed screen-space pointer origin for resize.
+- Clamp maximum dimensions to the current screen.
+- No change to runway certification, calibration, ND data, LAND, AP, APP, or control authority.

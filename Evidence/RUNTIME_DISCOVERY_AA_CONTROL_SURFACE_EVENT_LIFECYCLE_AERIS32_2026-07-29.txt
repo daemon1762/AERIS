@@ -1,0 +1,22 @@
+RUNTIME DISCOVERY — AA CONTROL SURFACE EVENT LIFECYCLE
+Source session: AERIS32 / CP2.5 Integrated Acceptance Candidate 1
+Date: 2026-07-29
+
+Candidate 1 functional result:
+- Empty manual-calibrated UI: PASS
+- Gate 1-4 integrated runtime: PASS
+- AERIS ERROR/FATAL/Exception: 0
+
+KSPCommunityFixes MemoryLeaks observations owned by AERIS SyncModuleControlSurface:
+- total: 23
+- onVesselReferenceTransformSwitch: 20
+- onEditorPartEvent: 3
+
+Representative records:
+[LOG 23:27:49.270] [KSPCF:MemoryLeaks] Removed a onVesselReferenceTransformSwitch callback owned by a destroyed AERISFlightControl:SyncModuleControlSurface instance
+[LOG 23:30:04.054] [KSPCF:MemoryLeaks] Removed a onEditorPartEvent callback owned by a destroyed AERISFlightControl:SyncModuleControlSurface instance
+
+Candidate 2 acceptance target:
+- Explicit AERIS lifecycle cleanup activation log is present.
+- KSPCF cleanup records owned by AERISFlightControl:SyncModuleControlSurface are zero.
+- Control-law implementation remains byte-identical.

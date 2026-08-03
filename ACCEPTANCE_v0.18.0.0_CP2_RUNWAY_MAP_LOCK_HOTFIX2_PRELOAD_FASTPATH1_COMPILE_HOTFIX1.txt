@@ -1,0 +1,14 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+Runway Map Lock Hotfix 2 + Preload Fast Path 1 Compile Hotfix 1
+
+Correction:
+- Added missing `using AERISFlightControl.Settings;` to AERISNdMapProjection.cs.
+- This resolves the reported Mono/xbuild CS0246 for AERISTerrainRenderTargetOrientation.
+
+Static acceptance before manifest:
+- 37/37 scripts PASS
+- dedicated compile hotfix test 5/5 PASS
+
+Safety boundary:
+- No AP, LAND control, Ground Stability, terrain projection formula, or Preload Fast Path algorithm changed.
+- Native Mono/xbuild compilation is not available in the packaging environment and remains an explicit user-side acceptance item.

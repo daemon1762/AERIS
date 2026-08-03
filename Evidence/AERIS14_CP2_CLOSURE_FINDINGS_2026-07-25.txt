@@ -1,0 +1,18 @@
+AERIS14 CP2 Closure findings
+
+Runtime evidence:
+- GPU TOPO/REL functional requirements passed in the 2026-07-25 13:14 recording.
+- Remaining visual issue: patchy relief shading and coastline fill overshoot.
+- KolaIsland registry certification and LAND ARM were accepted, while ND showed geometry invalid.
+
+Root cause:
+- AERISNavigationDisplay.CloneObservation omitted OnApproachSide and
+  RunwayGeometryDirectionValid. C# bool defaults changed the cached ND state to false.
+- Fill clipping used triangle-edge midpoints while the coastline used a separate
+  cell-perimeter construction. Ambiguous coastal cells could visibly disagree.
+
+Closure changes:
+- Copy the complete LAND safety/approach state.
+- Use one shared conservative land/water crossing for fill and coastline.
+- Generate coast segments from the same triangles as the fill mesh.
+- Reduce relief shading amplitude, especially in REL safety colours.

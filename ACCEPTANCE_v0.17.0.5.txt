@@ -1,0 +1,29 @@
+AERIS Flight Control v0.17.0.5 acceptance summary
+
+Status before manifest verification:
+- 14 / 14 test scripts PASS
+- 679 / 679 assertions PASS
+
+Included verification families:
+- v0.17.0.5 static/package source invariants
+- build entrypoint
+- generation/latest-wins/permit scheduler model
+- asynchronous writer/archive integrity
+- PC1 BANK/LAND/display golden invariants
+- v0.17.0.3 startup/cache-root/archive-drain regression
+- v0.17.0.4 StableRecordId/cache schema 4 regression
+- v0.17.0.5 provider identity / geometry signature split
+- v0.17.0.5 canonical order-independent cache fingerprint
+- v0.17.0.2 runway-registry identity regression
+- deterministic consensus runway cases
+- reload/LAND freeze/AIRFIELDS/ND contract
+- legacy NAV removal
+- foundation data/display
+- FDI/ND user layout
+
+Final packaged acceptance adds internal manifest verification and must report:
+- 15 / 15 scripts PASS
+- 682 / 682 assertions PASS
+- all manifest file hashes PASS
+
+Native KSP compilation and the two-restart identity/cache-hit field gate remain external.

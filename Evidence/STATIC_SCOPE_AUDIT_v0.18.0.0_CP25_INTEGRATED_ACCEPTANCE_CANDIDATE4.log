@@ -1,0 +1,27 @@
+AERIS v0.18.0.0 CP2.5 Candidate 4 static scope audit
+baseline=Candidate 3
+changed_entries=15
+unexpected_changed_entries=0
+python_syntax=126/126 PASS
+json_version_syntax=1/1 PASS
+csproj_xml=1/1 PASS
+bash_syntax=1/1 PASS
+csharp_lexical_delimiters=134/134 PASS
+compiled_cache_artifacts=0 PASS
+protected_tree Source/AERISFlightControl/AA match=True hash=5ab29f3517e084e5f88a13225c5abd162c1d4fb45ea431102a8d626137d1d72b
+protected_tree Source/AERISFlightControl/Autopilot match=True hash=82ec2617a789c33195173071927e2f3a615d13a1811e2121092c6539fb9bdfba
+protected_tree Source/AERISFlightControl/Protect match=True hash=5876f6ed1850420355227fd7351dcd28492ae19685710e34603785f41c32a303
+protected_tree Source/AERISFlightControl/FlightState match=True hash=b8b700b73ad9004000fc1f8380e8897a1e417908e428f3040a24d90a53048ded
+protected_tree Source/AERISFlightControl/Integrations match=True hash=e6647f140f8795d2b75b1a39391173f999b1349a323be8447171e10eab161151
+protected_tree Source/AERISFlightControl/Landing match=True hash=113e5f70680a9b4909dc70ffdb348e98ff1aed3f5c4113d622d1e4a765b69f2f
+protected_tree GameData/AERISFlightControl/Airfields match=True hash=f92f306c673f927fd4515d4230d2dae80b71c666d3867cf347f0a285bd85944d
+runtime_changed_files:
+  M GameData/AERISFlightControl/AERISFlightControl.version
+  M Source/AERISFlightControl/Performance/AERISWorkerScheduler.cs
+  M Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+  M Source/AERISFlightControl/Terrain/AERISTerrainBlockPipeline.cs
+  M Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs
+  M Source/AERISFlightControl/Terrain/AERISTerrainPreloadContracts.cs
+  M Source/AERISFlightControl/Terrain/AERISTerrainPreloadDatabase.cs
+  M Source/AERISFlightControl/UI/AERISWindow.cs
+  M build_ubuntu.sh

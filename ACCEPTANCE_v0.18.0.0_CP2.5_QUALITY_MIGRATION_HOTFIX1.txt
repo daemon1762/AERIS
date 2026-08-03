@@ -1,0 +1,34 @@
+AERIS Flight Control v0.18.0.0 DEV CP2.5 Quality Migration Hotfix 1
+
+Scope:
+- Track A only; no curated runway/default coordinate changes.
+- Preserves CP2.5 Altitude Gate Hotfix 1.
+- Public Terrain quality choices are AUTO / LOW / MEDIUM / HIGH.
+- Legacy settings migrate once and are persisted:
+  AUTO -> AUTO, ECO -> LOW, BALANCED -> MEDIUM, HIGH -> HIGH, ULTRA -> HIGH.
+- AUTO can recover only through HIGH and never selects LAND.
+- LAND runtime quality and per-body LAND preload detail are isolated to the
+  SYSTEM > DIAGNOSTICS developer surface.
+- Normal Terrain and preload quality selectors do not expose LAND.
+- LAND request/activation separation is intentionally deferred to CP2.5 Gate 3.
+
+Static acceptance before manifest:
+- Dedicated CP2.5 Gate 2 assertions: 39/39 PASS.
+- Gate 1 plus frozen CP1/CP2 regression scripts: 57/57 scripts PASS.
+- Python syntax, bash syntax and source delimiter audits: PASS.
+- Landing source and packaged Airfields trees: byte-identical to Gate 1.
+- No compiled/debug/python-cache artifacts: PASS.
+
+Gate 1 field status inherited by this package:
+- HHC-4 2100 m/s ballistic boundary test: implementation PASS.
+- OFF at 40,500.2 m; ON at 39,499.5 m; no chatter.
+- ND suspension and AP/AA continuity: PASS.
+- Visual stale-frame reactivation and active Preload progress remain carried to
+  integrated acceptance because the reactivation occurred while KSP was covered
+  and no active Preload progress line was emitted.
+
+Pending user-side Gate 2 acceptance:
+- Native Mono/xbuild against KSP 1.12.5 assemblies.
+- Existing configuration migration and persistence after restart.
+- Normal selector labels and developer LAND isolation in KSP UI.
+- AUTO/LOW/MEDIUM/HIGH effective profile switching and Gate 1 regression.

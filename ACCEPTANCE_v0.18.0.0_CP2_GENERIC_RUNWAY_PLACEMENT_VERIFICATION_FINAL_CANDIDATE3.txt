@@ -1,0 +1,55 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+Generic Runway Placement Verification / Manual Calibration Final Candidate 3
+Acceptance Record — 2026-07-26
+
+STATUS
+- CP2: OPEN pending native Mono/xbuild and KSP field acceptance.
+- CP3/new NAV: NOT AUTHORIZED.
+- Native Mono/xbuild: NOT RUN in packaging environment (toolchain and KSP references absent).
+- KSP runtime: NOT RUN in packaging environment.
+- AERISFlightControl(18): diagnostic evidence only; not final PASS evidence.
+
+IMPLEMENTED BOUNDARIES
+- Airport-independent CHECK HERE verifies a parked vessel against the selected certified runway.
+- Same-body, ground/PRELAUNCH, non-splashed and <=5 m/s gates prevent accidental airborne checks.
+- Spherical along-track/cross-track calculation with width, uncertainty, end and elevation gates.
+- Non-finite body radius, runway width and uncertainty inputs are sanitized before use.
+- Valid longitudinal/elevation evidence plus an out-of-corridor point persists a placement mismatch.
+- Mismatch persistence clears stale endpoints and forces fail-closed two-point calibration.
+- User calibration persistence schema 2; schema 1 remains readable and future schemas fail closed.
+- Calibration identity fallback is body-scoped and provider-specific.
+- Mutation/save failures roll back in-memory calibration and quarantine state.
+- MARK A/B requires a parked, stopped vessel and at least 80 m between finite endpoints.
+- Kola Island is cataloged ManualRequired as a confirmed field mismatch.
+- Generic production verification contains no Kola name, UUID or coordinate branch.
+- Algorithm 1710, Runway Detector Revision 5, cache schema 8.
+
+TEMPORARY CP2 RUNWAY DEBUG REMOVAL
+- Candidate overlay, candidate-only UI setting, candidate database/list path, periodic candidate log,
+  candidate cache detail and Hotfix-3-only debug acceptance path are removed.
+- Provisional Geometry remains a fail-closed registry state but is not rendered on ND and is not selectable.
+- Removed runtime identifiers are guarded by a negative regression test.
+
+STATIC ACCEPTANCE
+- Full CP2 suite without manifest: 45/45 scripts PASS.
+- Dedicated Final Candidate 3 regression suite: 195/195 PASS.
+- Snapshot-constructor arity and all C# brace-balance checks: PASS.
+- No user-specific UserRunwayCalibrations.cfg is shipped: PASS.
+- Legacy NAV remains absent: PASS.
+- LAND/control authority additions: none; observation/save/resurvey only.
+- Source package binary/build/runtime/python-cache exclusion: PASS.
+
+FINAL PACKAGE INTEGRITY
+- MANIFEST_SHA256.txt file-set and hash verification: PASS in final packaging cycle.
+- ZIP CRC: PASS in final packaging cycle.
+- Clean independent extraction CP2 acceptance: PASS in final packaging cycle.
+
+FIELD ACCEPTANCE REQUIRED
+- Native Mono/xbuild must succeed against KSP 1.12.5 references.
+- Kola must remain UserCalibrationRequired until MARK A/B completes, then align to the physical runway.
+- At least five other representative airports must be checked with CHECK HERE.
+- A detected mismatch must survive restart and remain non-CERT until two-point calibration.
+- A correctly aligned runway must report PLACEMENT CHECK PASS and remain certified.
+- Temporary CP2 candidate display/log/cache paths must be absent in runtime.
+- Auto Preload must show multi-body COMPLETE, PROMOTE and restart inheritance.
+- No CP2 CLOSE declaration is permitted until all field gates pass.

@@ -1,0 +1,18 @@
+AERIS v0.18.0.0 CP2 — AERISFlightControl(17) runtime diagnosis
+Date: 2026-07-26
+Verdict: FAIL evidence; not a PASS baseline
+
+Observed Kola Island runtime record:
+[RUNWAY_AXIS] site=Kola Island; meshRunwayHeadingDeg=163.70; launchTransformHeadingDeg=343.68; registeredHeadingBeforeDeg=343.68; registeredHeadingAfterDeg=163.70; headingCorrectionDeg=0.02; axisReference=LAUNCH_ANCHOR; axisReferenceErrorDeg=0.02; surfaceAspect=33.28; surfacePoints=4094; axisRegistrationValid=True.
+
+[RUNWAY_PLACEMENT] site=Kola Island; launchCrossBeforeM=-0.06; launchCrossAfterM=0.00; launchAlongM=-1179.82; axisRegistrationValid=True; absolutePlacementValid=True.
+
+The user screenshot showed the AERIS yellow runway line on a different long rectangle from the physical runway occupied by the aircraft. Therefore:
+
+1. Axis agreement and absolute-placement agreement were internally consistent.
+2. Internal consistency did not prove that the sampled mesh/collider was the operational runway.
+3. The Hotfix 2 decision boundary could certify a wrong airport object.
+4. The next boundary must begin from a launch-anchor-contacting physical surface, flood only two-dimensionally connected surfaces, and use an independent plan witness where available.
+5. Generic geometry without protected basis must remain Provisional and never LAND/ARM eligible.
+
+AERISFlightControl(17) remains regression/failure evidence only.

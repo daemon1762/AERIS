@@ -1,0 +1,31 @@
+AERIS Flight Control v0.17.0.7
+Sub-Metre Provider Frame Cache Compatibility Hotfix
+
+FINAL SOURCE ACCEPTANCE
+=======================
+
+Result: PASS
+Scripts: 15 / 15 PASS
+Assertions: 701 / 701 PASS
+
+Primary change:
+- exact InputFingerprint remains strict
+- independent SourceFingerprint is persisted in cache schema 5
+- exact miss may reuse certified geometry only when source/config/model,
+  Provider version, geometry point/primitive counts and collider readability match
+- compatibility limits: horizontal 0.50 m, vertical 0.10 m,
+  heading 0.02 deg, model scale 0.0005
+- any material source, geometry, placement or algorithm change re-enters survey
+
+Preserved gates:
+- BANK reference implementation byte-identical
+- LAND foundation remains observation-only and control-free
+- legacy NAV remains absent
+- shared bounded scheduler and asynchronous writer/archive contracts retained
+- schema 3 and 4 cache files remain readable; algorithm 1670 forces one safe rebuild
+- no compiled DLL, cache, FlightData, logs or Python bytecode in source package
+
+Native KSP compile and field acceptance:
+- NOT EXECUTED in the packaging environment because KSP reference DLLs and
+  Mono/xbuild are unavailable
+- required next gate is Docs/RUNWAY_REGISTRY_TEST_CARD_v0.17.0.7_ja.md

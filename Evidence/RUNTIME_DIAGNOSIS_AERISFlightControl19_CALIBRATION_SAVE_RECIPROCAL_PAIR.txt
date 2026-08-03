@@ -1,0 +1,24 @@
+AERISFlightControl(19).zip / Video_2026-07-26_16-45-43.mkv diagnosis
+Date: 2026-07-26
+
+Observed build:
+AERIS v0.18.0.0 DEV CP2 ... FINAL CANDIDATE 3 COMPILE HOTFIX 1
+
+Observed UI failure:
+CALIBRATION SAVE FAILED: InvalidDataException — temporary calibration file verification failed
+
+Observed runtime status:
+- Kola/manual-required safety routing was active.
+- AIRFIELDS MARK A/B controls were present.
+- User calibration count remained zero.
+- UserRunwayCalibrations.cfg was absent from the submitted GameData folder.
+- Therefore no successful endpoint pair was persisted and no user-calibrated runway could be regenerated after reload.
+
+Root cause:
+ConfigNode.Save/Load can expose the saved named node in multiple root shapes on KSP native Linux Mono. Manual calibration verification required one shape too strictly and rejected a semantically valid temporary file. The certified airfield cache already used a multi-shape resolver; manual calibration did not.
+
+Additional design finding:
+Two recorded endpoints define one physical runway, not one approach direction. The existing operational resolver already possessed A/B direction construction, but the persistence contract did not explicitly guarantee or validate the reciprocal pair. This hotfix makes the pair an explicit schema-3 invariant, forces both user-calibrated direction candidates available, validates endpoint reversal/180-degree headings/distinct IDs, and emits runtime evidence.
+
+Safety:
+Both directions are generated, but terrain/approach validation remains independent and fail-closed. No LAND or flight-control authority is added.

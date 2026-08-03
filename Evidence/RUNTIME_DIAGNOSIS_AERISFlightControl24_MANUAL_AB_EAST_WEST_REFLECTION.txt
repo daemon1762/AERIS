@@ -1,0 +1,27 @@
+AERISFlightControl(24) runtime diagnosis
+Date: 2026-07-26
+
+Observed stored manual endpoints:
+  A lat=-4.0581871709924062 lon=-72.08052478927371 alt=23.261601832462475
+  B lat=-4.2604107970112670 lon=-72.138091665285287 alt=26.875368561130017
+  Great-circle A->B heading=195.848207 deg
+  Great-circle length=2201.380 m (Kerbin radius 600000m)
+
+Observed runtime result before this hotfix:
+  registeredHeadingBeforeDeg=195.85
+  registeredHeadingAfterDeg=163.67
+  physicalRunway=RWY 16/34
+  meshRunwayHeadingDeg=163.68
+
+Diagnosis:
+  The stored latitude/longitude values were already body-fixed absolute coordinates.
+  BuildWitnessFrame converted them through CelestialBody.GetWorldSurfacePosition and then
+  projected Unity Vector3 values onto the provider LocalFrame East/North basis.  The East
+  sign of that path was mirrored for KSP body coordinates.  Mirroring the east component
+  of the true A->B vector reproduces approximately 163-164 degrees, matching the runtime.
+
+Correction:
+  Project body-fixed geodetic A/B directly with spherical inverse geodesy in double
+  precision.  Do not use Unity world vectors, floating origin, or provider local handedness
+  for user-calibrated endpoint placement.  Physical mesh/anchor data may refine width and
+  elevation diagnostics but must never move the marked user axis.

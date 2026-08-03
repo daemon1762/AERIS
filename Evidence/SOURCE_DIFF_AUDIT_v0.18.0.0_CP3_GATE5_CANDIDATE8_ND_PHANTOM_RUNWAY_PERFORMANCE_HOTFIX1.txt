@@ -1,0 +1,77 @@
+AERIS v0.18.0.0 CP3 Gate 5 Candidate 8
+Source Diff Audit — ND Phantom Runway / Performance Hotfix 1
+Baseline: Candidate 7 Expansion Detection / DLC Runtime Status Hotfix 1
+
+MODIFIED EXISTING FILES: 13
+- GameData/AERISFlightControl/AERISFlightControl.version
+  Candidate7: 7c4bae4e97f959e74c45fff323801ef13b156ef899930c2772c87a51fe31e0b2
+  Candidate8: 0870043cc8b57f4ee4b3938461bd1b69079f1f5a224ffb781f4fa4151bfcb321
+- README.md
+  Candidate7: 42e0671ef45be335696ae5f1bd768a713b7ce26133daa1d8d9140f71aafc267d
+  Candidate8: 37c2c0e0615d789b61027e4cbcc8df2fc5048af5599a7cda7f711b0e983fc8a4
+- Source/AERISFlightControl/Performance/AERISMapDramCache.cs
+  Candidate7: 32f69a41ef84a6ecef280921fcd5ae9f13d729eba7a080ef53fee644c24679e5
+  Candidate8: 43e4d6326bc37e0b4baac0af9cf08d11a1737bee8c8532de6e90de4f7ff64abf
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+  Candidate7: f0a617555a9efe4af295703f4bb548aaeb8c89b5215141e7c5cec2e3271271a9
+  Candidate8: f63752052b98c08b2c28c6ba169368df62a18fe31827bfbd9b3026c2bc11e52d
+- Source/AERISFlightControl/Terrain/AERISTerrainBlockPipeline.cs
+  Candidate7: bd7fc15ce8200d17e3d47bcb53a1cdda127b2a539d572215255da8c81463c938
+  Candidate8: 326dee6f48d45e5a181719e80dd31abb67b1768a1e4b38a3aaa32d5d54ec7497
+- Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+  Candidate7: 5258cc1c765963f68624c400e748d252b300f7bc13427a3de3bb09f6563dad39
+  Candidate8: 7bba788ead43026dd4cd83e7cb6fb1e9ddcf3da796195116f8b97b8d95b0f0d5
+- Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs
+  Candidate7: 0018b8852e24aea7d6cee55829181103133ce736c56186903dff4956691fc8b9
+  Candidate8: 96ca492168c5725844339f07bffb070437c156da30581a818f96d6df46992069
+- Source/AERISFlightControl/Terrain/AERISTerrainPreloadDatabase.cs
+  Candidate7: 3ab978c5bc405bcdfdff7a68ae8e01dc59d1d0d2be53317883b0940fe60c4688
+  Candidate8: 378d4b068c1ad97ba83b44c4fb0d09a76ef9e49868e45f5c28a88e660ccba59a
+- Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+  Candidate7: 2d7fbd6840bcc84d0f43ed96b62fba48aacfdc51ae888059f6ae8ae8164bf7cc
+  Candidate8: 86c65a2abba3a5cd59a49d83dff82092b9d108b652b1506c58ea3141749d0807
+- Tools/run_v01800_cp3_gate5_acceptance.py
+  Candidate7: 2c9c171271c2af018c00f67199a757550a699b07be76309b986b96a596e1fd57
+  Candidate8: 4ce8d924a369a227818134e4f173daafd5e2971e8a8708987778f74f19771000
+- Tools/selftest_v01800_cp3_gate5_candidate5_manual_authority_native_spawn_altitude_hotfix1.py
+  Candidate7: 59fbe9fcd0093b8580483945832117d324e9aef248583b625428c290deba888a
+  Candidate8: 4a2492cb729cf59fb53bcfb7f02cdb37d86d6472f89725a79b3d9b45b21a722a
+- Tools/selftest_v01800_cp3_gate5_predictive_corridor_successor.py
+  Candidate7: 6468867ebc4d42e8ea547363d0c1b8e2e37c55b40f6def026641dfe8584fb5a6
+  Candidate8: 89148828f3508707049731d5c080e4f21a429866eac999d8635cce4ba8203efe
+- build_ubuntu.sh
+  Candidate7: fdb2db3b775063cf30c83b44cb7c5eada4eb18f85b237cd356f90d360be6d7ef
+  Candidate8: b62c65659bc3178db2b5a81c0983464b208869a318e17bc03d881ae734c3838a
+
+NEW FILES (excluding this audit): 5
+- ACCEPTANCE_v0.18.0.0_CP3_GATE5_CANDIDATE8_ND_PHANTOM_RUNWAY_PERFORMANCE_HOTFIX1.txt
+- Docs/ND_CP3_GATE5_CANDIDATE8_ND_PHANTOM_RUNWAY_PERFORMANCE_HOTFIX1_TEST_CARD_v0.18.0.0_ja.md
+- Evidence/RUNTIME_DIAGNOSIS_AERISFlightControl50_ND_PHANTOM_RUNWAY_PERFORMANCE.txt
+- Tools/selftest_v01800_cp3_gate5_candidate8_nd_phantom_runway_performance_hotfix1.py
+- SOURCE_MANIFEST_SHA256.txt
+
+REMOVED FILES: 0
+
+FROZEN / BYTE-IDENTICAL BOUNDARIES
+- Source/AERISFlightControl/Terrain/AERISTerrainTileContracts.cs: 7790977cd845c58767a70f193db3efbfc573812706466b477846b06447440f86
+- Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs: f931ec7b381ebdf6323ae711c31d063256a961fa574995a650507c11b10cd032
+- Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs: 985adc588960559f8ec61875c2cad4cda6b472e6fd84e7c25725a65affad58e3
+- Source/AERISFlightControl/Autopilot/AERISBankDirector.cs: bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7
+- GameData/AERISFlightControl/Airfields/Defaults/03_Field_Verified_Runway_Calibrations.cfg: b9fd40fd1a8fcf2cb6f5f33900c88b6b5e3b5b6c6d070c2544c2829de43a9347
+
+ACCEPTANCE TEST CHANGES
+- selftest_v01800_cp3_gate5_predictive_corridor_successor.py: replaces an obsolete Candidate-era byte freeze for AERISMapDramCache.cs with semantic metadata-only ownership checks because Candidate 8 intentionally optimizes that file.
+- selftest_v01800_cp3_gate5_candidate5_manual_authority_native_spawn_altitude_hotfix1.py: current-successor identity expectation advanced from Candidate 7 to Candidate 8; Candidate 5 history/authority checks are unchanged.
+
+NO SCOPE EXPANSION
+- No Airfield registry/certification authority change.
+- No manual runway calibration/default data change.
+- No AP/FBW/PROTECT flight-control authority change.
+- No CPU terrain presentation.
+- No GUI.matrix temporal terrain warp.
+- No terrain LOD/resolution/rasterizer-quality change.
+
+STATIC RESULT
+- Candidate 8 selftest: 50/50 PASS.
+- Full CP3 Gate 5 acceptance: 18/18 scripts PASS.
+- Native KSP build/runtime: pending user environment.

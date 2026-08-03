@@ -1,0 +1,247 @@
+AERIS v0.18.0.0 CP2.5 Integrated Acceptance Candidate 3 — static / scope audit
+UTC 2026-07-30T01:33:54Z
+
+[INTENDED EXECUTION SOURCE CHANGES]
+Files /mnt/data/AERIS16_CP25_Candidate3_base_extract/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate2_Source/Source/AERISFlightControl/Performance/AERISWorkerScheduler.cs and /mnt/data/AERIS16_CP25_Candidate3_work/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate3_Source/Source/AERISFlightControl/Performance/AERISWorkerScheduler.cs differ
+Files /mnt/data/AERIS16_CP25_Candidate3_base_extract/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate2_Source/Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs and /mnt/data/AERIS16_CP25_Candidate3_work/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate3_Source/Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs differ
+Files /mnt/data/AERIS16_CP25_Candidate3_base_extract/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate2_Source/Source/AERISFlightControl/Settings/AERISSettings.cs and /mnt/data/AERIS16_CP25_Candidate3_work/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate3_Source/Source/AERISFlightControl/Settings/AERISSettings.cs differ
+Files /mnt/data/AERIS16_CP25_Candidate3_base_extract/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate2_Source/Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs and /mnt/data/AERIS16_CP25_Candidate3_work/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate3_Source/Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs differ
+Files /mnt/data/AERIS16_CP25_Candidate3_base_extract/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate2_Source/Source/AERISFlightControl/Terrain/AERISTerrainPreloadContracts.cs and /mnt/data/AERIS16_CP25_Candidate3_work/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate3_Source/Source/AERISFlightControl/Terrain/AERISTerrainPreloadContracts.cs differ
+Files /mnt/data/AERIS16_CP25_Candidate3_base_extract/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate2_Source/Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs and /mnt/data/AERIS16_CP25_Candidate3_work/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate3_Source/Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs differ
+Files /mnt/data/AERIS16_CP25_Candidate3_base_extract/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate2_Source/Source/AERISFlightControl/UI/AERISFlightInstrument.cs and /mnt/data/AERIS16_CP25_Candidate3_work/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate3_Source/Source/AERISFlightControl/UI/AERISFlightInstrument.cs differ
+Files /mnt/data/AERIS16_CP25_Candidate3_base_extract/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate2_Source/Source/AERISFlightControl/UI/AERISWindow.cs and /mnt/data/AERIS16_CP25_Candidate3_work/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate3_Source/Source/AERISFlightControl/UI/AERISWindow.cs differ
+
+[PROTECTED TREE HASH COMPARISON]
+PASS	Source/AERISFlightControl/AA	base=50:6ca70ae1d9d82d2a050f6501e2f42878b1122b29b5401f7d8d391f7d266fc18d	candidate3=50:6ca70ae1d9d82d2a050f6501e2f42878b1122b29b5401f7d8d391f7d266fc18d
+PASS	Source/AERISFlightControl/Autopilot	base=10:8ed3a114c52ea852a1d560323a8af0e7be91eb51200b4ce16d32eb7b693a683e	candidate3=10:8ed3a114c52ea852a1d560323a8af0e7be91eb51200b4ce16d32eb7b693a683e
+PASS	Source/AERISFlightControl/Protect	base=2:f22b7e2f2de1a283c1077462cda689dcbc94a812e30f71191e0762571a01e5b0	candidate3=2:f22b7e2f2de1a283c1077462cda689dcbc94a812e30f71191e0762571a01e5b0
+PASS	Source/AERISFlightControl/FlightState	base=2:7dfed9cb4255480a30af6eb88367f5d9437a513f70c3c36a4878a27c509312ff	candidate3=2:7dfed9cb4255480a30af6eb88367f5d9437a513f70c3c36a4878a27c509312ff
+PASS	Source/AERISFlightControl/Integrations	base=2:aef4618b11237c9ac1a496590c252dd516a446b391b0a11b112c18a77d6bfa0d	candidate3=2:aef4618b11237c9ac1a496590c252dd516a446b391b0a11b112c18a77d6bfa0d
+PASS	Source/AERISFlightControl/Core	base=3:a61de28c26a2d98dc3f43abdf3b91a20bb1f43788b68a4da90f15d226642c710	candidate3=3:a61de28c26a2d98dc3f43abdf3b91a20bb1f43788b68a4da90f15d226642c710
+PASS	Source/AERISFlightControl/Landing	base=20:92e5f6dfe2f961bcce9c5b37fc95a8a1ab0e1f4833fcd3396f6c36e4e4ea3d3c	candidate3=20:92e5f6dfe2f961bcce9c5b37fc95a8a1ab0e1f4833fcd3396f6c36e4e4ea3d3c
+PASS	GameData/AERISFlightControl/Airfields	base=2:37026d8ffa07938d881f58b1b74fb74442dcd567e972af71fd123e3d9265722f	candidate3=2:37026d8ffa07938d881f58b1b74fb74442dcd567e972af71fd123e3d9265722f
+
+[CANDIDATE 2 CONTROL SURFACE HASH]
+93d5161d9280e26e45ee3cfe6a3083f0e58a518216d67815d8534430151f6336  /mnt/data/AERIS16_CP25_Candidate3_base_extract/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate2_Source/Source/AERISFlightControl/AA/SyncModuleControlSurface.cs
+93d5161d9280e26e45ee3cfe6a3083f0e58a518216d67815d8534430151f6336  /mnt/data/AERIS16_CP25_Candidate3_work/AERISFlightControl-v0.18.0.0_DEV_CP2.5_IntegratedAcceptanceCandidate3_Source/Source/AERISFlightControl/AA/SyncModuleControlSurface.cs
+
+[FORBIDDEN AUTHORITY SCAN — INTENDED CHANGED EXECUTION FILES]
+PASS	FlightInputHandler.state
+PASS	MainThrottle =
+PASS	RunwayMasterCorrection
+PASS	CURATED_RUNWAY_GEODETIC_DEFAULTS
+PASS	CurrentBodyResidentCache
+PASS	ctrlSurfaceRange =
+PASS	authorityLimiter =
+
+[GATE 0 STATIC]
+PASS: VERSION is v0.18.0.0
+PASS: KSP version JSON matches VERSION
+PASS: generated assembly version matches VERSION
+PASS: every csproj Compile item exists
+PASS: Performance Runtime source is compiled: Performance\AERISRuntimeGeneration.cs
+PASS: Performance Runtime source is compiled: Performance\AERISWorkerScheduler.cs
+PASS: Performance Runtime source is compiled: Performance\AERISCanonicalSnapshot.cs
+PASS: Performance Runtime source is compiled: Performance\AERISGpuAssistBackend.cs
+PASS: Performance Runtime source is compiled: Performance\AERISPerformanceRuntime.cs
+PASS: Performance Runtime source is compiled: Performance\AERISBackgroundFileWriter.cs
+PASS: Performance Runtime source is compiled: Performance\AERISInstrumentPipeline.cs
+PASS: generation identity field exists: SceneGeneration
+PASS: generation identity field exists: VesselPersistentId
+PASS: generation identity field exists: VesselInstanceGeneration
+PASS: generation identity field exists: BodyId
+PASS: generation identity field exists: ControlPointRevision
+PASS: generation identity field exists: DockingSeparationRevision
+PASS: generation identity field exists: RunwayDatabaseRevision
+PASS: generation identity field exists: RunwaySelectionRevision
+PASS: generation identity field exists: FlightPlanRevision
+PASS: generation identity field exists: DisplayLayoutRevision
+PASS: generation identity field exists: Sequence
+PASS: generation identity field exists: MonotonicTimestamp
+PASS: commit generation match gate: scene == value.SceneGeneration
+PASS: commit generation match gate: vesselId == value.VesselPersistentId
+PASS: commit generation match gate: vesselInstance == value.VesselInstanceGeneration
+PASS: commit generation match gate: runwayDatabase == value.RunwayDatabaseRevision
+PASS: commit generation match gate: displayLayout == value.DisplayLayoutRevision
+PASS: scheduler contract: Math.Ceiling(LogicalProcessors * 0.15)
+PASS: scheduler contract: Math.Max(2, LogicalProcessors - ReservedProcessors)
+PASS: scheduler contract: configuredWorkers > 0 ? Math.Max(2, configuredWorkers)
+PASS: scheduler contract: latestJobIds
+PASS: scheduler contract: IsLatestLocked
+PASS: scheduler contract: GenerationBound
+PASS: scheduler contract: Capacity = 64
+PASS: scheduler contract: Capacity = 128
+PASS: scheduler contract: results.Count >= 256
+PASS: scheduler contract: SafetyReservedPermits
+PASS: scheduler contract: ArchivePaused
+PASS: scheduler contract: STABLE RECOVERY +1
+PASS: scheduler contract: WRITER BACKLOG BACKOFF
+PASS: scheduler contract: GPU FRAME BACKOFF
+PASS: adaptive permit policy is safely published to worker threads
+PASS: worker count has no fixed 12-thread ceiling
+PASS: scheduler never synchronously waits on the main thread
+PASS: AERISRunwayCertificationWorker.cs worker boundary excludes FlightGlobals
+PASS: AERISRunwayCertificationWorker.cs worker boundary excludes FlightCtrlState
+PASS: AERISRunwayCertificationWorker.cs worker boundary excludes GameObject
+PASS: AERISRunwayCertificationWorker.cs worker boundary excludes Texture2D
+PASS: AERISRunwayCertificationWorker.cs worker boundary excludes CelestialBody
+PASS: AERISRunwayCertificationWorker.cs worker boundary excludes UnityEngine.Object
+PASS: AERISTerrainRasterWorker.cs worker boundary excludes FlightGlobals
+PASS: AERISTerrainRasterWorker.cs worker boundary excludes FlightCtrlState
+PASS: AERISTerrainRasterWorker.cs worker boundary excludes GameObject
+PASS: AERISTerrainRasterWorker.cs worker boundary excludes Texture2D
+PASS: AERISTerrainRasterWorker.cs worker boundary excludes CelestialBody
+PASS: AERISTerrainRasterWorker.cs worker boundary excludes UnityEngine.Object
+PASS: AERISInstrumentPipeline.cs worker boundary excludes FlightGlobals
+PASS: AERISInstrumentPipeline.cs worker boundary excludes FlightCtrlState
+PASS: AERISInstrumentPipeline.cs worker boundary excludes GameObject
+PASS: AERISInstrumentPipeline.cs worker boundary excludes Texture2D
+PASS: AERISInstrumentPipeline.cs worker boundary excludes CelestialBody
+PASS: AERISInstrumentPipeline.cs worker boundary excludes UnityEngine.Object
+PASS: ordered writer contract: QueueCapacity = 8192
+PASS: ordered writer contract: ReservedControlSlots = 64
+PASS: ordered writer contract: EvictLowerPriorityLocked
+PASS: ordered writer contract: FirstDroppedSequence
+PASS: ordered writer contract: MarkChannelUnsealableLocked
+PASS: ordered writer contract: SealSession
+PASS: ordered writer contract: stopWhenDrained
+PASS: ordered writer contract: accepting = false
+PASS: ordered writer contract: AERISCsvField
+PASS: ordered writer contract: EncodeP95Milliseconds
+PASS: failed stream disposal is isolated from the producer queue lock
+PASS: writer percentile sorting does not hold the producer queue lock
+PASS: disk stream ownership is centralized
+PASS: public AA protected fields have a consistently accessible channel type
+PASS: Logging/AERISLogger.cs performs no synchronous stream/file write
+PASS: Recording/AERISFlightDataRecorder.cs performs no synchronous stream/file write
+PASS: AA/BackgroundThread.cs performs no synchronous stream/file write
+PASS: AA/Modules/AngularAccAdaptiveController.cs performs no synchronous stream/file write
+PASS: archive integrity contract: ArchiveCompression
+PASS: archive integrity contract: PendingCapacity = 64
+PASS: archive integrity contract: ResultCapacity = 256
+PASS: archive integrity contract: ArchiveIoSync
+PASS: archive integrity contract: context.ThrowIfStale()
+PASS: archive integrity contract: VerifyArchive
+PASS: archive integrity contract: entry/source content mismatch
+PASS: archive integrity contract: File.Move(temporaryPath, finalPath)
+PASS: archive integrity contract: TryDeleteSource
+PASS: archive integrity contract: raw data retained
+PASS: archive uses the shared bounded scheduler
+PASS: KSP main path has no blocking call: .Wait(
+PASS: KSP main path has no blocking call: .Result
+PASS: KSP main path has no blocking call: .Join(
+PASS: bootstrap runtime integration: Performance.Tick
+PASS: bootstrap runtime integration: SyncRuntimeRevisions
+PASS: bootstrap runtime integration: PublishCanonicalSnapshot
+PASS: bootstrap runtime integration: ResetAutomationState("shutdown",true)
+PASS: bootstrap runtime integration: AERISBackgroundFileWriter.ShutdownNoWait
+PASS: performance launch policy is loaded before runtime construction
+PASS: persisted worker/GPU acceptance policy reaches runtime construction
+PASS: performance launch setting contract: PerformanceWorkerOverride
+PASS: performance launch setting contract: PerformanceGpuAccelerationEnabled
+PASS: performance launch setting contract: NormalizeWorkerOverride
+PASS: performance launch setting contract: performanceWorkerOverride
+PASS: performance launch setting contract: performanceGpuAccelerationEnabled
+PASS: factory CFG uses AUTO workers and permits optional GPU assist
+PASS: minimum-resource acceptance mode is user-selectable and restart-scoped
+PASS: AIRFIELDS detail comparison resolves System.StringComparison explicitly
+PASS: AIRFIELDS page exposes the full reload result
+PASS: stock KSP facilities use independent stable identities
+PASS: registry separates provider-site identity from KK/SLE airport grouping
+PASS: provider identity and runtime geometry signatures are separately published
+PASS: sub-metre compatibility cache has a new algorithm version
+PASS: canonical source cache fingerprint contract: StableProviderFingerprintIdentity(record)
+PASS: canonical source cache fingerprint contract: CanonicalSourceGeometryFingerprint(record)
+PASS: canonical source cache fingerprint contract: AppendCanonicalPlacement(builder, record, frame)
+PASS: canonical source cache fingerprint contract: AppendSurveyDefinition(builder, definition)
+PASS: canonical source cache fingerprint contract: MeshAssetIdentity(root.transform, filters[i])
+PASS: canonical source cache fingerprint contract: ColliderAssetIdentity(root.transform,
+PASS: canonical source cache fingerprint contract: components.Sort(StringComparer.Ordinal)
+PASS: cache key excludes live/LOD geometry input: BuildPrimitiveAggregate(primitives
+PASS: cache key excludes live/LOD geometry input: BuildPointAggregate(points
+PASS: cache key excludes live/LOD geometry input: frame.PqsElevation
+PASS: cache key excludes live/LOD geometry input: frame.PqsSampled
+PASS: canonical source key avoids planet-scale world-matrix cancellation
+PASS: provider-authored placement is preferred over runtime fallback
+PASS: strict sub-metre compatibility contract: CurrentSchemaVersion = 8
+PASS: strict sub-metre compatibility contract: PreviousSchemaVersion = 7
+PASS: strict sub-metre compatibility contract: TryGetSubMetreCompatible
+PASS: strict sub-metre compatibility contract: MaximumHorizontalMeters = 0.50
+PASS: strict sub-metre compatibility contract: MaximumVerticalMeters = 0.10
+PASS: strict sub-metre compatibility contract: MaximumHeadingDegrees = 0.02
+PASS: strict sub-metre compatibility contract: MaximumScaleDelta = 0.0005
+PASS: strict sub-metre compatibility contract: SourceFingerprint = snapshot.SourceFingerprint
+PASS: strict sub-metre compatibility contract: Add(node, "sourceFingerprint", record.SourceFingerprint)
+PASS: source/placement split integration: BuildSourceFingerprint(record
+PASS: source/placement split integration: SourceFingerprint = sourceFingerprint
+PASS: source/placement split integration: sub-metre compatible hit
+PASS: source/placement split integration: CERTIFIED CACHE HIT — SUB-METRE PROVIDER FRAME COMPATIBILITY
+PASS: restart-stable provider identity excludes LatitudeDeg
+PASS: restart-stable provider identity excludes LongitudeDeg
+PASS: restart-stable provider identity excludes ElevationMeters
+PASS: restart-stable provider identity excludes OrientationHeadingDeg
+PASS: restart-stable provider identity excludes DeclaredLengthMeters
+PASS: restart-stable provider identity excludes DeclaredWidthMeters
+PASS: restart-stable provider identity excludes RuntimeModelScale
+PASS: restart-stable provider identity excludes QuantizedSignatureNumber
+PASS: shared provider cache identity: internal static class AERISProviderIdentity
+PASS: shared provider cache identity: hasStableProviderFields
+PASS: shared provider cache identity: uuidFallback
+PASS: shared provider cache identity: ComposeStableRecordId
+PASS: shared provider cache identity: normalizedPath
+PASS: shared provider identity helper is compiled
+PASS: schema-6 load compacts volatile provider UUID aliases
+PASS: schema migration rewrites embedded runway/direction stable IDs
+PASS: unqualified StringComparison uses import the System namespace
+PASS: required performance telemetry: frame_p95_ms
+PASS: required performance telemetry: aeris_main_p95_ms
+PASS: required performance telemetry: snapshot_capture_p95_ms
+PASS: required performance telemetry: commit_drain_p95_ms
+PASS: required performance telemetry: runway_worker_p95_ms
+PASS: required performance telemetry: terrain_worker_p95_ms
+PASS: required performance telemetry: instrument_worker_p95_ms
+PASS: required performance telemetry: writer_encode_p95_ms
+PASS: required performance telemetry: archive_deferred
+PASS: required performance telemetry: gc_positive_delta_ema_bytes
+PASS: adaptive main-thread cost includes asynchronous result commits
+PASS: snapshot capture cost is sampled once instead of repeated on idle frames
+PASS: diagnostics reuse 1 Hz telemetry snapshots without per-frame sorting
+PASS: runtime publication is cross-thread visible and old instances cannot clear new ones
+PASS: prepared display geometry is externally immutable
+PASS: terrain raster input/allocation guard: byteCountLong > 64L * 1024L * 1024L
+PASS: terrain raster input/allocation guard: !Finite(request.AircraftAltitudeAslMeters)
+PASS: terrain raster input/allocation guard: Finite(neighbourElevation)
+PASS: GPU assist/fallback contract: supportsComputeShaders
+PASS: GPU assist/fallback contract: CPU FALLBACK
+PASS: GPU assist/fallback contract: DisableAndFallback
+PASS: GPU assist/fallback contract: CPU EXACT VALIDATION
+PASS: reference BANK roll-in/pre-brake/zero-rate law is byte-identical
+PASS: LAND observation layer remains control-free: FlightCtrlState
+PASS: LAND observation layer remains control-free: MainThrottle
+PASS: LAND observation layer remains control-free: wheelThrottle
+PASS: LAND observation layer remains control-free: wheelSteer
+PASS: LAND observation layer remains control-free: ApplyAaNative
+PASS: LAND observation layer remains control-free: .SetArmed(
+PASS: legacy NAV remains absent: AERISNavDirector
+PASS: legacy NAV remains absent: AERISRouteSpeedPlanner
+PASS: legacy NAV remains absent: AERISTrajectoryPrimitives
+PASS: legacy NAV remains absent: TryStartNavLanding
+PASS: legacy NAV remains absent: NAV_LANDING
+PASS: all C# files have balanced lexical structure
+PASS: source package contains no compiled/cache artifact
+[v0.18.0.0 Gate 0 static verification] 194/194 PASS
+
+[PYTHON SYNTAX]
+PASS	125 Python files parsed
+
+[JSON / VERSION SYNTAX]
+PASS	1 JSON/version files parsed
+
+[XML SYNTAX]
+PASS	1 csproj files parsed
+
+[BASH SYNTAX]
+PASS build_ubuntu.sh
+
+[UNWANTED ARTIFACT SCAN]
+PASS no compiled/cache artifacts

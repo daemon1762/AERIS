@@ -1,0 +1,29 @@
+AERIS Flight Control v0.18.0.0 DEV CP2.5 LAND Separation Hotfix 1
+
+Scope:
+- Track A only; no curated runway/default coordinate changes.
+- Preserves CP2.5 Altitude Gate Hotfix 1 and Quality Migration Hotfix 1.
+- Adds one central data-only LAND-detail activation policy.
+- Developer LAND capability alone cannot activate LAND during normal cruise.
+- Current runtime demand source is independent LAND ARM.
+- Explicit Approach and Auto Landing demand slots are reserved but inactive.
+- LAND performance profile and selected-runway LAND request lane activate together.
+- DISARM, scene reset, viewport altitude OFF, or capability OFF revokes LAND detail.
+- Frozen CP2 SSD Preload Builder and automatic LAND_SITES promotion remain independent.
+- LAND source and packaged Airfields content are unchanged from Gate 2.
+
+Pending field acceptance:
+- Native Mono/xbuild against KSP 1.12.5 assemblies.
+- Normal cruise remains base quality with developer capability ON but LAND unarmed.
+- LAND ARM changes effective quality to LAND and logs one ACTIVE transition.
+- DISARM returns to the prior base quality and logs one STANDBY transition.
+- Altitude Gate interaction and Preload continuity.
+
+Static acceptance before final manifest:
+- Dedicated Gate 3 assertions: 45/45 PASS.
+- Gate 1 and Gate 2 dedicated regressions: 43/43 and 39/39 PASS.
+- Complete CP2.5 runner without manifest: 58/58 scripts PASS.
+- C# lexical delimiter audit: 132/132 source files PASS.
+- Python, JSON/.version and bash syntax: PASS.
+- Protected Landing/Airfields/AP/AA/PROTECT/FlightState/Integrations/Core trees: byte-identical to Gate 2.
+- No compiled/debug/python-cache artifacts: PASS.

@@ -1,0 +1,7 @@
+AERIS v0.18.0.0 CP2.5 Candidate 4 Airfields Zero-Category UI Hotfix 1
+Baseline: Full Boost Downstream Commit Hotfix 1
+Runtime source changes:
+- UI/AERISWindow.cs: generalized zero-count category disabled early-return to all AIRFIELDS categories
+- Properties/AERISBuildVersion.generated.cs: identity only
+Protected trees byte-identical: AA, Autopilot, Protect, FlightState, Integrations, Landing, GameData Airfields
+Track B coordinates unchanged. CP3 terrain payload residency excluded.

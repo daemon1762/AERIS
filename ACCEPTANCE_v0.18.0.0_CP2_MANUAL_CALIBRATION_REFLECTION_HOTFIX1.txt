@@ -1,0 +1,32 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+Manual Calibration Reflection Hotfix 1 Acceptance
+=================================================
+
+Purpose:
+- Reflect a successfully stored and certified manual A/B pair in AIRFIELDS and ND.
+- Keep USER CALIBRATED — MANUAL separate from automatic/provider certification.
+- Suppress obsolete automatic/provider directions replaced by the authoritative manual pair.
+- Rebuild calibration status from persisted current state.
+
+Static package acceptance:
+- Dedicated reflection regression: 29/29 PASS.
+- Pre-manifest full CP2 acceptance: 52/52 scripts PASS.
+- Manifest-included full CP2 acceptance: required before release packaging.
+- Clean re-extraction acceptance: required before release packaging.
+- ZIP CRC: required before release packaging.
+
+Required native/runtime acceptance:
+- Mono/xbuild PASS on user KSP installation.
+- Completed pair visible under USER CALIBRATED — MANUAL.
+- Superseded provider FAILED rows absent.
+- ND runway count and registry certified-runway count agree.
+- Manual runway line and both reciprocal selections persist through rescan/restart.
+
+Safety boundary:
+- No calibration coordinate/schema change.
+- No Terrain/Preload algorithm change.
+- No AP/AA/APP/LAND control-authority change.
+- No old NAV restoration.
+- No CP2 runway-survey debug display restoration.
+
+CP2 remains OPEN until native and KSP runtime acceptance pass.

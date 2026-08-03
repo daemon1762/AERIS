@@ -1,0 +1,68 @@
+AERIS v0.18.0.0 CP2.5 MAP DRAM CACHE FOUNDATION HOTFIX 2
+SOURCE DIFF AUDIT
+
+BASELINE: AERISFlightControl-v0.18.0.0_DEV_CP2.5_MapDramCacheFoundationHotfix1_Source
+TARGET:   AERISFlightControl-v0.18.0.0_DEV_CP2.5_MapDramCacheFoundationHotfix2_Source
+NOTE: this audit file and MANIFEST_SHA256.txt are excluded from their own file-set comparison.
+
+SCOPE SUMMARY
+- Routes normal Airfield list, airport, runway and ILS-direction reads through the shared immutable Map DRAM snapshot.
+- Adds a thread-local normal-lookup scope and guarded synchronous-disk operation accounting.
+- Separates allowed startup/maintenance synchronous I/O from forbidden normal-lookup violations.
+- Adds actionable violation telemetry and a shutdown summary proving whether normal lookup touched synchronous SSD I/O.
+- Preserves Terrain payload residency for CP3; Map DRAM remains metadata-only.
+- Track B curated runway coordinate/default data is unchanged.
+
+ADDED FILES (5)
+1ccee0299f1b1c3c1a1414b45c39be70598d98c8b721257be18a9c12687d0a61  ACCEPTANCE_v0.18.0.0_CP2.5_MAP_DRAM_CACHE_FOUNDATION_HOTFIX2.txt
+71034fd48fcca908a913f30f92c17b91a04ed9a9b729f58da2d67baeb8b2e302  Docs/CP25_MAP_DRAM_CACHE_FOUNDATION_HOTFIX_2_v0.18.0.0_ja.md
+89349ed754fe6ea9233575b4edf013e4666723dd9896eaca6ceeef701f21ff55  Docs/ND_CP25_MAP_DRAM_CACHE_FOUNDATION_HOTFIX_2_TEST_CARD_v0.18.0.0_ja.md
+a71fdfca4e0cc0bf7ed51abe392fc2f19d66aa2087bce7cd861607789e6033da  Source/AERISFlightControl/Performance/AERISMapDramDiskGuard.cs
+88b9585b0e32d104ea3c1771677a19c5db79b4d3d098a398aff21aae56a6fe42  Tools/selftest_v01800_cp25_map_dram_cache_foundation_hotfix2.py
+
+REMOVED FILES (0)
+
+CHANGED FILES (12)
+BASE e2b0e3dbfb8b392f3273cefe931fbd45ac879e1d9c89f5657e4be9f3d74dfdd6  GameData/AERISFlightControl/AERISFlightControl.version
+NEW  487dedca138036789cb3b0a037890e5e3c5cd6e6b6d65dd4a4b0c3200a95fda0  GameData/AERISFlightControl/AERISFlightControl.version
+BASE a9c2ea68f12544b7d27f07bf1160d060ca59e68fa9169ce36b08ca0c5dc90548  README.md
+NEW  48b999782ede351fc776ca2628e94917431dde9552e25320ea824b8064acd3d1  README.md
+BASE 50eb25389468ba6094d7937286088cb9aeeb3e353410f08dad0d844a0c2a2703  Source/AERISFlightControl/AERISFlightControl.csproj
+NEW  3d6e7708ad5b286909a73913a6cbc5f640d0a548c849ddf1a665551f8fe3d425  Source/AERISFlightControl/AERISFlightControl.csproj
+BASE 86c0a6cb14b3d46cad8d816da81e50b9e9b0a643199a664c1e21d0531167b951  Source/AERISFlightControl/Core/AERISBootstrap.cs
+NEW  a13d2c5a23ac6d189ac53386bd43e8c464a5aa6b505b33365b29f763a78ff7c6  Source/AERISFlightControl/Core/AERISBootstrap.cs
+BASE b8e72aff08f444026c39d7588e8d61900e43b2c5547e545c48661a9a7866c8e3  Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs
+NEW  5764d70cc2920ec8b66b3678793db264f21ef510e7196280078bf7c7d0e86057  Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs
+BASE ce98df9d27083b27b58bfaccfd7de3a2a29ca429b265c517d5d9179cb2b20655  Source/AERISFlightControl/Performance/AERISMapDramCache.cs
+NEW  32f69a41ef84a6ecef280921fcd5ae9f13d729eba7a080ef53fee644c24679e5  Source/AERISFlightControl/Performance/AERISMapDramCache.cs
+BASE cb90c5dc2d082e2a7aab9f20b116a0771882d2b897ad4aadf5c8392a02d17161  Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+NEW  2ce2b8a941425e533ba87b8b011ef807d4084007435fd91c545bdf15f68c6501  Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+BASE 486745d5289bd8bc6d4ed67e6716a5ac4c68214b8c2ba007d0e2d479fcf418f5  Source/AERISFlightControl/Terrain/AERISTerrainPreloadDatabase.cs
+NEW  59aaecc9b81ec2bdaf524bb47d37dd80357c8ddb0ac0c5b42f19c1f5a4e2735a  Source/AERISFlightControl/Terrain/AERISTerrainPreloadDatabase.cs
+BASE 1c54c743c9c961b4ac790f613e574c3969b87d9bbbdd1bcae30ac6ea49cd71b2  Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+NEW  c6ad6f8669121188267866bbc4d22a4f5d2295939dd287c49f9fe0c227c069e0  Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+BASE 43ee622bfcb841cd706171d0976cd344e36607412e6b04df77d562e9cf264a63  Source/AERISFlightControl/UI/AERISWindow.cs
+NEW  587bfe692ec8856cfdbcae39c95e19b9050048291054794fd013b914638b3053  Source/AERISFlightControl/UI/AERISWindow.cs
+BASE 4c2931239373a66b9d6c4a07eabe1d41cd557453b13da1a2f8f7f2c86b3307a4  Tools/run_v01800_cp25_acceptance.py
+NEW  c116a2352fffd7f64c44b2e5a969d1c9febc000866ae608089a5e5d623e8d2a5  Tools/run_v01800_cp25_acceptance.py
+BASE b094ca87836273a22106ac20eed48ed93cb2ce4190bc7236cf04ce1102fd88e6  build_ubuntu.sh
+NEW  fb6c1eb0c2480bf86e56497d40a69b83d3eb2b004a0289464d3eca0f6319f91d  build_ubuntu.sh
+
+PROTECTED BOUNDARIES
+PASS  GameData/AERISFlightControl/Airfields files=2 tree=6fd84220db339cb99cb3548b3f68fdbb861d578cecac33b32563422fb0fa7603
+PASS  Source/AERISFlightControl/Autopilot files=10 tree=a648e71c6dd672c122232ab12ad2a05a7ec81b28a1ac5ccb4fd2929671d83c7d
+PASS  Source/AERISFlightControl/Protect files=2 tree=a4531fea0d5165c32b33e1bfc6e1d2226b367cb256f88ad98f04d4199a6f4bc8
+PASS  Source/AERISFlightControl/FlightState files=2 tree=9a338810a39a907347c00ab70e96c7387763c6b43ebd35287775a8d2c2934115
+PASS  Source/AERISFlightControl/Integrations files=2 tree=901dc14008ff99213d96eb0cf82c67fca00a16a298a389176e544d4face26b1e
+PASS  Source/AERISFlightControl/AA files=50 tree=7e94cd6658d481b9b909e2666c86688a76a1d4438dce0e59026e2f96130cac77
+PASS  Landing changes restricted to AERISAirfieldRegistry.cs runtime DRAM routing and guarded startup/maintenance I/O.
+
+ACCEPTANCE EVIDENCE
+- Gate 4 Hotfix 2 dedicated static test: 77/77 PASS
+- CP2.5 full regression before manifest: 60/60 scripts PASS
+- Python syntax: 122 PASS
+- C# lexical/delimiter: 134 PASS
+- Project compile-set regression: PASS; AERISMapDramDiskGuard.cs included
+- JSON/version and bash syntax: PASS
+- Binary/cache contamination: none
+- Native Mono/xbuild and KSP runtime test: NOT EXECUTED in artifact environment

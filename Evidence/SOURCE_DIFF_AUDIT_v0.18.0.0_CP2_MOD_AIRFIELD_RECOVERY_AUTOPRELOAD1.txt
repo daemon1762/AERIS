@@ -1,0 +1,68 @@
+AERIS v0.18.0.0 CP2 Mod Airfield Recovery Hotfix 1 + Auto Preload Progression 1
+Baseline: KK Runway Axis Registration Hotfix 1 + Preload Fast Path 1 Compile Hotfix 1
+
+Changed or added files: 16
+
+ACCEPTANCE_v0.18.0.0_CP2_MOD_AIRFIELD_RECOVERY_AUTOPRELOAD1.txt
+  baseline -
+  current  f54e1d276b27dbe537acbd7103c6e4cf39b617ec945d52097f77559678805390
+
+Docs/CP2_MOD_AIRFIELD_RECOVERY_AUTOPRELOAD_PROGRESSION_1_v0.18.0.0_ja.md
+  baseline -
+  current  7fdf4c187ab20cd7dda7bb35569b0f5e65052eaceae22e9c9c82c6dbd3df0dda
+
+Docs/HANDOVER_AERIS14_v0.18.0.0_CP2_MOD_AIRFIELD_RECOVERY_AUTOPRELOAD1_ja.md
+  baseline -
+  current  f338bf615f905ca7037c9c913cbba52ed7a7df1a9784689dc965afb1fa09931e
+
+Docs/ND_CP2_MOD_AIRFIELD_RECOVERY_AUTOPRELOAD_PROGRESSION_1_TEST_CARD_v0.18.0.0_ja.md
+  baseline -
+  current  266682b7f3215e42a60b4d4b58c3e036edf3b03b5efd8e50622e01a6617a4b70
+
+Evidence/FROZEN_CONTROL_HASH_AUDIT_v0.18.0.0_CP2_MOD_AIRFIELD_RECOVERY_AUTOPRELOAD1.txt
+  baseline -
+  current  ab420aa22d0f750a852b232e6662356b18662b6e223d905ee8359fc62afff2a8
+
+GameData/AERISFlightControl/AERISFlightControl.version
+  baseline fef8cc4e8e3cca1bf9f15caca1d861b7a25382ab792d2970ec1c7c6f66b51e27
+  current  7195023f889dee2e012ec5fe5ee45934e950f7882785d57500b3298141cb98aa
+
+README.md
+  baseline 8532810843a7c7438db05d9ca0c87da0ca58e73848ce542b90131a3df79ea3c0
+  current  ed2fe3a6883f0475fc878a4ff99c696f67600d3aede1a76672af0ca713ea7213
+
+Source/AERISFlightControl/Landing/AERISRunwayGeometryWorker.cs
+  baseline 845d541155ae5c42197b0144dd2924006b1ea9199d99ab3e292bf8292296a76c
+  current  da1bc0b6444903f6f2f8b5be67550b9d4573ff5f5bd2a3a88ca88d41342115f9
+
+Source/AERISFlightControl/Landing/AERISRunwaySnapshotBuilder.cs
+  baseline c8c9b2ce9c8b93eb2d52118445bef371bb24865c5ecbae4dbf58a5929fd71bf6
+  current  ebee8bb1fef3f8cc33c81bb2b42e4e4373d0862a90b762d8532d9941b9131c04
+
+Source/AERISFlightControl/Landing/AERISRunwaySurveyContracts.cs
+  baseline 94217e23a0fdbf9f5f43e070b4ed6889f65b6baf6b524a29e9cd1c41210d82bb
+  current  3fecbf839f53818896efe64c51e7f77104cbe32e76e3d2dd7feb35de8c596ad4
+
+Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+  baseline 864827cbd788ad84d91558319b26800818cbcc8e6c087a954ef99aaf7b9b5fc2
+  current  3a334b1a98b8b6f551fc89fb37043868cb7c49c4db8afadd041c9b015bd0cdbe
+
+Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs
+  baseline ea0d0c8d7f213820955d3002cffc43b4ae578511a2cfc1cb46099a93d176b07f
+  current  217d674de643031d854955e94fb4d9e9fb10b71792d7de1c98441b5fd7a86dc1
+
+Tools/run_v01800_cp2_acceptance.py
+  baseline d5dac2baa7c3d3c758993afecb085ebc0378664f245da80b3721f53d1ed8b0e6
+  current  269c3f34ef9e549b88a969d861fa6a2eadce3a108d5a84a9d8feb786b0a84076
+
+Tools/selftest_v01800_cp2_mod_airfield_recovery_autopreload1.py
+  baseline -
+  current  6c64a8b088083ed4432e639361494d950eba54623836a9986aad66c0151b6a59
+
+Tools/verify_v01800_cp2_static.py
+  baseline 42d78eb8df4f194b146efbd6ecaf54c50383cfe5fc35cfd239b3b788395d2355
+  current  8a55189390970b8cfd1224b699b78d85dcd27fbd90c7e0cd48a57231ff3ec74f
+
+build_ubuntu.sh
+  baseline b5241ec64b586ae44008d9054cddccf9b23fca1250501354f8670587e1d1e091
+  current  5b2eb0badc86cf48d15f832745277491e3ed086f285fae93c69934d46b33dc63

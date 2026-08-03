@@ -1,0 +1,31 @@
+AERIS Flight Control v0.18.0.0 DEV CP2.5
+MAP DRAM CACHE FOUNDATION HOTFIX 2 — ACCEPTANCE CONTRACT
+
+SCOPE
+- Runtime Airfield list, selection, runway and ILS-direction reads use the shared immutable Map DRAM snapshot and stable-ID dictionaries.
+- Airfield atomic commit publishes the committed database revision before selection restore reads the new snapshot.
+- Every synchronous filesystem operation owned by the Airfield Registry and Terrain Preload Database is routed through the Map DRAM disk guard or an explicitly guarded external loader call.
+- Guard telemetry distinguishes observed operations, allowed startup/maintenance operations and forbidden normal-lookup synchronous SSD operations.
+- Shutdown emits one [CP2.5/MAP_DRAM_SUMMARY] with revisions, counts, lookup totals and PASS/VIOLATION.
+
+HARD BOUNDARIES
+- No terrain compressed payload, decoded height array, mesh, material, RenderTexture or GPU object is retained by Map DRAM.
+- Current-body payload residency and forward-corridor memory preload remain CP3.
+- No runway A/B geodetic defaults, coordinates, certification content or Track B data are changed.
+- No AP, AA, PROTECT, FlightState, propulsion or LAND control authority is added.
+
+STATIC ACCEPTANCE
+- Hotfix 2 dedicated self-test passes.
+- Hotfix 1 and Gates 1-3 dedicated tests remain green.
+- Full CP2.5 runner passes every script.
+- C# lexical/delimiter, Python syntax, JSON, bash syntax, manifest, ZIP CRC and clean re-extract acceptance pass.
+- Landing changes are limited to Map DRAM read routing and disk-guard instrumentation; Airfields configuration tree remains identical to Hotfix 1.
+
+RUNTIME ACCEPTANCE
+- Native Mono/xbuild succeeds against KSP 1.12.5.
+- DIAGNOSTICS shows DRAM snapshot + ID index ACTIVE.
+- SSD GUARD OBSERVED and ALLOWED STARTUP/MAINT are both greater than zero after startup.
+- Airfield lookup hit increases while opening AIRFIELDS, selecting runway directions and drawing ND symbols.
+- SYNC SSD remains 0 — PASS during ordinary Airfield and Terrain lookup.
+- Shutdown log contains one [CP2.5/MAP_DRAM_SUMMARY] with synchronousSSD=0 and result=PASS.
+- AERIS has no attributable ERROR/FATAL/Exception.

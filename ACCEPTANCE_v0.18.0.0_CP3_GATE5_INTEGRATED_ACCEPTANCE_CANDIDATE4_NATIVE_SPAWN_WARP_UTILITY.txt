@@ -1,0 +1,27 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 — Integrated Acceptance Candidate 4 — Native Spawn Warp Utility
+
+PURPOSE
+- Finish registered MOD runway inspection without flying manually between sites.
+- Preserve Candidate 3 Terrain Generation Bridge and all accepted Gate 4C behavior.
+
+AUTHORITY
+- Sandbox Flight scene only.
+- SYSTEM > AIRFIELDS shows one WARP TO MOD NATIVE SPAWN button per physical runway group.
+- Target is the provider-native Kerbal Konstructs / Stock Launchsites Expansion launch/spawn transform.
+- The live RuntimeLaunchTransform is preferred; provider instance + prefab launch transform may reconstruct the same native frame.
+- AERIS MUST NOT derive a warp target from runway thresholds, runway direction, runway heading, 60 m inset, staging altitude, or other synthetic inspection spawn geometry.
+
+PROHIBITED
+- Career or Science availability.
+- RWY 09 / RWY 27 separate warp actions.
+- approach-direction specific placement.
+- selection, certification, manual calibration, LAND/AP/APP/control writes.
+- CPU terrain presentation or revival of rejected GUI temporal terrain warp.
+
+RUNTIME ACCEPTANCE
+- In Sandbox, expand a registered KK/SLE physical runway and press WARP TO MOD NATIVE SPAWN.
+- Vessel appears at the MOD's own aircraft spawn transform and aligns with its native launch forward frame.
+- Only one warp button exists for the physical runway regardless of reciprocal runway directions.
+- In Career / Science the warp button is absent.
+- Airport/RWY selection state does not change solely due to warp.

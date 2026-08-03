@@ -1,0 +1,44 @@
+AERIS14 VIDEO / LOG REVIEW
+Date: 2026-07-25 JST
+
+INPUT
+- Video_2026-07-25_09-40-16.mkv
+  duration approximately 00:16:35
+  1920x1200, 30 fps
+- AERISFlightControl(7).zip
+  compiled AERIS deployment, settings, preload database, runtime logs
+- matching latest session:
+  Logs/Sessions/2026-07-25_004125_session.log
+  Logs/Sessions/2026-07-25_004125_410_performance_runtime.csv
+
+CONFIRMED FINDINGS
+1. Terrain geographic alignment mismatch
+   The runway/airfield symbol approaches ownship while the terrain island remains
+   displaced. At visual overflight, the principal terrain mass does not converge
+   under the ownship symbol. This is not explained by generation latency alone.
+
+2. LAND/ILS planar funnel disappearance
+   Source review found DrawLandingPlan returned when either runway endpoint was
+   outside the viewport. The return removed runway, LOC center, both funnel sides,
+   far cap, and XTK as one all-or-nothing operation.
+
+3. Missing clear-selection path
+   LAND DISARM did not clear the selected airfield/direction in the registry.
+   No direct ND control existed to clear the selection.
+
+4. Coverage semantic mismatch
+   Runtime evidence showed full viewport coverage while sampling work remained.
+   Fallback visual fill and requested/final quality completion were represented by
+   the same coverage value.
+
+5. Separate issues retained for later work
+   - stale cancellation continued increasing at an approximately 45 second rhythm
+   - touchdown/ground operation briefly entered liftoff-confirmed/released state
+   - one airfield snapshot slice was approximately 104 ms
+   - visible tile/LOD boundaries remained
+
+DECISION
+Create CP2 Alignment Diagnostic Hotfix 1. Change only terrain presentation and
+alignment diagnostics, selection UI/state, LAND/ILS rendering, GS profile scaling,
+and coverage semantics. Do not combine the stale scheduler or ground-state safety
+changes into this checkpoint.

@@ -1,0 +1,19 @@
+AERIS Flight Control v0.16.3.0
+
+Static/source acceptance command:
+  PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01630_acceptance.py
+
+Scope:
+  - all v0.16.2.0 adaptive Terrain ND and safety checks
+  - 41-record current MOD runway survey catalog
+  - 34 StaticBounds / 2 PairedThresholds / 5 ManualRequired classifications
+  - strict catalog match and optional KK reflection boundary
+  - runtime collider/renderer runway geometry with dimensional rejection
+  - paired TSC threshold geometry
+  - non-runway facilities retained internally but removed from LAND/ILS selection
+  - active LAND/ILS suppresses unrelated facility symbols
+  - OVERLAY terrain and clean FOCUS runway-only views
+  - old NAV remains completely removed
+  - internal SHA-256 manifest integrity
+
+Runtime acceptance still requires compilation against KSP 1.12.5 and visual verification of every generated runway direction. This source package intentionally contains no DLL/PDB.

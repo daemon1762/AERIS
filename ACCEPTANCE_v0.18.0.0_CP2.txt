@@ -1,0 +1,5 @@
+AERIS v0.18.0.0 CP2 acceptance record has moved to:
+
+ACCEPTANCE_v0.18.0.0_CP2_PRELOAD.txt
+
+The current checkpoint is CP2 Preload Terrain Integration. The earlier Terrain Supply-only counts are superseded.

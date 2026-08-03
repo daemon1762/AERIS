@@ -1,0 +1,18 @@
+AERIS v0.18.0.0 CP2.5 FINAL CLOSURE DECISION
+Date: 2026-07-31
+
+Project owner direction:
+- Remove the manual FULL BOOST feature.
+- Use the stable STANDARD Preload path as the only Preload mode.
+- Close CP2.5 with this removal.
+- Move development to CP3 Current Body Resident Cache.
+
+Runtime basis:
+- AERIS36 confirmed FULL safety and STOP recovery after downstream commit protection.
+- FULL was slower than STANDARD and reduced frame rate.
+- Therefore the complexity and performance cost did not justify retaining the mode.
+
+Implementation result:
+- FULL runtime API, scheduler policy, UI controls, state and telemetry removed.
+- STANDARD commit-required and backpressure protections retained.
+- CP3 payload residency remains absent from the closure baseline.

@@ -1,0 +1,37 @@
+AERIS Flight Control v0.18.0.0
+CP2.5 FINAL CLOSURE — STANDARD PRELOAD ONLY — CP3 ENTRY BASELINE
+
+CLOSURE DECISION
+- Manual FULL BOOST is removed from runtime code, UI, public/internal entry points, state, telemetry and scheduler policy.
+- CP2.5 exposes one validated STANDARD non-Flight Preload pipeline.
+- CP2.5 Track A is closed by project owner direction after this removal.
+- Track B curated runway geodetic defaults remain unchanged and outside this closure.
+
+STANDARD PRELOAD CONTRACT
+- Worker pool and active permits use the normal CP2.5 ceiling only.
+- GeneralCompute and Archive lane capacity use the bounded STANDARD envelope.
+- Terrain Block limits: active tiles 64, pending blocks per tile 4, global outstanding blocks 96.
+- CPU Encode commit-required limit: 16-32 depending on worker count.
+- SSD commit-required job limit: 1; super-batch maximum: 32 chunks.
+- All Terrain Block, CPU Encode and SSD completion callbacks are non-evictable.
+- Scheduler required-drop must remain zero.
+- Generic STANDARD recovery detects required-result loss or a six-second producer stall, resets transient Preload state only and preserves durable Terrain Database payload.
+- Flight hard-suspends Preload before runtime viewport work.
+
+UI CONTRACT
+- No FULL BOOST start/stop button or state exists.
+- Non-Flight Preload controls remain available through the existing AERIS toolbar/window path.
+- AIRFIELDS categories with count zero are forced closed, disabled and allocate no child layout.
+- ND and FDI retain independent AUTO / ALWAYS / OFF policies and SPEED-only FDI behavior.
+
+CP3 BOUNDARY
+- No CurrentBodyResidentCache, decoded terrain payload residency, mesh residency, RenderTexture residency or GPU-ready cache is implemented by CP2.5.
+- Map DRAM Cache remains metadata-only.
+- CP3 starts from this exact source baseline.
+
+RUNTIME CLOSURE SMOKE
+- Build and load identity must name CP2.5 FINAL CLOSURE STANDARD PRELOAD ONLY CP3 ENTRY BASELINE.
+- In Main Menu / Space Center / VAB / SPH, no FULL BOOST control is present.
+- STANDARD Preload advances tiles with required-drop=0.
+- Flight entry suspends Preload.
+- Returning to non-Flight resumes STANDARD without restart.

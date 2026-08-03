@@ -1,0 +1,52 @@
+AERIS v0.18.0.0 CP3 Gate 5 Candidate 9 — SOURCE DIFF AUDIT
+Date: 2026-08-02
+
+USER VIDEO OBSERVATION:
+- Video_2026-08-02_15-35-31.mkv: PRELOAD UI open frames show approximately 37 FPS (t~5s) and 41 FPS (t~10s); shortly after closing, t~15s shows approximately 57 FPS. This confirms a material UI-open penalty in Candidate 8, but is not a Candidate 9 runtime result.
+
+ROOT CAUSE / PERFORMANCE:
+- PreloadStatus previously delegated to preloadBuilder.SnapshotStatus() on every getter access.
+- AERISWindow PRELOAD UI is Unity IMGUI; Layout/Repaint/input passes can execute the draw path multiple times per rendered frame.
+- SnapshotStatus calls AERISTerrainPreloadDatabase.SnapshotBodies(), traversing tileIndex.Values under indexSync, then performs per-body pending/target calculations, sorting and allocations.
+- Candidate 9 caches display-only PreloadStatus for 0.25 s (4 Hz), with immediate invalidation after explicit user mutations.
+- Other potentially cache-walking SYSTEM diagnostic snapshots (terrain/resident/map/corridor) are display-rate cached at 4 Hz.
+- AERISWindow.Draw() and DrawPreloadOnly() keep their first-line hidden-state returns, so these display snapshot paths do not run when the window is closed.
+
+UI GEOMETRY CONTRACT:
+- Active AERIS non-AIRFIELDS-selection buttons use explicit width+height and non-wrapping/clipped button styles.
+- Main/SYSTEM tab column counts no longer change at width thresholds.
+- MASTER, PRELOAD selectors, AIRFIELDS category/action buttons, LAND selectors, AP/NAV/TAKEOFF and helper buttons are fixed geometry.
+- Sole variable-size exception: SYSTEM > AIRFIELDS airport/runway selection rows (airfieldRowButtonStyle).
+- LAND airfield selector is fixed; it is not part of the exception.
+- AERISNavigationDisplay buttons already use explicit Rect geometry; Candidate 9 additionally locks the shared button style to no-wrap/clip.
+- Legacy AA GUI is unreachable from the current AERIS host and its Gate-5-frozen source tree remains byte-identical.
+
+CANDIDATE 8 -> CANDIDATE 9 DIFFERENCES:
+  Only in /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source: ACCEPTANCE_v0.18.0.0_CP3_GATE5_CANDIDATE9_UI_STABILITY_TELEMETRY_HOTFIX1.txt
+  Only in /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/Docs: ND_CP3_GATE5_CANDIDATE9_UI_STABILITY_TELEMETRY_HOTFIX1_TEST_CARD_v0.18.0.0_ja.md
+  Only in /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/Evidence: RUNTIME_DIAGNOSIS_AERIS18_UI_FPS_LAYOUT_2026-08-02.txt
+  Only in /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/Evidence: SOURCE_DIFF_AUDIT_v0.18.0.0_CP3_GATE5_CANDIDATE9_UI_STABILITY_TELEMETRY_HOTFIX1.txt
+  Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate8_NDPhantomRunwayPerformanceHotfix1_Source/GameData/AERISFlightControl/AERISFlightControl.version and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/GameData/AERISFlightControl/AERISFlightControl.version differ
+  Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate8_NDPhantomRunwayPerformanceHotfix1_Source/README.md and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/README.md differ
+  Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate8_NDPhantomRunwayPerformanceHotfix1_Source/Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs differ
+  Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate8_NDPhantomRunwayPerformanceHotfix1_Source/Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs differ
+  Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate8_NDPhantomRunwayPerformanceHotfix1_Source/Source/AERISFlightControl/UI/AERISNavigationDisplay.cs and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/Source/AERISFlightControl/UI/AERISNavigationDisplay.cs differ
+  Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate8_NDPhantomRunwayPerformanceHotfix1_Source/Source/AERISFlightControl/UI/AERISWindow.cs and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/Source/AERISFlightControl/UI/AERISWindow.cs differ
+  Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate8_NDPhantomRunwayPerformanceHotfix1_Source/Tools/run_v01800_cp3_gate5_acceptance.py and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/Tools/run_v01800_cp3_gate5_acceptance.py differ
+  Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate8_NDPhantomRunwayPerformanceHotfix1_Source/Tools/selftest_v01800_cp2_nd_publish_airfields_ui_hotfix1.py and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/Tools/selftest_v01800_cp2_nd_publish_airfields_ui_hotfix1.py differ
+  Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate8_NDPhantomRunwayPerformanceHotfix1_Source/Tools/selftest_v01800_cp2_responsive_airfields_ui_resize_hotfix1.py and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/Tools/selftest_v01800_cp2_responsive_airfields_ui_resize_hotfix1.py differ
+  Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate8_NDPhantomRunwayPerformanceHotfix1_Source/Tools/selftest_v01800_cp3_gate5_candidate5_manual_authority_native_spawn_altitude_hotfix1.py and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/Tools/selftest_v01800_cp3_gate5_candidate5_manual_authority_native_spawn_altitude_hotfix1.py differ
+  Only in /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/Tools: selftest_v01800_cp3_gate5_candidate9_ui_stability_telemetry_hotfix1.py
+  Files /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate8_NDPhantomRunwayPerformanceHotfix1_Source/build_ubuntu.sh and /mnt/data/AERISFlightControl-v0.18.0.0_DEV_CP3_Gate5_IntegratedAcceptanceCandidate9_UIStabilityTelemetryHotfix1_Source/build_ubuntu.sh differ
+
+PROTECTED HASHES:
+7790977cd845c58767a70f193db3efbfc573812706466b477846b06447440f86  Source/AERISFlightControl/Terrain/AERISTerrainTileContracts.cs
+f931ec7b381ebdf6323ae711c31d063256a961fa574995a650507c11b10cd032  Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs
+985adc588960559f8ec61875c2cad4cda6b472e6fd84e7c25725a65affad58e3  Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs
+bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7  Source/AERISFlightControl/Autopilot/AERISBankDirector.cs
+b9fd40fd1a8fcf2cb6f5f33900c88b6b5e3b5b6c6d070c2544c2829de43a9347  GameData/AERISFlightControl/Airfields/Defaults/03_Field_Verified_Runway_Calibrations.cfg
+
+STATIC RESULTS:
+- Candidate 9: 107/107 PASS
+- Gate 5 integrated: 19/19 scripts PASS
+- Candidate 8 inherited: 50/50 PASS

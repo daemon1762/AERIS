@@ -1,0 +1,50 @@
+AERIS Flight Control v0.18.0.0 DEV CP2.5
+INTEGRATED ACCEPTANCE CANDIDATE 3 — ACCEPTANCE CONTRACT
+
+PURPOSE
+- Preserve the accepted Candidate 2 lifecycle and Gate 1-4 baseline.
+- Expose full Terrain Preload management in Main Menu, Space Center, VAB and SPH.
+- Add a manual, non-persistent PRELOAD BOOST that temporarily uses every existing AERIS worker permit and an explicitly bounded main-thread PQS budget.
+- Change ND and FDI factory/default policy to demand-driven AUTO and add absolute OFF.
+- When SPEED is the only normal AP channel, AUTO FDI shows a speed-only panel that identifies VEL ONLY or ACC ONLY inside the display.
+
+NON-FLIGHT PRELOAD CONTROL
+- A persistent MainMenu bootstrap continues to tick Terrain Preload outside Flight.
+- The non-Flight AERIS PRELOAD window reuses the complete Preload management page rather than a read-only status copy.
+- Mode, speed, storage, idle timing, body priority/quality/cap and BUILD/PAUSE/RESUME/CANCEL/VERIFY/REBUILD/DELETE operations are available outside Flight.
+- No AP, AA, FlightCtrlState or throttle authority is exposed by this surface.
+
+PRELOAD BOOST
+- Start and normal stop are explicit user actions; no setting, state file or automatic startup key exists.
+- Flight entry safety-stops boost before any Flight-suspended work is processed.
+- Boost assigns every worker in the already-created AERIS scheduler pool, removes the non-Flight safety reserve, unpauses archive capacity, fills a bounded preload compute queue and increases chunk-write parallelism.
+- Worker priority is Normal only while boost is active and returns to BelowNormal afterwards.
+- Main-thread PQS work remains bounded to 8-24 ms per update; it is not an unbounded busy loop.
+- Boost does not create private threads, does not use Safety/LAND lanes and does not change CP3 terrain-payload residency.
+
+DISPLAY DEMAND POLICY
+- Factory and reset defaults are AUTO for ND and FDI.
+- One-time display policy revision migrates the previous ALWAYS default to AUTO for installed Candidate 2 settings.
+- AUTO / ALWAYS / OFF are available independently for ND and FDI.
+- OFF is absolute: FDI provider/detail work and gauges are suppressed; ND display-owned snapshot/raster/GPU work is released without disabling Terrain safety state.
+- SPEED-only AP demand opens FDI in SPEED GUIDANCE mode and labels AP SPEED — VEL ONLY or AP SPEED — ACC ONLY internally.
+- Protection, terrain alert, traffic or external automation demand may still promote AUTO FDI to the full guidance view.
+
+SAFETY / FROZEN BOUNDARIES
+- Candidate 2 SyncModuleControlSurface lifecycle fix and CtrlSurfaceUpdate remain unchanged.
+- No FlightInputHandler.state, MainThrottle, control-law, runway-coordinate or curated Track B change is introduced.
+- Map DRAM remains metadata-only; Current-Body Resident Cache and terrain payload residency remain CP3.
+
+STATIC ACCEPTANCE
+- Candidate 3 dedicated self-test passes.
+- Candidate 2, Candidate 1, Gate 1-4 and every frozen CP1/CP2 regression script passes.
+- C# lexical/delimiter, Python, JSON, XML and bash checks pass.
+- Manifest verification, ZIP CRC and clean re-extract full acceptance pass.
+
+RUNTIME ACCEPTANCE
+- Native Mono/xbuild succeeds against KSP 1.12.5.
+- Main Menu and SPH/VAB can open the full Preload page and persist normal settings.
+- PRELOAD BOOST starts only by button, reports workers/permits/queue/PQS budget, stops by button and is not active after restart.
+- Flight entry while boost is active records reason=FLIGHT_SAFETY and leaves normal Flight responsive.
+- ND/FDI default migration produces AUTO; OFF remains hidden under all demands; SPEED-only AP shows only its speed guidance panel.
+- Candidate 2 lifecycle transition check remains free of destroyed AERIS SyncModuleControlSurface callbacks.

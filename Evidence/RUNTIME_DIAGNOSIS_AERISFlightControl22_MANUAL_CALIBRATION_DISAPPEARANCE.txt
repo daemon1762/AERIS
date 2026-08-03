@@ -1,0 +1,24 @@
+AERISFlightControl(22) / Video_2026-07-26_22-55-52.mkv diagnosis
+
+PASS before disappearance:
+- 13:59:25 [RUNWAY_CALIBRATION] THRESHOLD B MARKED ... reciprocalPair=True.
+- 13:59:28 [RUNWAY_CALIBRATION] RECIPROCAL PAIR GENERATED.
+- 14:00:05 [AIRFIELD_CACHE] save verified; certified=11; failures=30.
+- 14:00:05 [AIRFIELD_RELOAD] CERTIFIED 13 RWY / 19 APP.
+
+Destructive transition:
+- 14:05:37 [RUNWAY_PLACEMENT_VERIFY] PLACEMENT MISMATCH QUARANTINED FOR KolaIsland.
+- The saved UserRunwayCalibrations.cfg then contained hasStart=False / hasEnd=False.
+- 14:05:47 AIRFIELD_RELOAD fell back to CERTIFIED 12 RWY / 17 APP.
+
+Root cause:
+The generic CHECK HERE path was allowed to call RecordPlacementMismatch() for a
+CertificationBasis.UserCalibrated direction. RecordPlacementMismatch() intentionally
+cleared HasStart/HasEnd for automatic candidates, but this also erased a completed
+manual A/B pair.
+
+Required repair:
+- UserCalibrated direction: no automatic quarantine.
+- Storage-level complete-pair preservation guard.
+- Separate USER CALIBRATED — MANUAL list from automatic/provider certification.
+- Explicit CLEAR required before endpoint replacement.

@@ -1,0 +1,35 @@
+Source diff audit — AERIS v0.18.0.0 CP2.5 Integrated Acceptance Candidate 3
+Baseline: Integrated Acceptance Candidate 2
+
+Intended execution-source changes:
+- Source/AERISFlightControl/Performance/AERISWorkerScheduler.cs
+- Source/AERISFlightControl/Settings/AERISSettings.cs
+- Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs
+- Source/AERISFlightControl/Terrain/AERISTerrainPreloadContracts.cs
+- Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs
+- Source/AERISFlightControl/UI/AERISFlightInstrument.cs
+- Source/AERISFlightControl/UI/AERISWindow.cs
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+
+Feature boundary:
+- Full Preload management is exposed only through the existing non-Flight persistent UI route.
+- PRELOAD BOOST is manual, non-persistent, non-Flight, worker-pool bounded and PQS-budget bounded.
+- ND/FDI add AUTO/ALWAYS/OFF; FDI SPEED-only presentation is display-only.
+- No runway Track B data and no CP3 terrain-payload residency are added.
+
+Protected tree comparison:
+- PASS Source/AERISFlightControl/AA :: (50, '6ca70ae1d9d82d2a050f6501e2f42878b1122b29b5401f7d8d391f7d266fc18d') == (50, '6ca70ae1d9d82d2a050f6501e2f42878b1122b29b5401f7d8d391f7d266fc18d')
+- PASS Source/AERISFlightControl/Autopilot :: (10, '8ed3a114c52ea852a1d560323a8af0e7be91eb51200b4ce16d32eb7b693a683e') == (10, '8ed3a114c52ea852a1d560323a8af0e7be91eb51200b4ce16d32eb7b693a683e')
+- PASS Source/AERISFlightControl/Protect :: (2, 'f22b7e2f2de1a283c1077462cda689dcbc94a812e30f71191e0762571a01e5b0') == (2, 'f22b7e2f2de1a283c1077462cda689dcbc94a812e30f71191e0762571a01e5b0')
+- PASS Source/AERISFlightControl/FlightState :: (2, '7dfed9cb4255480a30af6eb88367f5d9437a513f70c3c36a4878a27c509312ff') == (2, '7dfed9cb4255480a30af6eb88367f5d9437a513f70c3c36a4878a27c509312ff')
+- PASS Source/AERISFlightControl/Integrations :: (2, 'aef4618b11237c9ac1a496590c252dd516a446b391b0a11b112c18a77d6bfa0d') == (2, 'aef4618b11237c9ac1a496590c252dd516a446b391b0a11b112c18a77d6bfa0d')
+- PASS Source/AERISFlightControl/Core :: (3, 'a61de28c26a2d98dc3f43abdf3b91a20bb1f43788b68a4da90f15d226642c710') == (3, 'a61de28c26a2d98dc3f43abdf3b91a20bb1f43788b68a4da90f15d226642c710')
+- PASS Source/AERISFlightControl/Landing :: (20, '92e5f6dfe2f961bcce9c5b37fc95a8a1ab0e1f4833fcd3396f6c36e4e4ea3d3c') == (20, '92e5f6dfe2f961bcce9c5b37fc95a8a1ab0e1f4833fcd3396f6c36e4e4ea3d3c')
+- PASS GameData/AERISFlightControl/Airfields :: (2, '37026d8ffa07938d881f58b1b74fb74442dcd567e972af71fd123e3d9265722f') == (2, '37026d8ffa07938d881f58b1b74fb74442dcd567e972af71fd123e3d9265722f')
+
+Candidate2 SyncModuleControlSurface SHA-256: 93d5161d9280e26e45ee3cfe6a3083f0e58a518216d67815d8534430151f6336
+Candidate3 SyncModuleControlSurface SHA-256: 93d5161d9280e26e45ee3cfe6a3083f0e58a518216d67815d8534430151f6336
+
+Static acceptance: 63/63 independent scripts PASS before manifest.
+Gate 0 lexical/static: 194/194 PASS.
+No DLL/PDB/bin/obj/__pycache__ artifact in source package.

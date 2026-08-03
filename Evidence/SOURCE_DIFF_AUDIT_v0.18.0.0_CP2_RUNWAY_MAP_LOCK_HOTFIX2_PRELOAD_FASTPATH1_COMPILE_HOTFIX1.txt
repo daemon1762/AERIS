@@ -1,0 +1,21 @@
+AERIS v0.18.0.0 DEV CP2 Runway Map Lock Hotfix 2 + Preload Fast Path 1 Compile Hotfix 1
+
+Trigger:
+Mono/xbuild CS0246 in Terrain/AERISNdMapProjection.cs because AERISTerrainRenderTargetOrientation is defined in AERISFlightControl.Settings but the new projection source did not import that namespace.
+
+Functional source correction:
+- Source/AERISFlightControl/Terrain/AERISNdMapProjection.cs
+  Added: using AERISFlightControl.Settings;
+
+No algorithm changes:
+- shared map projection equations unchanged
+- runway lock error guard unchanged
+- GPU terrain path unchanged
+- preload batching/cache/worker policy unchanged
+- AP and protection source unchanged
+
+Packaging/test additions:
+- compile-hotfix build identity
+- dedicated namespace/compile-item static regression test
+- compile hotfix note
+- manifest/acceptance evidence refresh

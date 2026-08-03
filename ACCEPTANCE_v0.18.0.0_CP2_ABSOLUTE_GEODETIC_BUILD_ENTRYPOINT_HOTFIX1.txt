@@ -1,0 +1,44 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+MANUAL RUNWAY ABSOLUTE GEODETIC ENDPOINT AUTHORITY HOTFIX 1
+BUILD ENTRYPOINT HOTFIX 1
+ACCEPTANCE RECORD
+Date: 2026-07-27
+Status: STATIC ACCEPTED / USER NATIVE BUILD AND KSP FIELD ACCEPTANCE PENDING / CP2 OPEN
+
+1. INPUT EVIDENCE
+- User terminal transcript.
+- Superseded source checkpoint:
+  AERISFlightControl-v0.18.0.0_DEV_CP2_ManualRunwayAbsoluteGeodeticEndpointAuthorityHotfix1_Source.zip
+
+2. FINDING
+- Standalone acceptance completed 55/55.
+- build_ubuntu.sh regenerated a stale identity and the build-time acceptance stopped at 167/168.
+- Native Mono/xbuild was not reached.
+
+3. CORRECTION
+- Current identity synchronized across build_ubuntu.sh, generated C#, AVC and README.
+- Exact parity/order regression added.
+- Runtime runway and flight-control logic unchanged.
+
+4. ACCEPTANCE BOUNDARY
+- Static/package acceptance is required before release.
+- User-environment native Mono/xbuild and KSP field confirmation remain mandatory.
+- CP2 remains OPEN until the field gates are complete.
+
+5. STATIC RESULTS
+- Dedicated build-entrypoint regression: 16/16 PASS.
+- CP2 static package verification: 168/168 PASS.
+- Full acceptance without manifest: 55/55 scripts PASS.
+- Runtime C# source differences from the superseded package: generated build-version file only.
+- Manifest, clean re-extraction and simulated build-entrypoint results are recorded in the external acceptance evidence delivered with the package.
+
+6. FINAL PACKAGE RESULTS
+- Full acceptance with internal manifest: 56/56 scripts PASS.
+- Internal manifest: file set and all SHA-256 values PASS.
+- Simulated build entrypoint with fake KSP references and fake xbuild:
+  - current identity generation PASS;
+  - build-time acceptance 56/56 PASS;
+  - xbuild invocation reached;
+  - staged install path reached.
+- The simulated xbuild result is an entrypoint test only and is not a real C# compile.
+- Real Mono/xbuild with KSP 1.12.5 references remains pending in the user environment.

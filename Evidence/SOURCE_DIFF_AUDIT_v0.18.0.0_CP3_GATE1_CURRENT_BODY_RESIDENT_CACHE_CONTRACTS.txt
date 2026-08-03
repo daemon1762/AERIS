@@ -1,0 +1,75 @@
+AERIS v0.18.0.0 CP3 Gate 1 Source Diff Audit
+Baseline: CP2.5 Final Closure / Standard Preload Only / CP3 Entry Baseline
+Result: intended Gate 1 source, identity, documentation and regression-harness changes only.
+Note: this audit file self-excludes from its own hash list. MANIFEST_SHA256.txt is regenerated after this audit is finalized and is verified separately.
+
+ADDED FILES
++ ACCEPTANCE_v0.18.0.0_CP3_GATE1_CURRENT_BODY_RESIDENT_CACHE_CONTRACTS.txt  sha256=6fb678bf1afb0c4537969ceb6e2edbc60c34b41b9d7f385818b8d3938808a54e
++ Docs/CP3_GATE1_CURRENT_BODY_RESIDENT_CACHE_CONTRACTS_v0.18.0.0_ja.md  sha256=731218e51b9609ff2063805814831ba90bab69ac7f667a0fe1513b8b4ab956d8
++ Docs/ND_CP3_GATE1_CURRENT_BODY_RESIDENT_CACHE_CONTRACTS_TEST_CARD_v0.18.0.0_ja.md  sha256=c2a4d5ff41627606d40d2585d737306ba40b7fefc58abd30479f458b0bcd783b
++ Evidence/AERIS17_CP3_GATE1_FINAL_STATIC_ACCEPTANCE.log  sha256=bdb76f57c19761d930494eb97b5aab8dac2f94f5fe691a7b692d0892e8a28dcf
++ Source/AERISFlightControl/Terrain/AERISCurrentBodyResidentCache.cs  sha256=3fc7702a3d14394c9406ed26d9475e6af6b8263306a939468003f038071a4f65
++ Tools/run_v01800_cp3_gate1_acceptance.py  sha256=f1371488e052f300c835c638ee8e263779c858f06112508386638754177ab8de
++ Tools/selftest_v01800_cp3_gate1_current_body_resident_cache_contracts.py  sha256=d8d97d5de174bfcca4620acd633ab93747ed25d8a9e7a804f0b887123101fc39
+
+CHANGED FILES
+* GameData/AERISFlightControl/AERISFlightControl.version
+  baseline=8ea457fccaa906247e9415361f84040589adcdb376439b99e62a356ad010f8a4
+  current =98d43e2d6bed2186fbc235bef9b985136a21bd5ed8ad55a4ba7d280784624b5c
+* README.md
+  baseline=bfda7c39655bf4ba7c12fc5e3e75494c4660b8632d9bc8cc394b2e2c7ed035b5
+  current =e1aee99e1b570e7f890cd1db8d0f56ec5cb0779fa416a003518a5480875ed6b8
+* Source/AERISFlightControl/AERISFlightControl.csproj
+  baseline=3d6e7708ad5b286909a73913a6cbc5f640d0a548c849ddf1a665551f8fe3d425
+  current =5fc0672faef3f1f4ed2c608b9bcbe2306f3e84b47939e7c0c33eb45bdd7c466b
+* Source/AERISFlightControl/Core/AERISBootstrap.cs
+  baseline=a13d2c5a23ac6d189ac53386bd43e8c464a5aa6b505b33365b29f763a78ff7c6
+  current =bded350547aede3303e1da20aaecbdffaa770c1a8425af9a33ce2fa973454e3a
+* Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+  baseline=412269ec95ccca3d3a498b0969956bc478cd99e027683516ff1a762f45897521
+  current =72fc6c63c0365fe04a7cfa6fa2f9f39649daa1509fb773534a4d0a3921c657ce
+* Source/AERISFlightControl/Terrain/AERISTerrainAwareness.cs
+  baseline=355c4059c4a15cab7d5767fd1841a770c388f018760df46af90137ba96105709
+  current =69a6350b0a03bc4289c1841a099e83b173b36943aa8a8bd65b016405710fa1a7
+* Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs
+  baseline=d845c1498d37685d766e4a28f8f0c68aed031b11509854583968a179f9b52c35
+  current =113248e779b92363aae160fc832e0fe87045340512ebda1e2baeccf050202476
+* Tools/selftest_v01800_cp25_map_dram_cache_foundation_hotfix1.py
+  baseline=1e88d4df36c96ac6a87f136dbb0afa1d597b67e5b0fe1ef8439065abf9078e97
+  current =4703b37701be0fb145d32a0e9773f94caa7e4e28aff2221ff79ba62f5bdf0c6e
+* Tools/selftest_v01800_cp25_map_dram_cache_foundation_hotfix2.py
+  baseline=88b9585b0e32d104ea3c1771677a19c5db79b4d3d098a398aff21aae56a6fe42
+  current =c93403b60bc5f2f8c79aa3836b7b86dac138f18defda596a99dcf51820cb457f
+* Tools/selftest_v01800_cp2_absolute_geodetic_build_entrypoint_hotfix1.py
+  baseline=2b3511af142d11efc6a62f21ab2239e13b9f39ac7f0ca436b489dec8e027b90b
+  current =74953337a41b11ea17ea7d6531e9463259c65493e1ac2c98714b952916c39b99
+* Tools/verify_v01800_cp1_build_entrypoint.py
+  baseline=72271e57f4a4b9c631b8bc9397d463d30336a402220f1c48c2c4b7610974eda5
+  current =d216c7481b037ec8e71ced878e4cffd84ad7b563eb8e6f41f4d76607dc1ca4c4
+* Tools/verify_v01800_cp2_build_entrypoint.py
+  baseline=6a225b7970986ea1eac34703efeb4ef0b050bcf1b0cbb819946a8e51ef75d94a
+  current =45860fdcb98a9f514e3b540586350cb7565aa067b7c92719789243ba49fd25bf
+* build_ubuntu.sh
+  baseline=4927c4ecc2549ca1a877ded6d1e5fe8199ac247e35e08d4f9d9c1ad24707aa3c
+  current =64c9d23171d6251ac95d5a9257a9b1ea5a36f3c09039f5ee44cac37f0e9dc71b
+
+REMOVED FILES
+(none)
+
+PROTECTED SOURCE BOUNDARIES
+- AA: unchanged
+- Autopilot: unchanged
+- Protect: unchanged
+- FlightState: unchanged
+- Landing: unchanged
+- Integrations: unchanged
+- GameData/Airfields: unchanged
+- Performance/AERISMapDramCache.cs: byte-identical
+- Terrain/AERISTerrainPreloadDatabase.cs: byte-identical
+
+PACKAGE HYGIENE
+- No DLL/PDB/pyc/__pycache__ included.
+- No TerrainCache or TerrainPreloadDatabase runtime payload tree included.
+- FULL BOOST entry points remain absent.
+
+Added=7 Changed=13 Removed=0

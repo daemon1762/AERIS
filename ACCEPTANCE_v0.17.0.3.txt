@@ -1,0 +1,33 @@
+AERIS Flight Control v0.17.0.3 — Source Acceptance
+Date: 2026-07-23
+Baseline source SHA256: 0c20572af23d47741c82bed7eaaa2e5d737ca861d68ff7b9a1b243abf7f00db7
+
+Scope
+- Defer STARTUP runway scan until stable unpacked Flight providers.
+- Accept and fully round-trip all KSP ConfigNode cache root shapes observed in the field.
+- Drain one bounded FlightData archive lane outside Flight despite stale transition P95 backoff.
+- Add deterministic provider snapshot and cache/archive lifecycle diagnostics.
+
+Pre-manifest acceptance
+- 12 / 12 scripts PASS
+- 606 / 606 assertions PASS
+
+Final acceptance
+- 13 / 13 scripts PASS
+- 609 / 609 assertions PASS
+
+Frozen invariants
+- Reference AERISBankDirector.cs is byte-identical to the v0.17.0.0 golden source.
+- LAND observation layer contains no FlightCtrlState/AP/throttle authority.
+- Legacy NAV remains absent.
+- No compiled binaries, caches or Python bytecode are included.
+- Main/KSP path contains no .Wait(), .Result or .Join() blocking call.
+
+Native build status
+- NOT RUN in this artifact environment: KSP/Unity reference DLLs, Mono/xbuild and a live KSP installation are unavailable.
+- build_ubuntu.sh runs the final acceptance suite before xbuild and installation.
+
+Required field gates
+- STARTUP, MANUAL 1 and MANUAL 2 provider signatures and commit counts must be identical.
+- Existing cache must load without CACHE ROOT MISSING and survive a KSP restart.
+- AERIS must automatically create and verify the FlightData ZIP in Main Menu.

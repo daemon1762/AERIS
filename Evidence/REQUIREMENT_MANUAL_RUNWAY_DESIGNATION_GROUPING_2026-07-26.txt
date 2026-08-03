@@ -1,0 +1,9 @@
+USER REQUIREMENT — 2026-07-26
+
+1. After manual A/B runway registration, rewrite the visible RWY numbers from the measured runway heading.
+2. Do not list reciprocal names for the same physical runway as separate AIRFIELDS items.
+3. Present one grouped item, for example:
+   KSC
+   RWY 09 / RWY 27
+4. Keep both reciprocal approach directions independently usable.
+5. Preserve the separate USER CALIBRATED category and the default-collapsed list behavior.

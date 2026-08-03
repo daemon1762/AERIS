@@ -1,0 +1,23 @@
+AERIS18 Candidate 9 runtime diagnosis basis — 2026-08-02
+
+User evidence: Video_2026-08-02_15-35-31.mkv.
+Observed behavior: AERIS/Preload UI open produces a large visible FPS reduction; FPS recovers after the UI is closed.
+This evidence establishes the symptom, not Candidate 9 runtime acceptance.
+
+Source diagnosis:
+1. PRELOAD display read AERISTerrainTileSystem.PreloadStatus from Unity IMGUI draw code.
+2. Before Candidate 9, every PreloadStatus access synchronously called AERISTerrainPreloadBuilder.SnapshotStatus().
+3. SnapshotStatus builds dictionaries and body snapshots; AERISTerrainPreloadDatabase.SnapshotBodies() walks all tileIndex.Values under indexSync, and additional per-body calculations/allocations follow.
+4. Unity IMGUI may execute Layout/Repaint/input passes, so UI-open cost can occur multiple times per rendered frame.
+5. Candidate 9 changes display telemetry to a 0.25 s cache, with immediate invalidation on explicit user mutations.
+6. AERISWindow heavy diagnostics (terrain/resident/map/corridor) are likewise sampled at 4 Hz.
+7. Closed-window early-return guards are retained.
+
+UI layout diagnosis:
+- AERISWindow contained word-wrapped button styles and content-derived CalcHeight paths.
+- Window-width-dependent column counts/reflows changed control placement.
+- Candidate 9 fixes geometry and clips non-AIRFIELDS-selection button text.
+- Sole variable-size exception: SYSTEM > AIRFIELDS airport/runway selection rows.
+- LAND airfield selector is fixed.
+
+Runtime result: PENDING. Static/source diagnosis only until user rebuilds and tests Candidate 9 in KSP.

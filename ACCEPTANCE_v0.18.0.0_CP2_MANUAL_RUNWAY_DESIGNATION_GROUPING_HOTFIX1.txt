@@ -1,0 +1,34 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+MANUAL RUNWAY DESIGNATION GROUPING HOTFIX 1
+
+STATUS: STATIC ACCEPTANCE PASS; NATIVE/KSP RUNTIME PENDING
+CP2: OPEN
+
+Scope:
+- Rewrite UserCalibrated RWY display numbers from committed HeadingDeg.
+- Rewrite the physical runway display as one reciprocal pair designation.
+- Group reciprocal directions into one AIRFIELDS physical-runway row.
+- Preserve both directions as independently usable approach/localizer entries.
+- Preserve Stable IDs, geometry, cache identity and operational selection.
+
+Dedicated regression test:
+- 25/25 PASS
+
+Full CP2 static acceptance before manifest:
+- 53/53 scripts PASS
+
+Full CP2 static acceptance with internal manifest:
+- 54/54 scripts PASS
+- Manifest file set and all SHA-256 values match
+
+Native Mono/xbuild:
+- NOT RUN IN ARTIFACT ENVIRONMENT
+
+KSP runtime:
+- NOT RUN IN ARTIFACT ENVIRONMENT
+
+Runtime acceptance required:
+- Existing completed calibration is retained.
+- Manual row displays one airfield item with both measured RWY numbers.
+- Both reciprocal directions remain selectable in ND.
+- Reload and restart preserve names and grouping.

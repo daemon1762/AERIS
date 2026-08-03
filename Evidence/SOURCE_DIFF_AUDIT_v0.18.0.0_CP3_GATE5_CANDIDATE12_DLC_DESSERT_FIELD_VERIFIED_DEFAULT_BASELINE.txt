@@ -1,0 +1,15 @@
+Candidate 12 Source Diff Audit
+Changed runtime/data scope:
+- 01_Stock_DLC_Foundation.cfg: exact Dessert field-verified RWY 36/18.
+- 03_Field_Verified_Runway_Calibrations.cfg: exact Dessert record appended; baseline 40 -> 41.
+- AERISAirfieldConfigParser.cs: optional configured certificationBasis/detail carried into direction; UserCalibrated gets M29 evidence.
+- Build/version/docs/tests.
+
+Protected runtime files byte-identical to Candidate 11:
+- UI/AERISWindow.cs
+- Landing/AERISAirfieldRegistry.cs
+- Landing/AERISExpansionStatus.cs
+- Terrain/AERISTerrainGpuTileRasterizer.cs
+- Autopilot/AERISBankDirector.cs
+
+AutomaticCertificationAllowed remains Stock-only. No CPU terrain presentation, GUI.matrix temporal warp, control-authority change, or startup auto-selection introduced.

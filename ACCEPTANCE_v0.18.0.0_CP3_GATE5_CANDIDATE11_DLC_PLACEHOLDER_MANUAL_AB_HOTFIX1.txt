@@ -1,0 +1,13 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Integrated Acceptance Candidate 11
+DLC Placeholder Manual A/B Hotfix 1
+
+STATUS: STATIC ACCEPTANCE CANDIDATE
+
+Contract:
+- SYSTEM > AIRFIELDS DLC runway placeholder exposes MARK A / MARK B / CLEAR.
+- Capture is allowed even when provider runtime runway geometry is not exposed.
+- Existing AERISRunwayWitnessLibrary body-fixed geodetic absolute calibration authority is reused.
+- UI shows exact captured A/B LAT/LON/ALT values for field handoff.
+- Placeholder remains LAND/ND non-operational until authoritative geometry/default integration is completed.
+- Candidate 10 provider visibility and Candidate 9 UI/performance contracts remain intact.

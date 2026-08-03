@@ -1,0 +1,78 @@
+AERIS Flight Control v0.18.0.0 DEV CP2 Field Render Consistency Hotfix 1
+================================================================================
+
+STATUS
+------
+Development checkpoint only. Not a final v0.18.0.0 release or RC.
+The supplied pre-fix runtime evidence fails the CP2 Field Render gate.
+Post-fix native build, KSP runtime and Unity GPU acceptance remain required.
+CP3 and new NAV remain BLOCKED.
+
+PROVENANCE
+----------
+Base artifact:
+  AERISFlightControl-v0.18.0.0_DEV_CP2_PreloadStatusToolbar_CompileHotfix1_Source.zip
+Base SHA-256:
+  50e469b0add6ce8a21e6218ddecca106676d5bb9eaaa908ff1e828515c03dfe8
+Runtime evidence ZIP SHA-256:
+  34bcab7ba413574c6c85f7266d609fed2ab9231b1f5e97e4738df04a9ddc20dc
+
+RUNTIME FAULT
+-------------
+- Display/range changes could discard or ignore still-valid terrain meshes.
+- Partial Preview could be treated as Final.
+- In-progress same-key work could not refresh all request generations.
+- Partial Final could remove the complete Preview underlay.
+- Viewport coverage could report tile rectangles rather than valid triangles.
+- AUTO backlog evidence could be erased inside the evaluation window.
+
+FIX
+---
+- Explicit SamplingComplete state.
+- Authoritative request commit and active request refresh.
+- TerrainGeneration preserved during request merge.
+- Display palette changes no longer invalidate body-fixed height tiles.
+- Completed Preview remains beneath partial Final or a pending contour style.
+- GPU and CPU coverage use actual valid geometry/quality.
+- AUTO backlog latch and field-observable range/mode/AUTO transitions.
+
+STATIC ACCEPTANCE
+-----------------
+Premanifest full acceptance:
+  31 / 31 scripts PASS
+  2320 / 2320 assertions PASS
+Manifest-inclusive full acceptance:
+  32 / 32 scripts PASS
+  2323 / 2323 assertions PASS
+C# tree-sitter syntax:
+  127 / 127 source files PASS
+Internal manifest:
+  complete file set and every SHA-256 PASS
+
+DIFFERENTIAL AUDIT
+------------------
+- Product C# delta: 11 files, 309 insertions, 86 deletions.
+- Autopilot: 10 / 10 files byte-identical to the supplied base.
+- Landing: 19 / 19 files byte-identical to the supplied base.
+- Performance: 9 / 9 files byte-identical to the supplied base.
+- AA: 50 / 50 files byte-identical to the supplied base.
+- Legacy NAV forbidden symbols: absent.
+- Source package binary/debug/python cache contamination: absent.
+
+SAFETY BOUNDARIES
+-----------------
+- AP/BANK control law unchanged.
+- AERISBankDirector.cs baseline SHA-256:
+  bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7
+- LAND remains observation/planning/display only and control-free.
+- Legacy NAV remains absent.
+- New NAV remains unimplemented and BLOCKED.
+- CP3 adaptive glide/corridor work is not included.
+
+NOT TESTED IN ARTIFACT ENVIRONMENT
+----------------------------------
+- Native Mono/xbuild compilation with KSP references.
+- KSP 1.12.5 runtime.
+- Unity GPU rendering.
+- Real PQS latency and progressive visual composition.
+- Long-run RAM/VRAM/disk boundedness.

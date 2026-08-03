@@ -1,0 +1,12 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Candidate 14 — Solid-Surface Preload Exclusion Hotfix 1
+
+Scope:
+- Automatic terrain preload admits only bodies with a body-local PQS terrain controller.
+- Stars, gas giants, and other surface-less bodies fail closed and are not auto-preloaded.
+- Surface-less bodies are omitted from PRELOAD body presentation and cannot enter BUILD/RESUME/REBUILD generation paths.
+- The rule is capability-based, not a Sun/Jool name whitelist, and therefore applies to mod bodies.
+- Existing stored terrain files are not automatically deleted.
+- Candidate 13 UI/preload fixed-policy behavior and runway/control boundaries remain unchanged.
+
+Runtime acceptance pending native KSP execution.

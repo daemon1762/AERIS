@@ -1,0 +1,52 @@
+AERIS Flight Control v0.18.0.0 DEV CP2.5
+INTEGRATED ACCEPTANCE CANDIDATE 4 — ACCEPTANCE CONTRACT
+
+PURPOSE
+- Preserve Candidate 3 non-Flight UI, display policy, Candidate 2 lifecycle fix and Gate 1-4 baseline.
+- Promote the former Candidate 3 PRELOAD BOOST envelope to standard non-Flight Preload operation.
+- Replace the former boost with a manual FULL BOOST that can use logical CPU count minus one and a much deeper bounded producer/encode/write pipeline.
+- Remove producer starvation by separating PQS production, parallel CPU encoding and SSD super-batch commit stages.
+- Report the real bottleneck and explicitly disclose that no compiled GPU preload kernel asset exists in this source package.
+
+STANDARD PRELOAD
+- Standard non-Flight Preload now uses all normal AERIS worker permits, no non-Flight safety reserve, Normal worker priority, a worker-scaled queue and the former bounded 8-24 ms PQS envelope.
+- Standard remains governed by the configured Preload mode, body plan and pause/cancel controls.
+- Flight entry suspends Preload work before Flight processing.
+
+MANUAL FULL BOOST
+- Start and stop are explicit user actions and are not persisted.
+- FULL BOOST uses the already-created AERIS scheduler pool up to logical CPU count minus one, removes the non-Flight reserve, raises worker priority to AboveNormal and expands bounded lane capacity.
+- The block pipeline expands from 64 standard active tiles / 4 pending blocks per tile to 256 active tiles / 12 pending blocks per tile.
+- PQS producer budget is bounded to 48-160 ms per non-Flight update, 10,000,000 queries/s and at most 65,536 samples per update.
+- Raw final tiles are encoded in parallel on GeneralCompute workers.
+- Encoded tiles are committed in multi-chunk SSD super-batches with one manifest transaction per super-batch.
+- FULL BOOST creates no private worker pool, no unbounded busy loop, uses no Safety/LAND lane and stops with FLIGHT_SAFETY before Flight.
+
+GPU BOUNDARY
+- Candidate 4 does not create artificial GPU load.
+- KSP/Unity cannot compile a new compute shader from this source package at runtime; no compiled preload compute-kernel asset is bundled.
+- Diagnostics therefore report GPU COMPUTE CAPABLE — NO PRELOAD KERNEL ASSET / CPU AUTHORITATIVE when compute is available.
+- A future GPU backend requires a separately built Unity asset bundle and a CPU-validated fallback; this is not falsely claimed as implemented here.
+
+DIAGNOSTICS
+- UI and telemetry expose standard/full state, pipeline active limits, pending block limits, encode queue/active workers, SSD queue/active writers, last super-batch chunks/tiles, write throughput, bottleneck and GPU stage.
+- Bottleneck values include NO WORK, PQS PRODUCER, CPU COMPRESSION, SSD WRITE and PIPELINE BALANCED.
+
+SAFETY / FROZEN BOUNDARIES
+- ND/FDI AUTO/ALWAYS/OFF and SPEED-only FDI remain unchanged.
+- Candidate 2 SyncModuleControlSurface lifecycle fix and control law remain unchanged.
+- AP, AA, PROTECT, FlightState, LAND, Airfield Registry, runway coordinates and Track B remain unchanged.
+- Map DRAM remains metadata-only; Current-Body Resident Cache remains CP3.
+
+STATIC ACCEPTANCE
+- Candidate 4 dedicated self-test passes.
+- Candidate 3, Candidate 2, Candidate 1, Gate 1-4 and every frozen CP1/CP2 regression script pass.
+- Source-scope, C# lexical/delimiter, Python, JSON, XML and bash checks pass.
+- Manifest verification, ZIP CRC and clean re-extract full acceptance pass.
+
+RUNTIME ACCEPTANCE
+- Native Mono/xbuild succeeds against KSP 1.12.5.
+- Standard Preload performs at least as strongly as Candidate 3 boost under equivalent remaining work.
+- FULL BOOST is manual/non-persistent, stops for Flight and materially increases producer, encode or SSD throughput when work exists.
+- Diagnostics identify the actual bottleneck instead of claiming GPU use.
+- KSP remains responsive enough to press STOP and no AERIS ERROR/FATAL/Exception occurs.

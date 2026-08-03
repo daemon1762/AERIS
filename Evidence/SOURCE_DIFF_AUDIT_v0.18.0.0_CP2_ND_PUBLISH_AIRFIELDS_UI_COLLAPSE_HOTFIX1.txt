@@ -1,0 +1,43 @@
+SOURCE DIFF AUDIT
+Baseline: Bidirectional Runway Pair Hotfix 1
+Candidate: ND Navigation Snapshot Publish / Airfields UI Collapse Hotfix 1
+
+RUNTIME SOURCE MODIFIED
+- Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+  * constructs and submits AERISNavigationDisplaySnapshot
+  * successful-submit capture commit
+  * 0.5 second retry on submit rejection
+- Source/AERISFlightControl/UI/AERISWindow.cs
+  * compact semantic-version build heading
+  * wrapped AIRFIELDS status/detail labels
+  * two-line runway rows and wrapped calibration action
+- Source/AERISFlightControl/Settings/AERISSettings.cs
+  * all AIRFIELDS categories default closed
+  * one-time layout migration revision 1
+- GameData/AERISFlightControl/Config/AERISSettings.cfg
+  * layout revision 1 and all AIRFIELDS expanded keys False
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+- build_ubuntu.sh
+
+TEST SOURCE MODIFIED/ADDED
+- Tools/selftest_v01800_cp2_nd_publish_airfields_ui_hotfix1.py
+- Tools/run_v01800_cp2_acceptance.py
+- Tools/verify_v01800_gate0_static.py
+- Tools/verify_v01800_cp2_static.py
+- Tools/selftest_v01702_runway_registry_identity.py
+
+DOCUMENTATION/EVIDENCE ADDED
+- Docs/CP2_ND_NAVIGATION_SNAPSHOT_PUBLISH_AIRFIELDS_UI_COLLAPSE_HOTFIX_1_v0.18.0.0_ja.md
+- Docs/ND_CP2_ND_NAVIGATION_SNAPSHOT_PUBLISH_AIRFIELDS_UI_COLLAPSE_HOTFIX_1_TEST_CARD_v0.18.0.0_ja.md
+- Evidence/RUNTIME_DIAGNOSIS_AERISFlightControl20_ND_DISAPPEAR_AIRFIELDS_UI.txt
+- Evidence/SOURCE_DIFF_AUDIT_v0.18.0.0_CP2_ND_PUBLISH_AIRFIELDS_UI_COLLAPSE_HOTFIX1.txt
+
+NOT MODIFIED
+- runway detector/certification algorithm
+- calibration schema 3 and reciprocal pair generation
+- Airfield certification cache schema/identity
+- LAND foundation and control authority
+- AP/AA/APP control source
+- Auto Preload progression
+- legacy NAV deletion boundary
+- CP2 debug-overlay removal

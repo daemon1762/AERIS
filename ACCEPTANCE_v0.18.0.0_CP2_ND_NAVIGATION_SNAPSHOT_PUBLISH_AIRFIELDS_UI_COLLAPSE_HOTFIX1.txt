@@ -1,0 +1,88 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+ND NAVIGATION SNAPSHOT PUBLISH / AIRFIELDS UI COLLAPSE HOTFIX 1
+ACCEPTANCE RECORD
+Date: 2026-07-26
+Status: STATIC ACCEPTED / NATIVE AND KSP FIELD ACCEPTANCE PENDING / CP2 OPEN
+
+1. INPUT EVIDENCE
+- AERISFlightControl(20).zip
+- Video_2026-07-26_18-28-07.mkv
+- Superseded source checkpoint:
+  AERISFlightControl-v0.18.0.0_DEV_CP2_GenericRunwayPlacementVerification_FinalCandidate3_CompileHotfix1_CalibrationRoundTripHotfix1_BidirectionalRunwayPairHotfix1_Source.zip
+
+2. RUNTIME FINDINGS
+- The reciprocal manual calibration completed successfully.
+- The runtime log recorded fullRoundTrip=True, committedReadback=True and reciprocalPairSchema=3.
+- The final manual airfield reload reported CERTIFIED 13 RWY / 19 APP.
+- No runtime ERROR, exception, crash or assembly-load failure was found in the supplied AERIS log evidence.
+- Despite the successful registry reload, the ND remained at NAV DATA and runway/facility symbols disappeared after the runway database revision changed.
+- The AIRFIELDS page was unreadable because the accumulated full build identity and long single-line runway/detail rows exceeded the compact 520-pixel window.
+- The saved configuration also had the CERTIFIED category expanded.
+
+3. ROOT CAUSE
+AERISNavigationDisplay.CaptureNavigationSnapshot collected runwaySources and facilitySources but did not publish the completed AERISNavigationDisplaySnapshot to AERISNavigationDisplayPipeline through Performance.SubmitNavigationDisplay.
+
+After an airfield reload or manual calibration incremented RunwayDatabaseRevision, the renderer correctly rejected the previously prepared stale frame. Because no replacement snapshot was submitted, no revision-matched frame could be prepared and the ND remained in NAV DATA state. The registry and reciprocal calibration were not lost; the display pipeline publication was missing.
+
+4. IMPLEMENTED CORRECTIONS
+- Build and submit an AERISNavigationDisplaySnapshot containing generation stamp, body identity/radius, origin, runway database revision, runway selection revision, runway sources and facility sources.
+- Commit capture revision/origin markers only after the scheduler accepts the snapshot.
+- Retry a rejected publication after 0.5 seconds instead of falsely suppressing capture for the normal 10-second interval.
+- Replace the accumulated full build identity in compact windows with a compact semantic-version/DEV-CP2 title; retain the full identity in logs and build metadata.
+- Use wrapped AIRFIELDS status/detail labels and wrapped action buttons.
+- Render each runway row as a readable two-line entry and disable horizontal scrolling.
+- Default CERTIFIED, PROVISIONAL, FAILED, PENDING and REVALIDATION sections to collapsed.
+- Add airfieldsUiLayoutRevision=1 and a one-time migration so existing installations with previously open sections are collapsed on first launch of this build.
+- Preserve reciprocal runway-pair calibration, runway recognition/certification, LAND observation-only boundaries, Auto Preload, AP, AA and APP behavior.
+- Do not restore old NAV and do not restore CP2 runway-survey debug displays.
+
+5. MODIFIED IMPLEMENTATION SURFACE
+- Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+- Source/AERISFlightControl/UI/AERISWindow.cs
+- Source/AERISFlightControl/Settings/AERISSettings.cs
+- GameData/AERISFlightControl/Config/AERISSettings.cfg
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+- build_ubuntu.sh
+- README.md
+- Tools/run_v01800_cp2_acceptance.py
+- Tools/selftest_v01800_cp2_nd_publish_airfields_ui_hotfix1.py
+- Tools/verify_v01800_gate0_static.py
+- Tools/verify_v01800_cp2_static.py
+- Tools/selftest_v01702_runway_registry_identity.py
+- Documentation and evidence files for this hotfix
+
+6. STATIC ACCEPTANCE
+- Dedicated ND publish / AIRFIELDS UI test: 45/45 PASS.
+- Pre-manifest complete CP2 acceptance: 49/49 scripts PASS.
+- Sealed-package acceptance including manifest verification: 50/50 scripts PASS.
+- Internal manifest file set: PASS.
+- Internal manifest hashes: PASS.
+- Clean separate extraction acceptance: 50/50 scripts PASS.
+- ZIP CRC: PASS.
+- Original and clean-extracted package file sets/hashes: PASS.
+- No Python cache, compiled binary, build output or user calibration data is intentionally included.
+- Old NAV remains absent.
+- LAND remains observation-only and no aircraft-control authority was added.
+- CP2 runway-survey debug display remains absent.
+
+7. UNEXECUTED / FIELD GATES
+The packaging environment does not contain the user's KSP Unity references or a usable native Mono/xbuild target installation. Therefore the following remain unaccepted here:
+- Native Mono/xbuild compilation on the user's KSP installation.
+- KSP runtime confirmation that a revision-matched ND frame is republished after startup, reload and manual calibration.
+- Visual confirmation that airport/runway symbols return at applicable ND ranges.
+- Visual confirmation that all AIRFIELDS sections start collapsed and expanded rows remain readable.
+- Regression confirmation of reciprocal manual calibration and Auto Preload Progression in this build.
+
+8. REQUIRED FIELD PASS
+- Build identity ends with ND NAVIGATION SNAPSHOT PUBLISH AIRFIELDS UI COLLAPSE HOTFIX 1.
+- All AIRFIELDS categories are collapsed on first launch of this layout revision.
+- Expanding each category does not overlap or clip row text/buttons at the normal compact window width.
+- After initial registry load, reload and reciprocal manual calibration, the ND leaves permanent NAV DATA state and displays a revision-matched runway count/symbol layer.
+- Runways/facilities remain visible at their intended ND ranges.
+- Reciprocal runway-pair calibration still saves, reloads and generates both directions.
+- No old CP2 survey-debug UI/log path returns.
+- Auto Preload Progression requirements remain satisfied.
+
+9. CLOSURE DECISION
+CP2 IS OPEN.
+This source is a field-test candidate only. CP2 may be declared CLOSED only after native build and the required KSP field pass are supplied and audited.

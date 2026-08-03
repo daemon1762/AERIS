@@ -1,0 +1,46 @@
+Source diff audit — v0.18.0.0 CP2 Generic Runway Placement Verification Final Candidate 3
+
+Baseline:
+AERISFlightControl-v0.18.0.0_DEV_CP2_RunwayWitnessAnchorScanCalibrationHotfix3_Source
+
+Changed functional boundary:
+- Landing/AERISAirfieldRegistry.cs
+  Added generic parked-vessel placement verification. No airport-name branch. Observation/save/resurvey only.
+- Landing/AERISRunwayWitnessLibrary.cs
+  Added schema-2 persistent placement-mismatch quarantine, schema-1 migration, stale endpoint invalidation, body-scoped provider matching, ground/stationary marking gates and transactional in-memory rollback when persistence fails.
+- Landing/AERISRunwaySurveyContracts.cs
+  Algorithm 1710, detector revision 5, pending/mismatch fields.
+- Landing/AERISRunwaySnapshotBuilder.cs
+  Carries incomplete/mismatch user witness state into immutable worker snapshot.
+- Landing/AERISRunwayGeometryWorker.cs
+  Rejects mismatch/incomplete calibration before normal geometry certification.
+- Landing/AERISAirfieldModels.cs
+  Added observed-placement mismatch failure classification.
+- UI/AERISWindow.cs
+  Added CHECK HERE and retained MARK A/B/CLEAR.
+- UI/AERISNavigationDisplay.cs and Performance/AERISNavigationDisplayPipeline.cs
+  Removed temporary candidate display data path; provisional geometry is not rendered.
+- Landing/AERISOperationalRunwayResolver.cs, Landing/AERISRunwayCertificationCache.cs,
+  Settings/AERISSettings.cs, factory Config/AERISSettings.cfg
+  Removed temporary candidate-display fields/settings/cache persistence.
+- Airfields/Defaults/02_Current_Mod_Runway_Survey_Catalog.cfg
+  Kola Island changed to ManualRequired as a confirmed field mismatch.
+
+Deliberately unchanged:
+- AP, AA/FBW, PROTECT control laws
+- LAND control authority (none added)
+- external automation control boundary
+- terrain tile/preload builder/progression logic
+- legacy NAV removal
+- new NAV remains unimplemented
+
+Static regression boundary:
+- generic method contains no Kola name or UUID
+- all snapshot constructor calls match the updated immutable contract
+- calibration schema 1 remains readable, schema 2 is written
+- mismatch invalidates old endpoints and forces two-point calibration
+- non-finite measurement inputs are sanitized before placement gates
+- calibration identity fallback cannot cross celestial-body boundaries
+- failed save/validation does not leave unpersisted in-memory authority
+- temporary candidate display runtime identifiers are absent
+- no user calibration file is shipped

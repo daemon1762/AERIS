@@ -1,0 +1,44 @@
+AERIS CP2.5 Candidate 4 FULL BOOST diagnosis
+Evidence: AERISFlightControl(34), KSP.zip, Video_2026-07-30_20-58-29.mkv
+
+Verdict: CONFIRMED DEFECT / deterministic pipeline stall.
+
+Before FULL BOOST (12:04:45.103Z):
+- tiles complete 5139
+- tiles pending 48
+- scheduler dropped 0
+- preload progressing normally
+
+Immediately after FULL BOOST:
+12:04:46.243Z
+- tiles complete 5148
+- pending 176
+- PQS 160.0119 ms
+- scheduler dropped 381
+
+12:04:47.278Z
+- tiles complete 5148
+- pending 176
+- scheduler dropped 1328
+
+12:04:48.288Z and thereafter
+- tiles complete remains 5148
+- pending remains 176
+- PQS falls to ~0.003 ms
+- encode queue/active 0/0
+- SSD queue/jobs 0/0
+- scheduler dropped fixed at 1620
+- progress does not recover after manual STOP
+
+Root cause:
+- AERISWorkerScheduler has a hard result queue cap of 256 and evicts the oldest result.
+- FULL BOOST permits up to 176 active tiles and 12 pending blocks per tile (up to 2112 completion callbacks).
+- Dropped terrain-block results never execute CommitBlock().
+- TileState.PendingBlocks therefore never decrements.
+- NextRunnableState rejects every saturated tile, leaving 176 permanently stuck states.
+- Telemetry incorrectly reports PIPELINE BALANCED although the pipeline is deadlocked.
+
+Immediate workaround:
+- Do not use FULL BOOST in Candidate 4.
+- If it has been started, STOP alone does not recover; restart KSP to clear the in-memory pipeline.
+- Standard preload was functioning before FULL BOOST activation.

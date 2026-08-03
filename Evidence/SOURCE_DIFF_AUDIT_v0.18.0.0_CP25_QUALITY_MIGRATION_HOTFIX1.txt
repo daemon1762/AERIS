@@ -1,0 +1,77 @@
+AERIS v0.18.0.0 CP2.5 Quality Migration Hotfix 1 — source diff audit
+
+Baseline: CP2.5 Altitude Gate Hotfix 1
+Current:  CP2.5 Quality Migration Hotfix 1
+
+Intended executable-source changes:
+- Settings/AERISSettings.cs: quality enum, one-time revisioned migration and persistence.
+- Terrain/AERISTerrainPerformance.cs: LOW/MEDIUM/HIGH/LAND profiles and AUTO<=HIGH.
+- UI/AERISWindow.cs: public four-choice selector; LAND moved to diagnostics/developer surface.
+- Default config, build identity and acceptance runner updated.
+
+Gate boundary:
+- No LAND request activation/separation implementation is included; that remains Gate 3.
+- No curated runway/default coordinate changes are included.
+- No AP/AA/PROTECT/APP/FlightCtrlState authority changes are included.
+
+Changed/added files relative to Gate 1 (excluding manifest and this audit): 15
+MODIFIED: ACCEPTANCE_v0.18.0.0_CP2.5_ALTITUDE_GATE_HOTFIX1.txt
+  old_sha256=1d521943b6c5b14912a3f1d4a912d1a273c6d996fc4d8a13f374687e71f92610
+  new_sha256=69f0c15023662889dc327f29fcc31cc099e3353ae0c579ca09e4354435b5dae1
+ADDED: ACCEPTANCE_v0.18.0.0_CP2.5_QUALITY_MIGRATION_HOTFIX1.txt
+  old_sha256=-
+  new_sha256=7b8422b9cb3e4a6b374e6716352159376007474c95ab7c7f5cd70460b8163913
+ADDED: Docs/CP25_QUALITY_MIGRATION_HOTFIX_1_v0.18.0.0_ja.md
+  old_sha256=-
+  new_sha256=c62a2b31912a8e401e596c361629ebe6d64b54ae95c9f9127f016044fb5a324e
+ADDED: Docs/ND_CP25_QUALITY_MIGRATION_HOTFIX_1_TEST_CARD_v0.18.0.0_ja.md
+  old_sha256=-
+  new_sha256=5e0474bfe66d08adc6efccecd6ba8256abe03cbdb546d1d0b37ab8325805d8db
+ADDED: Evidence/FIELD_ACCEPTANCE_CP25_ALTITUDE_GATE_HOTFIX1_HHC4_2026-07-28.txt
+  old_sha256=-
+  new_sha256=6c6a44abd903dda77e78121c12a7619219f7af7ae3d79205c13e87d6b617dcdc
+ADDED: Evidence/STATIC_ACCEPTANCE_v0.18.0.0_CP25_QUALITY_MIGRATION_HOTFIX1.log
+  old_sha256=-
+  new_sha256=15d06717a1723b290e3c504d3a09dfc168af33711b2cc0ac3cac20f7c96e3bb0
+MODIFIED: GameData/AERISFlightControl/AERISFlightControl.version
+  old_sha256=3adfac1b3b96471852f154015f996d6786948f42b608ae7ce5cb45388bf9b4db
+  new_sha256=d99a84779730f4cf950342f137976e95a0d3ccba32e9df3717cd54512bcf191f
+MODIFIED: GameData/AERISFlightControl/Config/AERISSettings.cfg
+  old_sha256=4efc48710b7a4f6a5c9084e6a37b41e97e0a86bfddf15458dae0b89284f12792
+  new_sha256=c323be46d93b85892e4b78a960fe992410c9a3dcd816f63d43936fbd02775d93
+MODIFIED: Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+  old_sha256=17a61335f059a6c9b13f18fb678285435580a82ddd94d3154ca122ffde0f7ab9
+  new_sha256=fd8bd631fe67b79acbf9508e58a7987864cf13b5ee0c5d737836a15ab5e2c4a9
+MODIFIED: Source/AERISFlightControl/Settings/AERISSettings.cs
+  old_sha256=03a830b60d4dbf56214cab80ea0c2eb8d980fb23a12f5f34ae5290df74e14ed1
+  new_sha256=7313064a1984284bda02b945428a249d51b915519a934e291a574a7363fdba0e
+MODIFIED: Source/AERISFlightControl/Terrain/AERISTerrainPerformance.cs
+  old_sha256=78e92652c448a82a888be83065b53a65a32eb88573669b192310542f5c0a3991
+  new_sha256=8c8682f60bead9aecf0ec167a2f177200bfaa5c64d0808f0235627f0241eeb23
+MODIFIED: Source/AERISFlightControl/UI/AERISWindow.cs
+  old_sha256=71f4b773db974bd1388dba3863632517007aa627b1e003565327f4d63cd1d41f
+  new_sha256=7ef8d178056ffc12a81c0aacfda261f823af55a59619e9442d1efbe3ccb89f96
+MODIFIED: Tools/run_v01800_cp25_acceptance.py
+  old_sha256=d9c4db1cb19f5e138a4083b73745700900072437debddd5ed60f89f12cf0d2f3
+  new_sha256=b54027e71456827b2ee97880c01a33810a3dd8b8ec79ed7d78ead1a061f57a46
+ADDED: Tools/selftest_v01800_cp25_quality_migration_hotfix1.py
+  old_sha256=-
+  new_sha256=50bd9bafbbcc90a7cd3aebe73169fbf342bb6e38d2dde06005a0df0566074444
+MODIFIED: build_ubuntu.sh
+  old_sha256=357f727c1624db8b2c852b32c4b0b59dd7cf4b1dac165f7d69b39ad733bf4b35
+  new_sha256=b59bb89259218414374186f7315bd109bb3cbfbff30ff4800917a892b3c03b0b
+
+Frozen-tree verification:
+Source/AERISFlightControl/Landing: baseline=20 files/7fe1e66d13ad57dd70973117f6f7e8f3f7527a2c4915cd5232efbe74c8842673 current=20 files/7fe1e66d13ad57dd70973117f6f7e8f3f7527a2c4915cd5232efbe74c8842673 match=True
+GameData/AERISFlightControl/Airfields: baseline=2 files/567513d5721cffcf9159177902bfb01b1f4bdf4234aff5ae393a0886562b9381 current=2 files/567513d5721cffcf9159177902bfb01b1f4bdf4234aff5ae393a0886562b9381 match=True
+Source/AERISFlightControl/AA: baseline=50 files/682a9ac35566b0bba2352e5c58b39aa5097d2a81bc2249baaf37d66eece6a312 current=50 files/682a9ac35566b0bba2352e5c58b39aa5097d2a81bc2249baaf37d66eece6a312 match=True
+Source/AERISFlightControl/Autopilot: baseline=10 files/8f73c77da92e63c08372de88bed459e79a13ae5cd5790f64554be8c568567e3e current=10 files/8f73c77da92e63c08372de88bed459e79a13ae5cd5790f64554be8c568567e3e match=True
+Source/AERISFlightControl/Protect: baseline=2 files/3cfb48f63ca8b3d07f1e4430c30b7a67c20cc064bf9fa656d060457440098bc1 current=2 files/3cfb48f63ca8b3d07f1e4430c30b7a67c20cc064bf9fa656d060457440098bc1 match=True
+Source/AERISFlightControl/FlightState: baseline=2 files/3913ad3d67079a8815b6acdb0aa3e8697ea38a15e33b60d85cee40de90a7baba current=2 files/3913ad3d67079a8815b6acdb0aa3e8697ea38a15e33b60d85cee40de90a7baba match=True
+Source/AERISFlightControl/Integrations: baseline=2 files/19c100cd0b871d2dc8b2d031427ff4dc9676ae2218ba4aa5e0ec61e2e91a3409 current=2 files/19c100cd0b871d2dc8b2d031427ff4dc9676ae2218ba4aa5e0ec61e2e91a3409 match=True
+
+Acceptance:
+- Gate 2 dedicated assertions: 39/39 PASS.
+- Pre-manifest complete regression: 57/57 scripts PASS.
+- Landing and Airfields tree hashes match Gate 1.
+- Native Mono/xbuild is not available in this execution environment.

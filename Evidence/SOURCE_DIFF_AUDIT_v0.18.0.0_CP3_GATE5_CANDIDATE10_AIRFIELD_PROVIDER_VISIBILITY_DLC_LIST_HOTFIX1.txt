@@ -1,0 +1,73 @@
+AERIS v0.18.0.0 CP3 Gate 5 Candidate 10 — SOURCE DIFF AUDIT
+Date: 2026-08-02
+
+USER-RUNTIME OBSERVATION / REQUEST:
+- SYSTEM > AIRFIELDS reported `KK: KERBAL KONSTRUCTS NOT DETECTED`, while cached/configured mod-airfield rows still appeared under PENDING.
+- Making History was reported installed by EXPANSIONS / DLC status, but Dessert Airfield was absent from the AIRFIELDS list.
+- Required behavior: airport-mod runways must disappear from AERIS UI/selection/ND whenever their current provider is absent; DLC airport must be represented when its DLC is installed.
+
+ROOT CAUSE:
+1. Cached/configured airfield definitions can retain historical ProviderDetected=true state. Presentation and selection paths did not require a current-generation provider witness, so removed airport mods could remain visible through cached/manual evidence.
+2. Dessert Airfield already exists in the stock/DLC foundation as a DiscoveryOnly DLC Runway definition, but it has no verified Runway/Direction geometry. Existing AIRFIELDS category rendering only emitted actual runway-direction rows, so the DLC facility itself had no visible row when runtime geometry was 0/1.
+
+CANDIDATE 10 REPAIR:
+- Every validation generation clears stale external-provider presence from retained/configured records and re-authorizes ProviderDetected only from records actually observed in the current provider scan.
+- A single IsAirfieldPresentationAvailable gate is applied to SYSTEM > AIRFIELDS, LAND selection, selectable direction APIs and both ND airfield/runway presentation paths.
+- Stock remains presentable. USERCFG remains locally authoritative. KK/SLE require current provider detection.
+- DLC presentation may be authorized by current DLC provider evidence or by verified Making History / Breaking Ground installation state.
+- Making History + Dessert Airfield + zero verified directions yields one non-selectable PENDING placeholder row (`RWY --`) explaining that geometry is unavailable/not calibrated.
+- No Dessert threshold coordinates were added or inferred. LAND ARM and ND runway geometry remain inhibited until normal provider geometry or manual A/B authority exists.
+- Woomerang remains LaunchPad and is intentionally excluded from the fixed-wing runway list.
+- Cached/manual evidence is retained on disk; provider absence only isolates it from live presentation/selection, so reinstalling a provider can restore the associated facility without discarding field calibration data.
+
+UI CONTRACT PRESERVATION:
+- Candidate 9 fixed-button geometry remains intact.
+- The only variable-size family remains SYSTEM > AIRFIELDS airport/runway selection/detail rows.
+- Candidate 10 adds the DLC pending placeholder to that same approved AIRFIELDS row family; no non-AIRFIELDS control gained content-derived sizing.
+- Candidate 9 4 Hz heavy SYSTEM/PRELOAD telemetry caching remains unchanged.
+
+CANDIDATE 9 -> CANDIDATE 10 FUNCTIONAL SOURCE CHANGES:
+- Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs
+  provider-generation normalization, presentation availability gate, DLC placeholder status, selection and presentation-scoped summary counts.
+- Source/AERISFlightControl/UI/AERISWindow.cs
+  AIRFIELDS/LAND filtering and non-operational DLC pending placeholder row.
+- Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+  provider availability filtering for navigation snapshots and facility/runway symbols.
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+- GameData/AERISFlightControl/AERISFlightControl.version
+- build_ubuntu.sh
+- README.md
+  Candidate 10 identity/documentation updates.
+- Tools/run_v01800_cp3_gate5_acceptance.py
+- Tools/selftest_v01800_cp3_gate5_candidate10_airfield_provider_visibility_dlc_list_hotfix1.py
+- Tools/selftest_v01800_cp2_responsive_airfields_ui_resize_hotfix1.py
+- Candidate 5/7/8/9 successor regression tests
+  Candidate 10 coverage and successor-aware historical assertions only.
+
+ADDED CONTRACT / TEST MATERIAL:
+- ACCEPTANCE_v0.18.0.0_CP3_GATE5_CANDIDATE10_AIRFIELD_PROVIDER_VISIBILITY_DLC_LIST_HOTFIX1.txt
+- Docs/ND_CP3_GATE5_CANDIDATE10_AIRFIELD_PROVIDER_VISIBILITY_DLC_LIST_HOTFIX1_TEST_CARD_v0.18.0.0_ja.md
+- Evidence/STATIC_ACCEPTANCE_v0.18.0.0_CP3_GATE5_CANDIDATE10.log
+- Evidence/STATIC_CSHARP_COMPILE_REGRESSION_v0.18.0.0_CP3_GATE5_CANDIDATE10.log
+- Evidence/STATIC_GATE5_INTEGRATED_ACCEPTANCE_v0.18.0.0_CP3_GATE5_CANDIDATE10.log
+- Evidence/SOURCE_DIFF_AUDIT_v0.18.0.0_CP3_GATE5_CANDIDATE10_AIRFIELD_PROVIDER_VISIBILITY_DLC_LIST_HOTFIX1.txt
+
+PROTECTED / BYTE-IDENTICAL HASHES FROM CANDIDATE 9:
+4302f89dcef74721cb0fa73804c438617ada808543d02bcc49189364ba22fe34  Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs
+f931ec7b381ebdf6323ae711c31d063256a961fa574995a650507c11b10cd032  Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs
+bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7  Source/AERISFlightControl/Autopilot/AERISBankDirector.cs
+c69bd788e2dc5a6c03fa0741213672de0892bff837406d2dcf8480f7b09e2253  Source/AERISFlightControl/Landing/AERISExpansionStatus.cs
+5ecc2734047330d137e9c340d7ba0e31aaaec11fc6240c39a67877e4f735b144  GameData/AERISFlightControl/Airfields/Defaults/01_Stock_DLC_Foundation.cfg
+b9fd40fd1a8fcf2cb6f5f33900c88b6b5e3b5b6c6d070c2544c2829de43a9347  GameData/AERISFlightControl/Airfields/Defaults/03_Field_Verified_Runway_Calibrations.cfg
+
+STATIC RESULTS:
+- Candidate 10 dedicated: 42/42 PASS
+- C# definite-assignment compile regression: 25/25 PASS
+- Responsive AIRFIELDS UI regression: 24/24 PASS
+- CP3 Gate 5 integrated successor acceptance: 20/20 scripts PASS
+- build_ubuntu.sh mode before packaging: executable (0755)
+
+RUNTIME STATUS:
+- STATIC PASS.
+- Native Ubuntu build + KSP runtime verification are still pending.
+- CP3 / Gate 5 MUST NOT be closed from static evidence alone.

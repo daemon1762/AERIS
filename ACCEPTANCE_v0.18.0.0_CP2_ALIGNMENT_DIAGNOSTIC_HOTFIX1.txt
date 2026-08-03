@@ -1,0 +1,44 @@
+AERIS Flight Control v0.18.0.0 DEV CP2 ALIGNMENT DIAGNOSTIC HOTFIX 1
+ACCEPTANCE RECORD
+Date: 2026-07-25 JST
+
+STATIC PACKAGE STATUS: PASS
+
+Acceptance runner:
+  PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_cp2_acceptance.py
+
+Result:
+  33 / 33 scripts PASS
+
+Focused results:
+  CP2 static package verification: 125 / 125 PASS
+  Alignment Diagnostic Hotfix 1 selftest: 32 / 32 PASS
+  Internal manifest verification: 3 / 3 PASS
+
+Safety/freeze verification:
+  BANK SHA-256:
+    bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7
+  BANK, HDG, PITCH, V/S, and Ground Stability Protection are byte-identical
+  to the Field Render Consistency Hotfix 1 baseline.
+  Legacy NAV remains absent.
+  LAND foundation remains control-free.
+  Source package contains no DLL, EXE, PDB, pyc, runtime cache, bin, or obj output.
+
+Accepted static scope:
+- Explicit Terrain RenderTarget DIRECT / FLIP presentation control
+- DIRECT default and persisted orientation setting
+- Two-second [ND/TERRAIN_ALIGN] coordinate/coverage diagnostics
+- ND CLR SEL with LAND DISARM and persisted explicit selection clear
+- Viewport-clipped runway/LOC funnel rendering
+- Persistent GS centerline and upper/lower funnel geometry
+- Visual fallback coverage separated from requested-quality coverage
+
+NOT EXECUTED IN CREATION ENVIRONMENT:
+- Native Mono/xbuild C# compilation against KSP 1.12.5 assemblies
+- KSP startup and scene lifecycle
+- Unity GPU RenderTexture presentation
+- Actual terrain/PQS alignment flight
+- Runtime LOC/GS/CLR SEL interaction
+- Long-duration scheduler and I/O test
+
+These remain mandatory user-environment gates. This static acceptance does not declare CP2 complete.

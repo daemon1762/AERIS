@@ -1,0 +1,54 @@
+AERIS Flight Control v0.17.0.8 acceptance record
+================================================
+
+Purpose
+-------
+Fix the v0.17.0.7 field-test cache-growth defect where volatile TSC Runway
+09/27 UniversalSpawnPoint UUIDs produced two additional failure hints on each
+KSP restart despite stable provider identity and successful 16/16 cache hits.
+
+Field evidence accepted
+-----------------------
+- v0.17.0.7 identity signature: 320C1BCE0E271905 across both KSP runs.
+- Provider records/runways: 157 / 67.
+- Database: 43 RWY / 86 APP; 13 RWY / 24 APP certified;
+  32 RWY / 62 APP failed.
+- First-run Manual reloads: MEASURED 0 / CACHE 16.
+- Second-run STARTUP and Manual: MEASURED 0 / CACHE 16.
+- Cache save fullRoundTrip=True.
+- Automatic archives verified and raw folders deleted.
+- Writer critical/continuous/verbose drops=0; writer failures=0.
+- Failure hint count grew 53 -> 55.
+- Schema-5 cache contained six TSC KK failure records (three UUID generations
+  per direction) which canonicalize to two records, i.e. four stale aliases.
+
+Implemented safety fix
+----------------------
+- Cache schema 6; schemas 5, 4 and 3 remain readable.
+- Shared AERISProviderIdentity stable-record identity.
+- Runtime UUID excluded whenever site/path/model stable fields exist.
+- UUID retained only as fallback when all stable provider fields are absent.
+- Source path included to prevent same-site/model cross-source collisions.
+- Certified and failure identities are canonicalized at load.
+- Alias collisions prefer higher survey algorithm, then newer round-trip UTC.
+- Embedded runway/direction stable IDs are rewritten to the canonical ID.
+- Survey algorithm 1670 and strict sub-metre compatibility limits unchanged.
+- AP/BANK, LAND observation-only boundary, legacy NAV removal and async archive
+  contracts unchanged.
+
+Static/model acceptance before manifest
+---------------------------------------
+15 / 15 scripts PASS
+734 / 734 assertions PASS
+
+Final package acceptance expectation
+------------------------------------
+16 / 16 scripts PASS
+737 / 737 assertions PASS
+(includes internal manifest verification)
+
+Unverified in this environment
+------------------------------
+- Native Mono/xbuild compilation against KSP 1.12.5 references.
+- Real KSP schema-5 to schema-6 migration and stable failure count=51.
+- Flight-scene regeneration and second-process cache regression on v0.17.0.8.

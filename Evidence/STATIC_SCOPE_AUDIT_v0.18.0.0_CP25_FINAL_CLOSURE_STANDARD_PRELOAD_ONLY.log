@@ -1,0 +1,28 @@
+PASS: Python syntax files — 132 files
+PASS: JSON/version parse — 1 files 
+PASS: XML parse — 1 files 
+PASS: bash -n build_ubuntu.sh
+PASS: Gate 0 static 194/194 — : ApplyAaNative
+PASS: LAND observation layer remains control-free: .SetArmed(
+PASS: legacy NAV remains absent: AERISNavDirector
+PASS: legacy NAV remains absent: AERISRouteSpeedPlanner
+PASS: legacy NAV remains absent: AERISTrajectoryPrimitives
+PASS: legacy NAV remains absent: TryStartNavLanding
+PASS: legacy NAV remains absent: NAV_LANDING
+PASS: all C# files have balanced lexical structure
+PASS: source package contains no compiled/cache artifact
+[v0.18.0.0 Gate 0 static verification] 194/194 PASS
+
+PASS: No binary/debug/cache artifacts
+PASS: FULL BOOST active runtime surface absent
+PASS: STANDARD required block path retained
+PASS: STANDARD required encode/write retained
+PASS: CP3 runtime implementation absent
+PASS: Protected tree Source/AERISFlightControl/AA — 79f241cf024a81851dd11e41f2ae38485554c6375318d8201b90383fbdbc1726
+PASS: Protected tree Source/AERISFlightControl/Autopilot — 49557b5408e8e5a9b406ac1f42b06abe6ea49c29e6f96d6f2d4ad880721e544c
+PASS: Protected tree Source/AERISFlightControl/Protect — 8d5a103421b2c88fc9f7c20414e87250dd00b265df2331adbfcd666001135438
+PASS: Protected tree Source/AERISFlightControl/FlightState — cb7cc694b8cee6935797b8050368a7e061249883d7a664483676678940cc080a
+PASS: Protected tree Source/AERISFlightControl/Landing — d99906b21e57e70e3d7ec4a592524d773ebd3a3a7a08c300076ba0395220abbe
+PASS: Protected tree Source/AERISFlightControl/Integrations — 43cac3baf7f5455d61feb26a5ce488336936a81a4e573d4d48a44a5bdb4c7efc
+PASS: Protected tree GameData/AERISFlightControl/Airfields — f9c83c5877a3c3234eee4057cae2f43935634a837d500f5d2636dce1ec593ac9
+[17/17 PASS]

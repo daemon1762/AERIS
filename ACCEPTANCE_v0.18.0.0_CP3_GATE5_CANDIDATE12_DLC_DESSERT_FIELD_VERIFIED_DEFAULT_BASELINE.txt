@@ -1,0 +1,23 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Integrated Acceptance Candidate 12 — DLC Dessert Field-Verified Default Baseline
+
+SCOPE
+- Promote the 2026-08-02 user field-surveyed Making History Dessert Airfield A/B absolute geodetic endpoints into shipped defaults.
+- Define the physical runway as reciprocal RWY 36/18 without provider inference.
+- Preserve non-Stock automatic-certification prohibition by carrying UserCalibrated certification basis explicitly.
+- Keep Candidate 10 DLC-install visibility gating and Candidate 11 manual correction/re-survey path.
+
+FIELD AUTHORITY
+A: LAT -6.5996178022817782 / LON -144.04085510339206 / ALT 822.713678324013 m
+B: LAT -6.4482987102736748 / LON -144.0382863593405 / ALT 822.6041791010648 m
+A->B: 0.9663908930630335 deg = RWY 36
+B->A: 180.96639089306302 deg = RWY 18
+Great-circle endpoint length (Kerbin R=600000 m): 1584.835184 m
+Coordinate frame: BODY_FIXED_GEODETIC_ABSOLUTE
+Authority: USER FIELD CALIBRATION / M29
+
+RUNTIME PENDING
+- Making History installed: Dessert appears as normal RWY 36/18, not RWY -- placeholder.
+- Making History absent: Dessert remains hidden.
+- RWY 36/18 geometry stays fixed at the field-surveyed A/B endpoints.
+- LAND remains NONE until explicit user selection.

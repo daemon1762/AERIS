@@ -1,0 +1,20 @@
+AERIS v0.18.0.0 CP2 Runway Presentation UI Hotfix 1
+Source-diff scope audit against RunwayMapLockHotfix2_PreloadFastPath1_CompileHotfix1
+
+Runtime implementation changed:
+- Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+  - Off-scale runway pointer now originates at the ownship map anchor.
+  - Positive ray/viewport intersection and in-bounds clamp.
+  - Off-scale pointer label includes runway name and current distance.
+  - Preview controls reordered to ARM / CENTER / APPROACH / SELECT / CLEAR.
+  - Adaptive short labels and width allocation prevent control overflow.
+  - CLEAR disarms LAND observation and clears the selected airport/runway.
+
+Identity/packaging changed:
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+- GameData/AERISFlightControl/AERISFlightControl.version
+- build_ubuntu.sh
+- README.md
+
+Tests updated/added only to preserve regression expectations for the new UI labels and identity.
+No AP, FBW, PROTECT control law, LAND control authority, terrain projection, or Preload Fast Path runtime implementation was modified.

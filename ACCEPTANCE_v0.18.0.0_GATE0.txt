@@ -1,0 +1,53 @@
+AERIS Flight Control v0.18.0.0 DEV Gate 0
+Physical Runway Federation + Adaptive Approach Registry Foundation
+
+FINAL SOURCE-TREE STATIC/MODEL ACCEPTANCE
+- 20 / 20 scripts PASS (includes manifest verification)
+- 860 / 860 assertions PASS
+- Internal file manifest: PASS
+- Independent ZIP extraction recheck: required before artifact publication
+- ZIP CRC: required before artifact publication
+
+PRIMARY GATE-0 RESULTS
+- Physical runway federation: 33 / 33 PASS
+- Schema-7 physical cache aliases: 17 / 17 PASS
+- Schema-7 identity migration: 27 / 27 PASS
+- Cache round-trip determinism: 23 / 23 PASS
+- Canonical source geometry cache: 46 / 46 PASS
+- Sub-metre provider-frame compatibility: 31 / 31 PASS
+- Adaptive approach foundation: 30 / 30 PASS
+
+INHERITED REGRESSIONS
+- Gate-0 static verification: 194 / 194 PASS
+- Build entrypoint verification: 11 / 11 PASS
+- Generation scheduler: 34 / 34 PASS
+- Async recording/archive: 67 / 67 PASS
+- PC1 golden: 45 / 45 PASS
+- STARTUP/cache/archive: 48 / 48 PASS
+- Runway registry identity: 20 / 20 PASS
+- Consensus runway: 15 / 15 PASS
+- Reload/LAND/ND contract: 53 / 53 PASS
+- Legacy NAV removal: 44 / 44 PASS
+- Foundation data/display: 40 / 40 PASS
+- FDI/ND user layout: 79 / 79 PASS
+- Manifest verification: 3 / 3 PASS
+
+SAFETY BOUNDARIES
+- AP/BANK reference law: byte-identical
+- LAND planning/display layer: no FlightCtrlState or throttle/steering authority
+- New NAV: not implemented and not advertised
+- Legacy NAV/fallback/Kramax runtime path: absent
+- Approach Registry: pure CPU, clone-only, not connected to control
+- Final localizer: runway centerline invariant
+- Missed-approach corridor: mandatory for available procedure
+
+NOT PERFORMED IN THIS ENVIRONMENT
+- Native C# compilation with Mono/xbuild
+- KSP/Unity reference assembly compilation
+- KSP 1.12.5 runtime execution
+- Real schema-6 to schema-7 cache migration
+- Scene-reload/restart physical-runway determinism field test
+- Real terrain/static obstacle snapshot generation
+- ND procedure rendering
+
+This is a development checkpoint, not a Release Candidate or field-approved build.

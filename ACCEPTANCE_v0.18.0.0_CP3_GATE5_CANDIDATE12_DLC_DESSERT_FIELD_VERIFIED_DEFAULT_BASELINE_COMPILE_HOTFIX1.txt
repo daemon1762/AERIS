@@ -1,0 +1,15 @@
+AERIS Flight Control v0.18.0.0
+CP3 Gate 5 Candidate 12 DLC Dessert Field-Verified Default Baseline — Compile Hotfix 1
+
+Purpose:
+- Fix inherited Candidate 11/12 regression tests that incorrectly required their historical UiCheckpoint to remain the current build identity.
+- Preserve all Candidate 12 runtime/source behavior and the 41 physical runway / 82 reciprocal direction field-verified baseline.
+
+Root cause:
+Candidate 11 selftest asserted that Candidate 11 UiCheckpoint must be the current identity. Once Candidate 12 legitimately became current, the inherited selftest failed before native compilation, even though Candidate 12's own 58/58 regression passed. Candidate 12's identity assertion is converted to the same successor-safe lineage contract to prevent the next valid successor from repeating this failure.
+
+Acceptance:
+- Historical feature tests assert retained lineage markers, not ownership of current UiCheckpoint.
+- New Compile Hotfix 1 test owns exact current build/UI identity.
+- Gate 5 full static regression passes.
+- No operational C# logic changed except generated version identity.

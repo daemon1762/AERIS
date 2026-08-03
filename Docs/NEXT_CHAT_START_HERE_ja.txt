@@ -1,0 +1,39 @@
+次のチャットへの開始指示
+
+AERIS Flight Control v0.18.0.0 DEV CP2 FIELD RENDER CONSISTENCY HOTFIX 1を継続する。
+
+最初に次を全て読むこと。
+1. Docs/HANDOVER_AERIS13_v0.18.0.0_CP2_FIELD_RENDER_HOTFIX1_ja.md
+2. Docs/ROADMAP_CURRENT_AERIS13_v0.18.0.0_ja.md
+3. Docs/RUNTIME_EVIDENCE_ANALYSIS_2026-07-24_ja.md
+4. Docs/CODE_AUDIT_v0.18.0.0_CP2_FIELD_RENDER_HOTFIX1_ja.md
+5. Docs/CP2_FIELD_RENDER_CONSISTENCY_HOTFIX_1_v0.18.0.0_ja.md
+6. Docs/ND_CP2_PRELOAD_TERRAIN_TEST_CARD_v0.18.0.0_ja.md
+7. Docs/AERIS13_Baseline/ 以下の全9文書
+
+現在の前提：
+- AP完成済み・凍結。
+- BANKは20°捕捉、zero roll rate、no overshoot、no micro-wobbleをgolden基準として凍結。
+- LANDは観測・Registry・認証・表示基盤のみ。操縦権限なし。
+- NAVは未搭載・新規開発BLOCKED。
+- 修正前ログのCP2 Field Render gateはFAIL。
+- 本Hotfixは静的検証済みでも、修正後の実KSP試験は未実施。
+- CP2実機PASS前にCP3または新NAVへ進まない。
+
+次の作業：
+1. ZIP SHA確認。
+2. CP2 acceptance。
+3. Ubuntu native Mono/KSP build。
+4. 試験カードどおりRange／mode／Preview→Final／AUTO／長時間試験。
+5. 動画、AERISログ、KSP.log、Performance CSVを時刻同期して合否判定。
+
+滑走路について：
+- startup commit一回、databaseRevision=1、43 RWY / 86 APP登録を今回確認。
+- 手動RELOAD二回は未証明。
+- certified 13は最終安全認証ではない。
+- AERIS13の41施設個別対応を継承する。
+- CP3では方向別3.0～6.0°を0.1°刻みで評価し、最小の安全角を採用する。
+- 3D障害回廊、人工障害物、missed approach、機体適合性を同時に成立させる。
+
+修正前ログを修正後PASSの証拠として扱わないこと。
+

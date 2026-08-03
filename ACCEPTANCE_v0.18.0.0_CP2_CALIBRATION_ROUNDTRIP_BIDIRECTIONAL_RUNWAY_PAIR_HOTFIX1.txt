@@ -1,0 +1,81 @@
+AERIS Flight Control v0.18.0.0 DEV CP2
+Calibration Round-Trip Hotfix 1 / Bidirectional Runway Pair Hotfix 1
+Acceptance Record — 2026-07-26
+
+STATUS
+- CP2: OPEN pending native Mono/xbuild and KSP field acceptance.
+- CP3/new NAV: NOT AUTHORIZED.
+- Packaging environment native Mono/xbuild/KSP assemblies: NOT AVAILABLE.
+- User-observed previous field build: manual calibration SAVE FAIL before this hotfix.
+
+FIELD FAILURE DIAGNOSIS
+- AERISFlightControl(19).zip and Video_2026-07-26_16-45-43.mkv showed:
+  CALIBRATION SAVE FAILED: InvalidDataException — temporary calibration file verification failed
+- MARK A/B UI existed, but USER calibration count remained zero and no durable
+  UserRunwayCalibrations.cfg was produced.
+
+ROOT CAUSE
+- ConfigNode.Save/Load can return a named root, a named child below a generic file
+  root, or direct values/nodes on a generic root under native KSP/Mono.
+- Manual runway calibration verification accepted too narrow a root shape and
+  rejected a semantically valid saved file.
+- The persistence contract also did not explicitly guarantee that two marked
+  endpoints represented one physical runway with two reciprocal operational
+  directions.
+
+FIX — DURABLE CALIBRATION ROUND-TRIP
+- Resolve all three supported ConfigNode root shapes on load and verification.
+- Read back and validate every record from the temporary file before commit.
+- Read back and validate the committed final file after atomic move.
+- Restore the prior .bak if committed readback fails.
+- Persist calibration schema 3 while retaining schema 1/2 migration reads.
+- Validate record count, endpoint state, mismatch state and reciprocal-pair data.
+
+FIX — ONE PHYSICAL RUNWAY, TWO RECIPROCAL DIRECTIONS
+- MARK A and MARK B persist one physical two-endpoint runway.
+- Automatically generate A -> B and B -> A directions.
+- Swap Threshold/OppositeThreshold exactly between the two directions.
+- Derive headings 180 degrees apart and generate reciprocal runway numbers.
+- Require distinct Stable IDs for the two operational directions.
+- Publish both direction candidates for independent approach-terrain validation.
+- Do not bypass direction-specific terrain/approach safety; one side may fail while
+  the opposite side remains certifiable.
+- Emit explicit save/readback and reciprocal-pair runtime evidence.
+
+SAFETY BOUNDARIES
+- No airport-specific production branch is introduced.
+- The same pair generation applies to every manual-calibrated airport.
+- No legacy NAV or new NAV implementation is added.
+- No LAND or flight-control authority is added.
+- No user-owned UserRunwayCalibrations.cfg is shipped.
+- Removed CP2 runway debug display/settings/log paths remain absent.
+
+STATIC ACCEPTANCE
+- Calibration Round-Trip Hotfix 1 regression: 21/21 PASS.
+- Bidirectional Runway Pair Hotfix 1 regression: 29/29 PASS.
+- Generic Placement Final Candidate 3 regression: 195/195 PASS.
+- Shared C# definite-assignment regression: 25/25 PASS.
+- Full CP2 suite without manifest: 48/48 scripts PASS.
+
+FINAL PACKAGE INTEGRITY
+- Full CP2 suite with internal manifest: 49/49 scripts PASS.
+- MANIFEST_SHA256.txt file set and every hash: PASS.
+- ZIP CRC and independent clean-extraction acceptance are required and recorded
+  in external package evidence generated after this acceptance record.
+
+FIELD ACCEPTANCE REQUIRED
+- Native Mono/xbuild PASS.
+- Build identity ends in:
+  CALIBRATION ROUND-TRIP HOTFIX 1 BIDIRECTIONAL RUNWAY PAIR HOTFIX 1
+- MARK A/B completes without CALIBRATION SAVE FAILED.
+- Save log contains fullRoundTrip=True, committedReadback=True and
+  reciprocalPairSchema=3.
+- Reload generates two reciprocal directions with swapped endpoints, headings
+  180 degrees apart and distinct Stable IDs.
+- Both directions are independently selectable when their individual approach
+  validation passes.
+- Restart reloads schema-3 calibration and regenerates the pair.
+- Kola and at least one other manual-calibrated airport pass the same generic path.
+- Auto Preload COMPLETE / PROMOTE / restart inheritance pass.
+- No runtime ERROR/exception, control-authority regression or removed debug path.
+- CP2 remains OPEN until every field gate passes.
