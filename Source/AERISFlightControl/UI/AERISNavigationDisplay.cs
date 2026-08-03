@@ -435,8 +435,10 @@ namespace AERISFlightControl.UI
                 if (landActive)
                 {
                     if (!planMode)
-                        DrawLandingPlan(plan, direction, observation, presentedRange,
-                            presentedHeading, presentedTrackUp, scale);
+                        DrawLandingPlan(plan, direction, observation, vessel,
+                            presentedCenterLatitudeDeg, presentedCenterLongitudeDeg,
+                            presentedRange, presentedHeading, presentedTrackUp,
+                            presentedAnchorV, scale);
                     DrawLandingProfile(profile, direction, observation, scale);
                 }
                 DrawAircraftSymbol(aircraftPoint, scale);
@@ -1530,12 +1532,21 @@ namespace AERISFlightControl.UI
         {
             if (!settings.NavigationDisplayTrackVectorEnabled || vessel == null ||
                 vessel.mainBody == null || planMode || vessel.srfSpeed < 1.0) return;
+
+            // CP3.75 Candidate 2: all vector geometry is map-center-relative. Candidate 1
+            // projected the vector endpoint as though ownship were always at the map center,
+            // while the line start used the actual ownship point. A latched GPU FRONT therefore
+            // made the vector breathe/collapse as ownship moved away from the committed center.
+            double ownEast, ownNorth;
+            ToLocalMeters(vessel.mainBody, centerLatitudeDeg, centerLongitudeDeg,
+                vessel.latitude, vessel.longitude, out ownEast, out ownNorth);
+
             double speed = Math.Max(1.0, vessel.srfSpeed);
-            double seconds = Math.Max(5.0, Math.Min(60.0, range * 0.38 / speed));
-            double distance = Math.Min(range * 0.42, speed * seconds);
+            const double horizonSeconds = 60.0;
+            double distance = Math.Min(range * 0.42, speed * horizonSeconds);
             double trackRad = cachedFallbackMapHeading * Math.PI / 180.0;
-            double east = Math.Sin(trackRad) * distance;
-            double north = Math.Cos(trackRad) * distance;
+            double east = ownEast + Math.Sin(trackRad) * distance;
+            double north = ownNorth + Math.Cos(trackRad) * distance;
             Vector2 end;
             TryMapPoint(east, north, range, heading, trackUp, plot, anchorV, out end);
             end = ClampToRect(end, plot, 3f);
@@ -1544,10 +1555,10 @@ namespace AERISFlightControl.UI
             int[] tickSeconds = { 15, 30, 45, 60 };
             for (int i = 0; i < tickSeconds.Length; i++)
             {
-                if (tickSeconds[i] > seconds + 0.5) continue;
-                double tickDistance = Math.Min(distance, speed * tickSeconds[i]);
-                double tickEast = Math.Sin(trackRad) * tickDistance;
-                double tickNorth = Math.Cos(trackRad) * tickDistance;
+                double tickDistance = speed * tickSeconds[i];
+                if (tickDistance > distance + 1.0) continue;
+                double tickEast = ownEast + Math.Sin(trackRad) * tickDistance;
+                double tickNorth = ownNorth + Math.Cos(trackRad) * tickDistance;
                 Vector2 tick;
                 if (!TryMapPoint(tickEast, tickNorth, range, heading, trackUp,
                     plot, anchorV, out tick)) continue;
@@ -1939,8 +1950,9 @@ namespace AERISFlightControl.UI
         }
 
         void DrawLandingPlan(Rect plot, AERISRunwayDirectionDefinition direction,
-            AERISRunwayObservation observation, float range, float mapHeading,
-            bool mapTrackUp, float scale)
+            AERISRunwayObservation observation, Vessel vessel,
+            double centerLatitudeDeg, double centerLongitudeDeg, float range,
+            float mapHeading, bool mapTrackUp, float anchorV, float scale)
         {
             if (direction == null || observation == null ||
                 !direction.HeadingMatchesGeometry ||
@@ -1952,14 +1964,22 @@ namespace AERISFlightControl.UI
                 return;
             }
             float heading = mapHeading;
+            double ownEast = 0.0, ownNorth = 0.0;
+            if (vessel != null && vessel.mainBody != null)
+                ToLocalMeters(vessel.mainBody, centerLatitudeDeg, centerLongitudeDeg,
+                    vessel.latitude, vessel.longitude, out ownEast, out ownNorth);
+            double thresholdEast = ownEast + observation.ThresholdEastMeters;
+            double thresholdNorth = ownNorth + observation.ThresholdNorthMeters;
+            double oppositeEast = ownEast + observation.OppositeEastMeters;
+            double oppositeNorth = ownNorth + observation.OppositeNorthMeters;
             Vector2 threshold, opposite;
-            // TryMapPoint always returns the projected point even when it is outside the
-            // viewport. Do not abort LAND geometry merely because one runway endpoint is
-            // off-screen; clip every segment against the ND rectangle instead.
-            TryMapPoint(observation.ThresholdEastMeters, observation.ThresholdNorthMeters,
-                range, heading, mapTrackUp, plot, out threshold);
-            TryMapPoint(observation.OppositeEastMeters, observation.OppositeNorthMeters,
-                range, heading, mapTrackUp, plot, out opposite);
+            // Observation coordinates are ownship-relative. Convert them to the exact
+            // presented map-center authority before projection so a latched FRONT cannot
+            // make the runway/localizer fan stretch as ownship moves across the old map.
+            TryMapPoint(thresholdEast, thresholdNorth, range, heading, mapTrackUp,
+                plot, anchorV, out threshold);
+            TryMapPoint(oppositeEast, oppositeNorth, range, heading, mapTrackUp,
+                plot, anchorV, out opposite);
             DrawClippedLine(plot, threshold, opposite, RunwayColor,
                 Mathf.Max(2f, 4f * scale));
             if (!observation.OnApproachSide)
@@ -1970,29 +1990,29 @@ namespace AERISFlightControl.UI
                 return;
             }
 
-            double runwayEast = observation.OppositeEastMeters - observation.ThresholdEastMeters;
-            double runwayNorth = observation.OppositeNorthMeters - observation.ThresholdNorthMeters;
+            double runwayEast = oppositeEast - thresholdEast;
+            double runwayNorth = oppositeNorth - thresholdNorth;
             double runwayLength = Math.Sqrt(runwayEast * runwayEast + runwayNorth * runwayNorth);
             if (runwayLength > 1.0)
             {
                 double unitEast = runwayEast / runwayLength;
                 double unitNorth = runwayNorth / runwayLength;
                 double captureDistance = Math.Min(direction.LocalizerCaptureDistanceMeters, range);
-                double farEast = observation.ThresholdEastMeters - unitEast * captureDistance;
-                double farNorth = observation.ThresholdNorthMeters - unitNorth * captureDistance;
+                double farEast = thresholdEast - unitEast * captureDistance;
+                double farNorth = thresholdNorth - unitNorth * captureDistance;
                 double halfFunnel = Math.Tan(direction.LocalizerCaptureAngleDeg * Math.PI / 180.0) *
                     captureDistance;
                 double perpEast = unitNorth;
                 double perpNorth = -unitEast;
                 Vector2 farCenter, farLeft, farRight;
-                TryMapPoint(farEast, farNorth, range, heading,
-                    mapTrackUp, plot, out farCenter);
+                TryMapPoint(farEast, farNorth, range, heading, mapTrackUp,
+                    plot, anchorV, out farCenter);
                 TryMapPoint(farEast + perpEast * halfFunnel,
-                    farNorth + perpNorth * halfFunnel, range, heading,
-                    mapTrackUp, plot, out farLeft);
+                    farNorth + perpNorth * halfFunnel, range, heading, mapTrackUp,
+                    plot, anchorV, out farLeft);
                 TryMapPoint(farEast - perpEast * halfFunnel,
-                    farNorth - perpNorth * halfFunnel, range, heading,
-                    mapTrackUp, plot, out farRight);
+                    farNorth - perpNorth * halfFunnel, range, heading, mapTrackUp,
+                    plot, anchorV, out farRight);
                 Color color = observation.LocalizerGeometryEligible ? GuidanceColor :
                     new Color(0.28f, 0.68f, 0.92f, 1f);
                 DrawClippedLine(plot, threshold, farCenter, color,

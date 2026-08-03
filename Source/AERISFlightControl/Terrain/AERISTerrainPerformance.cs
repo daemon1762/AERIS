@@ -127,10 +127,10 @@ namespace AERISFlightControl.Terrain
         {
             get
             {
-                if (landDetailActive && settings != null &&
-                    settings.TerrainLandRuntimeQualityEnabled) return Profiles[3];
-                int index = QualityIndexFromSettings();
-                return Profiles[Mathf.Clamp(index, 0, MaximumAutomaticQualityIndex)];
+                // CP3.75 Candidate 2: Golden LOW is the single runtime quality authority.
+                // Legacy MEDIUM/HIGH/LAND profiles remain defined only for source/history
+                // compatibility and are intentionally unreachable at runtime.
+                return Profiles[0];
             }
         }
 
@@ -170,11 +170,11 @@ namespace AERISFlightControl.Terrain
         }
         internal bool QualityIsAutomatic
         {
-            get { return settings == null || settings.TerrainQualityMode == AERISTerrainQualityMode.Automatic; }
+            get { return false; }
         }
         internal bool UpdateRateIsAutomatic
         {
-            get { return settings == null || settings.NavigationDisplayUpdateMode == AERISNavigationDisplayUpdateMode.Automatic; }
+            get { return false; }
         }
 
         internal float EffectiveTerrainFps
@@ -183,7 +183,7 @@ namespace AERISFlightControl.Terrain
             {
                 AERISTerrainPerformanceProfile profile = ActiveProfile;
                 float requested = ResolveRequestedUpdateFps();
-                float layer = UpdateRateIsAutomatic ? AutoTerrainFps() : Mathf.Max(1f, requested / 6f);
+                float layer = Mathf.Max(1f, requested / 6f);
                 return Mathf.Clamp(Mathf.Min(layer, profile.MaximumTerrainFps), 0.5f, 12f);
             }
         }
@@ -194,8 +194,7 @@ namespace AERISFlightControl.Terrain
             {
                 AERISTerrainPerformanceProfile profile = ActiveProfile;
                 float requested = ResolveRequestedUpdateFps();
-                float layer = UpdateRateIsAutomatic ? AutoNavigationFps() : requested;
-                return Mathf.Clamp(Mathf.Min(layer, profile.MaximumNavigationFps), 5f, 60f);
+                return Mathf.Clamp(Mathf.Min(requested, profile.MaximumNavigationFps), 5f, 60f);
             }
         }
 
@@ -204,14 +203,9 @@ namespace AERISFlightControl.Terrain
         {
             get
             {
-                switch (automaticRateTier)
-                {
-                    case 0: return 0.5f;
-                    case 1: return 1f;
-                    case 2: return 2f;
-                    case 3: return 3f;
-                    default: return 5f;
-                }
+                // Keep tile planning independent from the user-facing ND cadence.
+                // The former AUTO tier state is retired in Candidate 2.
+                return 2f;
             }
         }
 
@@ -221,8 +215,7 @@ namespace AERISFlightControl.Terrain
             {
                 AERISTerrainPerformanceProfile profile = ActiveProfile;
                 float requested = ResolveRequestedUpdateFps();
-                float layer = UpdateRateIsAutomatic ? AutoSymbologyFps() : requested;
-                return Mathf.Clamp(Mathf.Min(layer, profile.MaximumSymbologyFps), 10f, 60f);
+                return Mathf.Clamp(Mathf.Min(requested, profile.MaximumSymbologyFps), 10f, 60f);
             }
         }
 
@@ -309,6 +302,16 @@ namespace AERISFlightControl.Terrain
 
         void EvaluateAdaptiveState()
         {
+            // CP3.75 Candidate 2 retires user/AUTO quality and update-rate adaptation.
+            // Telemetry collection remains active, but runtime presentation authority is
+            // fixed to Golden LOW + 10 Hz so measured load cannot silently change quality.
+            if (!QualityIsAutomatic && !UpdateRateIsAutomatic)
+            {
+                overloadSeconds = 0f;
+                recoverySeconds = 0f;
+                workerBacklogged = false;
+                return;
+            }
             if (ExternalMaintenanceHold)
             {
                 overloadSeconds = 0f;
@@ -400,31 +403,12 @@ namespace AERISFlightControl.Terrain
 
         int QualityIndexFromSettings()
         {
-            if (settings == null) return automaticQualityIndex;
-            switch (settings.TerrainQualityMode)
-            {
-                case AERISTerrainQualityMode.Low: return 0;
-                case AERISTerrainQualityMode.Medium: return 1;
-                case AERISTerrainQualityMode.High: return 2;
-                // Legacy/stray LAND is a base-quality HIGH fallback. The central
-                // Gate 3 policy alone may activate Profiles[3].
-                case AERISTerrainQualityMode.Land: return 2;
-                default: return automaticQualityIndex;
-            }
+            return 0;
         }
 
         float ResolveRequestedUpdateFps()
         {
-            if (settings == null) return AutoSymbologyFps();
-            switch (settings.NavigationDisplayUpdateMode)
-            {
-                case AERISNavigationDisplayUpdateMode.Fps10: return 10f;
-                case AERISNavigationDisplayUpdateMode.Fps20: return 20f;
-                case AERISNavigationDisplayUpdateMode.Fps30: return 30f;
-                case AERISNavigationDisplayUpdateMode.Fps45: return 45f;
-                case AERISNavigationDisplayUpdateMode.Fps60: return 60f;
-                default: return AutoSymbologyFps();
-            }
+            return AERISSettings.FixedNavigationDisplayUpdateHz;
         }
 
         float AutoTerrainFps()

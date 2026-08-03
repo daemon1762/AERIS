@@ -1,0 +1,27 @@
+AERIS Flight Control v0.18.0.0
+CP3.75 ND RUNTIME STABILIZATION / SETTINGS CONSOLIDATION CANDIDATE 2 — STATIC ACCEPTANCE
+
+SCOPE
+- Preserve Candidate1 late-CP3 Golden cartographic quality.
+- Fix high-speed presentation forced-recovery amplification.
+- Fix map-center authority for track vector and LAND localizer/funnel geometry.
+- Consolidate terrain quality to Golden LOW and ND presentation cadence to 10 Hz.
+- Preserve later non-ND AERIS20 functionality.
+
+STATIC TARGETS
+- Build identity updated to Candidate2.
+- Terrain quality runtime authority: LOW only.
+- Terrain quality UI: disabled LOW button only.
+- ND update selector removed; fixed 10 Hz internal authority.
+- AUTO quality/rate adaptation cannot alter runtime presentation settings.
+- Latched complete FRONT is presented before last-resort forced recovery.
+- Candidate1 240 m-at-160km direct-center tolerance removed.
+- Track vector endpoint/ticks include ownship offset from presented map center.
+- Track vector uses 60 s horizon with range clipping; 30 s tick survives 160 km / 2100 m/s.
+- LAND threshold/opposite/funnel coordinates include ownship offset from presented map center.
+- Protected non-ND hash baseline remains unchanged.
+- FDR/CVR verified ZIP retention remains present.
+- CP2 C# static regression suite passes.
+- Source/package manifests pass after packaging.
+
+NATIVE xbuild and KSP runtime remain mandatory before runtime PASS declaration.

@@ -126,7 +126,8 @@ namespace AERISFlightControl.Settings
         internal bool LandSectionExpanded = true;
         internal const int CurrentAirfieldsUiLayoutRevision = 2;
         internal int AirfieldsUiLayoutRevision = CurrentAirfieldsUiLayoutRevision;
-        internal const int CurrentTerrainQualityModelRevision = 2;
+        internal const int CurrentTerrainQualityModelRevision = 3;
+        internal const float FixedNavigationDisplayUpdateHz = 10f;
         internal int TerrainQualityModelRevision = CurrentTerrainQualityModelRevision;
         internal const int CurrentDisplayPolicyRevision = 1;
         internal int DisplayPolicyRevision = CurrentDisplayPolicyRevision;
@@ -144,16 +145,15 @@ namespace AERISFlightControl.Settings
         internal bool NavigationDisplayTrackUp = true;
         internal bool NavigationDisplayAutoRange = false;
         internal float NavigationDisplayManualRangeMeters = 20000f;
-        // Terrain quality and display update cadence can be fixed by the user or
-        // adapted at runtime from measured frame/AERIS workload. These affect only
-        // ND presentation and never alter KSP graphics or flight-control settings.
-        internal AERISTerrainQualityMode TerrainQualityMode = AERISTerrainQualityMode.Automatic;
-        // Gate 3 separates permission from activation. This developer-only capability
-        // never activates LAND detail by itself; LAND ARM / Approach / Auto Landing
-        // demand must also be present in the central activation policy.
+        // CP3.75 Candidate 2 consolidation: terrain quality is fixed to Golden LOW and
+        // ND presentation cadence is fixed to 10 Hz. Legacy enum values remain readable
+        // only to migrate older user CFG files without breaking compatibility.
+        internal AERISTerrainQualityMode TerrainQualityMode = AERISTerrainQualityMode.Low;
+        // Retained for backward CFG/source compatibility only. Candidate 2 does not expose
+        // or activate a separate LAND terrain-quality preset.
         internal bool TerrainLandRuntimeQualityEnabled;
         internal AERISNavigationDisplayUpdateMode NavigationDisplayUpdateMode =
-            AERISNavigationDisplayUpdateMode.Automatic;
+            AERISNavigationDisplayUpdateMode.Fps10;
         internal AERISTerrainDisplayMode TerrainDisplayMode = AERISTerrainDisplayMode.Automatic;
         internal AERISTerrainGpuMode TerrainGpuMode = AERISTerrainGpuMode.Automatic;
         internal AERISTerrainRenderTargetOrientation TerrainRenderTargetOrientation =
@@ -352,39 +352,30 @@ namespace AERISFlightControl.Settings
                     node.GetValue("terrainQualityMode") : string.Empty;
                 bool rawLandCapability = ReadBool(node,
                     "terrainLandRuntimeQualityEnabled", false);
-                if (terrainQualityRevision < CurrentTerrainQualityModelRevision)
+                AERISTerrainQualityMode loadedTerrainQuality = ReadTerrainQualityMode(node,
+                    "terrainQualityMode", AERISTerrainQualityMode.Low);
+                AERISNavigationDisplayUpdateMode loadedNdUpdate =
+                    ReadNavigationDisplayUpdateMode(node, "navigationDisplayUpdateMode",
+                        AERISNavigationDisplayUpdateMode.Fps10);
+
+                // CP3.75 Candidate 2 settings consolidation. LOW is the only active terrain
+                // quality authority and preserves the late-CP3 cartographic presentation.
+                // Legacy AUTO/MEDIUM/HIGH/LAND values remain parseable only so old CFG files
+                // migrate cleanly. ND presentation cadence is fixed internally at 10 Hz.
+                settings.TerrainQualityMode = AERISTerrainQualityMode.Low;
+                settings.TerrainLandRuntimeQualityEnabled = false;
+                settings.TerrainQualityModelRevision = CurrentTerrainQualityModelRevision;
+                settings.NavigationDisplayUpdateMode = AERISNavigationDisplayUpdateMode.Fps10;
+                if (terrainQualityRevision != CurrentTerrainQualityModelRevision ||
+                    loadedTerrainQuality != AERISTerrainQualityMode.Low ||
+                    rawLandCapability ||
+                    loadedNdUpdate != AERISNavigationDisplayUpdateMode.Fps10)
                 {
-                    bool gate2LandProfile = terrainQualityRevision >= 1 &&
-                        string.Equals((rawTerrainQuality ?? string.Empty).Trim(), "LAND",
-                            StringComparison.OrdinalIgnoreCase);
-                    settings.TerrainQualityMode = terrainQualityRevision < 1 ?
-                        MigrateLegacyTerrainQualityMode(rawTerrainQuality,
-                            AERISTerrainQualityMode.Automatic) :
-                        ReadTerrainQualityMode(node, "terrainQualityMode",
-                            AERISTerrainQualityMode.Automatic);
-                    if (settings.TerrainQualityMode == AERISTerrainQualityMode.Land)
-                        settings.TerrainQualityMode = AERISTerrainQualityMode.High;
-                    settings.TerrainLandRuntimeQualityEnabled =
-                        rawLandCapability || gate2LandProfile;
-                    settings.TerrainQualityModelRevision =
-                        CurrentTerrainQualityModelRevision;
                     saveSettingsMigration = true;
-                    AERISLogger.Info("[CP2.5/TERRAIN_QUALITY] migrated setting '" +
-                        rawTerrainQuality + "' -> base=" + settings.TerrainQualityMode +
-                        "; LAND capability=" + settings.TerrainLandRuntimeQualityEnabled +
-                        "; revision=" + settings.TerrainQualityModelRevision + ".");
+                    AERISLogger.Info("[CP3.75/ND_POLICY] consolidated legacy ND settings: " +
+                        "terrain='" + rawTerrainQuality + "' -> LOW; LAND capability -> OFF; " +
+                        "ND update=" + loadedNdUpdate + " -> 10 Hz.");
                 }
-                else
-                {
-                    settings.TerrainQualityModelRevision = terrainQualityRevision;
-                    settings.TerrainQualityMode = ReadTerrainQualityMode(node,
-                        "terrainQualityMode", AERISTerrainQualityMode.Automatic);
-                    if (settings.TerrainQualityMode == AERISTerrainQualityMode.Land)
-                        settings.TerrainQualityMode = AERISTerrainQualityMode.High;
-                    settings.TerrainLandRuntimeQualityEnabled = rawLandCapability;
-                }
-                settings.NavigationDisplayUpdateMode = ReadNavigationDisplayUpdateMode(node,
-                    "navigationDisplayUpdateMode", AERISNavigationDisplayUpdateMode.Automatic);
                 settings.TerrainDisplayMode = ReadEnum(node, "terrainDisplayMode",
                     AERISTerrainDisplayMode.Automatic);
                 settings.TerrainGpuMode = ReadEnum(node, "terrainGpuMode",
@@ -585,11 +576,11 @@ namespace AERISFlightControl.Settings
             NavigationDisplayTrackUp = true;
             NavigationDisplayAutoRange = false;
             NavigationDisplayManualRangeMeters = 20000f;
-            TerrainQualityMode = AERISTerrainQualityMode.Automatic;
+            TerrainQualityMode = AERISTerrainQualityMode.Low;
             TerrainLandRuntimeQualityEnabled = false;
             TerrainQualityModelRevision = CurrentTerrainQualityModelRevision;
             DisplayPolicyRevision = CurrentDisplayPolicyRevision;
-            NavigationDisplayUpdateMode = AERISNavigationDisplayUpdateMode.Automatic;
+            NavigationDisplayUpdateMode = AERISNavigationDisplayUpdateMode.Fps10;
             TerrainDisplayMode = AERISTerrainDisplayMode.Automatic;
             TerrainGpuMode = AERISTerrainGpuMode.Automatic;
             TerrainRenderTargetOrientation = AERISTerrainRenderTargetOrientation.Direct;
@@ -813,9 +804,11 @@ namespace AERISFlightControl.Settings
                     System.Globalization.CultureInfo.InvariantCulture));
                 node.AddValue("terrainQualityModelRevision",
                     CurrentTerrainQualityModelRevision);
+                TerrainQualityMode = AERISTerrainQualityMode.Low;
+                TerrainLandRuntimeQualityEnabled = false;
+                NavigationDisplayUpdateMode = AERISNavigationDisplayUpdateMode.Fps10;
                 node.AddValue("terrainQualityMode", TerrainQualityMode);
-                node.AddValue("terrainLandRuntimeQualityEnabled",
-                    TerrainLandRuntimeQualityEnabled);
+                node.AddValue("terrainLandRuntimeQualityEnabled", false);
                 node.AddValue("navigationDisplayUpdateMode", NavigationDisplayUpdateMode);
                 node.AddValue("terrainDisplayMode", TerrainDisplayMode);
                 node.AddValue("terrainGpuMode", TerrainGpuMode);

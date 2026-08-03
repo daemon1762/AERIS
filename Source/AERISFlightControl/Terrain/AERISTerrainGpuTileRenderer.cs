@@ -138,7 +138,7 @@ namespace AERISFlightControl.Terrain
         // is oversized.
         const float HistoryOverscanScale = 1.35f;
         const float MaximumHistorySurfaceRangeMeters = 250000f;
-        const float ProjectionRefreshAgeSeconds = 2.5f;
+        const float ProjectionRefreshAgeSeconds = 0.50f;
         const float ProjectionRefreshHeadingDeg = 8f;
         const float ReadyBuildingViolationSeconds = 1.0f;
 
@@ -503,7 +503,7 @@ namespace AERISFlightControl.Terrain
                 backRenderFrames++;
                 lastBackAttemptViewGeneration = visible.ViewGeneration;
                 lastBackAttemptContentRevision = gpuContentRevision;
-                nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.20f;
+                nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f;
                 foundationComplete = rendered && visible.FoundationComplete &&
                     lastBackFoundationCoverage >= 0.999f &&
                     readyFar >= visible.FarFoundationCount;
@@ -550,9 +550,30 @@ namespace AERISFlightControl.Terrain
                 lastVisualCoverageFraction = 0f;
             }
 
-            // Geometry integrity invariant: temporal GUI-matrix reprojection is quarantined.
-            // If the exact FAR foundation is available and the current FRONT is not an exact
-            // projection match, render the current projection now and present it directly.
+            // CP3.75 Candidate 2 presentation continuity. Never force a full BACK render
+            // merely because ownship outran the old Candidate1 exact-center tolerance. The
+            // scheduled refresh path above owns normal map recentering. Until it commits, keep
+            // the last complete FRONT visible and publish that FRONT projection so terrain,
+            // ownship, runway, vector and LAND geometry share one coordinate authority.
+            if (!present && CanPresentLatchedFront(visible, vessel))
+            {
+                if (frontTerrainGeneration != visible.TerrainGeneration)
+                    generationBridgeFrames++;
+                PresentFrontDirect(plot, frontOrientation);
+                lastFrontBufferPresented = true;
+                lastFrontBufferLatched = true;
+                CapturePresentedProjection(true);
+                lastVisualCoverageFraction = 1f;
+                present = true;
+                RecordPresentedFrontAlignmentDiagnostic(plot, tiles, vessel,
+                    effectiveMode, settings == null ? AERISTerrainColourPreset.Standard :
+                    settings.TerrainColourPreset, lockReference);
+            }
+
+            // Last-resort recovery only. This path is no longer a normal high-speed update
+            // mechanism; it runs only when no complete FRONT can be presented while the FAR
+            // foundation is already ready. This preserves the no-blank safety invariant
+            // without turning vessel speed into main-thread render frequency.
             bool readyFoundationNow = visible.FoundationComplete &&
                 lastBackFoundationCoverage >= 0.999f &&
                 readyFar >= visible.FarFoundationCount;
@@ -564,7 +585,7 @@ namespace AERISFlightControl.Terrain
                 forcedRecoveryBackRenders++;
                 lastBackAttemptViewGeneration = visible.ViewGeneration;
                 lastBackAttemptContentRevision = gpuContentRevision;
-                nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.20f;
+                nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f;
                 if (recovered)
                 {
                     SwapFrontAndBack(visible, vessel, centerLatitudeDeg,
@@ -585,26 +606,6 @@ namespace AERISFlightControl.Terrain
                         effectiveMode, settings == null ? AERISTerrainColourPreset.Standard :
                         settings.TerrainColourPreset, lockReference);
                 }
-            }
-
-            // Gate 5 Candidate 2 presentation latch. Never warp the old FRONT. When the
-            // new exact projection cannot yet be committed, keep the last complete GPU FRONT
-            // visible and publish that FRONT's exact projection to the ND. All runway/traffic/
-            // ownship symbology then uses the same latched projection, preventing both the
-            // short black flash and the apparent floating runway-threshold marker.
-            if (!present && CanPresentLatchedFront(visible, vessel))
-            {
-                if (frontTerrainGeneration != visible.TerrainGeneration)
-                    generationBridgeFrames++;
-                PresentFrontDirect(plot, frontOrientation);
-                lastFrontBufferPresented = true;
-                lastFrontBufferLatched = true;
-                CapturePresentedProjection(true);
-                lastVisualCoverageFraction = 1f;
-                present = true;
-                RecordPresentedFrontAlignmentDiagnostic(plot, tiles, vessel,
-                    effectiveMode, settings == null ? AERISTerrainColourPreset.Standard :
-                    settings.TerrainColourPreset, lockReference);
             }
 
             if (!present && frontBufferValid)
@@ -748,12 +749,12 @@ namespace AERISFlightControl.Terrain
             if (Math.Abs(frontRangeMeters - rangeMeters) >
                 Math.Max(1f, rangeMeters * 0.001f)) return false;
             if (trackUp && Mathf.Abs(Mathf.DeltaAngle(frontMapHeadingDeg,
-                mapHeadingDeg)) > 0.5f) return false;
+                mapHeadingDeg)) > ProjectionRefreshHeadingDeg) return false;
             double displacement = GreatCircleDistanceMeters(vessel.mainBody,
                 frontCenterLatitudeDeg, frontCenterLongitudeDeg, centerLatitudeDeg,
                 centerLongitudeDeg);
             return !double.IsNaN(displacement) && !double.IsInfinity(displacement) &&
-                displacement <= Math.Max(25.0, rangeMeters * 0.0015);
+                displacement <= ProjectionRefreshDistanceMeters(rangeMeters);
         }
 
         bool ShouldRefreshBackBuffer(AERISTerrainVisibleTileSet visible,
@@ -793,9 +794,14 @@ namespace AERISFlightControl.Terrain
                 frontCenterLatitudeDeg, frontCenterLongitudeDeg, centerLatitudeDeg,
                 centerLongitudeDeg);
             if (double.IsNaN(displacement) || double.IsInfinity(displacement)) return true;
-            if (displacement >= Math.Max(250.0, rangeMeters * 0.06)) return true;
+            if (displacement >= ProjectionRefreshDistanceMeters(rangeMeters)) return true;
             return Time.realtimeSinceStartup - frontCommittedRealtime >=
                 ProjectionRefreshAgeSeconds;
+        }
+
+        static double ProjectionRefreshDistanceMeters(float rangeMeters)
+        {
+            return Math.Max(250.0, Math.Max(1f, rangeMeters) * 0.06);
         }
 
         bool CanPresentLatchedFront(AERISTerrainVisibleTileSet visible, Vessel vessel)

@@ -1,0 +1,39 @@
+AERIS CP3.75 Candidate1 — HHC4 runtime diagnosis
+Date: 2026-08-03
+Decision: Candidate1 visual recovery is substantially successful, but runtime stabilization is required before performance optimization.
+
+EVIDENCE
+- Built mod archive: AERISFlightControl(65).zip
+  SHA-256: 4b01e58ddd325ede8e4a1bb64ed6a8a71a317879686051fdd05b75476840e862
+- Video: Video_2026-08-03_22-45-36.mkv
+  SHA-256: 322e179cc321e88efb00acbcf0355198cd9f5e73fcc2481f97bcc6d0c4e23149
+- Test vehicle: hhc4
+- Body: Kerbin
+- Principal stress point: approximately 30,000 m ASL / 2,100 m/s / ND range 160 km
+- FDR maximum observed speed: approximately 2100.23 m/s
+
+CONFIRMED FINDINGS
+1. Late-CP3 contour/cartographic detail is visibly restored. Giant CP3.5 Candidate2 block mosaics were not observed.
+2. Coastline/water-boundary stroke continuity is unstable during motion.
+3. Frame cost rises with speed. Candidate1 telemetry showed ND repaint cost rising materially in the high-speed regime.
+4. Candidate1 forced-recovery BACK rendering becomes a normal high-speed update mechanism. Runtime log examples:
+   14:11:18 forced_recovery=6618
+   14:11:23 forced_recovery=6644
+   14:11:28 forced_recovery=6671
+   14:11:33 forced_recovery=6703
+   14:11:38 forced_recovery=6735
+   This is roughly 5-6 additional forced BACK renders per second in that interval.
+5. Root cause in Candidate1 renderer: direct FRONT compatibility rejected ownship displacement above max(25 m, range*0.0015). At 160 km this is 240 m, crossed in about 0.114 s at 2100 m/s. The recovery path ran before the existing latched-FRONT continuity path.
+6. Track-vector geometry had a coordinate-authority defect. The line start used actual ownship position on the presented map, while endpoint/ticks were projected as if ownship were still at the map center. This necessarily stretches/collapses when FRONT is latched.
+7. Track-vector time horizon also shrank with speed: seconds=clamp(range*0.38/speed,5,60). At 160 km / 2100 m/s this is below 30 s, so the 30/45/60 s marks disappear by formula rather than by rendering necessity.
+8. LAND runway/localizer observation offsets are ownship-relative. Candidate1 projected them directly as map-center-relative values, creating the same coordinate mismatch whenever the presented FRONT center lags ownship.
+9. Terrain quality AUTO/MEDIUM/HIGH and ND update AUTO/20/30/45/60 did not produce a useful visual-quality distinction in the tested Golden FAR path, while higher settings increased work. Candidate2 therefore consolidates runtime authority to Golden LOW and 10 Hz.
+
+CANDIDATE2 RESPONSE
+- Golden LOW only; legacy quality enum values become migration-only.
+- Separate LAND terrain-quality preset disabled; LAND flight functionality itself remains untouched.
+- ND user update-rate selector removed; internal presentation target fixed to 10 Hz.
+- Scheduled FRONT refresh owns normal recentering; latched FRONT is presented before last-resort forced recovery.
+- Projection refresh age reduced to 0.50 s to bound high-speed center lag without per-repaint rendering.
+- Track vector endpoint/ticks converted to presented-map-center coordinates and stabilized to a 60 s horizon with range clipping.
+- LAND runway/localizer geometry converted from ownship-relative observation coordinates to presented-map-center coordinates.
