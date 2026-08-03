@@ -1,0 +1,25 @@
+AERIS CP3.5 Gate 4 Candidate 1 runtime diagnosis -> Candidate 2 corrective design
+
+USER EVIDENCE
+- Video_2026-08-03_20-38-47.mkv
+- AERISFlightControl(63).zip
+
+CONFIRMED CANDIDATE 1 FAILURES
+1. Visual quality did not materially change between presets.
+   Candidate 1 MIDDLE retained REAL33 geometry and only increased RenderTexture scale.
+   It did not invoke CP3 virtual geometry reconstruction, therefore coast/contour geometry remained blocky.
+2. HIGH refinement was too sparse to restore full-map cartographic quality.
+3. Runtime telemetry repeatedly reported `virtual_builds=0/...` in Candidate 1.
+4. Stable FAR foundation was followed by repeated `CP3_GATE4B_READY_BUILDING_VIOLATION` and blue-only/blank terrain.
+5. During the failure, completed HIGH REAL65 refinements advanced the shared `terrainGeneration` while `front_gen` lagged farther and farther behind `current_gen`.
+
+CORRECTIVE DESIGN
+- Restore late-CP3 worker-side FAR33 -> VIRTUAL ROUTE65 / VIRTUAL LOCAL97 geometry reconstruction as the hard visual floor.
+- LOW itself uses CP3 virtual reconstruction at 5..80 km; it is not permitted to show Candidate-1 native block mosaics.
+- HIGH keeps a full-map CP3 Golden fallback and upgrades bounded complete REAL65 tiles to VIRTUAL129.
+- Transient REAL65 completion no longer advances global terrainGeneration.
+- Existing gpuContentRevision remains the redraw authority for newly uploaded refinement content.
+- Partial REAL65 remains suppressed and REAL65 remains RAM-only.
+
+RUNTIME RE-ACCEPTANCE REQUIRED
+Static analysis establishes the intended data/control path but cannot prove final in-game visual equivalence. Candidate 2 must be compared directly with the embedded CP3 Golden reference screenshots.

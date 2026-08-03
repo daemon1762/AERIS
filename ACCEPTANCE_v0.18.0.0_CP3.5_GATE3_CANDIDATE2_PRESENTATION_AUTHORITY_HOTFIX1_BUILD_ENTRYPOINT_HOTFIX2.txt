@@ -1,0 +1,28 @@
+AERIS Flight Control v0.18.0.0
+CP3.5 Gate 3 Candidate 2 — Presentation Authority Hotfix 1 — Build Entrypoint Hotfix 2
+
+PURPOSE
+- Repair the Ubuntu source-build entrypoint that could stall before xbuild while hashing the complete SOURCE/PACKAGE manifests.
+- Preserve the Presentation Authority Hotfix 1 runtime/terrain/rendering code byte-for-byte except generated identity metadata and lineage selftests.
+
+NORMAL BUILD CONTRACT
+- build_ubuntu.sh MUST NOT execute SOURCE_MANIFEST_SHA256.txt or MANIFEST_SHA256.txt verification.
+- build_ubuntu.sh MUST run only the focused Candidate 2 / Presentation Authority / Build Entrypoint / C# compile-regression static suites before xbuild.
+- xbuild remains the native compile authority against the user's KSP 1.12.5 managed assemblies.
+- successful build installs only the package-owned AERIS paths while preserving user settings and user-owned runtime data as before.
+
+FULL ACCEPTANCE CONTRACT
+- Full SOURCE and PACKAGE SHA-256 verification remains available only through:
+  python3 Tools/run_v01800_cp35_gate3_candidate2_presentation_authority_build_entrypoint_hotfix2_acceptance.py
+- Distribution/package closure still requires both manifests, ZIP CRC, clean extraction and focused acceptance.
+
+RUNTIME NON-CHANGE BOUNDARY
+- No terrain renderer, virtual-detail, resident-cache, preload, temporal-reprojection, ND UI, autopilot, LAND guidance, runway, flight-control, protection or flight-state runtime source is changed by this hotfix.
+- Temporal presentation authority remains quarantined; Exact FRONT remains hard presentation authority.
+- Terrain quality LAND remains retired; AUTOPILOT LAND remains intact.
+
+USER GATE
+1. build_ubuntu.sh reaches xbuild without entering full manifest hash verification.
+2. Native compile succeeds on the user's KSP 1.12.5 installation.
+3. KSP launches with the new Build Entrypoint Hotfix 2 identity.
+4. Resume the Presentation Authority Hotfix 1 ND visibility test only after build success.

@@ -1,0 +1,56 @@
+AERIS Flight Control v0.18.0.0
+CP3.5 GATE 4 — TERRAIN QUALITY ARCHITECTURE CANDIDATE 1
+
+STATUS AT PACKAGE CREATION
+- Static/prebuild acceptance: REQUIRED and expected PASS before packaging.
+- Native xbuild against the user's KSP 1.12.5 managed assemblies: NOT PERFORMED in package-creation environment.
+- KSP runtime acceptance: NOT PERFORMED. Candidate 1 is not a runtime PASS until user test.
+
+QUALITY CONTRACT
+1. LOW
+   - Persistent/authoritative FAR terrain: REAL 33x33.
+   - Native presentation scale: 1.00.
+   - No extra PQS sampling for presentation quality.
+
+2. MIDDLE
+   - Persistent/authoritative FAR terrain remains REAL 33x33.
+   - No extra PQS sampling relative to LOW solely for quality.
+   - Presentation uses a bounded higher-resolution GPU surface (logical VIRTUAL 65 class).
+   - The implementation must not synthesize a heavier 65x65 terrain mesh from every 33x33 tile.
+
+3. HIGH
+   - REAL 33x33 FAR foundation always remains the readiness authority.
+   - Only a bounded nearest visible subset may be transiently resampled from PQS at REAL 65x65.
+   - Maximum transient REAL65 candidates: 4; >40 km: max 3; >80 km: max 2.
+   - AERIS measured load may reduce the limit to 1 or suppress real65 refinement entirely.
+   - A complete REAL65 FAR tile may be reconstructed on a worker to logical VIRTUAL 129 geometry.
+   - Existing exact Route/Local payloads remain sparse exact overlays; missing exact payloads are not generated just for presentation.
+   - Transient REAL65 must remain RAM-only and must not be written into the standard preload database.
+   - Partial REAL65 commits must never replace a complete visible REAL33 foundation tile.
+
+SAFETY / ARCHITECTURE BOUNDARIES
+- Current preload/database format remains based on the established 33x33 FAR/Route/Local final contract.
+- Whole-visible-area REAL129 PQS generation is prohibited.
+- Whole-visible-area REAL65 generation is prohibited.
+- Temporal presentation authority remains quarantined in Candidate 1.
+- GUI.matrix temporal/world warp remains prohibited.
+- Gate 3 Hotfix 1 ownship fixed-anchor and ownship-relative prediction authority must not regress.
+- Wrong-range/orientation exact FRONT reuse remains prohibited.
+
+RUNTIME ACCEPTANCE TARGETS
+- LOW/MIDDLE/HIGH selectors visibly select distinct intended quality policies.
+- MIDDLE should improve raster/vector edge presentation without meaningful PQS-load growth versus LOW.
+- HIGH should eventually report bounded REAL65 refinement completion when runtime headroom allows.
+- HIGH must not cause uncontrolled tile queues, multi-second repeated main-thread stalls, or a large persistent FPS collapse.
+- Range sequence 160/80/40/20/10/5 km must retain correct ownship/prediction positioning.
+- Palette V3 and runway/world symbology must remain aligned.
+- Runtime logs must expose [CP3.5_GATE4_QUALITY] counters.
+
+FAIL CONDITIONS
+- MIDDLE triggers quality-only extra PQS grids across the viewport.
+- HIGH attempts REAL129 PQS sampling.
+- More than the bounded HIGH real65 tile count is requested at once.
+- Transient REAL65 is persisted into the standard preload database.
+- Partial REAL65 replaces the complete 33x33 foundation and creates holes/tearing.
+- Ownship/prediction range-authority regression returns.
+- Significant performance regression with no visible quality benefit.

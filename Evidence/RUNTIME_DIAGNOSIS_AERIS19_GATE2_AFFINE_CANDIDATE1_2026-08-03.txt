@@ -1,0 +1,21 @@
+AERIS19 / CP3.5 Gate 2 Affine Candidate 1 — Runtime Diagnosis
+Date: 2026-08-03
+Input evidence: user flight video + AERISFlightControl log from Gate 2 Candidate 1.
+
+OBSERVED
+- Direction was correct: FPS improved materially relative to the original CPU projection path.
+- ND OFF still caused an obvious additional FPS increase.
+- User observed intermittent line-shaped flicker in the ND terrain surface.
+- Prepared BACK generation fell to roughly 1.19 ms median.
+- CPU projection fell to roughly 0.142 ms in the affine path.
+- Previous Gate 1 exact CPU projection had been roughly 28 ms per BACK.
+- Remaining ND repaint cost was approximately 2 ms/frame class.
+- Four-patch affine approximation error reached roughly 9 px class, consistent with visible seam/flicker risk.
+
+DECISION
+- Affine projection is rejected as final visual authority despite its excellent BACK cost.
+- Preserve the performance lesson: do not return exact per-vertex geographic math to the Unity main thread.
+- Candidate 2 uses exact geographic key frames prepared on shared multicore workers.
+- Candidate 2 adds 1.25x overscan and GPU temporal geographic reprojection between exact key frames.
+- Temporal presentation is accepted only under a measured <=0.75 px interpolation-error bound.
+- Remaining IMGUI/world-layer repaint cost is deferred to the restructured CP3.5 Gate 4 Unified ND World Surface.

@@ -1,0 +1,59 @@
+AERIS CP3.5 Gate 4 Candidate 2 — SOURCE DIFF AUDIT
+
+BASE: Gate 4 Terrain Quality Architecture Candidate 1
+CURRENT: Gate 4 CP3 Golden Cartographic Quality Candidate 2
+NOTE: this audit file self-excludes from the file-count comparison.
+
+added=15 removed=0 changed=6
+
+[ADDED]
+ACCEPTANCE_v0.18.0.0_CP3.5_GATE4_CP3_GOLDEN_CARTOGRAPHIC_QUALITY_CANDIDATE2.txt
+AERISFlightControl-v0.18.0.0_DEV_CP3.5_Gate4_CP3GoldenCartographicQuality_Candidate2_VERIFICATION.txt
+Docs/CP3.5_GATE4_CP3_GOLDEN_CARTOGRAPHIC_QUALITY_CANDIDATE2_DESIGN_ja.md
+Docs/ND_CP3.5_GATE4_CP3_GOLDEN_CARTOGRAPHIC_QUALITY_CANDIDATE2_TEST_CARD_v0.18.0.0_ja.md
+Evidence/CP3_GOLDEN_VISUAL_REFERENCE/CP3_Golden_160km_CoastlineReadability.png
+Evidence/CP3_GOLDEN_VISUAL_REFERENCE/CP3_Golden_20km_DenseContours.png
+Evidence/CP3_GOLDEN_VISUAL_REFERENCE/CP3_Golden_LandSeaSilhouette.png
+Evidence/CP3_GOLDEN_VISUAL_REFERENCE/README_ja.md
+Evidence/RUNTIME_DIAGNOSIS_GATE4_CANDIDATE1_TO_CANDIDATE2_2026-08-03.txt
+Evidence/STATIC_ACCEPTANCE_v0.18.0.0_CP35_GATE4_CP3_GOLDEN_CARTOGRAPHIC_QUALITY_CANDIDATE2.log
+Tools/run_v01800_cp35_gate4_cp3_golden_cartographic_quality_candidate2_full_acceptance.py
+Tools/run_v01800_cp35_gate4_cp3_golden_cartographic_quality_candidate2_prebuild.py
+Tools/selftest_v01800_cp35_gate4_cp3_golden_cartographic_quality_candidate2.py
+Tools/verify_cp35_gate4_candidate2_package_manifest.py
+Tools/verify_cp35_gate4_candidate2_source_manifest.py
+
+[REMOVED]
+(none)
+
+[CHANGED]
+GameData/AERISFlightControl/AERISFlightControl.version
+README.md
+Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs
+Source/AERISFlightControl/Terrain/AERISTerrainVirtualDetail.cs
+build_ubuntu.sh
+
+[COMPILED C# DELTA]
+Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs
+Source/AERISFlightControl/Terrain/AERISTerrainVirtualDetail.cs
+
+[INTENDED RUNTIME DELTA]
+- AERISTerrainVirtualDetail.cs: restore CP3 Golden FAR33 -> VIRTUAL ROUTE65 / LOCAL97 presentation reconstruction; HIGH REAL65 -> VIRTUAL129.
+- AERISTerrainTileSystem.cs: transient REAL65 no longer increments global terrainGeneration; gpuContentRevision remains redraw signal.
+- No AA/AP/PROTECT/LAND/FlightState/Integrations/Airfield runtime changes.
+
+[FROZEN TREE CHECK]
+PASS Source/AERISFlightControl/AA 8d3237fc169e9ebbc862c8c900786cad82340abc521ef8b61c2db79792cb604c
+PASS Source/AERISFlightControl/Autopilot c933a2a801b43ad9826f995c6f279e8f01ba8349c3fb5809dab89379b6596c1d
+PASS Source/AERISFlightControl/Protect e5a72298b6fb0b6d8b424887d90168d0a96af3989ccba7d4b9a24c5e1c2b2a74
+PASS Source/AERISFlightControl/FlightState 9fdefc98b876a1e66d9939fdcbced14d8088a43b2318033e694fb9f4d66968b2
+PASS Source/AERISFlightControl/Landing 7d3bc4aecc946a4a7d56d3f74949623e4172f3d6ff9e63dde1e5cccc515bbd96
+PASS Source/AERISFlightControl/Integrations 919902796d0688e132c122957dda205c01227b9f4e4f59a441449c296d3de8e8
+PASS GameData/AERISFlightControl/Airfields 55173460d430de5f3d824b7cf5a7266655fac7aad65f594c59d8616a4d1ebb2c
+
+[GOLDEN VISUAL REFERENCES]
+PASS Evidence/CP3_GOLDEN_VISUAL_REFERENCE contains the three user-supplied late-CP3 reference screenshots.
+
+OVERALL: PASS

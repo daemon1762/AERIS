@@ -1,0 +1,11 @@
+AERIS v0.18.0.0 CP3.5 Gate 3 Candidate 2
+CP3 FROZEN VISUAL PATH RECOVERY / BOUNDED EXACT REFINEMENT
+
+PASS requires:
+- live viewport never generates missing Route/Local exact terrain payloads;
+- CP3 frozen FAR/Virtual Route/Virtual Local reconstruction is authoritative;
+- HIGH resource envelope returns to the known CP3/Gate2 bounded working set;
+- exact pre-existing Route/Local payloads may overlay the frozen base;
+- terrain-quality LAND remains fully removed; LAND autopilot/guidance remains;
+- CP3.5 multicore projection, exact keyframe, overscan temporal reprojection, accessibility fixes and compact UI remain;
+- native KSP build and runtime acceptance remain external requirements.

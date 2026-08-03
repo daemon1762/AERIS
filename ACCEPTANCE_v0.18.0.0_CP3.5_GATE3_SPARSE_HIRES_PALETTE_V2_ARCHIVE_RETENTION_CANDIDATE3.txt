@@ -1,0 +1,13 @@
+AERISFlightControl v0.18.0.0 CP3.5 Gate 3 Candidate 3 acceptance
+
+PASS requires:
+1. CP3 Frozen FAR foundation remains authoritative and no all-visible exact Hi-Res generation is reintroduced.
+2. HIGH long range keeps FAR 33x33 geometry but may use a 1.25x display surface; exact Route/Local is existing-only and radius <= 1.
+3. Coastline crossings use endpoint elevation interpolation around the authoritative ocean surface to improve sub-cell shoreline precision.
+4. TOPO accessibility palettes use a visible-terrain quantized altitude window; old near-black HIGH and near-white BY endpoints are absent.
+5. Exact FRONT remains presentation authority; temporal presentation is quarantined and full temporal shadow grid sampling is disabled during recovery.
+6. FDR/CVR verified FlightData ZIP retention is selectable 1..30, defaults to 10, prunes oldest verified committed ZIPs only, and never deletes raw/current/tmp/unverified data.
+7. Terrain-quality LAND preset remains absent while AUTOPILOT LAND remains intact.
+8. Candidate 3 static checks and CP2 C# definite-assignment regression pass.
+9. Distribution package passes source/package SHA-256 manifests, ZIP CRC, and clean re-extraction acceptance.
+10. Native KSP compile and runtime acceptance remain user-side gates when KSP assemblies are unavailable in the packaging environment.

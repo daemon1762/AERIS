@@ -1,0 +1,25 @@
+AERIS58 runtime diagnosis — 2026-08-03
+
+Observed:
+- ND terrain often remained ocean-blue/empty although the FAR foundation was complete.
+- The terrain could appear briefly, proving supply/database was not completely dead.
+- Runtime telemetry repeatedly reported front=DIRECT and temporal confidence=1.000 while the visible result was wrong.
+- Later temporal diagnostics also reached max_error_px=Infinity, min_uv_margin=-1, drift=Infinity and heading_delta=180.
+- direct_frames remained 0 because the Candidate 2 latch still routed through RenderTemporalReprojection instead of PresentFrontDirect.
+
+Representative late log state:
+- back_foundation=1.000
+- ready_gf=20/103, required_gf=20/103
+- temporal confidence=1.000, max_error_px=0.000, min_uv_margin=0.1000 during nominal periods
+- history_frames_quarantined exceeded 12,000
+- direct_frames=0
+
+Root design defect:
+The so-called exact latch did not directly present the committed Exact FRONT. It rebuilt/presented through the temporal presentation surface. Thus a bad/empty presentationTarget could hide a valid exact key frame.
+
+Hotfix response:
+- Exact FRONT becomes hard presentation authority.
+- 1.25x overscan is cropped exactly back to the committed visible range around the ND anchor.
+- Temporal remains shadow-only for diagnostics until runtime revalidation.
+- NaN/Infinity is explicitly rejected.
+- failed SetPass cannot clear the last valid presentation surface.

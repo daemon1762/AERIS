@@ -1,0 +1,43 @@
+AERIS v0.18.0.0 CP3.5 Gate 1 Candidate 1 — SOURCE DIFF AUDIT
+Date: 2026-08-02
+Baseline: Candidate 14 — Solid-Surface Preload Exclusion Hotfix 1
+
+FUNCTIONAL CHANGES
+1. Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+   - Removed direct forced-recovery RenderBackBuffer/Swap/Present path.
+   - FRONT incompatibility is now an ordinary refresh request.
+   - All post-initial invalidations obey nextBackRefreshRealtime.
+   - Added range-aware full-composition cadence: 0.20/0.25/0.33/0.50 s.
+   - Existing exact FRONT latch remains the continuity path; no GUI.matrix warp.
+   - Removed the previously quarantined/dead TryPresentReprojectedFront GUI.matrix implementation so temporal terrain warp code is absent, not merely unreachable.
+   - Added forced_recovery_suppressed and back_cadence_s telemetry.
+
+2. Source/AERISFlightControl/UI/AERISWindow.cs
+   - Supersedes Candidate 9 fixed-size button geometry per user request.
+   - Controls scale only from current window dimensions and default-window baseline.
+   - Fixed 3-column tab topology prevents threshold-driven coordinate jumps.
+   - Removed width-threshold header/footer/AIRFIELDS reserve switches; sizing changes continuously.
+   - Removed content-derived CalcHeight button sizing.
+   - AIRFIELDS labels/rows/actions and shared responsive buttons disable word wrap and clip overflow.
+   - Raw AERISWindow skin label/button/toggle/box styles are forced to no-wrap/clip only during AERIS draw and restored immediately after, preventing global KSP UI side effects.
+
+3. Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+   - centerStyle automatic word wrap disabled; clipping enabled.
+   - Existing Rect-based ND button geometry remains window/panel-scale driven.
+
+IDENTITY / TEST / DOC CHANGES
+- build_ubuntu.sh and AERISBuildVersion.generated.cs checkpoint -> CP3.5 Gate 1 Candidate 1.
+- AERISFlightControl.version and README updated.
+- Added CP3.5 Gate 1 selftest, successor-safe inherited regression runner, acceptance and runtime test card.
+- Candidate 14 / Candidate 9 / predictive-corridor historical tests are successor-aware only where Gate 1 intentionally supersedes UI identity/geometry or the build entrypoint; their unrelated safety assertions remain intact.
+- build_ubuntu.sh now runs the CP3.5 Gate 1 acceptance runner.
+
+UNCHANGED HIGH-RISK BOUNDARIES
+- Terrain tile contracts byte-identical.
+- GPU rasterizer byte-identical.
+- Airfield registry byte-identical.
+- Bank/AP authority byte-identical.
+- Field-verified runway calibration baseline unchanged.
+- No Resident Cache / Preload DB / Predictive Corridor redesign.
+- No CPU terrain presentation.
+- No GUI.matrix temporal terrain warp.

@@ -1,0 +1,46 @@
+AERIS v0.18.0.0 CP3.5 Gate 2 Candidate 2 — Source Scope Audit
+
+PRIMARY OPERATIONAL CHANGES
+- Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+  * exact multicore projection batch retained
+  * 1.25x overscan authoritative key-frame surface
+  * BACK / FRONT / PRESENTATION RenderTexture pipeline
+  * 8x8 geographic temporal reprojection grid
+  * <=0.75 px midpoint interpolation acceptance
+  * adaptive key-frame age/drift/heading/error policy
+  * scheduler admission fail-closed; no main-thread full projection fallback
+  * split temporal grid CPU / GPU submission telemetry
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+  * Candidate 2 checkpoint identity
+- build_ubuntu.sh
+  * Candidate 2 display identity
+  * Candidate 2 acceptance runner before native compilation
+- GameData/AERISFlightControl/AERISFlightControl.version
+  * Candidate 2 AVC identity
+- README.md
+  * current Candidate 2 architecture and runtime markers
+
+CARRIED-FORWARD UI CONTRACT
+- Source/AERISFlightControl/UI/AERISWindow.cs
+  * screenshot-reference symmetric top layout
+  * readable minimum geometry / no automatic wrapping
+  * compact full-row mini-MASTER controls
+  * TAKEOFF / FLIGHT / NAV / LAND status-colour tabs
+
+NEW VALIDATION / DOCUMENTATION
+- ACCEPTANCE_v0.18.0.0_CP3.5_GATE2_EXACT_KEYFRAME_OVERSCAN_TEMPORAL_REPROJECTION_MULTICORE_GPU_CANDIDATE2.txt
+- Docs/ND_CP3.5_GATE2_EXACT_KEYFRAME_OVERSCAN_TEMPORAL_REPROJECTION_MULTICORE_GPU_CANDIDATE2_TEST_CARD_v0.18.0.0_ja.md
+- Docs/ROADMAP_CP3.5_ND_PRESENTATION_PERFORMANCE_v0.18.0.0_ja.md
+- Tools/selftest_v01800_cp35_gate2_exact_keyframe_overscan_temporal_multicore_gpu_candidate2.py
+- Tools/run_v01800_cp35_gate2_candidate2_acceptance.py
+- Tools/verify_cp35_gate2_candidate2_source_manifest.py
+- Evidence/RUNTIME_DIAGNOSIS_AERIS19_GATE2_AFFINE_CANDIDATE1_2026-08-03.txt
+
+FROZEN / SAFETY BOUNDARIES
+Dedicated inherited regressions verify that terrain supply contracts, GPU rasterizer,
+runway registry authority, AP bank-control authority, solid-surface preload exclusion,
+41 physical runway field baseline, and CPU-terrain-presentation prohibition are retained.
+
+NATIVE BUILD LIMITATION
+The packaging environment has no target KSP managed assemblies / Mono xbuild.
+Native compile remains a mandatory user-side Ubuntu test via build_ubuntu.sh.

@@ -1,0 +1,93 @@
+AERIS v0.18.0.0 CP3.5 Gate 2 Candidate 1 — Source Diff Audit
+BASE: CP3.5 Gate 1 Back Render Profiler / Symmetric Top UI Candidate 2
+
+INTENTIONAL OPERATIONAL SOURCE CHANGES
+
+1. Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+   BASE SHA-256: 0b641bcc75479b5ea50a2fe330a08105ed929e69e133c4dcb87d08b79704628e
+   - Adds one bounded ProjectionBatch and worker chunk result model.
+   - Normal BACK path schedules geographic projection + terrain-colour preparation
+     through the shared AERIS GeneralCompute worker scheduler.
+   - Worker fan-out uses min(drawable entries, scheduler workers, active permits).
+   - Entries are greedily balanced by total geographic/projected vertex count.
+   - Worker code touches only projection snapshots and managed scratch arrays.
+   - Main thread commits prepared Mesh.vertices / optional colours and DrawMeshNow.
+   - Per-refresh Mesh.RecalculateBounds is removed and replaced by fixed safe bounds.
+   - 0.05 s target cadence is a request ceiling; one pending batch gives natural
+     backpressure when workers cannot complete at 20 Hz.
+   - Synchronous full projector remains only as scheduler-unavailable fallback.
+   - Reset/cancel marks the single batch non-committable and lets already-running
+     workers retire before any successor can reuse Entry scratch arrays.
+   - Adds [CP3.5_GATE2_PARALLEL] aggregate runtime evidence.
+
+2. Source/AERISFlightControl/Performance/AERISWorkerScheduler.cs
+   BASE SHA-256: 2c9fc6067e7a5c8fbf4e67e58e706e4e70ac548f2dfe6acf2eb503992b9aa5cc
+   - No new private thread farm is created.
+   - Existing CPU-count-derived shared worker pool / active permit controller is reused.
+   - terrain-projection-* jobs are included in terrain worker telemetry samples.
+
+3. Source/AERISFlightControl/UI/AERISWindow.cs
+   BASE SHA-256: da049e38ce84a9e25322b281796eec8c2563d689e16a36f45035078b47647b2d
+   - Main-window minimum width raised to the compact readable baseline.
+   - Compact one-line control height is bounded by measured button text height.
+   - Button width helper uses GUI skin text measurement for static/action controls.
+   - Full-row one-line controls use small-MASTER responsive layout.
+   - Explicit two-line runway rows remain taller and unchanged in intent.
+   - Screenshot-reference MASTER + 3-way + 2-way top topology remains symmetric.
+   - AUTOPILOT adds TAKEOFF / FLIGHT / NAV / LAND child pages.
+   - Category colours are derived from existing real controller state:
+       TAKEOFF = AutoTakeoff Armed/Executing
+       FLIGHT  = AnyNormalApArmed
+       NAV     = inactive while NAV remains data-only
+       LAND    = Landing.Armed
+   - FLIGHT contains the existing normal BANK/HDG/PITCH/V/S/ALT/ACC/VEL controls.
+   - No automatic button/label text wrapping is introduced.
+
+IDENTITY / BUILD / DOCUMENTATION CHANGES
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+- GameData/AERISFlightControl/AERISFlightControl.version
+- build_ubuntu.sh
+- README.md
+- ACCEPTANCE_v0.18.0.0_CP3.5_GATE2_PARALLEL_PROJECTION_COMPACT_AUTOPILOT_UI_CANDIDATE1.txt
+- Docs/ND_CP3.5_GATE2_PARALLEL_PROJECTION_COMPACT_AUTOPILOT_UI_CANDIDATE1_TEST_CARD_v0.18.0.0_ja.md
+- Tools/run_v01800_cp35_gate2_candidate1_acceptance.py
+- Tools/selftest_v01800_cp35_gate2_parallel_projection_compact_autopilot_ui_candidate1.py
+- Evidence/STATIC_ACCEPTANCE_v0.18.0.0_CP35_GATE2_CANDIDATE1.log
+- this source diff audit
+
+SUCCESSOR-AWARE REGRESSION TEST CHANGES
+- Tools/selftest_v01800_cp35_gate1_back_render_profiler_symmetric_top_ui_candidate2.py
+  Only teaches the frozen Gate 1 regression to accept Gate 2's 0.05 s asynchronous
+  cadence, fixed bounds, worker projector, and newer current UiCheckpoint while still
+  asserting Gate 1 forced-recovery/profiler/safety contracts.
+- Tools/selftest_v01800_cp3_gate5_candidate9_ui_stability_telemetry_hotfix1.py
+  Only teaches the historical fixed-geometry regression that the accepted CP3.5
+  successor may use ExpandWidth full-row controls plus explicit compact height while
+  preserving bounded/no-wrap geometry.
+
+FROZEN BOUNDARIES — BYTE IDENTICAL TO GATE 1 CANDIDATE 2
+- Source/AERISFlightControl/Terrain/AERISTerrainTileContracts.cs
+  SHA-256: 7790977cd845c58767a70f193db3efbfc573812706466b477846b06447440f86
+- Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs
+  SHA-256: f931ec7b381ebdf6323ae711c31d063256a961fa574995a650507c11b10cd032
+- Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs
+  SHA-256: c1e70635741b779f585d0dd3d7a486e0c5761588f14cee41a710ba4f69cf800e
+- Source/AERISFlightControl/Autopilot/AERISBankDirector.cs
+  SHA-256: bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7
+- GameData/AERISFlightControl/Airfields/Defaults/01_Stock_DLC_Foundation.cfg
+  SHA-256: a8116c248ced084b264f0174a54b3ee1cd679614bbc4923f36efb3e44ea336eb
+- GameData/AERISFlightControl/Airfields/Defaults/03_Field_Verified_Runway_Calibrations.cfg
+  SHA-256: 6bfd7d57ad066ae042a4759ae8e60931a13f96c21a24b5d1a7aa9c4be8af5345
+
+PROHIBITIONS RETAINED
+- CPU terrain presentation: prohibited.
+- GUI.matrix temporal terrain warp: prohibited.
+- non-stock automatic runway certification: prohibited.
+- worker calls into Unity/KSP object APIs: prohibited.
+- unbounded projection queue / multiple simultaneous Entry scratch writers: prohibited.
+- SYSTEM DIAGNOSTICS UI resurrection: prohibited.
+
+NATIVE BUILD BOUNDARY
+- No xbuild/msbuild/mcs/csc/dotnet compiler is available in the packaging container.
+- Native DLL acceptance therefore remains explicitly pending the user's KSP 1.12.5
+  Ubuntu build, which is preceded by the full Gate 2 static acceptance runner.

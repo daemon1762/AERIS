@@ -1,3 +1,68 @@
+# AERIS Flight Control v0.18.0.0 DEV CP3.5 Gate 4 — CP3 Golden Cartographic Quality Candidate 2
+
+Gate 4 Candidate 1 runtime is rejected. Candidate 2 makes the user-supplied late-CP3 screenshots the **Golden Visual Reference** and restores the proven CP3 cartographic reconstruction path as the quality floor.
+
+- LOW keeps REAL33 terrain authority but uses CP3 VIRTUAL LOCAL97 at <=20 km, VIRTUAL ROUTE65 at 20..80 km, and CP3 FAR/Hi-DPI at long range.
+- MIDDLE keeps REAL33 and uses CP3 LOCAL97/ROUTE65 reconstruction plus bounded supersampling; no quality-only PQS pass is added.
+- HIGH keeps a full-map CP3-quality fallback and selectively upgrades complete bounded REAL65 tiles to VIRTUAL129.
+- Categorical land/sea reconstruction, exact fill-diagonal coastline, sub-cell ocean crossing and contour generation from reconstructed geometry are retained from the late-CP3 path.
+- Candidate 1 HIGH refinement no longer advances global `terrainGeneration`; new detail uses `gpuContentRevision`, preventing transient REAL65 completions from continuously invalidating Exact FRONT.
+- Exact FRONT authority, ownship fixed-anchor, ownship-relative prediction and wrong-range FRONT rejection from Hotfix 1 remain frozen.
+- The three Golden Visual Reference screenshots are embedded under `Evidence/CP3_GOLDEN_VISUAL_REFERENCE/`.
+
+Runtime acceptance is mandatory: LOW itself must be no worse than the embedded CP3 Golden references, and stable FAR-ready viewports must not fall to blue-only/BUILDING.
+
+# AERIS Flight Control v0.18.0.0 DEV CP3.5 Gate 3 — Candidate 2 Presentation Authority Hotfix 1
+
+## Exact FRONT Authority / Temporal Shadow Recovery
+
+AERIS58 runtime evidence showed that Candidate 2 could report a valid temporal reprojection (`confidence=1.000`, sub-pixel error) while the actual ND presentation surface was ocean-blue/empty. Hotfix 1 therefore restores the committed Exact FRONT RenderTexture as the hard presentation authority.
+
+- Temporal reprojection remains available only as a **shadow-quality probe** for refresh/error telemetry; it cannot own the visible ND in this hotfix.
+- The Exact FRONT is presented directly with an **exact overscan crop** about horizontal center 0.5 and the committed ND vertical anchor, so a 1.25x key-frame surface is not incorrectly scaled into the visible range.
+- `NaN`/`Infinity` temporal coordinates are rejected explicitly.
+- Temporal material setup is completed before the presentation RenderTexture may be cleared, preventing a failed `SetPass` from blanking a previously valid surface.
+- World-locked runway/airfield/route overlays continue to consume the renderer's committed presented projection, preserving map lock.
+- CP3 Frozen visual-detail policy, multicore exact projection, accessibility palette fixes, compact responsive UI, and terrain-quality LAND removal remain unchanged.
+
+Runtime acceptance priority: **ND must always become visible once an Exact FRONT exists.** Performance/temporal smoothness is secondary for this hotfix and will be resumed only after exact visibility is confirmed.
+
+# AERIS Flight Control v0.18.0.0 DEV CP3.5 Gate 3 — CP3 Frozen Visual Path Recovery / Bounded Exact Refinement Candidate 2
+
+## v0.18.0.0 DEV CP3.5 Gate 3 — CP3 Frozen Visual Path Recovery / Bounded Exact Refinement Candidate 2
+
+Candidate 1 is rejected for runtime use because live 160 km refinement could promote visible Route/Local working sets into repeated Mesh build/upload/evict cycles. Candidate 2 restores the exact CP3 frozen visual-detail policy as the Golden Visual Reference while retaining CP3.5 multicore projection, Exact Key Frames, overscan temporal reprojection, accessibility palette fixes, unified world-surface phase 1 and compact responsive UI.
+
+- FAR DIRECT remains 33x33; CP3 VIRTUAL ROUTE remains 65x65 and VIRTUAL LOCAL remains 97x97.
+- Flight viewport exact Route/Local refinement is **existing-only**. Missing detail is never generated for presentation.
+- The CP3 near-LOD thresholds are restored: Local <=10 km, Route <=40 km, FAR above 40 km. The rejected 160 km Route promotion is removed.
+- HIGH returns to the known CP3/Gate2 bounded resource envelope.
+- Terrain-quality LAND remains fully removed; AUTOPILOT LAND and LAND guidance remain independent.
+- Accessibility palette fixes and palette-generation invalidation are retained.
+- Future high-resolution work must use a sparse refinement overlay that cannot evict/replace the FAR base working set.
+
+## Historical Gate 2 Candidate 1 — Parallel Projection / Compact Autopilot UI
+
+Candidate 1 first moved the dominant exact ND BACK preparation work off the Unity main thread. Its multicore projection architecture is inherited by Candidate 2, but Candidate 2 adds overscan and temporal GPU presentation and removes the synchronous main-thread projection fallback.
+
+# AERIS Flight Control v0.18.0.0 DEV CP3.5 Gate 1 — Back Render Profiler / Symmetric Top UI Candidate 2
+
+Candidate 2 is a **diagnostic bridge, not the final ND presentation architecture**. Candidate 1 proved that suppressing forced recovery works, but the 160 km 0.50 s cadence only reduced the terrain presentation to about 2 Hz while the expensive BACK render itself remained. Candidate 2 therefore restores every ND range to the scheduled **0.20 s BACK cadence**, keeps forced-recovery full renders suppressed, and profiles the remaining BACK cost so Gate 2 can remove the real main-thread bottleneck instead of hiding it behind a slow display.
+
+- Every fourth BACK render receives low-rate detailed timing. The normal BACK total is still sampled every render. `[CP3.5_GATE1_BACK_PROFILE]` reports setup/clear, CPU geographic projection, `mesh.vertices` upload, `RecalculateBounds`, colour CPU work, colour upload, `DrawMeshNow`/material submission, finalize, residual/other time, tile/vertex/draw-call counts, and the active cadence. No per-tile log spam is added.
+- Candidate 1's forced-recovery suppression and exact latched-FRONT projection authority remain. `GUI.matrix` terrain warping and CPU terrain presentation remain prohibited.
+- The AERIS main-window top chrome now follows the supplied screenshot reference: MASTER fills the available row; `FLIGHT CONTROL / PROTECT / AUTOPILOT` is an equal three-way row; `SYSTEM / EXTEND ADDONS` is an equal two-way row. Rows are computed from the available window width with equal left/right outer margins and equal internal gaps, so resizing cannot leave an ugly one-sided blank area.
+- The same symmetric row rule is used for SYSTEM's top selectors. Candidate 13's deliberate removal of SYSTEM DIAGNOSTICS is preserved; `PRELOAD MAPS` fills its remaining row instead of recreating a dead button.
+- Window resizing remains continuous/responsive. Text, labels, and buttons are explicitly non-wrapping and clipped rather than allowed to create content-driven coordinate jumps.
+
+Runtime acceptance focus: 160 km at approximately 2100 m/s, `forced_recovery=0`, `back_cadence_s=0.20`, several `[CP3.5_GATE1_BACK_PROFILE]` samples, ND ON/OFF frame-time comparison, and min/mid/max window resize symmetry/no-wrap inspection.
+
+# AERIS Flight Control v0.18.0.0 DEV CP3.5 Gate 1 — Presentation Cadence / Responsive UI Candidate 1
+
+CP3.5 Gate 1 removes the Gate 4B forced full-render recovery loop from the ND terrain presentation path. FRONT compatibility loss now requests a BACK refresh but cannot bypass the explicit presentation cadence. The last complete GPU FRONT is shown without `GUI.matrix` warp and publishes its exact committed projection to terrain/runway/traffic/ownship world-fixed overlays until the next BACK atomically swaps. Cadence is range-aware: 5–20 km 0.20 s, 40 km 0.25 s, 80 km 0.33 s, 160 km 0.50 s. `forced_recovery` must remain zero; `forced_recovery_suppressed` records prevented bypass frames. CPU terrain presentation remains prohibited.
+
+The main AERIS window also supersedes Candidate 9 fixed button dimensions by restoring window-responsive control geometry. Width follows window width continuously and control height follows window height within bounded scaling. Geometry is determined only by window dimensions: text/content may not change control size or flow. Automatic word wrapping is disabled for AERIS window labels/buttons and ND shared text/button styles; long text is clipped rather than silently moving later controls. Existing resize pointer anchoring and screen clamps remain unchanged.
+
 ## v0.18.0.0 DEV CP3 Gate 5 Candidate 14 — Solid-Surface Preload Exclusion Hotfix 1
 
 Automatic terrain preload is now strictly limited to celestial bodies that expose a body-local PQS terrain controller. Stars, gas giants, and any other bodies without a solid terrain surface are fail-closed and excluded from automatic preload, PRELOAD body presentation, manual BUILD/RESUME/REBUILD generation paths, and current-body terrain support. This is capability-based rather than name-based, so mod-added surface-less bodies are excluded automatically. Existing stored data is not destructively deleted.

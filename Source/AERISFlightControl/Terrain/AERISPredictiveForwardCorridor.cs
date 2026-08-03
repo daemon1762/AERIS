@@ -184,8 +184,7 @@ namespace AERISFlightControl.Terrain
             {
                 LatitudeDeg = Math.Max(-90.0, Math.Min(90.0, latitude)),
                 LongitudeDeg = NormalizeLongitude(longitude),
-                Lod = lod == AERISTerrainTileLod.Land ?
-                    AERISTerrainTileLod.Local : lod,
+                Lod = lod,
                 Priority = priority,
                 HorizonSeconds = Math.Max(0.0, horizonSeconds),
                 CorridorHalfWidthMeters = Math.Max(0.0, halfWidthMeters),

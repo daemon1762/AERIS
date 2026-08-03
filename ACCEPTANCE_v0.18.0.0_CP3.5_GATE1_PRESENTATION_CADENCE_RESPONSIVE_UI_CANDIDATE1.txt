@@ -1,0 +1,65 @@
+AERIS Flight Control v0.18.0.0
+CP3.5 Gate 1 — Presentation Cadence / Responsive UI Candidate 1
+
+STATUS: STATIC ACCEPTANCE CANDIDATE
+NATIVE KSP BUILD: PENDING USER ENVIRONMENT
+KSP RUNTIME: PENDING
+CP3.5 GATE 1 CLOSE: NOT AUTHORIZED
+
+BASELINE
+- Candidate 14 — Solid-Surface Preload Exclusion Hotfix 1
+- Baseline source ZIP SHA-256: 350758594c3bb8ab36eed5c096515dfd20e2989b96a2089c96c52a624093b140
+
+GATE 1 PRESENTATION CHANGE
+- Removed the Gate 4B forced-recovery full BACK render path.
+- FRONT incompatibility now requests a normal BACK refresh but cannot bypass the explicit cadence.
+- First-ever FRONT creation is the only cadence bypass.
+- ViewGeneration/content revision/movement/heading invalidations all obey the same cadence after the initial attempt.
+- Range-aware full-composition cadence:
+  - 5/10/20 km: 0.20 s (<=5 Hz)
+  - 40 km: 0.25 s (<=4 Hz)
+  - 80 km: 0.33 s (<=3.03 Hz)
+  - 160 km: 0.50 s (<=2 Hz)
+- Compatibility loss is included in refreshRequired, so a moving aircraft schedules the next exact projection rather than waiting only for Terrain/ViewGeneration rollover.
+- While waiting, the last complete FRONT is shown without transformation and its exact committed projection remains the common terrain/runway/traffic/ownship authority.
+- Telemetry adds forced_recovery_suppressed and back_cadence_s. forced_recovery must remain 0.
+
+USER-REQUESTED UI SPEC CHANGE
+- Candidate 9 fixed button geometry is superseded.
+- Main AERIS controls scale from window dimensions only.
+- Width follows window width continuously using the v0.18 default 520 px window as the baseline proportion.
+- Heights follow window height with bounded 0.82x..1.35x scaling.
+- Tab row topology remains fixed (3 columns) to prevent threshold-based coordinate jumps.
+- Width-threshold scroll/footer/AIRFIELDS chrome switches were removed; those reserves now change continuously with window geometry.
+- Automatic word wrapping is prohibited in the active AERISWindow and ND UI styles. Raw AERIS-window skin label/button/toggle/box styles are temporarily forced to no-wrap/clip during the window draw and restored immediately afterward.
+- AIRFIELDS selection rows no longer use CalcHeight/content-derived height.
+- Long text clips instead of silently changing button geometry.
+- Existing screen-space resize pointer anchor, dedicated footer grip and screen clamps remain.
+
+PRESERVED SAFETY / AUTHORITY
+- CPU terrain presentation remains 0.
+- GUI.matrix temporal terrain warp remains prohibited; the quarantined dead reprojection implementation was removed from the source tree.
+- Candidate 8 presented-projection runway lock remains.
+- Resident Cache / Preload DB / Predictive Corridor / Render-Ready Height Field are not redesigned in this Gate.
+- 41 physical runways / 82 reciprocal directions remain baseline.
+- Non-stock AUTO CERTIFIED remains prohibited.
+- Candidate 13 standard preload policy and Candidate 14 surface-body exclusion remain.
+- No AP/FBW/PROTECT/APP flight-control authority change.
+
+RUNTIME ACCEPTANCE REQUIRED
+- Native build/install on user's KSP environment.
+- 160 km, approximately 2100 m/s stress run with ND ON/OFF comparison.
+- forced_recovery remains exactly 0.
+- back_render cadence at 160 km does not exceed 2 Hz during steady motion after initial FRONT.
+- forced_recovery_suppressed rises when old Candidate-14 recovery would have fired.
+- no black flash, phantom runway, terrain/runway divergence or persistent BUILDING state.
+- verify 5/10/20/40/80/160 km, TRACK UP/NORTH UP, range changes and PLAN/RECENTER.
+- resize main window from min -> intermediate -> max -> intermediate; controls scale smoothly and do not jump because status text changes.
+- no automatic line wrapping in window text/buttons; no GUILayout mismatch/exception.
+
+STATIC ACCEPTANCE
+- Gate 1 dedicated selftest: 102/102 PASS.
+- Successor-safe inherited CP3 boundary runner: 12/12 scripts PASS.
+- Static acceptance log: Evidence/STATIC_ACCEPTANCE_v0.18.0.0_CP35_GATE1_CANDIDATE1.log
+- Historical exact-candidate identity tests are not used as current-gate authority.
+- Source archive manifest, ZIP CRC and clean extraction acceptance are required before handoff.

@@ -24,6 +24,9 @@ namespace AERISFlightControl.Recording
             internal int FileCount;
             internal string Detail;
             internal double DurationMilliseconds;
+            internal int RetentionLimit;
+            internal int PrunedArchives;
+            internal string RetentionDetail;
         }
 
         sealed class RecoveryScanResult
@@ -41,6 +44,7 @@ namespace AERISFlightControl.Recording
 
         const int PendingCapacity = 64;
         const int ResultCapacity = 256;
+        const string VerifiedMarkerSuffix = ".verified";
         static readonly object Sync = new object();
         static readonly object ArchiveIoSync = new object();
         static readonly Queue<string> Pending = new Queue<string>();
@@ -55,6 +59,7 @@ namespace AERISFlightControl.Recording
         static long failureCount;
         static double lastDurationMilliseconds;
         static double maximumDurationMilliseconds;
+        static int retentionLimit = 10;
 
         internal static int PendingCount
         {
@@ -70,6 +75,16 @@ namespace AERISFlightControl.Recording
         internal static double MaximumDurationMilliseconds
         {
             get { lock (Sync) return maximumDurationMilliseconds; }
+        }
+
+        internal static void ConfigureRetention(int limit)
+        {
+            Interlocked.Exchange(ref retentionLimit, Math.Max(1, Math.Min(30, limit)));
+        }
+
+        internal static int RetentionLimit
+        {
+            get { return Math.Max(1, Math.Min(30, Interlocked.CompareExchange(ref retentionLimit, 0, 0))); }
         }
 
         // Runtime instances are scene-scoped. If a scene closes while compression is
@@ -234,9 +249,13 @@ namespace AERISFlightControl.Recording
                         "; source=" + result.SourceBytes + " B; zip=" +
                         result.ArchiveBytes + " B; reduction=" +
                         ratio.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) +
-                        "%; sourceDeleted=" + result.SourceDeleted + ".";
+                        "%; sourceDeleted=" + result.SourceDeleted +
+                        "; retention=" + result.RetentionLimit +
+                        "; pruned=" + result.PrunedArchives + ".";
                     if (result.SourceDeleted) AERISLogger.Info(message);
                     else AERISLogger.Warn(message + " Source folder was retained: " + result.Detail);
+                    if (!string.IsNullOrEmpty(result.RetentionDetail))
+                        AERISLogger.Info("[FDR][RETENTION] " + result.RetentionDetail);
                 }
                 else
                 {
@@ -278,6 +297,7 @@ namespace AERISFlightControl.Recording
                 activeFolder = folder;
                 activeRuntime = runtime;
             }
+            int immutableRetentionLimit = RetentionLimit;
             bool accepted = runtime.Scheduler.SubmitLatest(
                 AERISRuntimeLane.ArchiveCompression, "flightdata-archive",
                 runtime.CaptureStamp(), context =>
@@ -290,7 +310,7 @@ namespace AERISFlightControl.Recording
                         lock (ArchiveIoSync)
                         {
                             context.ThrowIfStale();
-                            result = ArchiveFolder(folder, context);
+                            result = ArchiveFolder(folder, context, immutableRetentionLimit);
                         }
                     }
                     catch (OperationCanceledException) { throw; }
@@ -354,7 +374,7 @@ namespace AERISFlightControl.Recording
         }
 
         static ArchiveResult ArchiveFolder(string folder,
-            AERISRuntimeJobContext context)
+            AERISRuntimeJobContext context, int archiveRetentionLimit)
         {
             context.ThrowIfStale();
             var result = new ArchiveResult { Folder = folder };
@@ -407,6 +427,7 @@ namespace AERISFlightControl.Recording
                 result.Success = true;
                 result.ArchiveBytes = new FileInfo(finalPath).Length;
                 result.SourceDeleted = TryDeleteSource(folder, out result.Detail);
+                ApplyVerifiedRetention(finalPath, archiveRetentionLimit, context, result);
                 return result;
             }
 
@@ -475,6 +496,7 @@ namespace AERISFlightControl.Recording
                 result.Success = true;
                 context.ThrowIfStale();
                 result.SourceDeleted = TryDeleteSource(folder, out result.Detail);
+                ApplyVerifiedRetention(finalPath, archiveRetentionLimit, context, result);
                 return result;
             }
             catch
@@ -482,6 +504,125 @@ namespace AERISFlightControl.Recording
                 try { if (File.Exists(temporaryPath)) File.Delete(temporaryPath); } catch { }
                 throw;
             }
+        }
+
+        static void ApplyVerifiedRetention(string finalPath, int archiveRetentionLimit,
+            AERISRuntimeJobContext context, ArchiveResult result)
+        {
+            if (result == null || string.IsNullOrEmpty(finalPath)) return;
+            result.RetentionLimit = Math.Max(1, Math.Min(30, archiveRetentionLimit));
+            string markerError;
+            if (!TryWriteVerifiedMarker(finalPath, out markerError))
+            {
+                result.RetentionDetail = "verified ZIP retained but verification marker could not be written; pruning skipped: " + markerError;
+                return;
+            }
+            context.ThrowIfStale();
+            string pruneDetail;
+            result.PrunedArchives = PruneVerifiedArchives(
+                Path.GetDirectoryName(finalPath), result.RetentionLimit, finalPath,
+                context, out pruneDetail);
+            result.RetentionDetail = pruneDetail;
+        }
+
+        static bool TryWriteVerifiedMarker(string archivePath, out string error)
+        {
+            error = string.Empty;
+            try
+            {
+                string markerPath = archivePath + VerifiedMarkerSuffix;
+                string temporaryMarker = markerPath + ".tmp";
+                try { if (File.Exists(temporaryMarker)) File.Delete(temporaryMarker); }
+                catch { }
+                using (var writer = new StreamWriter(new FileStream(temporaryMarker,
+                    FileMode.Create, FileAccess.Write, FileShare.None)))
+                {
+                    writer.WriteLine("AERIS_VERIFIED_FLIGHT_ARCHIVE_V1");
+                    writer.WriteLine(DateTime.UtcNow.ToString("o",
+                        System.Globalization.CultureInfo.InvariantCulture));
+                }
+                if (File.Exists(markerPath)) File.Delete(markerPath);
+                File.Move(temporaryMarker, markerPath);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.GetType().Name + ": " + ex.Message;
+                return false;
+            }
+        }
+
+        sealed class VerifiedArchiveCandidate
+        {
+            internal string Path;
+            internal DateTime LastWriteUtc;
+        }
+
+        static int PruneVerifiedArchives(string rootPath, int limit,
+            string currentArchivePath, AERISRuntimeJobContext context,
+            out string detail)
+        {
+            detail = string.Empty;
+            limit = Math.Max(1, Math.Min(30, limit));
+            if (string.IsNullOrEmpty(rootPath) || !Directory.Exists(rootPath))
+            {
+                detail = "retention root unavailable; no pruning performed";
+                return 0;
+            }
+            string current = string.Empty;
+            try { current = Path.GetFullPath(currentArchivePath); }
+            catch { current = currentArchivePath ?? string.Empty; }
+            var verified = new List<VerifiedArchiveCandidate>();
+            string[] archives = Directory.GetFiles(rootPath, "*.zip", SearchOption.TopDirectoryOnly);
+            for (int i = 0; i < archives.Length; i++)
+            {
+                context.ThrowIfStale();
+                string path = archives[i];
+                if (string.IsNullOrEmpty(path) || path.EndsWith(".zip.tmp",
+                    StringComparison.OrdinalIgnoreCase)) continue;
+                if (!File.Exists(path + VerifiedMarkerSuffix)) continue;
+                DateTime lastWrite;
+                try { lastWrite = File.GetLastWriteTimeUtc(path); }
+                catch { continue; }
+                verified.Add(new VerifiedArchiveCandidate { Path = path, LastWriteUtc = lastWrite });
+            }
+            verified.Sort((left, right) =>
+            {
+                int time = left.LastWriteUtc.CompareTo(right.LastWriteUtc);
+                if (time != 0) return time;
+                return string.Compare(left.Path, right.Path, StringComparison.OrdinalIgnoreCase);
+            });
+            int toRemove = Math.Max(0, verified.Count - limit);
+            int removed = 0;
+            for (int i = 0; i < verified.Count && removed < toRemove; i++)
+            {
+                context.ThrowIfStale();
+                string candidate = verified[i].Path;
+                string normalized;
+                try { normalized = Path.GetFullPath(candidate); }
+                catch { normalized = candidate; }
+                if (string.Equals(normalized, current, StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    File.Delete(candidate);
+                    try
+                    {
+                        string marker = candidate + VerifiedMarkerSuffix;
+                        if (File.Exists(marker)) File.Delete(marker);
+                    }
+                    catch { }
+                    removed++;
+                }
+                catch (Exception ex)
+                {
+                    detail = "retention delete stopped after " + removed + " archive(s): " +
+                        ex.GetType().Name + ": " + ex.Message;
+                    return removed;
+                }
+            }
+            detail = "verified ZIP retention=" + limit + "; pruned=" + removed +
+                "; unverified ZIP/raw/tmp entries untouched";
+            return removed;
         }
 
         static void CollectFiles(string directory, List<string> files)

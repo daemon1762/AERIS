@@ -1,0 +1,32 @@
+AERIS Flight Control v0.18.0.0
+CP3.5 GATE 3 — UNIFIED WORLD SURFACE / ADAPTIVE HI-RES / ACCESSIBILITY CANDIDATE 1
+
+STATIC ACCEPTANCE CONTRACT
+
+1. Terrain quality model contains AUTO / LOW / MEDIUM / HIGH only.
+   The retired terrain-quality LAND tier, dedicated terrain LOD/request lane,
+   hidden runtime profile, cache/pin/preload state and policy source must not exist.
+   LAND autopilot/guidance and its profile display are outside this removal scope.
+
+2. Exact-key-frame multicore projection and overscan temporal reprojection remain.
+   No GUI.matrix temporal terrain warp and no worker-side Unity object access are introduced.
+
+3. World-locked runway and facility geometry are composed into the authoritative
+   exact GPU BACK/FRONT world surface and share the same temporal reprojection authority.
+   IMGUI may keep labels, ownship, traffic and dynamic preview highlighting.
+
+4. Terrain detail uses ND screen-space error. FAR may be reconstructed at 65x65 or
+   129x129 and land/water boundaries are continuously reconstructed inside known FAR
+   cells. Exact Route/Local refinement is requested progressively in a bounded center
+   neighbourhood instead of generating an entire 160 km viewport in one burst.
+
+5. Accessibility palettes STD/RG/BY/HIGH preserve sea/land and danger/caution/safe
+   luminance separation. The former near-black HIGH safe color and near-white BY
+   caution color are prohibited. Palette changes invalidate pending/front presentation
+   generations before a new exact key frame is accepted.
+
+6. Existing CP3.5 UI contract remains: symmetric top rows, no automatic wrapping,
+   compact controls, and AUTOPILOT TAKEOFF / FLIGHT / NAV / LAND categories.
+
+7. Native KSP/xbuild compile and runtime performance/visual acceptance remain required
+   on the user's KSP installation. Static acceptance does not claim runtime PASS.

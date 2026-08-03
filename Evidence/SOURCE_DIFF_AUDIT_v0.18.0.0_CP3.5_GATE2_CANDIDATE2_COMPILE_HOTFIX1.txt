@@ -1,0 +1,17 @@
+SOURCE DIFF AUDIT — CP3.5 Gate 2 Candidate 2 Compile Hotfix 1
+Date: 2026-08-03
+
+Operational C# change:
+- Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+  DrawPreparedEntry changed from static instance-independent declaration to instance method declaration.
+  Reason: method directly accesses instance fields terrainMaterial, contourMaterial, coastlineMaterial.
+  User compiler evidence: CS0120 at lines 1167, 1173, 1179, 1184.
+
+Identity/support changes:
+- Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+- build_ubuntu.sh
+- GameData/AERISFlightControl/AERISFlightControl.version
+- README.md
+- acceptance/selftest/manifest evidence files.
+
+No intended runtime behavior change beyond restoring successful compilation.

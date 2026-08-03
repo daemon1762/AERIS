@@ -143,8 +143,13 @@ namespace AERISFlightControl.Terrain
         float lastTerrainResultRealtime;
         bool fallbackActive;
         bool flightViewportActive;
-        bool landDetailActive;
         bool disposed;
+        const int Gate4HighRealResolution = 65;
+        const int Gate4HighRefinementMaximumTiles = 4;
+        int gate4HighRefinementRequested;
+        long gate4HighRefinementCompleted;
+        long gate4HighRefinementPartialCommitsSuppressed;
+        long gate4HighRefinementSafetySkips;
         string status = "TERRAIN CACHE INDEX READY";
 
         internal AERISTerrainTileSystem(AERISSettings settings,
@@ -193,7 +198,6 @@ namespace AERISFlightControl.Terrain
         internal long TerrainGeneration { get { return terrainGeneration; } }
         internal long ViewGeneration { get { return viewGeneration; } }
         internal string ActiveBodyName { get { return activeBodyName; } }
-        internal bool LandDetailRequestsActive { get { return landDetailActive; } }
         // CP3 Gate 3.1 Compile Hotfix 1: SYSTEM UI reads these values directly
         // from the tile-system owner. Keep the public-facing names stable while the
         // internal telemetry snapshot retains GlobalFoundationCount/FarFoundationCount.
@@ -201,6 +205,9 @@ namespace AERISFlightControl.Terrain
         internal int FoundationFarCount { get { return lastFoundationFarCount; } }
         internal int FoundationMissingCount { get { return lastFoundationMissingCount; } }
         internal int FoundationRequestedCount { get { return lastFoundationRequestedCount; } }
+        internal int Gate4HighRefinementRequested { get { return gate4HighRefinementRequested; } }
+        internal long Gate4HighRefinementCompleted { get { return gate4HighRefinementCompleted; } }
+        internal long Gate4HighRefinementSafetySkips { get { return gate4HighRefinementSafetySkips; } }
         internal AERISTerrainPreloadStatusSnapshot PreloadStatus
         {
             get
@@ -304,7 +311,6 @@ namespace AERISFlightControl.Terrain
             lastFoundationGlobalCount = 0;
             lastFoundationFarCount = 0;
             flightViewportActive = false;
-            landDetailActive = false;
             bodyGeneration++;
             terrainGeneration++;
             terrainRequestGeneration++;
@@ -351,26 +357,7 @@ namespace AERISFlightControl.Terrain
         internal void Tick(Vessel vessel, AERISLandingFoundation landing,
             AERISAirfieldRegistry airfields, bool flightViewportEnabled)
         {
-            Tick(vessel, landing, airfields, flightViewportEnabled,
-                landing != null && landing.Armed);
-        }
-
-        internal void Tick(Vessel vessel, AERISLandingFoundation landing,
-            AERISAirfieldRegistry airfields, bool flightViewportEnabled,
-            bool landDetailDemand)
-        {
             if (disposed) return;
-            if (landDetailActive != landDetailDemand)
-            {
-                landDetailActive = landDetailDemand;
-                nextPlanRealtime = 0f;
-                terrainRequestGeneration++;
-                viewGeneration++;
-                planGeneration++;
-                status = landDetailActive ?
-                    "LAND DETAIL REQUEST LANE ACTIVATED" :
-                    "LAND DETAIL REQUEST LANE RELEASED";
-            }
             RequestGameDataHash();
             bool flight = HighLogic.LoadedSceneIsFlight;
             CelestialBody currentBody = vessel == null ? null : vessel.mainBody;
@@ -648,7 +635,7 @@ namespace AERISFlightControl.Terrain
                     BodyName = bodyName,
                     LatitudeDeg = active.Threshold.LatitudeDeg,
                     LongitudeDeg = active.Threshold.LongitudeDeg,
-                    MaximumLod = AERISTerrainTileLod.Land,
+                    MaximumLod = AERISTerrainTileLod.Local,
                     Priority = 140,
                     Reason = "SELECTED LAND RUNWAY"
                 });
@@ -675,8 +662,7 @@ namespace AERISFlightControl.Terrain
                                     airfield.Body,
                                 LatitudeDeg = direction.Threshold.LatitudeDeg,
                                 LongitudeDeg = direction.Threshold.LongitudeDeg,
-                                MaximumLod = direction.HasCertifiedGeometry ?
-                                    AERISTerrainTileLod.Land : AERISTerrainTileLod.Local,
+                                MaximumLod = AERISTerrainTileLod.Local,
                                 Priority = direction.HasCertifiedGeometry ? 100 : 70,
                                 Reason = "REGISTERED RUNWAY"
                             });
@@ -727,6 +713,10 @@ namespace AERISFlightControl.Terrain
                     displayViewAnchorGuiV, displayViewOrientation);
             AddFoundationKeys(foundation.GlobalKeys, planningCapacity);
             AddFoundationKeys(foundation.FarKeys, planningCapacity);
+            // Gate 4 HIGH: the 33x33 FAR foundation is always admitted first. Once a
+            // complete base tile is already resident, promote only a small nearest subset
+            // to transient REAL 65. This never makes viewport readiness wait for 65x65.
+            PromoteGate4HighRealFarRefinement(range);
             lastFoundationGlobalCount = foundation.GlobalKeys.Length;
             lastFoundationFarCount = foundation.FarKeys.Length;
             // FAR is the sole persistent display authority. GLOBAL remains an
@@ -735,6 +725,10 @@ namespace AERISFlightControl.Terrain
             lastFoundationRequestedCount = foundation.FarKeys.Length;
 
             AERISTerrainTileLod nearLod = ResolveNearLod(range, profile);
+            // CP3.5 Gate 3 Candidate 2 visual recovery: preserve the CP3 frozen
+            // virtual-detail authority. Route/Local exact payloads may be consumed
+            // only when they already exist; the live viewport never generates a
+            // missing high-resolution payload merely to improve presentation.
             AddExistingExactDetailBridge(latitude, longitude, nearLod,
                 planningCapacity, profile == null ? 1 : profile.LocalTileRadius);
 
@@ -745,25 +739,10 @@ namespace AERISFlightControl.Terrain
                 AERISTerrainTilePriority.High, AERISTerrainRequestLane.Background,
                 planningCapacity, false);
 
-            // Selected runway terrain remains exact and demand-gated. It is the only
-            // normal path allowed to request LOCAL/LAND payloads that do not already
-            // exist in the database while the virtual-detail renderer is introduced.
-            AERISRunwayDirectionDefinition direction = !landDetailActive ||
-                landing == null || !landing.Armed ? null : landing.ActiveDirection;
-            if (direction != null)
-            {
-                double thresholdLat = direction.Threshold == null ? double.NaN :
-                    direction.Threshold.LatitudeDeg;
-                double thresholdLon = direction.Threshold == null ? double.NaN :
-                    direction.Threshold.LongitudeDeg;
-                AddLandingPointWithPins(thresholdLat, thresholdLon, planningCapacity);
-
-                double reciprocalLat = direction.OppositeThreshold == null ? double.NaN :
-                    direction.OppositeThreshold.LatitudeDeg;
-                double reciprocalLon = direction.OppositeThreshold == null ? double.NaN :
-                    direction.OppositeThreshold.LongitudeDeg;
-                AddLandingPointWithPins(reciprocalLat, reciprocalLon, planningCapacity);
-            }
+            // No landing-specific terrain quality exists in CP3.5. Runway geometry
+            // consumes the same frozen visual authority as all other navigation layers.
+            AERISRunwayDirectionDefinition direction = landing == null ? null :
+                landing.ActiveDirection;
 
             IList<AERISPredictiveCorridorPoint> corridor = predictiveCorridor.Build(
                 activeBody, vessel, range, nearLod, direction != null);
@@ -772,8 +751,8 @@ namespace AERISFlightControl.Terrain
                 AERISPredictiveCorridorPoint point = corridor[i];
                 if (point == null) continue;
                 // The predictive corridor now warms the sole persistent FAR base. Route
-                // and Local quality will be reconstructed from this base in Gate 4B;
-                // exact detail is reserved for viewport hits already on SSD and LAND.
+                // and Local quality is reconstructed from this base; exact viewport detail
+                // is consumed only when an authoritative payload already exists.
                 AddPoint(point.LatitudeDeg, point.LongitudeDeg,
                     AERISTerrainTileLod.Far, point.Priority,
                     AERISTerrainRequestLane.LookAhead, planningCapacity, false);
@@ -832,6 +811,61 @@ namespace AERISFlightControl.Terrain
                 residentPlanPins.Count);
         }
 
+        void PromoteGate4HighRealFarRefinement(double rangeMeters)
+        {
+            gate4HighRefinementRequested = 0;
+            AERISTerrainPerformanceProfile profile = performance == null ? null :
+                performance.ActiveProfile;
+            if (profile == null || !string.Equals(profile.Name, "HIGH",
+                StringComparison.OrdinalIgnoreCase)) return;
+
+            // Fixed HIGH is still bounded by measured AERIS cost. The pilot keeps the HIGH
+            // presentation surface even when real-65 sampling is temporarily suppressed.
+            if (performance != null &&
+                (performance.NdMainThreadEmaMs > 3.0f ||
+                 performance.TilePqsSampleEmaMs > 2.0f ||
+                 performance.FrameTimeEmaMs > 40f))
+            {
+                gate4HighRefinementSafetySkips++;
+                return;
+            }
+
+            int limit = Gate4HighRefinementMaximumTiles;
+            if (rangeMeters > 80000.0) limit = Math.Min(limit, 2);
+            else if (rangeMeters > 40000.0) limit = Math.Min(limit, 3);
+            if (performance != null &&
+                (performance.WorkerBacklogged || performance.NdMainThreadEmaMs > 2.0f ||
+                 performance.TilePqsSampleEmaMs > 1.25f))
+                limit = Math.Min(limit, 1);
+            if (limit <= 0) return;
+
+            var candidates = new List<AERISTerrainTileRequest>();
+            for (int i = 0; i < requestScratch.Count; i++)
+            {
+                AERISTerrainTileRequest request = requestScratch[i];
+                if (request == null || request.Key.Lod != AERISTerrainTileLod.Far ||
+                    !request.Visible || !desiredFoundationIds.Contains(request.Key.StableId))
+                    continue;
+                AERISTerrainHeightTile resident;
+                if (!ram.TryGet(request.Key, out resident) || resident == null ||
+                    resident.IsPreview || !resident.SamplingComplete ||
+                    resident.Resolution < AERISTerrainTileFormat.DefaultResolution ||
+                    resident.Resolution >= Gate4HighRealResolution) continue;
+                candidates.Add(request);
+            }
+            candidates.Sort((a, b) => a.ViewDistanceMeters.CompareTo(b.ViewDistanceMeters));
+            int count = Math.Min(limit, candidates.Count);
+            for (int i = 0; i < count; i++)
+            {
+                AERISTerrainTileRequest request = candidates[i];
+                request.Stage = AERISTerrainSamplingStage.Final;
+                request.Resolution = Gate4HighRealResolution;
+                request.FinalResolution = Gate4HighRealResolution;
+                request.TransientRefinement = true;
+                gate4HighRefinementRequested++;
+            }
+        }
+
         void AddFoundationKeys(AERISTerrainTileKey[] keys, int planningCapacity)
         {
             if (keys == null) return;
@@ -867,6 +901,8 @@ namespace AERISFlightControl.Terrain
                     var key = new AERISTerrainTileKey(activeBodyName,
                         activeBody.Radius, environmentHash, nearLod, latitudeIndex,
                         longitudeIndex);
+                    // Existing-only bridge is the hard anti-thrash boundary. Missing
+                    // Route/Local detail stays on the frozen FAR/virtual-detail surface.
                     if (!ExactDetailPayloadExists(key)) continue;
                     AddKey(key, AERISTerrainTilePriority.High,
                         AERISTerrainRequestLane.Viewport, planningCapacity, true);
@@ -880,20 +916,6 @@ namespace AERISFlightControl.Terrain
             AERISTerrainHeightTile existing;
             if (ram.TryGet(key, out existing) && existing != null) return true;
             return preloadDatabase != null && preloadDatabase.Contains(key);
-        }
-
-        void AddLandingPointWithPins(double latitude, double longitude, int maximum)
-        {
-            if (!IsFinite(latitude) || !IsFinite(longitude)) return;
-            AddPointWithFallback(latitude, longitude, AERISTerrainTileLod.Land,
-                AERISTerrainTilePriority.Critical, AERISTerrainRequestLane.Landing,
-                maximum, false);
-            MarkResidentPin(KeyForPoint(activeBody, environmentHash,
-                AERISTerrainTileLod.Land, latitude, longitude),
-                AERISResidentPinReason.Landing);
-            MarkResidentPin(KeyForPoint(activeBody, environmentHash,
-                AERISTerrainTileLod.Local, latitude, longitude),
-                AERISResidentPinReason.Runway);
         }
 
         void MarkResidentPin(AERISTerrainTileKey key,
@@ -972,7 +994,6 @@ namespace AERISFlightControl.Terrain
         {
             switch (reason)
             {
-                case AERISResidentPinReason.Landing: return 6;
                 case AERISResidentPinReason.Runway: return 5;
                 case AERISResidentPinReason.Viewport: return 4;
                 case AERISResidentPinReason.GlobalFoundation: return 3;
@@ -989,8 +1010,8 @@ namespace AERISFlightControl.Terrain
             AddPoint(latitude, longitude, lod, priority, lane, maximum, visible);
             if (lod > AERISTerrainTileLod.Global)
             {
-                AERISTerrainTileLod fallback = lod == AERISTerrainTileLod.Land ?
-                    AERISTerrainTileLod.Local : (AERISTerrainTileLod)((int)lod - 1);
+                AERISTerrainTileLod fallback =
+                    (AERISTerrainTileLod)((int)lod - 1);
                 AddPoint(latitude, longitude, fallback,
                     priority > AERISTerrainTilePriority.Low ?
                         (AERISTerrainTilePriority)((int)priority - 1) : priority,
@@ -1222,6 +1243,19 @@ namespace AERISFlightControl.Terrain
                 return;
             }
 
+            if (request.TransientRefinement)
+            {
+                bool accepted = blockPipeline.Enqueue(activeBody, request,
+                    AERISTerrainTileSource.RealtimeGenerated, environmentHash,
+                    GameDataHash, preloadDatabase.DatabaseGeneration,
+                    IsFlightRequestCurrent,
+                    (committedRequest, generatedTile, complete) =>
+                        CommitFlightBlock(committedRequest, generatedTile, complete));
+                if (!accepted) telemetry.DroppedRequests++;
+                else status = "GATE 4 HIGH REAL 65 REFINEMENT";
+                return;
+            }
+
             string id = request.Key.StableId;
             bool newlyQueued = false;
             lock (sync)
@@ -1309,6 +1343,8 @@ namespace AERISFlightControl.Terrain
                 source.DatabaseGeneration);
             if (source.ReadLane < target.ReadLane) target.ReadLane = source.ReadLane;
             target.WorkOwner = source.WorkOwner;
+            target.TransientRefinement = target.TransientRefinement ||
+                source.TransientRefinement;
             target.VesselGeneration = source.VesselGeneration;
             target.RequestSequence = Math.Max(target.RequestSequence,
                 source.RequestSequence);
@@ -1914,9 +1950,26 @@ namespace AERISFlightControl.Terrain
             tile.PqsConfigurationHash = environmentHash;
             tile.GameDataHash = GameDataHash;
             tile.TerrainGenerationId = preloadDatabase.DatabaseGeneration;
+
+            // HIGH real-65 refinement must never replace the complete 33x33 foundation
+            // with a 25/50/75% partial tile. Keep the old base visible until the 65x65
+            // tile is complete, then atomically replace it in the bounded RAM cache.
+            if (request.TransientRefinement && !requestComplete)
+            {
+                gate4HighRefinementPartialCommitsSuppressed++;
+                status = "GATE 4 HIGH REAL 65 BUILDING";
+                return;
+            }
+
             ram.Put(tile);
             telemetry.Generated++;
-            terrainGeneration++;
+            // Gate 4 Candidate 2: transient REAL65 is presentation detail, not a new
+            // geographic/supply generation.  Candidate 1 incremented terrainGeneration
+            // for every completed REAL65 tile, which invalidated the Exact FRONT faster
+            // than the GPU could rebuild it and produced READY_BUILDING / blue-only ND.
+            // Render-ready upload already advances gpuContentRevision in the renderer,
+            // so refinement still requests a new BACK without poisoning FRONT authority.
+            if (!request.TransientRefinement) terrainGeneration++;
             lastTerrainResultRealtime = Time.realtimeSinceStartup;
             if (!requestComplete)
             {
@@ -1933,6 +1986,13 @@ namespace AERISFlightControl.Terrain
             }
             tile.IsPreview = false;
             telemetry.FinalGenerated++;
+            if (request.TransientRefinement)
+            {
+                gate4HighRefinementCompleted++;
+                status = "GATE 4 HIGH REAL 65 READY";
+                // Deliberately RAM-only: the standard preload/database remains 33x33.
+                return;
+            }
             status = tile.Key.Lod >= AERISTerrainTileLod.Local ?
                 "LOCAL TERRAIN AVAILABLE" : "GLOBAL TERRAIN AVAILABLE";
             ScheduleDiskWrite(tile.CloneImmutable());
@@ -1984,6 +2044,7 @@ namespace AERISFlightControl.Terrain
                 DatabaseGeneration = source.DatabaseGeneration,
                 ReadLane = source.ReadLane,
                 WorkOwner = source.WorkOwner,
+                TransientRefinement = source.TransientRefinement,
                 Visible = source.Visible
             };
         }
@@ -2328,7 +2389,6 @@ namespace AERISFlightControl.Terrain
                         "/" + (resident == null ? 0 : resident.FarCount) +
                         "/" + (resident == null ? 0 : resident.RouteCount) +
                         "/" + (resident == null ? 0 : resident.LocalCount) +
-                        "/" + (resident == null ? 0 : resident.LandCount) +
                         "; decode=" + (resident == null ? 0L :
                             resident.AsyncDecodeSuccesses) + "/" +
                         (resident == null ? 0L : resident.AsyncDecodeSubmissions) +
@@ -2341,6 +2401,18 @@ namespace AERISFlightControl.Terrain
                         lastFoundationGlobalCount + "/" + lastFoundationFarCount +
                         "; foundation_missing=" + lastFoundationMissingCount + "/" +
                         lastFoundationRequestedCount + ".");
+                    AERISLogger.Info("[CP3.5_GATE4_QUALITY] effective=" +
+                        (performance == null || performance.ActiveProfile == null ?
+                            "UNKNOWN" : performance.ActiveProfile.Name) +
+                        "; quality_floor=CP3_GOLDEN; " +
+                        "low=REAL33_CP3_LOCAL97_ROUTE65; " +
+                        "middle=REAL33_CP3_LOCAL97_ROUTE65_HIDPI; " +
+                        "high=CP3_GOLDEN_FALLBACK_REAL65_VIRTUAL129_SPARSE_EXACT; " +
+                        "high_refine_requested=" +
+                        gate4HighRefinementRequested + "; high_refine_completed=" +
+                        gate4HighRefinementCompleted + "; high_partial_suppressed=" +
+                        gate4HighRefinementPartialCommitsSuppressed +
+                        "; high_safety_skips=" + gate4HighRefinementSafetySkips + ".");
                 }
             }
         }
@@ -2491,8 +2563,7 @@ namespace AERISFlightControl.Terrain
             if (lane == AERISTerrainRequestLane.Viewport ||
                 priority == AERISTerrainTilePriority.Critical)
                 return AERISTerrainReadLane.Critical;
-            if (lane == AERISTerrainRequestLane.Landing ||
-                priority == AERISTerrainTilePriority.High)
+            if (priority == AERISTerrainTilePriority.High)
                 return AERISTerrainReadLane.High;
             if (lane == AERISTerrainRequestLane.LookAhead)
                 return AERISTerrainReadLane.Prefetch;
@@ -2504,7 +2575,7 @@ namespace AERISFlightControl.Terrain
         {
             // Gate 3.1 keeps only the coarse authoritative base in the current-body
             // sweep. Route/Local become reconstructed quality levels and are admitted
-            // only as existing exact bridge payloads or demand-gated LAND microtiles.
+            // only as existing exact bridge payloads; the live viewport never creates them.
             return lod == AERISTerrainTileLod.Global ||
                 lod == AERISTerrainTileLod.Far;
         }
@@ -2514,8 +2585,7 @@ namespace AERISFlightControl.Terrain
             return lod == AERISTerrainTileLod.Global ||
                 lod == AERISTerrainTileLod.Far ||
                 lod == AERISTerrainTileLod.Route ||
-                lod == AERISTerrainTileLod.Local ||
-                lod == AERISTerrainTileLod.Land;
+                lod == AERISTerrainTileLod.Local;
         }
 
         static int CompareRequests(AERISTerrainTileRequest a, AERISTerrainTileRequest b)

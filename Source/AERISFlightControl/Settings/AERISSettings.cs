@@ -27,10 +27,7 @@ namespace AERISFlightControl.Settings
         Automatic = 0,
         Low = 1,
         Medium = 2,
-        High = 3,
-        // LAND is intentionally excluded from the normal user selector. It is a
-        // developer-only detail profile and Gate 3 controls when LAND requests exist.
-        Land = 4
+        High = 3
     }
 
     internal enum AERISNavigationDisplayLandProfileSize
@@ -89,6 +86,10 @@ namespace AERISFlightControl.Settings
         internal bool AllowAASpeedAutoBrakes = false;
         // Observation-only by design. This remains independent from both AERIS and AA control paths.
         internal bool EnableAAComparisonTelemetry = true;
+        // CP3.5 Gate 3 Candidate 3: bounded FDR/CVR archive retention. One verified
+        // flight ZIP contains both FDR and CVR payloads. Values are intentionally
+        // selection-only in UI and clamped to 1..30; default is 10.
+        internal int FlightDataArchiveLimit = 10;
         // Performance-runtime launch policy.  Zero selects the scheduler's
         // processor-aware AUTO sizing.  A value of two is the documented minimum
         // worker acceptance configuration; larger explicit values remain available
@@ -123,7 +124,7 @@ namespace AERISFlightControl.Settings
         internal bool LandSectionExpanded = true;
         internal const int CurrentAirfieldsUiLayoutRevision = 2;
         internal int AirfieldsUiLayoutRevision = CurrentAirfieldsUiLayoutRevision;
-        internal const int CurrentTerrainQualityModelRevision = 2;
+        internal const int CurrentTerrainQualityModelRevision = 3;
         internal int TerrainQualityModelRevision = CurrentTerrainQualityModelRevision;
         internal const int CurrentDisplayPolicyRevision = 1;
         internal int DisplayPolicyRevision = CurrentDisplayPolicyRevision;
@@ -145,10 +146,6 @@ namespace AERISFlightControl.Settings
         // adapted at runtime from measured frame/AERIS workload. These affect only
         // ND presentation and never alter KSP graphics or flight-control settings.
         internal AERISTerrainQualityMode TerrainQualityMode = AERISTerrainQualityMode.Automatic;
-        // Gate 3 separates permission from activation. This developer-only capability
-        // never activates LAND detail by itself; LAND ARM / Approach / Auto Landing
-        // demand must also be present in the central activation policy.
-        internal bool TerrainLandRuntimeQualityEnabled;
         internal AERISNavigationDisplayUpdateMode NavigationDisplayUpdateMode =
             AERISNavigationDisplayUpdateMode.Automatic;
         internal AERISTerrainDisplayMode TerrainDisplayMode = AERISTerrainDisplayMode.Automatic;
@@ -279,6 +276,8 @@ namespace AERISFlightControl.Settings
                 settings.EnableAABackgroundTraining = ReadBool(node, "enableAABackgroundTraining", true);
                 settings.AllowAASpeedAutoBrakes = ReadBool(node, "allowAASpeedAutoBrakes", false);
                 settings.EnableAAComparisonTelemetry = ReadBool(node, "enableAAComparisonTelemetry", true);
+                settings.FlightDataArchiveLimit = NormalizeFlightDataArchiveLimit(ReadInt(node,
+                    "flightDataArchiveLimit", settings.FlightDataArchiveLimit));
                 settings.PerformanceWorkerOverride = NormalizeWorkerOverride(ReadInt(node,
                     "performanceWorkerOverride", settings.PerformanceWorkerOverride));
                 settings.PerformanceGpuAccelerationEnabled = ReadBool(node,
@@ -345,38 +344,26 @@ namespace AERISFlightControl.Settings
                     "terrainQualityModelRevision", 0);
                 string rawTerrainQuality = node.HasValue("terrainQualityMode") ?
                     node.GetValue("terrainQualityMode") : string.Empty;
-                bool rawLandCapability = ReadBool(node,
-                    "terrainLandRuntimeQualityEnabled", false);
                 if (terrainQualityRevision < CurrentTerrainQualityModelRevision)
                 {
-                    bool gate2LandProfile = terrainQualityRevision >= 1 &&
-                        string.Equals((rawTerrainQuality ?? string.Empty).Trim(), "LAND",
-                            StringComparison.OrdinalIgnoreCase);
                     settings.TerrainQualityMode = terrainQualityRevision < 1 ?
                         MigrateLegacyTerrainQualityMode(rawTerrainQuality,
                             AERISTerrainQualityMode.Automatic) :
                         ReadTerrainQualityMode(node, "terrainQualityMode",
                             AERISTerrainQualityMode.Automatic);
-                    if (settings.TerrainQualityMode == AERISTerrainQualityMode.Land)
-                        settings.TerrainQualityMode = AERISTerrainQualityMode.High;
-                    settings.TerrainLandRuntimeQualityEnabled =
-                        rawLandCapability || gate2LandProfile;
                     settings.TerrainQualityModelRevision =
                         CurrentTerrainQualityModelRevision;
                     saveSettingsMigration = true;
-                    AERISLogger.Info("[CP2.5/TERRAIN_QUALITY] migrated setting '" +
-                        rawTerrainQuality + "' -> base=" + settings.TerrainQualityMode +
-                        "; LAND capability=" + settings.TerrainLandRuntimeQualityEnabled +
-                        "; revision=" + settings.TerrainQualityModelRevision + ".");
+                    AERISLogger.Info("[CP3.5/TERRAIN_QUALITY] migrated setting '" +
+                        rawTerrainQuality + "' -> " + settings.TerrainQualityMode +
+                        "; retired hidden detail preset removed; revision=" +
+                        settings.TerrainQualityModelRevision + ".");
                 }
                 else
                 {
                     settings.TerrainQualityModelRevision = terrainQualityRevision;
                     settings.TerrainQualityMode = ReadTerrainQualityMode(node,
                         "terrainQualityMode", AERISTerrainQualityMode.Automatic);
-                    if (settings.TerrainQualityMode == AERISTerrainQualityMode.Land)
-                        settings.TerrainQualityMode = AERISTerrainQualityMode.High;
-                    settings.TerrainLandRuntimeQualityEnabled = rawLandCapability;
                 }
                 settings.NavigationDisplayUpdateMode = ReadNavigationDisplayUpdateMode(node,
                     "navigationDisplayUpdateMode", AERISNavigationDisplayUpdateMode.Automatic);
@@ -553,6 +540,7 @@ namespace AERISFlightControl.Settings
             EnableAABackgroundTraining = true;
             AllowAASpeedAutoBrakes = false;
             EnableAAComparisonTelemetry = true;
+            FlightDataArchiveLimit = 10;
             PerformanceWorkerOverride = 0;
             PerformanceGpuAccelerationEnabled = true;
             VelocityAccelerationLimitMps2 = 4.0f;
@@ -580,7 +568,6 @@ namespace AERISFlightControl.Settings
             NavigationDisplayAutoRange = false;
             NavigationDisplayManualRangeMeters = 20000f;
             TerrainQualityMode = AERISTerrainQualityMode.Automatic;
-            TerrainLandRuntimeQualityEnabled = false;
             TerrainQualityModelRevision = CurrentTerrainQualityModelRevision;
             DisplayPolicyRevision = CurrentDisplayPolicyRevision;
             NavigationDisplayUpdateMode = AERISNavigationDisplayUpdateMode.Automatic;
@@ -770,6 +757,8 @@ namespace AERISFlightControl.Settings
                 node.AddValue("enableAABackgroundTraining", EnableAABackgroundTraining);
                 node.AddValue("allowAASpeedAutoBrakes", AllowAASpeedAutoBrakes);
                 node.AddValue("enableAAComparisonTelemetry", EnableAAComparisonTelemetry);
+                node.AddValue("flightDataArchiveLimit",
+                    NormalizeFlightDataArchiveLimit(FlightDataArchiveLimit));
                 node.AddValue("performanceWorkerOverride", PerformanceWorkerOverride);
                 node.AddValue("performanceGpuAccelerationEnabled", PerformanceGpuAccelerationEnabled);
                 node.AddValue("velocityAccelerationLimitMps2", VelocityAccelerationLimitMps2.ToString("F1", System.Globalization.CultureInfo.InvariantCulture));
@@ -806,8 +795,6 @@ namespace AERISFlightControl.Settings
                 node.AddValue("terrainQualityModelRevision",
                     CurrentTerrainQualityModelRevision);
                 node.AddValue("terrainQualityMode", TerrainQualityMode);
-                node.AddValue("terrainLandRuntimeQualityEnabled",
-                    TerrainLandRuntimeQualityEnabled);
                 node.AddValue("navigationDisplayUpdateMode", NavigationDisplayUpdateMode);
                 node.AddValue("terrainDisplayMode", TerrainDisplayMode);
                 node.AddValue("terrainGpuMode", TerrainGpuMode);
@@ -916,9 +903,9 @@ namespace AERISFlightControl.Settings
         private static AERISTerrainQualityMode MigrateLegacyTerrainQualityMode(
             string raw, AERISTerrainQualityMode fallback)
         {
-            // One-time CP2 -> CP2.5 migration contract:
-            // AUTO -> AUTO, ECO -> LOW, BALANCED -> MEDIUM, HIGH -> HIGH,
-            // ULTRA -> HIGH. LAND is never enabled by migration.
+            // Legacy quality tokens are collapsed into the current four-value
+            // presentation model: AUTO / LOW / MIDDLE / HIGH. Unknown retired
+            // developer presets safely fall back instead of retaining hidden state.
             return ParseTerrainQualityMode(raw, fallback, true);
         }
 
@@ -934,13 +921,10 @@ namespace AERISFlightControl.Settings
                 case "LOW": return AERISTerrainQualityMode.Low;
                 case "BAL":
                 case "BALANCED":
-                case "MEDIUM": return AERISTerrainQualityMode.Medium;
+                case "MEDIUM":
+                case "MIDDLE": return AERISTerrainQualityMode.Medium;
                 case "HIGH": return AERISTerrainQualityMode.High;
                 case "ULTRA": return AERISTerrainQualityMode.High;
-                // Gate 2 packages persisted LAND as a global profile. Gate 3 always
-                // migrates that token to HIGH and carries activation in the separate
-                // terrainLandRuntimeQualityEnabled capability flag.
-                case "LAND": return AERISTerrainQualityMode.High;
                 default: return fallback;
             }
         }
@@ -1013,6 +997,11 @@ namespace AERISFlightControl.Settings
             if (float.TryParse(text, System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out value) && IsFinite(value)) return value;
             return float.TryParse(text, out value) && IsFinite(value) ? value : fallback;
+        }
+
+        internal static int NormalizeFlightDataArchiveLimit(int value)
+        {
+            return Math.Max(1, Math.Min(30, value));
         }
 
         private static int ReadInt(ConfigNode node, string key, int fallback)

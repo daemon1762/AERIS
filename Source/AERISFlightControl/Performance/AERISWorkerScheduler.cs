@@ -654,6 +654,7 @@ namespace AERISFlightControl.Performance
                     RecordSample(runwaySamples, ref runwayIndex, ref runwayCount,
                         watch.Elapsed.TotalMilliseconds);
                 else if (string.Equals(job.Key, "terrain-raster",
+                    StringComparison.Ordinal) || job.Key.StartsWith("terrain-projection-",
                     StringComparison.Ordinal))
                     RecordSample(terrainSamples, ref terrainIndex, ref terrainCount,
                         watch.Elapsed.TotalMilliseconds);

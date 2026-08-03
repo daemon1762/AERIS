@@ -1,0 +1,34 @@
+AERIS CP3.5 Gate 3 Candidate 2 source diff audit
+
+Base: Gate 3 Candidate 1 (REJECTED runtime hi-res path)
+Current: CP3 Frozen Visual Path Recovery / Bounded Exact Refinement Candidate 2
+
+ADDED
+ + ACCEPTANCE_v0.18.0.0_CP3.5_GATE3_CP3_FROZEN_VISUAL_PATH_RECOVERY_BOUNDED_EXACT_REFINEMENT_CANDIDATE2.txt
+ + Docs/CP3.5_GATE3_CP3_FROZEN_VISUAL_PATH_RECOVERY_CANDIDATE2_DESIGN_ja.md
+ + Docs/ND_CP3.5_GATE3_CP3_FROZEN_VISUAL_PATH_RECOVERY_CANDIDATE2_TEST_CARD_v0.18.0.0_ja.md
+ + Tools/run_v01800_cp35_gate3_candidate2_acceptance.py
+ + Tools/selftest_v01800_cp35_gate3_cp3_frozen_visual_path_recovery_candidate2.py
+ + Tools/verify_cp35_gate3_candidate2_package_manifest.py
+ + Tools/verify_cp35_gate3_candidate2_source_manifest.py
+
+REMOVED
+
+
+CHANGED
+ * GameData/AERISFlightControl/AERISFlightControl.version
+ * README.md
+ * Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+ * Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+ * Source/AERISFlightControl/Terrain/AERISTerrainPerformance.cs
+ * Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs
+ * Source/AERISFlightControl/Terrain/AERISTerrainVirtualDetail.cs
+ * build_ubuntu.sh
+
+RECOVERY AUTHORITY
+Frozen CP3 VirtualDetail sha256: 6afedb91ee15194da10d3cc105d6ab5e329a2552739cf0146cb5591e597473b2
+Candidate2 VirtualDetail sha256: f952e71c5ef7b87c1d9ecf9b9b7008a9118725ef6eae4ad4f8e552e363e76476
+Candidate2 differs from frozen CP3 VirtualDetail only to remove retired terrain-quality LAND branches/comments.
+Live viewport generated Route/Local refinement: DISABLED (existing exact payloads only).
+CP3.5 multicore/keyframe/temporal/accessibility/UI lineage: RETAINED.
+Terrain-quality LAND: REMAINS REMOVED.

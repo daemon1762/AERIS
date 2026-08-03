@@ -1,0 +1,40 @@
+AERIS v0.18.0.0 CP3.5 Gate 1 Candidate 2 — Source Diff Audit
+
+INTENTIONAL OPERATIONAL CHANGES
+1. Terrain/AERISTerrainGpuTileRenderer.cs
+   - Candidate 1 range cadence constants 0.25/0.33/0.50 s removed.
+   - Scheduled BACK cadence bridge set to 0.20 s for every ND range.
+   - forced-recovery suppression remains; no forced full-render path restored.
+   - Every fourth BACK receives aggregate internal profiling.
+   - Profile decomposes setup/clear, projection CPU, mesh vertex upload, bounds,
+     colour CPU, colour upload, draw submission, finalize, residual, and workload counts.
+   - One aggregate log marker only; no per-tile log output.
+
+2. UI/AERISWindow.cs
+   - Main top tabs use explicit screenshot-reference 3+2 topology.
+   - MASTER and tab rows allocate the full available row width.
+   - Buttons in a row use equal widths and equal gaps from one shared row Rect,
+     guaranteeing equal left/right outer margins from GUILayout content area.
+   - SYSTEM selectors use the same symmetric row allocator. Candidate 13's removal
+     of DIAGNOSTICS remains; PRELOAD MAPS fills its own full row.
+   - Existing responsive sizing and no-wrap/clipping contract remains.
+
+IDENTITY / BUILD / DOCUMENTATION
+- AERISBuildVersion.generated.cs -> Candidate 2 current UiCheckpoint.
+- build_ubuntu.sh -> Candidate 2 display prefix and acceptance runner.
+- AERISFlightControl.version -> Candidate 2 AVC prefix.
+- README / acceptance / runtime test card / evidence updated.
+
+FROZEN BOUNDARIES
+No intentional modification to:
+- Terrain/AERISTerrainTileContracts.cs
+- Terrain/AERISTerrainGpuTileRasterizer.cs
+- Landing/AERISAirfieldRegistry.cs
+- Autopilot/AERISBankDirector.cs
+- field-verified runway authority baseline
+
+PROHIBITIONS RETAINED
+- CPU terrain presentation: prohibited.
+- GUI.matrix temporal terrain warp: prohibited.
+- non-stock automatic runway certification: prohibited.
+- SYSTEM DIAGNOSTICS page: not reintroduced.

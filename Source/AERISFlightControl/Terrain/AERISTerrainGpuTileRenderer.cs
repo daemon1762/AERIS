@@ -14,6 +14,8 @@ namespace AERISFlightControl.Terrain
     {
         internal bool Valid;
         internal bool Latched;
+        internal bool Reprojected;
+        internal float ReprojectionErrorPixels;
         internal double CenterLatitudeDeg;
         internal double CenterLongitudeDeg;
         internal float RangeMeters;
@@ -34,8 +36,9 @@ namespace AERISFlightControl.Terrain
     // GPU-only contract and the Gate 4B geometry-integrity rule. Gate 5 Candidate 2 adds a
     // presentation latch: when the next exact projection is not ready, the last complete GPU
     // FRONT remains visible without any warp and publishes its committed projection so every
-    // world-fixed overlay is drawn in that same coordinate authority. Route/Local display
-    // quality is reconstructed from FAR; exact existing/LAND microtiles remain authoritative.
+    // world-fixed overlay is drawn in that same coordinate authority. CP3.5 Gate 3 folds
+    // world-locked runway/facility geometry into that same surface and progressively refines
+    // Route/Local detail without any landing-specific terrain-quality tier.
     internal sealed class AERISTerrainGpuTileRenderer : IDisposable
     {
         sealed class Entry
@@ -70,9 +73,13 @@ namespace AERISFlightControl.Terrain
             internal float[] LandElevationMeters;
             internal byte[] LandShade;
             internal Color32[] LandColours;
+            internal long PreparedProjectionBatchId = -1L;
+            internal long PreparedColourBatchId = -1L;
             internal AERISTerrainDisplayMode ColourMode = (AERISTerrainDisplayMode)(-1);
             internal AERISTerrainColourPreset ColourPreset = (AERISTerrainColourPreset)(-1);
             internal int RelativeAltitudeBucket = int.MinValue;
+            internal int TopoMinimumMeters = int.MinValue;
+            internal int TopoMaximumMeters = int.MinValue;
             internal int Resolution;
             internal byte[] Valid;
             internal float CoverageFraction;
@@ -94,6 +101,85 @@ namespace AERISFlightControl.Terrain
             internal double X;
             internal double Y;
             internal double Z;
+        }
+
+        // Fixed-value, allocation-free sample carried only by the sampled BACK render. Detailed
+        // instrumentation runs once per BackRenderDetailedProfileStride BACKs; all BACKs still
+        // contribute the outer total-time average. No per-tile log messages are emitted.
+        struct BackRenderDetailedProfile
+        {
+            internal double SetupClearMs;
+            internal double ProjectionCpuMs;
+            internal double MeshVertexUploadMs;
+            internal double BoundsMs;
+            internal double ColourCpuMs;
+            internal double ColourUploadMs;
+            internal double DrawSubmitMs;
+            internal double WorldSurfaceMs;
+            internal double FinalizeMs;
+            internal long ProjectedVertices;
+            internal long DrawCalls;
+            internal long WorldSurfacePrimitives;
+            internal long TilesVisited;
+            internal long EntriesReprojected;
+        }
+
+        // Gate 2 projection batches deliberately carry only immutable projection snapshots
+        // plus managed arrays.  No worker touches Mesh, Material, RenderTexture, Graphics,
+        // Event, Vessel or any other Unity/KSP object.  Each chunk owns a disjoint set of
+        // Entry scratch arrays, allowing all currently-permitted scheduler workers to run
+        // in parallel without locks or cross-thread Unity calls.
+        sealed class ProjectionBatch
+        {
+            internal long Id;
+            internal AERISNdMapProjection Projection;
+            internal Matrix4x4 MapRotation;
+            internal Entry[] Entries;
+            internal Entry[][] Chunks;
+            internal AERISTerrainDisplayMode Mode;
+            internal AERISTerrainColourPreset Preset;
+            internal float AircraftAltitudeAslMeters;
+            internal int RelativeAltitudeBucket;
+            internal int TopoMinimumMeters;
+            internal int TopoMaximumMeters;
+            internal double CenterLatitudeDeg;
+            internal double CenterLongitudeDeg;
+            internal float RangeMeters;
+            internal float SurfaceRangeMeters;
+            internal float MapHeadingDeg;
+            internal bool TrackUp;
+            internal float AnchorV;
+            internal AERISTerrainRenderTargetOrientation Orientation;
+            internal long ViewGeneration;
+            internal long TerrainGeneration;
+            internal long ContentRevision;
+            internal string BodyName;
+            internal long BodyRadiusMillimetres;
+            internal bool FoundationComplete;
+            internal float FoundationCoverage;
+            internal int ReadyFar;
+            internal int RequiredFar;
+            internal AERISTerrainHeightTile[] Tiles;
+            internal AERISPreparedNavigationFrame NavigationFrame;
+            internal bool IncludeFacilities;
+            internal long WorldSurfaceRevision;
+            internal int ExpectedChunks;
+            internal int CompletedChunks;
+            internal bool SubmissionFailed;
+            internal bool Ready;
+            internal long ProjectedVertices;
+            internal long ColourVertices;
+            internal double WorkerMilliseconds;
+            internal float SubmittedRealtime;
+        }
+
+        sealed class ProjectionChunkResult
+        {
+            internal ProjectionBatch Batch;
+            internal int ChunkIndex;
+            internal long ProjectedVertices;
+            internal long ColourVertices;
+            internal double WorkerMilliseconds;
         }
 
         sealed class SurfaceBuilder
@@ -128,19 +214,42 @@ namespace AERISFlightControl.Terrain
             internal Entry Entry;
         }
 
-        const string GraphicsAssistName = "UNITY GPU EXACT FAR PRESENTATION";
+        const string GraphicsAssistName = "UNITY GPU UNIFIED WORLD SURFACE TEMPORAL REPROJECTION";
         const float CoastlineHalfWidthNormalized = 0.0025f;
         const float RelativeAltitudeBucketMeters = 5f;
-        // Gate 4B Recovery Hotfix 1: keep a wider GPU history surface than the
-        // visible ND viewport so normal aircraft translation/rotation does not
-        // instantly invalidate the temporal FRONT. The user-visible projection
-        // is still the exact requested range; only the hidden FAR history surface
-        // is oversized.
-        const float HistoryOverscanScale = 1.35f;
+        const float TopographicWindowBucketMeters = 250f;
+        const float TopographicMinimumSpanMeters = 1500f;
+        // CP3.5 Gate 2 Candidate 2: every authoritative map is an exact key frame prepared
+        // by the multicore worker pool.  The key frame covers a hidden overscan surface;
+        // between key frames a tiny continuous reprojection grid maps the current exact ND
+        // projection back into that surface and the GPU resamples it into a third presentation
+        // RenderTexture.  This is not GUI.matrix warping: all geographic mapping is computed
+        // from AERISNdMapProjection and accepted only while the measured interpolation error
+        // stays below a strict sub-pixel limit.
+        const float HistoryOverscanScale = 1.25f;
         const float MaximumHistorySurfaceRangeMeters = 250000f;
-        const float ProjectionRefreshAgeSeconds = 2.5f;
-        const float ProjectionRefreshHeadingDeg = 8f;
         const float ReadyBuildingViolationSeconds = 1.0f;
+        const float KeyFrameMinimumIntervalSeconds = 0.35f;
+        const float KeyFrameMaximumAgeSeconds = 1.25f;
+        const float KeyFrameRefreshHeadingDeg = 3.0f;
+        const float KeyFrameRefreshDriftPixels = 36f;
+        const float KeyFrameRefreshErrorPixels = 0.30f;
+        const float TemporalMaximumErrorPixels = 0.75f;
+        const float TemporalMinimumUvMargin = 0.0025f;
+        const int TemporalGridCells = 8;
+        const int TemporalGridPointsPerAxis = TemporalGridCells + 1;
+        const int TemporalGridPointCount = TemporalGridPointsPerAxis * TemporalGridPointsPerAxis;
+        // Gate 3 Candidate 2 Presentation Authority Hotfix 1: temporal reprojection is
+        // retained as a shadow-quality probe, but it is not allowed to own presentation
+        // until the exact FRONT authority has been revalidated in runtime. Any valid
+        // committed FRONT must remain directly visible even if temporal generation fails.
+        const bool TemporalPresentationAuthorityEnabled = false;
+        // Candidate 3: exact FRONT remains the only presentation authority, so the
+        // 9x9 temporal shadow grid is disabled during normal operation. A one-point
+        // geographic drift/heading metric keeps adaptive key-frame refresh intact.
+        const bool TemporalShadowSamplingEnabled = false;
+        const int BackRenderDetailedProfileStride = 4;
+        const int ProjectionCancellationCheckStride = 4096;
 
         readonly AERISSettings settings;
         readonly AERISTerrainPerformanceController performance;
@@ -161,6 +270,7 @@ namespace AERISFlightControl.Terrain
         long usedEntryBytes;
         long backTargetBytes;
         long frontTargetBytes;
+        long presentationTargetBytes;
         int generation;
         int uploadFailures;
         int uploaded;
@@ -179,8 +289,11 @@ namespace AERISFlightControl.Terrain
         Material terrainMaterial;
         Material contourMaterial;
         Material coastlineMaterial;
+        Material worldSurfaceMaterial;
+        Material reprojectionMaterial;
         RenderTexture backTarget;
         RenderTexture frontTarget;
+        RenderTexture presentationTarget;
         bool frontBufferValid;
         long frontViewGeneration = -1L;
         long frontTerrainGeneration = -1L;
@@ -205,6 +318,17 @@ namespace AERISFlightControl.Terrain
         long renderReadyBytes;
         long gpuContentRevision;
         long frontContentRevision;
+        long frontWorldSurfaceRevision = -1L;
+        AERISPreparedNavigationFrame worldSurfaceNavigationFrame;
+        bool worldSurfaceIncludeFacilities;
+        long worldSurfaceRevision;
+        string worldSurfaceBodyName = string.Empty;
+        long worldSurfaceDatabaseRevision = -1L;
+        long worldSurfaceSelectionRevision = -1L;
+        int worldSurfaceRunwayCount = -1;
+        int worldSurfaceFacilityCount = -1;
+        AERISTerrainColourPreset activePalettePreset = (AERISTerrainColourPreset)(-1);
+        long paletteGeneration;
         long lastBackAttemptViewGeneration = -1L;
         long lastBackAttemptContentRevision = -1L;
         float nextBackRefreshRealtime;
@@ -214,6 +338,8 @@ namespace AERISFlightControl.Terrain
         long backRenderFrames;
         long skippedBackRenderFrames;
         long forcedRecoveryBackRenders;
+        long suppressedForcedRecoveryFrames;
+        float lastBackRefreshCadenceSeconds;
         long generationBridgeFrames;
         long generationBridgeRejects;
         long readyBuildingViolations;
@@ -230,6 +356,100 @@ namespace AERISFlightControl.Terrain
         long exactDetailOverlayDraws;
         string lastVirtualDetailName = "FAR DIRECT";
 
+        // CP3.5 Gate 1 Candidate 2 BACK composition profiler. Main-thread only; no locks, no
+        // allocations on the render path, and no per-frame file writes. Aggregates are flushed
+        // into one human-readable log line at the existing 5 s presentation telemetry cadence.
+        long backProfileSequence;
+        long backProfileAllSamples;
+        double backProfileAllTotalMs;
+        double backProfileAllMaxTotalMs;
+        long backProfileDetailedSamples;
+        double backProfileDetailedTotalMs;
+        double backProfileSetupClearMs;
+        double backProfileProjectionCpuMs;
+        double backProfileMeshVertexUploadMs;
+        double backProfileBoundsMs;
+        double backProfileColourCpuMs;
+        double backProfileColourUploadMs;
+        double backProfileDrawSubmitMs;
+        double backProfileWorldSurfaceMs;
+        double backProfileFinalizeMs;
+        long backProfileProjectedVertices;
+        long backProfileDrawCalls;
+        long backProfileWorldSurfacePrimitives;
+        long backProfileTilesVisited;
+        long backProfileEntriesReprojected;
+
+        ProjectionBatch pendingProjectionBatch;
+        long projectionBatchSequence;
+        long projectionBatchesSubmitted;
+        long projectionBatchesCompleted;
+        long projectionBatchesDiscarded;
+        long projectionBatchesSubmissionFailed;
+        long projectionWorkerProjectedVertices;
+        long projectionWorkerColourVertices;
+        double projectionWorkerMilliseconds;
+        double projectionWorkerWallMilliseconds;
+        int lastProjectionWorkerCount;
+
+        readonly Vector2[] temporalSourceUv = new Vector2[TemporalGridPointCount];
+        long temporalFrames;
+        long temporalRejects;
+        long temporalKeyFrameRequests;
+        double temporalGridMilliseconds;
+        double temporalSubmitMilliseconds;
+        double lastTemporalMaxErrorPixels;
+        float lastTemporalMinUvMargin;
+        float lastTemporalDriftPixels;
+        float lastTemporalHeadingDeltaDeg;
+        long temporalShadowEligibleFrames;
+        long temporalPresentationBlockedFrames;
+        long exactFrontAuthorityFrames;
+
+        // Gate 3 Candidate 1: world-locked navigation geometry is latched into the
+        // same exact key-frame surface as terrain. New pipeline frames with identical
+        // database/selection identity do not force a redraw; only meaningful geometry
+        // authority changes advance the surface revision.
+        internal void SetWorldSurfaceNavigationFrame(AERISPreparedNavigationFrame frame,
+            bool includeFacilities)
+        {
+            string body = frame == null ? string.Empty : (frame.BodyName ?? string.Empty);
+            long databaseRevision = frame == null ? -1L : frame.DatabaseRevision;
+            long selectionRevision = frame == null ? -1L : frame.SelectionRevision;
+            int runwayCount = frame == null || frame.Runways == null ? 0 : frame.Runways.Length;
+            int facilityCount = frame == null || frame.Facilities == null ? 0 : frame.Facilities.Length;
+            bool changed = !string.Equals(body, worldSurfaceBodyName, StringComparison.Ordinal) ||
+                databaseRevision != worldSurfaceDatabaseRevision ||
+                selectionRevision != worldSurfaceSelectionRevision ||
+                runwayCount != worldSurfaceRunwayCount ||
+                facilityCount != worldSurfaceFacilityCount ||
+                includeFacilities != worldSurfaceIncludeFacilities;
+            worldSurfaceNavigationFrame = frame;
+            worldSurfaceIncludeFacilities = includeFacilities;
+            if (!changed) return;
+            worldSurfaceBodyName = body;
+            worldSurfaceDatabaseRevision = databaseRevision;
+            worldSurfaceSelectionRevision = selectionRevision;
+            worldSurfaceRunwayCount = runwayCount;
+            worldSurfaceFacilityCount = facilityCount;
+            worldSurfaceRevision++;
+            gpuContentRevision++;
+            CancelProjectionBatch();
+            nextBackRefreshRealtime = 0f;
+        }
+
+        internal bool IsWorldSurfaceNavigationCurrent(AERISPreparedNavigationFrame frame,
+            bool includeFacilities)
+        {
+            if (!frontBufferValid || frontWorldSurfaceRevision != worldSurfaceRevision ||
+                includeFacilities != worldSurfaceIncludeFacilities) return false;
+            if (frame == null) return worldSurfaceNavigationFrame == null;
+            return string.Equals(frame.BodyName ?? string.Empty, worldSurfaceBodyName,
+                StringComparison.Ordinal) &&
+                frame.DatabaseRevision == worldSurfaceDatabaseRevision &&
+                frame.SelectionRevision == worldSurfaceSelectionRevision;
+        }
+
         internal AERISTerrainGpuTileRenderer(AERISSettings settings,
             AERISTerrainPerformanceController performance)
         {
@@ -244,7 +464,8 @@ namespace AERISFlightControl.Terrain
             get
             {
                 return Math.Max(0L, usedEntryBytes) + Math.Max(0L, backTargetBytes) +
-                    Math.Max(0L, frontTargetBytes) + Math.Max(0L, renderReadyBytes);
+                    Math.Max(0L, frontTargetBytes) + Math.Max(0L, presentationTargetBytes) +
+                    Math.Max(0L, renderReadyBytes);
             }
         }
         // Kept as TextureCount in telemetry for backward column compatibility. CP2 entries
@@ -305,6 +526,11 @@ namespace AERISFlightControl.Terrain
             generation++;
             rasterizer.CancelAll();
             requested.Clear();
+            // A user-selected range/view change is interactive and must not wait behind the
+            // previous key-frame cadence. Existing worker chunks are retired safely by the
+            // normal batch contract; the successor exact FRONT may be requested immediately.
+            CancelProjectionBatch();
+            nextBackRefreshRealtime = 0f;
         }
 
         internal void SuspendViewport()
@@ -402,12 +628,9 @@ namespace AERISFlightControl.Terrain
             AERISTerrainRenderTargetOrientation orientation = settings == null ?
                 AERISTerrainRenderTargetOrientation.Direct :
                 settings.TerrainRenderTargetOrientation;
-            float historySurfaceRangeMeters = rangeMeters;
-            // Geometry Integrity Hotfix 2: the rejected overscan/GUI-matrix history surface
-            // is non-authoritative. Capture exactly the visible projection so the texture
-            // presented to the ND cannot contain a differently-scaled map authority.
+            float historySurfaceRangeMeters = ResolveHistorySurfaceRange(rangeMeters);
             AERISTerrainVisibleTileSet visible = system.CaptureVisible(centerLatitudeDeg,
-                centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
+                centerLongitudeDeg, historySurfaceRangeMeters, mapHeadingDeg, trackUp,
                 anchorV, orientation);
             if (visible == null || visible.Tiles == null || visible.Tiles.Length == 0)
             {
@@ -429,6 +652,8 @@ namespace AERISFlightControl.Terrain
 
             AERISTerrainHeightTile[] tiles = (AERISTerrainHeightTile[])visible.Tiles.Clone();
             Array.Sort(tiles, CompareTilesCoarseFirst);
+            int topoMinimumMeters, topoMaximumMeters;
+            ResolveTopographicWindow(tiles, out topoMinimumMeters, out topoMaximumMeters);
             for (int i = 0; i < tiles.Length; i++)
             {
                 AERISTerrainHeightTile tile = tiles[i];
@@ -452,8 +677,11 @@ namespace AERISFlightControl.Terrain
                 vessel.mainBody, centerLatitudeDeg, centerLongitudeDeg, rangeMeters,
                 mapHeadingDeg, trackUp, anchorV, orientation);
             Matrix4x4 mapRotation = projection.ResolveScaleCorrectedRenderMatrix();
-            AERISNdMapProjection historySurfaceProjection = projection;
-            Matrix4x4 historySurfaceMapRotation = mapRotation;
+            AERISNdMapProjection historySurfaceProjection = AERISNdMapProjection.Create(
+                vessel.mainBody, centerLatitudeDeg, centerLongitudeDeg,
+                historySurfaceRangeMeters, mapHeadingDeg, trackUp, anchorV, orientation);
+            Matrix4x4 historySurfaceMapRotation =
+                historySurfaceProjection.ResolveScaleCorrectedRenderMatrix();
             lastRunwayMapLockErrorPixels = MeasureRunwayMapLockError(plot,
                 projection, mapRotation, lockReference);
             if (lastRunwayMapLockErrorPixels > 1.0f)
@@ -477,47 +705,60 @@ namespace AERISFlightControl.Terrain
             Prune(ResolveVramLimitBytes());
             PruneRenderReady(ResolveRenderReadyLimitBytes());
             if (backTarget == null || !backTarget.IsCreated() || frontTarget == null ||
-                !frontTarget.IsCreated())
+                !frontTarget.IsCreated() || presentationTarget == null ||
+                !presentationTarget.IsCreated())
             {
                 lastDrawState = AERISTerrainGpuDrawState.None;
                 return lastDrawState;
             }
 
-            bool projectionRefreshRequired = NeedsProjectionRefresh(visible, vessel,
-                centerLatitudeDeg, centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
-                anchorV, orientation);
-            bool refreshRequired = !frontBufferValid ||
-                frontTerrainGeneration != visible.TerrainGeneration ||
-                frontViewGeneration != visible.ViewGeneration ||
-                frontContentRevision != gpuContentRevision ||
-                projectionRefreshRequired;
+            AERISTerrainColourPreset currentPreset = settings == null ?
+                AERISTerrainColourPreset.Standard : settings.TerrainColourPreset;
+            HandlePaletteGeneration(currentPreset);
+
+            bool preparedSwapped;
+            TryRenderReadyProjectionBatch(visible, effectiveMode, currentPreset,
+                rangeMeters, historySurfaceRangeMeters, trackUp, orientation,
+                out preparedSwapped);
+
+            double temporalErrorPixels;
+            float temporalUvMargin;
+            float temporalDriftPixels;
+            float temporalHeadingDelta;
+            bool temporalAvailable = TryBuildRefreshMetrics(vessel, projection,
+                rangeMeters, mapHeadingDeg, trackUp, out temporalErrorPixels,
+                out temporalUvMargin, out temporalDriftPixels, out temporalHeadingDelta);
+            lastTemporalMaxErrorPixels = temporalErrorPixels;
+            lastTemporalMinUvMargin = temporalUvMargin;
+            lastTemporalDriftPixels = temporalDriftPixels;
+            lastTemporalHeadingDeltaDeg = temporalHeadingDelta;
+
+            bool refreshRequired = NeedsKeyFrameRefresh(visible, vessel, rangeMeters,
+                historySurfaceRangeMeters, temporalAvailable, temporalErrorPixels,
+                temporalUvMargin, temporalDriftPixels, temporalHeadingDelta);
             bool refreshAllowed = ShouldRefreshBackBuffer(visible, refreshRequired);
-            bool rendered = false;
-            bool foundationComplete = false;
-            bool swapped = false;
-            if (refreshAllowed)
+            bool swapped = preparedSwapped;
+            if (refreshAllowed && pendingProjectionBatch == null)
             {
-                rendered = RenderBackBuffer(tiles, projection,
-                    mapRotation, styleKey, effectiveMode, vessel,
-                    rangeMeters);
-                backRenderFrames++;
+                temporalKeyFrameRequests++;
+                bool asynchronous = TryStartProjectionBatch(visible, tiles,
+                    historySurfaceProjection, historySurfaceMapRotation, styleKey,
+                    effectiveMode, currentPreset, vessel, rangeMeters,
+                    historySurfaceRangeMeters, mapHeadingDeg, readyFar,
+                    topoMinimumMeters, topoMaximumMeters);
                 lastBackAttemptViewGeneration = visible.ViewGeneration;
                 lastBackAttemptContentRevision = gpuContentRevision;
-                nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.20f;
-                foundationComplete = rendered && visible.FoundationComplete &&
-                    lastBackFoundationCoverage >= 0.999f &&
-                    readyFar >= visible.FarFoundationCount;
-                if (foundationComplete)
+                lastBackRefreshCadenceSeconds = ResolveBackRefreshCadenceSeconds(rangeMeters);
+                nextBackRefreshRealtime = Time.realtimeSinceStartup +
+                    lastBackRefreshCadenceSeconds;
+
+                // Fail closed if the shared scheduler cannot admit a key frame. Never fall
+                // back to the former ~28 ms main-thread full-vertex projection path: keep the
+                // last exact FRONT and retry after the bounded admission cadence instead.
+                if (!asynchronous)
                 {
-                    SwapFrontAndBack(visible, vessel, centerLatitudeDeg,
-                        centerLongitudeDeg, rangeMeters, rangeMeters,
-                        mapHeadingDeg, trackUp, anchorV, orientation);
-                    MarkVisibleGpuReady(tiles);
-                    swapped = true;
-                }
-                else
-                {
-                    blockedIncompleteSwaps++;
+                    projectionBatchesSubmissionFailed++;
+                    skippedBackRenderFrames++;
                 }
             }
             else if (refreshRequired)
@@ -525,98 +766,574 @@ namespace AERISFlightControl.Terrain
                 skippedBackRenderFrames++;
             }
 
-            bool directCompatible = IsFrontBufferCompatible(visible, vessel,
-                centerLatitudeDeg, centerLongitudeDeg, rangeMeters, mapHeadingDeg,
-                trackUp, anchorV, orientation);
-            lastHistoryReprojected = false;
-            lastHistoryConfidence = 0f;
-            bool present = false;
-            if (directCompatible)
+            // A freshly completed key frame may make reprojection available immediately.
+            if (swapped)
             {
-                PresentFrontDirect(plot, frontOrientation);
-                directFrontFrames++;
-                lastFrontBufferPresented = true;
-                lastFrontBufferLatched = false;
-                CapturePresentedProjection(false);
-                lastVisualCoverageFraction = 1f;
-                present = true;
-                RecordPresentedFrontAlignmentDiagnostic(plot, tiles, vessel,
-                    effectiveMode, settings == null ? AERISTerrainColourPreset.Standard :
-                    settings.TerrainColourPreset, lockReference);
-            }
-            else
-            {
-                lastFrontBufferPresented = false;
-                lastVisualCoverageFraction = 0f;
+                temporalAvailable = TryBuildRefreshMetrics(vessel, projection,
+                    rangeMeters, mapHeadingDeg, trackUp, out temporalErrorPixels,
+                    out temporalUvMargin, out temporalDriftPixels, out temporalHeadingDelta);
+                lastTemporalMaxErrorPixels = temporalErrorPixels;
+                lastTemporalMinUvMargin = temporalUvMargin;
+                lastTemporalDriftPixels = temporalDriftPixels;
+                lastTemporalHeadingDeltaDeg = temporalHeadingDelta;
             }
 
-            // Geometry integrity invariant: temporal GUI-matrix reprojection is quarantined.
-            // If the exact FAR foundation is available and the current FRONT is not an exact
-            // projection match, render the current projection now and present it directly.
+            lastHistoryReprojected = false;
+            lastHistoryConfidence = TemporalShadowSamplingEnabled && temporalAvailable ?
+                ResolveTemporalConfidence(temporalErrorPixels, temporalUvMargin) : 0f;
+            bool present = false;
+
+            // Temporal stays in shadow mode for this hotfix. Runtime evidence showed that
+            // presentationTarget could be empty/blue while temporal confidence still read
+            // 1.000, so confidence alone cannot grant presentation authority.
+            if (TemporalShadowSamplingEnabled && temporalAvailable)
+            {
+                temporalShadowEligibleFrames++;
+                if (TemporalPresentationAuthorityEnabled)
+                {
+                    bool submitted = RenderTemporalReprojection(plot, projection,
+                        temporalErrorPixels, temporalUvMargin);
+                    if (submitted)
+                    {
+                        temporalFrames++;
+                        historyReprojectFrames++;
+                        lastHistoryReprojected = true;
+                        lastFrontBufferPresented = true;
+                        lastFrontBufferLatched = false;
+                        CapturePresentedProjectionCurrent(centerLatitudeDeg,
+                            centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
+                            anchorV, orientation, temporalErrorPixels);
+                        lastVisualCoverageFraction = 1f;
+                        present = true;
+                    }
+                    else temporalPresentationBlockedFrames++;
+                }
+                else temporalPresentationBlockedFrames++;
+            }
+            else if (frontBufferValid)
+            {
+                temporalRejects++;
+                historyRejectedFrames++;
+            }
+
             bool readyFoundationNow = visible.FoundationComplete &&
                 lastBackFoundationCoverage >= 0.999f &&
                 readyFar >= visible.FarFoundationCount;
-            if (!present && readyFoundationNow && !gpuFailed)
-            {
-                bool recovered = RenderBackBuffer(tiles, projection, mapRotation, styleKey,
-                    effectiveMode, vessel, rangeMeters);
-                backRenderFrames++;
-                forcedRecoveryBackRenders++;
-                lastBackAttemptViewGeneration = visible.ViewGeneration;
-                lastBackAttemptContentRevision = gpuContentRevision;
-                nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.20f;
-                if (recovered)
-                {
-                    SwapFrontAndBack(visible, vessel, centerLatitudeDeg,
-                        centerLongitudeDeg, rangeMeters, rangeMeters,
-                        mapHeadingDeg, trackUp, anchorV, orientation);
-                    MarkVisibleGpuReady(tiles);
-                    swapped = true;
-                    PresentFrontDirect(plot, frontOrientation);
-                    directFrontFrames++;
-                    lastHistoryReprojected = false;
-                    lastHistoryConfidence = 0f;
-                    lastFrontBufferPresented = true;
-                    lastFrontBufferLatched = false;
-                    CapturePresentedProjection(false);
-                    lastVisualCoverageFraction = 1f;
-                    present = true;
-                    RecordPresentedFrontAlignmentDiagnostic(plot, tiles, vessel,
-                        effectiveMode, settings == null ? AERISTerrainColourPreset.Standard :
-                        settings.TerrainColourPreset, lockReference);
-                }
-            }
+            if (!present && readyFoundationNow && !gpuFailed && refreshRequired &&
+                !refreshAllowed)
+                suppressedForcedRecoveryFrames++;
 
-            // Gate 5 Candidate 2 presentation latch. Never warp the old FRONT. When the
-            // new exact projection cannot yet be committed, keep the last complete GPU FRONT
-            // visible and publish that FRONT's exact projection to the ND. All runway/traffic/
-            // ownship symbology then uses the same latched projection, preventing both the
-            // short black flash and the apparent floating runway-threshold marker.
-            if (!present && CanPresentLatchedFront(visible, vessel))
+            // Exact FRONT is the hard presentation authority. Draw the committed
+            // RenderTexture directly, cropped from its overscan surface back to the visible
+            // ND range. No temporal grid, presentationTarget clear, or reprojection material
+            // participates in this fallback/authority path.
+            if (!present && CanPresentLatchedFront(visible, vessel, rangeMeters,
+                trackUp, anchorV, orientation) &&
+                PresentFrontDirect(plot, frontOrientation))
             {
                 if (frontTerrainGeneration != visible.TerrainGeneration)
                     generationBridgeFrames++;
-                PresentFrontDirect(plot, frontOrientation);
+                directFrontFrames++;
+                exactFrontAuthorityFrames++;
                 lastFrontBufferPresented = true;
                 lastFrontBufferLatched = true;
                 CapturePresentedProjection(true);
                 lastVisualCoverageFraction = 1f;
                 present = true;
-                RecordPresentedFrontAlignmentDiagnostic(plot, tiles, vessel,
-                    effectiveMode, settings == null ? AERISTerrainColourPreset.Standard :
-                    settings.TerrainColourPreset, lockReference);
             }
 
-            if (!present && frontBufferValid)
-                generationBridgeRejects++;
+            if (!present && frontBufferValid) generationBridgeRejects++;
 
             UpdateReadyBuildingWatchdog(present, readyFoundationNow, visible,
                 readyGlobal, readyFar);
-
             LogGpuOnlyPresentation(visible, readyGlobal, readyFar, swapped);
             lastDrawState = present ? AERISTerrainGpuDrawState.Complete :
                 AERISTerrainGpuDrawState.Partial;
             return lastDrawState;
+        }
+
+        bool TryStartProjectionBatch(AERISTerrainVisibleTileSet visible,
+            AERISTerrainHeightTile[] tiles, AERISNdMapProjection projection,
+            Matrix4x4 mapRotation, string styleKey, AERISTerrainDisplayMode mode,
+            AERISTerrainColourPreset preset, Vessel vessel, float rangeMeters,
+            float surfaceRangeMeters, float mapHeadingDeg, int readyFar,
+            int topoMinimumMeters, int topoMaximumMeters)
+        {
+            if (pendingProjectionBatch != null || visible == null || tiles == null ||
+                vessel == null || vessel.mainBody == null) return false;
+            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
+            if (runtime == null || runtime.Scheduler == null) return false;
+
+            var unique = new HashSet<Entry>();
+            var drawEntries = new List<Entry>(tiles.Length);
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                AERISTerrainHeightTile tile = tiles[i];
+                if (tile == null) continue;
+                Entry fallback, current;
+                ResolveRenderableEntries(tile, styleKey, out fallback, out current);
+                Entry entry = current != null ? current : fallback;
+                if (entry == null || !unique.Add(entry)) continue;
+                drawEntries.Add(entry);
+            }
+            if (drawEntries.Count == 0) return false;
+
+            int permitted = Math.Max(1, runtime.Scheduler.PermitController.ActivePermits);
+            int workerCount = Math.Max(1, Math.Min(drawEntries.Count,
+                Math.Min(runtime.Scheduler.WorkerCount, permitted)));
+            var chunkLists = new List<Entry>[workerCount];
+            long[] chunkWeights = new long[workerCount];
+            for (int i = 0; i < workerCount; i++) chunkLists[i] = new List<Entry>();
+
+            // Greedy vertex-weight distribution gives every permitted core a similar amount
+            // of projection work even when one FAR tile contains substantially more coastline
+            // or clipped land geometry than its neighbours.
+            drawEntries.Sort((a, b) => EntryProjectionVertexCount(b).CompareTo(
+                EntryProjectionVertexCount(a)));
+            for (int i = 0; i < drawEntries.Count; i++)
+            {
+                int lightest = 0;
+                for (int j = 1; j < workerCount; j++)
+                    if (chunkWeights[j] < chunkWeights[lightest]) lightest = j;
+                Entry entry = drawEntries[i];
+                chunkLists[lightest].Add(entry);
+                chunkWeights[lightest] += EntryProjectionVertexCount(entry);
+            }
+
+            var chunks = new Entry[workerCount][];
+            for (int i = 0; i < workerCount; i++) chunks[i] = chunkLists[i].ToArray();
+            var batch = new ProjectionBatch
+            {
+                Id = ++projectionBatchSequence,
+                Projection = projection,
+                MapRotation = mapRotation,
+                Entries = drawEntries.ToArray(),
+                Chunks = chunks,
+                Mode = mode,
+                Preset = preset,
+                AircraftAltitudeAslMeters = (float)vessel.altitude,
+                RelativeAltitudeBucket = mode == AERISTerrainDisplayMode.Relative ?
+                    Mathf.RoundToInt((float)vessel.altitude / RelativeAltitudeBucketMeters) :
+                    int.MinValue,
+                TopoMinimumMeters = topoMinimumMeters,
+                TopoMaximumMeters = topoMaximumMeters,
+                CenterLatitudeDeg = UnitLatitude(projection.CenterX, projection.CenterY,
+                    projection.CenterZ),
+                CenterLongitudeDeg = UnitLongitude(projection.CenterX, projection.CenterY),
+                RangeMeters = rangeMeters,
+                SurfaceRangeMeters = surfaceRangeMeters,
+                MapHeadingDeg = mapHeadingDeg,
+                TrackUp = projection.TrackUp,
+                AnchorV = projection.AnchorGuiV,
+                Orientation = projection.Orientation,
+                ViewGeneration = visible.ViewGeneration,
+                TerrainGeneration = visible.TerrainGeneration,
+                ContentRevision = gpuContentRevision,
+                BodyName = visible.BodyName ?? string.Empty,
+                BodyRadiusMillimetres = (long)Math.Round(
+                    Math.Max(0.0, vessel.mainBody.Radius) * 1000.0),
+                FoundationComplete = visible.FoundationComplete &&
+                    lastBackFoundationCoverage >= 0.999f &&
+                    readyFar >= visible.FarFoundationCount,
+                FoundationCoverage = lastBackFoundationCoverage,
+                ReadyFar = readyFar,
+                RequiredFar = visible.FarFoundationCount,
+                Tiles = (AERISTerrainHeightTile[])tiles.Clone(),
+                NavigationFrame = worldSurfaceNavigationFrame,
+                IncludeFacilities = worldSurfaceIncludeFacilities,
+                WorldSurfaceRevision = worldSurfaceRevision,
+                ExpectedChunks = 0,
+                CompletedChunks = 0,
+                SubmittedRealtime = Time.realtimeSinceStartup
+            };
+            pendingProjectionBatch = batch;
+            lastProjectionWorkerCount = workerCount;
+
+            AERISRuntimeGenerationStamp stamp = runtime.CaptureStamp();
+            int accepted = 0;
+            for (int i = 0; i < workerCount; i++)
+            {
+                int chunkIndex = i;
+                string key = "terrain-projection-" + chunkIndex;
+                bool submitted = runtime.Scheduler.SubmitRequired(
+                    AERISRuntimeLane.GeneralCompute, key, stamp,
+                    context => ProjectProjectionChunk(batch, chunkIndex, context),
+                    value => CommitProjectionChunk(batch,
+                        value as ProjectionChunkResult), false);
+                if (submitted) accepted++;
+                else batch.SubmissionFailed = true;
+            }
+            batch.ExpectedChunks = accepted;
+            projectionBatchesSubmitted++;
+            if (accepted == 0)
+            {
+                batch.SubmissionFailed = true;
+                batch.Ready = true;
+                projectionBatchesSubmissionFailed++;
+            }
+            else if (accepted != workerCount)
+            {
+                projectionBatchesSubmissionFailed++;
+            }
+            return true;
+        }
+
+        static long EntryProjectionVertexCount(Entry entry)
+        {
+            if (entry == null) return 0L;
+            return PointCount(entry.LandGeographicPoints) +
+                PointCount(entry.WaterGeographicPoints) +
+                PointCount(entry.ContourGeographicPoints) +
+                PointCount(entry.CoastlineGeographicPoints);
+        }
+
+        static long PointCount(GeographicUnitPoint[] points)
+        {
+            return points == null ? 0L : points.LongLength;
+        }
+
+        static ProjectionChunkResult ProjectProjectionChunk(ProjectionBatch batch,
+            int chunkIndex, AERISRuntimeJobContext context)
+        {
+            long start = Stopwatch.GetTimestamp();
+            long projected = 0L;
+            long coloured = 0L;
+            if (batch == null || batch.Chunks == null || chunkIndex < 0 ||
+                chunkIndex >= batch.Chunks.Length)
+                return new ProjectionChunkResult { Batch = batch, ChunkIndex = chunkIndex };
+            Entry[] chunk = batch.Chunks[chunkIndex];
+            for (int i = 0; i < chunk.Length; i++)
+            {
+                context.ThrowIfStale();
+                Entry entry = chunk[i];
+                if (entry == null) continue;
+                projected += ProjectPointsWorker(entry.LandGeographicPoints,
+                    entry.LandProjectedVertices, batch.Projection, context);
+                projected += ProjectPointsWorker(entry.WaterGeographicPoints,
+                    entry.WaterProjectedVertices, batch.Projection, context);
+                projected += ProjectPointsWorker(entry.ContourGeographicPoints,
+                    entry.ContourProjectedVertices, batch.Projection, context);
+                projected += ProjectPointsWorker(entry.CoastlineGeographicPoints,
+                    entry.CoastlineProjectedVertices, batch.Projection, context);
+                entry.PreparedProjectionBatchId = batch.Id;
+
+                int altitudeBucket = batch.RelativeAltitudeBucket;
+                if (entry.LandElevationMeters != null && entry.LandShade != null &&
+                    (entry.ColourMode != batch.Mode || entry.ColourPreset != batch.Preset ||
+                    entry.RelativeAltitudeBucket != altitudeBucket ||
+                    (batch.Mode == AERISTerrainDisplayMode.Topographic &&
+                    (entry.TopoMinimumMeters != batch.TopoMinimumMeters ||
+                    entry.TopoMaximumMeters != batch.TopoMaximumMeters))))
+                {
+                    if (entry.LandColours == null ||
+                        entry.LandColours.Length != entry.LandElevationMeters.Length)
+                        entry.LandColours = new Color32[entry.LandElevationMeters.Length];
+                    float quantizedAltitude = batch.Mode == AERISTerrainDisplayMode.Relative ?
+                        altitudeBucket * RelativeAltitudeBucketMeters :
+                        batch.AircraftAltitudeAslMeters;
+                    for (int c = 0; c < entry.LandColours.Length; c++)
+                    {
+                        if ((c & (ProjectionCancellationCheckStride - 1)) == 0)
+                            context.ThrowIfStale();
+                        Color32 baseColour = ResolveLandColour(batch.Mode, batch.Preset,
+                            entry.LandElevationMeters[c], quantizedAltitude,
+                            batch.TopoMinimumMeters, batch.TopoMaximumMeters);
+                        entry.LandColours[c] = ApplyShade(baseColour, entry.LandShade[c],
+                            batch.Mode);
+                    }
+                    entry.PreparedColourBatchId = batch.Id;
+                    coloured += entry.LandColours.LongLength;
+                }
+            }
+            return new ProjectionChunkResult
+            {
+                Batch = batch,
+                ChunkIndex = chunkIndex,
+                ProjectedVertices = projected,
+                ColourVertices = coloured,
+                WorkerMilliseconds = ElapsedMilliseconds(start)
+            };
+        }
+
+        static long ProjectPointsWorker(GeographicUnitPoint[] points,
+            Vector3[] output, AERISNdMapProjection projection,
+            AERISRuntimeJobContext context)
+        {
+            if (points == null || output == null || points.Length != output.Length) return 0L;
+            for (int i = 0; i < points.Length; i++)
+            {
+                if ((i & (ProjectionCancellationCheckStride - 1)) == 0)
+                    context.ThrowIfStale();
+                GeographicUnitPoint point = points[i];
+                float u, v;
+                projection.ProjectUnitToRenderNUp(point.X, point.Y, point.Z, out u, out v);
+                output[i] = new Vector3(u, v, 0f);
+            }
+            return points.LongLength;
+        }
+
+        void CommitProjectionChunk(ProjectionBatch owner,
+            ProjectionChunkResult result)
+        {
+            if (owner == null || !ReferenceEquals(owner, pendingProjectionBatch)) return;
+            ProjectionBatch batch = owner;
+            batch.CompletedChunks++;
+            if (result == null || result.Batch == null ||
+                !ReferenceEquals(result.Batch, batch))
+            {
+                // SubmitRequired delivers null on worker failure/staleness.  Retire the
+                // chunk credit so the batch cannot deadlock; the whole batch is discarded.
+                batch.SubmissionFailed = true;
+            }
+            else
+            {
+                batch.ProjectedVertices += result.ProjectedVertices;
+                batch.ColourVertices += result.ColourVertices;
+                batch.WorkerMilliseconds += result.WorkerMilliseconds;
+            }
+            if (batch.CompletedChunks >= batch.ExpectedChunks) batch.Ready = true;
+        }
+
+        bool TryRenderReadyProjectionBatch(AERISTerrainVisibleTileSet currentVisible,
+            AERISTerrainDisplayMode currentMode, AERISTerrainColourPreset currentPreset,
+            float currentRangeMeters, float currentSurfaceRangeMeters, bool currentTrackUp,
+            AERISTerrainRenderTargetOrientation currentOrientation,
+            out bool swapped)
+        {
+            swapped = false;
+            ProjectionBatch batch = pendingProjectionBatch;
+            if (batch == null || !batch.Ready) return false;
+            pendingProjectionBatch = null;
+            double wallMs = Math.Max(0.0,
+                (Time.realtimeSinceStartup - batch.SubmittedRealtime) * 1000.0);
+
+            bool compatible = !batch.SubmissionFailed && currentVisible != null &&
+                batch.TerrainGeneration == currentVisible.TerrainGeneration &&
+                batch.ContentRevision == gpuContentRevision &&
+                string.Equals(batch.BodyName, currentVisible.BodyName,
+                    StringComparison.OrdinalIgnoreCase) &&
+                Math.Abs(batch.RangeMeters - currentRangeMeters) <=
+                    Math.Max(1f, currentRangeMeters * 0.001f) &&
+                Math.Abs(batch.SurfaceRangeMeters - currentSurfaceRangeMeters) <=
+                    Math.Max(1f, currentSurfaceRangeMeters * 0.001f) &&
+                batch.TrackUp == currentTrackUp &&
+                batch.Orientation == currentOrientation &&
+                batch.Mode == currentMode && batch.Preset == currentPreset &&
+                ProjectionBatchEntriesCurrent(batch);
+            if (!compatible)
+            {
+                projectionBatchesDiscarded++;
+                return false;
+            }
+
+            projectionWorkerWallMilliseconds += wallMs;
+            bool rendered = RenderPreparedBackBuffer(batch);
+            backRenderFrames++;
+            projectionBatchesCompleted++;
+            projectionWorkerProjectedVertices += batch.ProjectedVertices;
+            projectionWorkerColourVertices += batch.ColourVertices;
+            projectionWorkerMilliseconds += batch.WorkerMilliseconds;
+            if (rendered && batch.FoundationComplete)
+            {
+                SwapFrontAndBack(batch);
+                MarkVisibleGpuReady(batch.Tiles);
+                swapped = true;
+            }
+            else blockedIncompleteSwaps++;
+            return rendered;
+        }
+
+        bool ProjectionBatchEntriesCurrent(ProjectionBatch batch)
+        {
+            if (batch == null || batch.Entries == null) return false;
+            for (int i = 0; i < batch.Entries.Length; i++)
+            {
+                Entry entry = batch.Entries[i];
+                if (entry == null) return false;
+                Entry current;
+                if (!entries.TryGetValue(entry.CacheKey, out current) ||
+                    !ReferenceEquals(entry, current) ||
+                    entry.PreparedProjectionBatchId != batch.Id) return false;
+            }
+            return true;
+        }
+
+        bool RenderPreparedBackBuffer(ProjectionBatch batch)
+        {
+            if (batch == null || batch.Entries == null) return false;
+            long frameStartTicks = Stopwatch.GetTimestamp();
+            bool detailedProfile = (backProfileSequence++ % BackRenderDetailedProfileStride) == 0L;
+            BackRenderDetailedProfile profile = new BackRenderDetailedProfile();
+            RenderTexture previous = RenderTexture.active;
+            bool matrixPushed = false;
+            bool rendered = false;
+            bool failed = false;
+            try
+            {
+                long setupStartTicks = detailedProfile ? Stopwatch.GetTimestamp() : 0L;
+                RenderTexture.active = backTarget;
+                GL.PushMatrix();
+                matrixPushed = true;
+                GL.LoadOrtho();
+                GL.Clear(true, true, Color.clear);
+                if (detailedProfile) profile.SetupClearMs += ElapsedMilliseconds(setupStartTicks);
+
+                for (int i = 0; i < batch.Entries.Length; i++)
+                {
+                    Entry entry = batch.Entries[i];
+                    if (entry == null || entry.PreparedProjectionBatchId != batch.Id) continue;
+                    if (detailedProfile) profile.TilesVisited++;
+                    UploadPreparedProjection(entry, batch, detailedProfile, ref profile);
+                    bool entryRendered = DrawPreparedEntry(entry, batch.MapRotation, true,
+                        batch, detailedProfile, ref profile);
+                    rendered = entryRendered || rendered;
+                    if (entryRendered && entry.TileKey.Lod >= AERISTerrainTileLod.Route)
+                        exactDetailOverlayDraws++;
+                }
+                DrawWorldSurfaceNavigation(batch, detailedProfile, ref profile);
+            }
+            catch (Exception ex)
+            {
+                failed = true;
+                FailGpuTerrain(ex);
+            }
+            finally
+            {
+                long finalizeStartTicks = detailedProfile ? Stopwatch.GetTimestamp() : 0L;
+                if (matrixPushed) { try { GL.PopMatrix(); } catch { } }
+                RenderTexture.active = previous;
+                if (detailedProfile) profile.FinalizeMs += ElapsedMilliseconds(finalizeStartTicks);
+                double totalMs = ElapsedMilliseconds(frameStartTicks);
+                RecordBackRenderProfile(totalMs, detailedProfile, ref profile);
+                AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
+                if (runtime != null) runtime.Gpu.RecordFrameCost(totalMs);
+            }
+            return !failed && rendered;
+        }
+
+        static void UploadPreparedProjection(Entry entry, ProjectionBatch batch,
+            bool detailedProfile, ref BackRenderDetailedProfile profile)
+        {
+            if (entry == null || batch == null) return;
+            UploadPreparedMesh(entry.LandMesh, entry.LandProjectedVertices,
+                detailedProfile, ref profile);
+            UploadPreparedMesh(entry.WaterMesh, entry.WaterProjectedVertices,
+                detailedProfile, ref profile);
+            UploadPreparedMesh(entry.ContourMesh, entry.ContourProjectedVertices,
+                detailedProfile, ref profile);
+            UploadPreparedMesh(entry.CoastlineMesh, entry.CoastlineProjectedVertices,
+                detailedProfile, ref profile);
+            entry.LastProjectionCenterLatitudeDeg = batch.CenterLatitudeDeg;
+            entry.LastProjectionCenterLongitudeDeg = batch.CenterLongitudeDeg;
+            entry.LastProjectionBodyRadius = batch.Projection.RadiusMeters;
+            entry.LastProjectionRangeMeters = (float)batch.Projection.VerticalMeters;
+            entry.LastProjectionAnchorBottom = batch.Projection.AnchorRenderV;
+            entry.LastProjectionOrientation = batch.Projection.Orientation;
+            if (detailedProfile)
+            {
+                profile.EntriesReprojected++;
+                profile.ProjectedVertices += EntryProjectionVertexCount(entry);
+            }
+        }
+
+        static void UploadPreparedMesh(Mesh mesh, Vector3[] vertices,
+            bool detailedProfile, ref BackRenderDetailedProfile profile)
+        {
+            if (mesh == null || vertices == null) return;
+            long uploadStartTicks = detailedProfile ? Stopwatch.GetTimestamp() : 0L;
+            mesh.vertices = vertices;
+            if (detailedProfile)
+                profile.MeshVertexUploadMs += ElapsedMilliseconds(uploadStartTicks);
+            long boundsStartTicks = detailedProfile ? Stopwatch.GetTimestamp() : 0L;
+            SetProjectionSafeBounds(mesh);
+            if (detailedProfile) profile.BoundsMs += ElapsedMilliseconds(boundsStartTicks);
+        }
+
+        bool DrawPreparedEntry(Entry entry, Matrix4x4 mapMatrix,
+            bool drawContours, ProjectionBatch batch, bool detailedProfile,
+            ref BackRenderDetailedProfile profile)
+        {
+            if (entry == null || batch == null ||
+                (entry.LandMesh == null && entry.WaterMesh == null)) return false;
+            if (entry.PreparedColourBatchId == batch.Id && entry.LandMesh != null)
+            {
+                long colourUploadStartTicks = detailedProfile ? Stopwatch.GetTimestamp() : 0L;
+                entry.LandMesh.colors32 = entry.LandColours;
+                if (detailedProfile)
+                    profile.ColourUploadMs += ElapsedMilliseconds(colourUploadStartTicks);
+                entry.ColourMode = batch.Mode;
+                entry.ColourPreset = batch.Preset;
+                entry.RelativeAltitudeBucket = batch.RelativeAltitudeBucket;
+                entry.TopoMinimumMeters = batch.TopoMinimumMeters;
+                entry.TopoMaximumMeters = batch.TopoMaximumMeters;
+                entry.PreparedColourBatchId = -1L;
+            }
+            long drawStartTicks = detailedProfile ? Stopwatch.GetTimestamp() : 0L;
+            bool rendered = false;
+            if (entry.WaterMesh != null && terrainMaterial.SetPass(0))
+            {
+                Graphics.DrawMeshNow(entry.WaterMesh, mapMatrix);
+                if (detailedProfile) profile.DrawCalls++;
+                rendered = true;
+            }
+            if (entry.LandMesh != null && terrainMaterial.SetPass(0))
+            {
+                Graphics.DrawMeshNow(entry.LandMesh, mapMatrix);
+                if (detailedProfile) profile.DrawCalls++;
+                rendered = true;
+            }
+            if (drawContours && entry.ContourMesh != null && contourMaterial.SetPass(0))
+            {
+                Graphics.DrawMeshNow(entry.ContourMesh, mapMatrix);
+                if (detailedProfile) profile.DrawCalls++;
+            }
+            if (entry.CoastlineMesh != null && coastlineMaterial.SetPass(0))
+            {
+                Graphics.DrawMeshNow(entry.CoastlineMesh, mapMatrix);
+                if (detailedProfile) profile.DrawCalls++;
+            }
+            if (detailedProfile) profile.DrawSubmitMs += ElapsedMilliseconds(drawStartTicks);
+            return rendered;
+        }
+
+        void SwapFrontAndBack(ProjectionBatch batch)
+        {
+            RenderTexture previousFront = frontTarget;
+            frontTarget = backTarget;
+            backTarget = previousFront;
+            long previousFrontBytes = frontTargetBytes;
+            frontTargetBytes = backTargetBytes;
+            backTargetBytes = previousFrontBytes;
+            frontBufferValid = true;
+            frontViewGeneration = batch.ViewGeneration;
+            frontTerrainGeneration = batch.TerrainGeneration;
+            frontBodyName = batch.BodyName ?? string.Empty;
+            frontBodyRadiusMillimetres = batch.BodyRadiusMillimetres;
+            frontCenterLatitudeDeg = batch.CenterLatitudeDeg;
+            frontCenterLongitudeDeg = batch.CenterLongitudeDeg;
+            frontRangeMeters = batch.RangeMeters;
+            frontSurfaceRangeMeters = Math.Max(batch.RangeMeters, batch.SurfaceRangeMeters);
+            frontMapHeadingDeg = batch.MapHeadingDeg;
+            frontTrackUp = batch.TrackUp;
+            frontAnchorV = batch.AnchorV;
+            frontOrientation = batch.Orientation;
+            frontCommittedRealtime = Time.realtimeSinceStartup;
+            frontContentRevision = batch.ContentRevision;
+            frontWorldSurfaceRevision = batch.WorldSurfaceRevision;
+            frontBufferSwaps++;
+        }
+
+        void CancelProjectionBatch()
+        {
+            ProjectionBatch batch = pendingProjectionBatch;
+            if (batch == null) return;
+            // Do not invalidate already-running jobs: every chunk owns scratch arrays inside
+            // the same Entry objects. Let the bounded single batch retire normally, mark it
+            // non-committable, then discard it on the main thread. This prevents a reset or
+            // RenderTexture resize from starting a successor batch while cancelled workers
+            // could still be writing the same managed arrays.
+            batch.SubmissionFailed = true;
+            if (batch.ExpectedChunks <= 0) batch.Ready = true;
         }
 
         bool RenderBackBuffer(AERISTerrainHeightTile[] tiles,
@@ -624,11 +1341,15 @@ namespace AERISFlightControl.Terrain
             AERISTerrainDisplayMode effectiveMode, Vessel vessel, float rangeMeters)
         {
             long frameStartTicks = Stopwatch.GetTimestamp();
+            bool detailedProfile = (backProfileSequence++ % BackRenderDetailedProfileStride) == 0L;
+            BackRenderDetailedProfile profile = new BackRenderDetailedProfile();
             RenderTexture previous = RenderTexture.active;
             bool matrixPushed = false;
             bool rendered = false;
+            bool failed = false;
             try
             {
+                long setupStartTicks = detailedProfile ? Stopwatch.GetTimestamp() : 0L;
                 RenderTexture.active = backTarget;
                 GL.PushMatrix();
                 matrixPushed = true;
@@ -636,6 +1357,8 @@ namespace AERISFlightControl.Terrain
                 // Back is never visible before a complete FAR foundation commit, so a
                 // transparent clear cannot expose a black wedge to the user.
                 GL.Clear(true, true, Color.clear);
+                if (detailedProfile)
+                    profile.SetupClearMs += ElapsedMilliseconds(setupStartTicks);
                 float projectionThresholdMeters = Math.Max(0.25f,
                     rangeMeters / Math.Max(128f, backTarget.height) * 0.25f);
                 for (int i = 0; i < tiles.Length; i++)
@@ -647,11 +1370,13 @@ namespace AERISFlightControl.Terrain
                         out currentEntry);
                     Entry drawEntry = currentEntry != null ? currentEntry : fallbackEntry;
                     if (drawEntry == null) continue;
+                    if (detailedProfile) profile.TilesVisited++;
                     EnsureProjectedGeometry(drawEntry, projection,
-                        projectionThresholdMeters);
+                        projectionThresholdMeters, detailedProfile, ref profile);
                     bool entryRendered = DrawEntry(drawEntry, mapRotation, true, effectiveMode,
                         settings == null ? AERISTerrainColourPreset.Standard :
-                        settings.TerrainColourPreset, (float)vessel.altitude);
+                        settings.TerrainColourPreset, (float)vessel.altitude,
+                        detailedProfile, ref profile);
                     rendered = entryRendered || rendered;
                     if (entryRendered && tile.Key.Lod >= AERISTerrainTileLod.Route)
                         exactDetailOverlayDraws++;
@@ -659,22 +1384,25 @@ namespace AERISFlightControl.Terrain
             }
             catch (Exception ex)
             {
+                failed = true;
                 FailGpuTerrain(ex);
-                return false;
             }
             finally
             {
+                long finalizeStartTicks = detailedProfile ? Stopwatch.GetTimestamp() : 0L;
                 if (matrixPushed)
                 {
                     try { GL.PopMatrix(); } catch { }
                 }
                 RenderTexture.active = previous;
+                if (detailedProfile)
+                    profile.FinalizeMs += ElapsedMilliseconds(finalizeStartTicks);
+                double totalMs = ElapsedMilliseconds(frameStartTicks);
+                RecordBackRenderProfile(totalMs, detailedProfile, ref profile);
+                AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
+                if (runtime != null) runtime.Gpu.RecordFrameCost(totalMs);
             }
-            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
-            if (runtime != null)
-                runtime.Gpu.RecordFrameCost((Stopwatch.GetTimestamp() - frameStartTicks) *
-                    1000.0 / Stopwatch.Frequency);
-            return rendered;
+            return !failed && rendered;
         }
 
         float MeasureFoundationGpuReadiness(AERISTerrainVisibleTileSet visible,
@@ -760,10 +1488,20 @@ namespace AERISFlightControl.Terrain
             bool refreshRequired)
         {
             if (!refreshRequired || visible == null) return false;
+            // CP3.5 Gate 1 has exactly one bypass: the very first attempt needed to create
+            // an initial FRONT. Once an attempt has occurred, ViewGeneration, content
+            // revision, movement, heading and range invalidations all obey the same explicit
+            // cadence. This prevents any hidden path from recreating the old forced-render loop.
             if (!frontBufferValid && lastBackAttemptViewGeneration < 0L) return true;
-            if (lastBackAttemptViewGeneration != visible.ViewGeneration) return true;
-            if (lastBackAttemptContentRevision != gpuContentRevision) return true;
             return Time.realtimeSinceStartup >= nextBackRefreshRealtime;
+        }
+
+        static float ResolveBackRefreshCadenceSeconds(float rangeMeters)
+        {
+            // Candidate 2 decouples display refresh from key-frame generation. The GPU
+            // reprojects every Repaint; authoritative exact key frames only have a bounded
+            // minimum interval and are otherwise requested adaptively from drift/error/age.
+            return KeyFrameMinimumIntervalSeconds;
         }
 
         static float ResolveHistorySurfaceRange(float visibleRangeMeters)
@@ -773,35 +1511,50 @@ namespace AERISFlightControl.Terrain
                 MaximumHistorySurfaceRangeMeters);
         }
 
-        bool NeedsProjectionRefresh(AERISTerrainVisibleTileSet visible, Vessel vessel,
-            double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
-            float mapHeadingDeg, bool trackUp, float anchorV,
-            AERISTerrainRenderTargetOrientation orientation)
+        bool NeedsKeyFrameRefresh(AERISTerrainVisibleTileSet visible, Vessel vessel,
+            float rangeMeters, float surfaceRangeMeters, bool temporalAvailable,
+            double temporalErrorPixels, float temporalUvMargin, float temporalDriftPixels,
+            float temporalHeadingDeltaDeg)
         {
             if (!frontBufferValid || visible == null || vessel == null ||
                 vessel.mainBody == null) return true;
             if (frontTerrainGeneration != visible.TerrainGeneration ||
+                frontContentRevision != gpuContentRevision ||
                 !string.Equals(frontBodyName, visible.BodyName,
-                    StringComparison.OrdinalIgnoreCase) ||
-                frontTrackUp != trackUp || frontOrientation != orientation ||
-                Math.Abs(frontAnchorV - anchorV) > 0.001f) return true;
+                    StringComparison.OrdinalIgnoreCase)) return true;
+            long bodyRadiusMillimetres = (long)Math.Round(
+                Math.Max(0.0, vessel.mainBody.Radius) * 1000.0);
+            if (bodyRadiusMillimetres != frontBodyRadiusMillimetres) return true;
             if (Math.Abs(frontRangeMeters - rangeMeters) >
-                Math.Max(1f, rangeMeters * 0.0025f)) return true;
-            if (trackUp && Mathf.Abs(Mathf.DeltaAngle(frontMapHeadingDeg,
-                mapHeadingDeg)) >= ProjectionRefreshHeadingDeg) return true;
-            double displacement = GreatCircleDistanceMeters(vessel.mainBody,
-                frontCenterLatitudeDeg, frontCenterLongitudeDeg, centerLatitudeDeg,
-                centerLongitudeDeg);
-            if (double.IsNaN(displacement) || double.IsInfinity(displacement)) return true;
-            if (displacement >= Math.Max(250.0, rangeMeters * 0.06)) return true;
-            return Time.realtimeSinceStartup - frontCommittedRealtime >=
-                ProjectionRefreshAgeSeconds;
+                Math.Max(1f, rangeMeters * 0.001f)) return true;
+            if (Math.Abs(frontSurfaceRangeMeters - surfaceRangeMeters) >
+                Math.Max(1f, surfaceRangeMeters * 0.001f)) return true;
+            float age = Math.Max(0f, Time.realtimeSinceStartup - frontCommittedRealtime);
+            if (age >= KeyFrameMaximumAgeSeconds) return true;
+            if (!temporalAvailable) return true;
+            if (temporalErrorPixels >= KeyFrameRefreshErrorPixels) return true;
+            if (temporalDriftPixels >= KeyFrameRefreshDriftPixels) return true;
+            if (temporalHeadingDeltaDeg >= KeyFrameRefreshHeadingDeg) return true;
+            float marginPixels = temporalUvMargin * Math.Max(1,
+                Math.Min(frontTarget == null ? 1 : frontTarget.width,
+                    frontTarget == null ? 1 : frontTarget.height));
+            return marginPixels < 18f;
         }
 
-        bool CanPresentLatchedFront(AERISTerrainVisibleTileSet visible, Vessel vessel)
+        bool CanPresentLatchedFront(AERISTerrainVisibleTileSet visible, Vessel vessel,
+            float currentRangeMeters, bool currentTrackUp, float currentAnchorV,
+            AERISTerrainRenderTargetOrientation currentOrientation)
         {
             if (!frontBufferValid || frontTarget == null || !frontTarget.IsCreated() ||
                 visible == null || vessel == null || vessel.mainBody == null) return false;
+            // A latch may bridge movement/content-generation supply gaps only inside the
+            // same display scale/orientation. Presenting a 160 km FRONT after the pilot has
+            // selected 5 km is not continuity; it is a false projection and amplifies
+            // ownship/symbology displacement by the range ratio.
+            if (Math.Abs(frontRangeMeters - currentRangeMeters) >
+                Math.Max(1f, currentRangeMeters * 0.001f) ||
+                frontTrackUp != currentTrackUp || frontOrientation != currentOrientation ||
+                Math.Abs(frontAnchorV - currentAnchorV) > 0.001f) return false;
             // Gate 5 Candidate 3: TerrainGeneration is a supply-generation boundary, not a
             // presentation-invalidity boundary. The last fully committed GPU FRONT is still
             // geographically self-consistent for its own published projection and may bridge
@@ -823,6 +1576,8 @@ namespace AERISFlightControl.Terrain
         {
             presentedProjection.Valid = frontBufferValid;
             presentedProjection.Latched = latched;
+            presentedProjection.Reprojected = false;
+            presentedProjection.ReprojectionErrorPixels = 0f;
             presentedProjection.CenterLatitudeDeg = frontCenterLatitudeDeg;
             presentedProjection.CenterLongitudeDeg = frontCenterLongitudeDeg;
             presentedProjection.RangeMeters = frontRangeMeters;
@@ -830,6 +1585,28 @@ namespace AERISFlightControl.Terrain
             presentedProjection.TrackUp = frontTrackUp;
             presentedProjection.AnchorV = frontAnchorV;
             presentedProjection.Orientation = frontOrientation;
+            presentedProjection.AgeSeconds = Math.Max(0f,
+                Time.realtimeSinceStartup - frontCommittedRealtime);
+        }
+
+
+        void CapturePresentedProjectionCurrent(double centerLatitudeDeg,
+            double centerLongitudeDeg, float rangeMeters, float mapHeadingDeg,
+            bool trackUp, float anchorV, AERISTerrainRenderTargetOrientation orientation,
+            double reprojectionErrorPixels)
+        {
+            presentedProjection.Valid = frontBufferValid;
+            presentedProjection.Latched = false;
+            presentedProjection.Reprojected = true;
+            presentedProjection.ReprojectionErrorPixels = (float)Math.Max(0.0,
+                reprojectionErrorPixels);
+            presentedProjection.CenterLatitudeDeg = centerLatitudeDeg;
+            presentedProjection.CenterLongitudeDeg = centerLongitudeDeg;
+            presentedProjection.RangeMeters = rangeMeters;
+            presentedProjection.MapHeadingDeg = mapHeadingDeg;
+            presentedProjection.TrackUp = trackUp;
+            presentedProjection.AnchorV = anchorV;
+            presentedProjection.Orientation = orientation;
             presentedProjection.AgeSeconds = Math.Max(0f,
                 Time.realtimeSinceStartup - frontCommittedRealtime);
         }
@@ -858,158 +1635,243 @@ namespace AERISFlightControl.Terrain
                 "; forcing presentation recovery.");
         }
 
-        void PresentFrontDirect(Rect plot,
+        bool PresentFrontDirect(Rect plot,
             AERISTerrainRenderTargetOrientation orientation)
         {
+            if (frontTarget == null || !frontTarget.IsCreated() ||
+                !frontBufferValid || frontRangeMeters <= 0f ||
+                frontSurfaceRangeMeters <= 0f) return false;
+
+            // frontTarget is an overscan exact key-frame. Recover the committed visible ND
+            // range by cropping about the same projection pivots used by AERISNdMapProjection:
+            // horizontal center 0.5 and the committed vertical anchor. This is an exact
+            // scale crop because center, heading and orientation are unchanged.
+            float ratio = Mathf.Clamp01(frontRangeMeters /
+                Math.Max(frontRangeMeters, frontSurfaceRangeMeters));
+            float u0 = 0.5f + (0f - 0.5f) * ratio;
+            float u1 = 0.5f + (1f - 0.5f) * ratio;
+            float guiV0 = frontAnchorV + (0f - frontAnchorV) * ratio;
+            float guiV1 = frontAnchorV + (1f - frontAnchorV) * ratio;
+            float uvY, uvH;
+            if (orientation == AERISTerrainRenderTargetOrientation.Flipped)
+            {
+                uvY = 1f - guiV0;
+                uvH = -(guiV1 - guiV0);
+            }
+            else
+            {
+                uvY = guiV0;
+                uvH = guiV1 - guiV0;
+            }
+            Rect uv = new Rect(u0, uvY, u1 - u0, uvH);
+            GUI.DrawTextureWithTexCoords(plot, frontTarget, uv, true);
+            return true;
+        }
+
+        static void PresentTextureDirect(Rect plot, Texture texture,
+            AERISTerrainRenderTargetOrientation orientation)
+        {
+            if (texture == null) return;
             bool flipVertically = orientation ==
                 AERISTerrainRenderTargetOrientation.Flipped;
             Rect uv = flipVertically ? new Rect(0f, 1f, 1f, -1f) :
                 new Rect(0f, 0f, 1f, 1f);
-            GUI.DrawTextureWithTexCoords(plot, frontTarget, uv, true);
+            GUI.DrawTextureWithTexCoords(plot, texture, uv, true);
         }
 
-        bool TryPresentReprojectedFront(Rect plot, AERISTerrainVisibleTileSet visible,
-            Vessel vessel, AERISNdMapProjection currentProjection, double centerLatitudeDeg,
-            double centerLongitudeDeg, float rangeMeters, float mapHeadingDeg,
-            bool trackUp, float anchorV,
-            AERISTerrainRenderTargetOrientation orientation, out float confidence)
+        bool TryBuildTemporalReprojection(Vessel vessel,
+            AERISNdMapProjection currentProjection, float currentRangeMeters,
+            out double maxErrorPixels, out float minimumUvMargin,
+            out float driftPixels, out float headingDeltaDeg)
         {
-            confidence = 0f;
+            maxErrorPixels = double.PositiveInfinity;
+            minimumUvMargin = -1f;
+            driftPixels = float.PositiveInfinity;
+            headingDeltaDeg = 180f;
             if (!frontBufferValid || frontTarget == null || !frontTarget.IsCreated() ||
-                visible == null || vessel == null || vessel.mainBody == null ||
-                frontRangeMeters <= 0f || plot.width < 8f || plot.height < 8f) return false;
-            if (frontTerrainGeneration != visible.TerrainGeneration) return false;
-            if (!string.Equals(frontBodyName, vessel.mainBody.name,
-                StringComparison.OrdinalIgnoreCase) || frontTrackUp != trackUp ||
-                frontOrientation != orientation || Math.Abs(frontAnchorV - anchorV) > 0.001f)
+                vessel == null || vessel.mainBody == null || frontSurfaceRangeMeters <= 1f)
                 return false;
+            if (!string.Equals(frontBodyName, vessel.mainBody.bodyName,
+                    StringComparison.OrdinalIgnoreCase)) return false;
             long bodyRadiusMillimetres = (long)Math.Round(
                 Math.Max(0.0, vessel.mainBody.Radius) * 1000.0);
             if (bodyRadiusMillimetres != frontBodyRadiusMillimetres) return false;
+            if (Math.Abs(frontRangeMeters - currentRangeMeters) >
+                Math.Max(1f, currentRangeMeters * 0.001f)) return false;
+            if (Time.realtimeSinceStartup - frontCommittedRealtime > 8.0f) return false;
 
-            float ageSeconds = Math.Max(0f,
-                Time.realtimeSinceStartup - frontCommittedRealtime);
-            if (ageSeconds > 20f) return false;
-            float rangeRatio = rangeMeters / Math.Max(1f, frontSurfaceRangeMeters);
-            // The FRONT is an oversized history surface. Zoom-in can reuse a much
-            // smaller part of that surface; zoom-out is allowed only while the current
-            // viewport remains inside the already-rendered overscan authority.
-            if (rangeRatio < 0.06f || rangeRatio > 1.00f) return false;
-            if (trackUp && Mathf.Abs(Mathf.DeltaAngle(frontMapHeadingDeg,
-                mapHeadingDeg)) > 70f) return false;
-            double displacement = GreatCircleDistanceMeters(vessel.mainBody,
-                frontCenterLatitudeDeg, frontCenterLongitudeDeg, centerLatitudeDeg,
-                centerLongitudeDeg);
-            if (double.IsNaN(displacement) || double.IsInfinity(displacement) ||
-                displacement > Math.Max(3500.0, rangeMeters * 0.32)) return false;
-
-            AERISNdMapProjection oldProjection = AERISNdMapProjection.Create(
+            long startTicks = Stopwatch.GetTimestamp();
+            AERISNdMapProjection sourceProjection = AERISNdMapProjection.Create(
                 vessel.mainBody, frontCenterLatitudeDeg, frontCenterLongitudeDeg,
-                Math.Max(frontRangeMeters, frontSurfaceRangeMeters), frontMapHeadingDeg,
-                frontTrackUp, frontAnchorV,
-                frontOrientation);
-            Vector2 q00, q10, q01, q11;
-            if (!ProjectHistoryGuiPoint(oldProjection, currentProjection, 0f, 0f, out q00) ||
-                !ProjectHistoryGuiPoint(oldProjection, currentProjection, 1f, 0f, out q10) ||
-                !ProjectHistoryGuiPoint(oldProjection, currentProjection, 0f, 1f, out q01) ||
-                !ProjectHistoryGuiPoint(oldProjection, currentProjection, 1f, 1f, out q11))
-                return false;
-            Vector2 axisX = q10 - q00;
-            Vector2 axisY = q01 - q00;
-            float determinant = axisX.x * axisY.y - axisY.x * axisX.y;
-            if (Mathf.Abs(determinant) < 0.08f || Mathf.Abs(determinant) > 8f)
-                return false;
-            Vector2 predicted11 = q00 + axisX + axisY;
-            float distortion = Vector2.Distance(predicted11, q11);
-            if (distortion > 0.06f) return false;
-            if (!AffineCoversViewport(q00, axisX, axisY, determinant)) return false;
+                frontSurfaceRangeMeters, frontMapHeadingDeg, frontTrackUp,
+                frontAnchorV, frontOrientation);
+            minimumUvMargin = 1f;
+            for (int gy = 0; gy < TemporalGridPointsPerAxis; gy++)
+            {
+                float guiV = gy / (float)TemporalGridCells;
+                for (int gx = 0; gx < TemporalGridPointsPerAxis; gx++)
+                {
+                    float guiU = gx / (float)TemporalGridCells;
+                    double latitudeDeg, longitudeDeg;
+                    currentProjection.UnprojectGuiToLatitudeLongitude(guiU, guiV,
+                        out latitudeDeg, out longitudeDeg);
+                    float sourceGuiU, sourceGuiV;
+                    sourceProjection.ProjectLatitudeLongitudeToGui(latitudeDeg,
+                        longitudeDeg, out sourceGuiU, out sourceGuiV);
+                    if (!Finite(sourceGuiU) || !Finite(sourceGuiV)) return false;
+                    float sourceRenderV = frontOrientation ==
+                        AERISTerrainRenderTargetOrientation.Flipped ?
+                        sourceGuiV : 1f - sourceGuiV;
+                    if (!Finite(sourceRenderV)) return false;
+                    int index = gy * TemporalGridPointsPerAxis + gx;
+                    temporalSourceUv[index] = new Vector2(sourceGuiU, sourceRenderV);
+                    minimumUvMargin = Math.Min(minimumUvMargin,
+                        Math.Min(Math.Min(sourceGuiU, 1f - sourceGuiU),
+                            Math.Min(sourceRenderV, 1f - sourceRenderV)));
+                }
+            }
 
-            float headingPenalty = trackUp ? Mathf.Clamp01(
-                Mathf.Abs(Mathf.DeltaAngle(frontMapHeadingDeg, mapHeadingDeg)) / 70f) : 0f;
-            float displacementPenalty = Mathf.Clamp01((float)(displacement /
-                Math.Max(1.0, rangeMeters * 0.32)));
-            float agePenalty = Mathf.Clamp01(ageSeconds / 20f);
-            float distortionPenalty = Mathf.Clamp01(distortion / 0.06f);
-            confidence = Mathf.Clamp01(1f - 0.24f * headingPenalty -
-                0.24f * displacementPenalty - 0.20f * agePenalty -
-                0.32f * distortionPenalty);
-            if (confidence < 0.35f) return false;
+            maxErrorPixels = 0.0;
+            for (int gy = 0; gy < TemporalGridCells; gy++)
+            {
+                float guiV = (gy + 0.5f) / TemporalGridCells;
+                for (int gx = 0; gx < TemporalGridCells; gx++)
+                {
+                    float guiU = (gx + 0.5f) / TemporalGridCells;
+                    double latitudeDeg, longitudeDeg;
+                    currentProjection.UnprojectGuiToLatitudeLongitude(guiU, guiV,
+                        out latitudeDeg, out longitudeDeg);
+                    float exactU, exactGuiV;
+                    sourceProjection.ProjectLatitudeLongitudeToGui(latitudeDeg,
+                        longitudeDeg, out exactU, out exactGuiV);
+                    if (!Finite(exactU) || !Finite(exactGuiV)) return false;
+                    float exactV = frontOrientation ==
+                        AERISTerrainRenderTargetOrientation.Flipped ?
+                        exactGuiV : 1f - exactGuiV;
+                    if (!Finite(exactV)) return false;
+                    int i00 = gy * TemporalGridPointsPerAxis + gx;
+                    int i10 = i00 + 1;
+                    int i01 = i00 + TemporalGridPointsPerAxis;
+                    int i11 = i01 + 1;
+                    Vector2 interpolated = (temporalSourceUv[i00] +
+                        temporalSourceUv[i10] + temporalSourceUv[i01] +
+                        temporalSourceUv[i11]) * 0.25f;
+                    double dx = (interpolated.x - exactU) * Math.Max(1, frontTarget.width);
+                    double dy = (interpolated.y - exactV) * Math.Max(1, frontTarget.height);
+                    double error = Math.Sqrt(dx * dx + dy * dy);
+                    if (error > maxErrorPixels) maxErrorPixels = error;
+                }
+            }
 
-            Matrix4x4 previousMatrix = GUI.matrix;
-            bool groupBegun = false;
+            float centerSourceU, centerSourceGuiV;
+            sourceProjection.ProjectLatitudeLongitudeToGui(
+                UnitLatitude(currentProjection.CenterX, currentProjection.CenterY,
+                    currentProjection.CenterZ),
+                UnitLongitude(currentProjection.CenterX, currentProjection.CenterY),
+                out centerSourceU, out centerSourceGuiV);
+            float dxPixels = (centerSourceU - 0.5f) * Math.Max(1, frontTarget.width);
+            float dyPixels = (centerSourceGuiV - frontAnchorV) *
+                Math.Max(1, frontTarget.height);
+            driftPixels = Mathf.Sqrt(dxPixels * dxPixels + dyPixels * dyPixels);
+            float sourceHeadingDeg = frontTrackUp ? frontMapHeadingDeg : 0f;
+            float currentHeadingDeg = currentProjection.TrackUp ?
+                Mathf.Atan2(currentProjection.HeadingSin, currentProjection.HeadingCos) *
+                Mathf.Rad2Deg : 0f;
+            headingDeltaDeg = frontTrackUp == currentProjection.TrackUp ?
+                Mathf.Abs(Mathf.DeltaAngle(sourceHeadingDeg, currentHeadingDeg)) : 180f;
+            temporalGridMilliseconds += ElapsedMilliseconds(startTicks);
+            if (double.IsNaN(maxErrorPixels) || double.IsInfinity(maxErrorPixels) ||
+                !Finite(minimumUvMargin) || !Finite(driftPixels) ||
+                !Finite(headingDeltaDeg)) return false;
+            return minimumUvMargin >= TemporalMinimumUvMargin &&
+                maxErrorPixels <= TemporalMaximumErrorPixels;
+        }
+
+        static bool Finite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        bool RenderTemporalReprojection(Rect plot,
+            AERISNdMapProjection currentProjection, double errorPixels,
+            float uvMargin)
+        {
+            if (frontTarget == null || presentationTarget == null ||
+                reprojectionMaterial == null || !frontTarget.IsCreated() ||
+                !presentationTarget.IsCreated()) return false;
+            for (int i = 0; i < temporalSourceUv.Length; i++)
+                if (!Finite(temporalSourceUv[i].x) || !Finite(temporalSourceUv[i].y))
+                    return false;
+            reprojectionMaterial.mainTexture = frontTarget;
+            reprojectionMaterial.color = Color.white;
+            // Failed material setup must never clear a previously valid presentation surface.
+            if (!reprojectionMaterial.SetPass(0)) return false;
+            RenderTexture previous = RenderTexture.active;
+            bool matrixPushed = false;
+            long submitTicks = Stopwatch.GetTimestamp();
             try
             {
-                GUI.BeginGroup(plot);
-                groupBegun = true;
-                Matrix4x4 transform = Matrix4x4.identity;
-                float width = Math.Max(1f, plot.width);
-                float height = Math.Max(1f, plot.height);
-                transform.m00 = axisX.x;
-                transform.m01 = axisY.x * width / height;
-                transform.m03 = q00.x * width;
-                transform.m10 = axisX.y * height / width;
-                transform.m11 = axisY.y;
-                transform.m13 = q00.y * height;
-                GUI.matrix = previousMatrix * transform;
-                bool flipVertically = frontOrientation ==
-                    AERISTerrainRenderTargetOrientation.Flipped;
-                Rect uv = flipVertically ? new Rect(0f, 1f, 1f, -1f) :
-                    new Rect(0f, 0f, 1f, 1f);
-                GUI.DrawTextureWithTexCoords(new Rect(0f, 0f, width, height),
-                    frontTarget, uv, true);
+                RenderTexture.active = presentationTarget;
+                GL.PushMatrix();
+                matrixPushed = true;
+                GL.LoadOrtho();
+                GL.Clear(true, true, Color.clear);
+                GL.Begin(GL.QUADS);
+                for (int gy = 0; gy < TemporalGridCells; gy++)
+                {
+                    float guiV0 = gy / (float)TemporalGridCells;
+                    float guiV1 = (gy + 1f) / TemporalGridCells;
+                    float renderV0 = currentProjection.Orientation ==
+                        AERISTerrainRenderTargetOrientation.Flipped ?
+                        guiV0 : 1f - guiV0;
+                    float renderV1 = currentProjection.Orientation ==
+                        AERISTerrainRenderTargetOrientation.Flipped ?
+                        guiV1 : 1f - guiV1;
+                    for (int gx = 0; gx < TemporalGridCells; gx++)
+                    {
+                        float u0 = gx / (float)TemporalGridCells;
+                        float u1 = (gx + 1f) / TemporalGridCells;
+                        int i00 = gy * TemporalGridPointsPerAxis + gx;
+                        int i10 = i00 + 1;
+                        int i01 = i00 + TemporalGridPointsPerAxis;
+                        int i11 = i01 + 1;
+                        EmitTemporalVertex(temporalSourceUv[i00], u0, renderV0);
+                        EmitTemporalVertex(temporalSourceUv[i10], u1, renderV0);
+                        EmitTemporalVertex(temporalSourceUv[i11], u1, renderV1);
+                        EmitTemporalVertex(temporalSourceUv[i01], u0, renderV1);
+                    }
+                }
+                GL.End();
             }
-            catch
+            catch (Exception ex)
             {
-                confidence = 0f;
+                FailGpuTerrain(ex);
                 return false;
             }
             finally
             {
-                GUI.matrix = previousMatrix;
-                if (groupBegun) GUI.EndGroup();
+                if (matrixPushed) { try { GL.PopMatrix(); } catch { } }
+                RenderTexture.active = previous;
+                temporalSubmitMilliseconds += ElapsedMilliseconds(submitTicks);
             }
+            PresentTextureDirect(plot, presentationTarget, currentProjection.Orientation);
             return true;
         }
 
-        static bool ProjectHistoryGuiPoint(AERISNdMapProjection oldProjection,
-            AERISNdMapProjection currentProjection, float oldU, float oldV,
-            out Vector2 current)
+        static void EmitTemporalVertex(Vector2 sourceUv, float outputU,
+            float outputRenderV)
         {
-            current = Vector2.zero;
-            double latitudeDeg, longitudeDeg;
-            oldProjection.UnprojectGuiToLatitudeLongitude(oldU, oldV,
-                out latitudeDeg, out longitudeDeg);
-            if (double.IsNaN(latitudeDeg) || double.IsInfinity(latitudeDeg) ||
-                double.IsNaN(longitudeDeg) || double.IsInfinity(longitudeDeg)) return false;
-            float u, v;
-            currentProjection.ProjectLatitudeLongitudeToGui(latitudeDeg, longitudeDeg,
-                out u, out v);
-            if (float.IsNaN(u) || float.IsInfinity(u) || float.IsNaN(v) ||
-                float.IsInfinity(v)) return false;
-            current = new Vector2(u, v);
-            return true;
+            GL.TexCoord2(sourceUv.x, sourceUv.y);
+            GL.Vertex3(outputU, outputRenderV, 0f);
         }
 
-        static bool AffineCoversViewport(Vector2 origin, Vector2 axisX,
-            Vector2 axisY, float determinant)
+        static float ResolveTemporalConfidence(double errorPixels, float uvMargin)
         {
-            Vector2[] corners =
-            {
-                new Vector2(0f, 0f), new Vector2(1f, 0f),
-                new Vector2(0f, 1f), new Vector2(1f, 1f)
-            };
-            float inverseDeterminant = 1f / determinant;
-            for (int i = 0; i < corners.Length; i++)
-            {
-                Vector2 delta = corners[i] - origin;
-                float sourceU = (delta.x * axisY.y - delta.y * axisY.x) *
-                    inverseDeterminant;
-                float sourceV = (axisX.x * delta.y - axisX.y * delta.x) *
-                    inverseDeterminant;
-                if (sourceU < -0.02f || sourceU > 1.02f || sourceV < -0.02f ||
-                    sourceV > 1.02f) return false;
-            }
-            return true;
+            float errorConfidence = 1f - Mathf.Clamp01((float)(errorPixels /
+                Math.Max(0.001, TemporalMaximumErrorPixels)));
+            float marginConfidence = Mathf.Clamp01((uvMargin - TemporalMinimumUvMargin) /
+                Math.Max(0.001f, 0.05f - TemporalMinimumUvMargin));
+            return Mathf.Clamp01(Math.Min(errorConfidence, marginConfidence));
         }
 
         static double GreatCircleDistanceMeters(CelestialBody body, double latitudeA,
@@ -1050,7 +1912,8 @@ namespace AERISFlightControl.Terrain
             if (Time.realtimeSinceStartup < nextPresentationLogRealtime) return;
             nextPresentationLogRealtime = Time.realtimeSinceStartup + 5f;
             string frontMode = !lastFrontBufferPresented ? "BUILDING" :
-                (lastFrontBufferLatched ? "LATCHED" : "DIRECT");
+                (lastHistoryReprojected ? "TEMPORAL" :
+                (lastFrontBufferLatched ? "EXACT_LATCH" : "EXACT"));
             AERISLogger.Info("[CP3_GATE4C_VIRTUAL_DETAIL] front=" + frontMode +
                 "; detail=" + VirtualDetailLevel + "; history_conf=" +
                 lastHistoryConfidence.ToString("F3", CultureInfo.InvariantCulture) +
@@ -1065,7 +1928,10 @@ namespace AERISFlightControl.Terrain
                 (swapped ? "1" : "0") + "; swaps=" + frontBufferSwaps +
                 "; back_render=" + backRenderFrames + "; back_skip=" +
                 skippedBackRenderFrames + "; forced_recovery=" +
-                forcedRecoveryBackRenders + "; gen_bridge_frames=" +
+                forcedRecoveryBackRenders + "; forced_recovery_suppressed=" +
+                suppressedForcedRecoveryFrames + "; back_cadence_s=" +
+                lastBackRefreshCadenceSeconds.ToString("F2", CultureInfo.InvariantCulture) +
+                "; gen_bridge_frames=" +
                 generationBridgeFrames + "; gen_bridge_rejects=" +
                 generationBridgeRejects + "; front_gen=" + frontTerrainGeneration +
                 "; current_gen=" + (visible == null ? -1L : visible.TerrainGeneration) +
@@ -1074,11 +1940,148 @@ namespace AERISFlightControl.Terrain
                 frontSurfaceRangeMeters.ToString("F0", CultureInfo.InvariantCulture) +
                 "; history_frames_quarantined=" + historyReprojectFrames +
                 "; history_reject=" + historyRejectedFrames + "; direct_frames=" +
-                directFrontFrames + "; blocked=" + blockedIncompleteSwaps +
+                directFrontFrames + "; exact_authority_frames=" + exactFrontAuthorityFrames +
+                "; temporal_shadow_eligible=" + temporalShadowEligibleFrames +
+                "; temporal_authority_blocked=" + temporalPresentationBlockedFrames +
+                "; blocked=" + blockedIncompleteSwaps +
                 "; render_ready=" + renderReadyFields.Count + "/" + renderReadyBytes +
                 "; virtual_builds=" + virtualRouteBuilds + "/" +
                 virtualLocalBuilds + "; exact_overlay_draws=" +
                 exactDetailOverlayDraws + "; cpu_terrain_draw=0.");
+            LogBackRenderProfile();
+            LogGate2ParallelProjection();
+            LogGate2TemporalReprojection();
+        }
+
+        void LogGate2ParallelProjection()
+        {
+            long completed = Math.Max(1L, projectionBatchesCompleted);
+            AERISLogger.Info("[CP3.5_GATE2_PARALLEL] submitted=" +
+                projectionBatchesSubmitted + "; completed=" + projectionBatchesCompleted +
+                "; discarded=" + projectionBatchesDiscarded +
+                "; admission_failed=" + projectionBatchesSubmissionFailed +
+                "; pending=" + (pendingProjectionBatch == null ? "0" : "1") +
+                "; workers_last=" + lastProjectionWorkerCount +
+                "; worker_cpu_ms_per_completed=" +
+                (projectionWorkerMilliseconds / completed).ToString("F3",
+                    CultureInfo.InvariantCulture) +
+                "; worker_wall_ms_per_completed=" +
+                (projectionWorkerWallMilliseconds / completed).ToString("F3",
+                    CultureInfo.InvariantCulture) +
+                "; projected_vertices=" + projectionWorkerProjectedVertices +
+                "; colour_vertices=" + projectionWorkerColourVertices +
+                "; keyframe_min_interval_s=" + KeyFrameMinimumIntervalSeconds.ToString("F2",
+                    CultureInfo.InvariantCulture) + ".");
+        }
+
+        void LogGate2TemporalReprojection()
+        {
+            long frames = Math.Max(1L, temporalFrames);
+            AERISLogger.Info("[CP3.5_GATE2_TEMPORAL] frames=" + temporalFrames +
+                "; rejects=" + temporalRejects + "; keyframe_requests=" +
+                temporalKeyFrameRequests + "; overscan_scale=" +
+                HistoryOverscanScale.ToString("F2", CultureInfo.InvariantCulture) +
+                "; grid=" + TemporalGridCells + "x" + TemporalGridCells +
+                "; max_error_px=" + lastTemporalMaxErrorPixels.ToString("F3",
+                    CultureInfo.InvariantCulture) + "; min_uv_margin=" +
+                lastTemporalMinUvMargin.ToString("F4", CultureInfo.InvariantCulture) +
+                "; drift_px=" + lastTemporalDriftPixels.ToString("F1",
+                    CultureInfo.InvariantCulture) + "; heading_delta_deg=" +
+                lastTemporalHeadingDeltaDeg.ToString("F2", CultureInfo.InvariantCulture) +
+                "; grid_cpu_ms_per_frame=" + (temporalGridMilliseconds / frames).ToString("F3",
+                    CultureInfo.InvariantCulture) + "; submit_ms_per_frame=" +
+                (temporalSubmitMilliseconds / frames).ToString("F3",
+                    CultureInfo.InvariantCulture) + "; confidence=" +
+                lastHistoryConfidence.ToString("F3", CultureInfo.InvariantCulture) +
+                "; presentation_authority=" +
+                (TemporalPresentationAuthorityEnabled ? "TEMPORAL_ALLOWED" :
+                    "EXACT_FRONT_ONLY") + "; shadow_eligible=" +
+                temporalShadowEligibleFrames + "; authority_blocked=" +
+                temporalPresentationBlockedFrames + ".");
+        }
+
+        static double ElapsedMilliseconds(long startTicks)
+        {
+            return (Stopwatch.GetTimestamp() - startTicks) * 1000.0 / Stopwatch.Frequency;
+        }
+
+        void RecordBackRenderProfile(double totalMs, bool detailed,
+            ref BackRenderDetailedProfile profile)
+        {
+            backProfileAllSamples++;
+            backProfileAllTotalMs += totalMs;
+            if (totalMs > backProfileAllMaxTotalMs) backProfileAllMaxTotalMs = totalMs;
+            if (!detailed) return;
+            backProfileDetailedSamples++;
+            backProfileDetailedTotalMs += totalMs;
+            backProfileSetupClearMs += profile.SetupClearMs;
+            backProfileProjectionCpuMs += profile.ProjectionCpuMs;
+            backProfileMeshVertexUploadMs += profile.MeshVertexUploadMs;
+            backProfileBoundsMs += profile.BoundsMs;
+            backProfileColourCpuMs += profile.ColourCpuMs;
+            backProfileColourUploadMs += profile.ColourUploadMs;
+            backProfileDrawSubmitMs += profile.DrawSubmitMs;
+            backProfileWorldSurfaceMs += profile.WorldSurfaceMs;
+            backProfileFinalizeMs += profile.FinalizeMs;
+            backProfileProjectedVertices += profile.ProjectedVertices;
+            backProfileDrawCalls += profile.DrawCalls;
+            backProfileWorldSurfacePrimitives += profile.WorldSurfacePrimitives;
+            backProfileTilesVisited += profile.TilesVisited;
+            backProfileEntriesReprojected += profile.EntriesReprojected;
+        }
+
+        void LogBackRenderProfile()
+        {
+            if (backProfileAllSamples <= 0) return;
+            double allDivisor = Math.Max(1L, backProfileAllSamples);
+            double detailedDivisor = Math.Max(1L, backProfileDetailedSamples);
+            double sampledKnown = backProfileSetupClearMs + backProfileProjectionCpuMs +
+                backProfileMeshVertexUploadMs + backProfileBoundsMs +
+                backProfileColourCpuMs + backProfileColourUploadMs +
+                backProfileDrawSubmitMs + backProfileWorldSurfaceMs +
+                backProfileFinalizeMs;
+            double sampledOther = Math.Max(0.0, backProfileDetailedTotalMs - sampledKnown);
+            AERISLogger.Info("[CP3.5_GATE1_BACK_PROFILE] all_samples=" +
+                backProfileAllSamples + "; detailed_samples=" + backProfileDetailedSamples +
+                "; detailed_stride=" + BackRenderDetailedProfileStride +
+                "; total_all_avg_ms=" + (backProfileAllTotalMs / allDivisor).ToString("F3", CultureInfo.InvariantCulture) +
+                "; total_all_max_ms=" + backProfileAllMaxTotalMs.ToString("F3", CultureInfo.InvariantCulture) +
+                "; sampled_total_avg_ms=" + (backProfileDetailedTotalMs / detailedDivisor).ToString("F3", CultureInfo.InvariantCulture) +
+                "; setup_clear_avg_ms=" + (backProfileSetupClearMs / detailedDivisor).ToString("F3", CultureInfo.InvariantCulture) +
+                "; projection_cpu_avg_ms=" + (backProfileProjectionCpuMs / detailedDivisor).ToString("F3", CultureInfo.InvariantCulture) +
+                "; mesh_vertex_upload_avg_ms=" + (backProfileMeshVertexUploadMs / detailedDivisor).ToString("F3", CultureInfo.InvariantCulture) +
+                "; bounds_avg_ms=" + (backProfileBoundsMs / detailedDivisor).ToString("F3", CultureInfo.InvariantCulture) +
+                "; colour_cpu_avg_ms=" + (backProfileColourCpuMs / detailedDivisor).ToString("F3", CultureInfo.InvariantCulture) +
+                "; colour_upload_avg_ms=" + (backProfileColourUploadMs / detailedDivisor).ToString("F3", CultureInfo.InvariantCulture) +
+                "; draw_submit_avg_ms=" + (backProfileDrawSubmitMs / detailedDivisor).ToString("F3", CultureInfo.InvariantCulture) +
+                "; world_surface_avg_ms=" + (backProfileWorldSurfaceMs / detailedDivisor).ToString("F3", CultureInfo.InvariantCulture) +
+                "; world_surface_primitives_avg=" + (backProfileWorldSurfacePrimitives / detailedDivisor).ToString("F1", CultureInfo.InvariantCulture) +
+                "; finalize_avg_ms=" + (backProfileFinalizeMs / detailedDivisor).ToString("F3", CultureInfo.InvariantCulture) +
+                "; other_avg_ms=" + (sampledOther / detailedDivisor).ToString("F3", CultureInfo.InvariantCulture) +
+                "; tiles_avg=" + (backProfileTilesVisited / detailedDivisor).ToString("F1", CultureInfo.InvariantCulture) +
+                "; reprojected_entries_avg=" + (backProfileEntriesReprojected / detailedDivisor).ToString("F1", CultureInfo.InvariantCulture) +
+                "; projected_vertices_avg=" + (backProfileProjectedVertices / detailedDivisor).ToString("F0", CultureInfo.InvariantCulture) +
+                "; draw_calls_avg=" + (backProfileDrawCalls / detailedDivisor).ToString("F1", CultureInfo.InvariantCulture) +
+                "; cadence_s=" + lastBackRefreshCadenceSeconds.ToString("F2", CultureInfo.InvariantCulture) + ".");
+            backProfileAllSamples = 0L;
+            backProfileAllTotalMs = 0.0;
+            backProfileAllMaxTotalMs = 0.0;
+            backProfileDetailedSamples = 0L;
+            backProfileDetailedTotalMs = 0.0;
+            backProfileSetupClearMs = 0.0;
+            backProfileProjectionCpuMs = 0.0;
+            backProfileMeshVertexUploadMs = 0.0;
+            backProfileBoundsMs = 0.0;
+            backProfileColourCpuMs = 0.0;
+            backProfileColourUploadMs = 0.0;
+            backProfileDrawSubmitMs = 0.0;
+            backProfileWorldSurfaceMs = 0.0;
+            backProfileFinalizeMs = 0.0;
+            backProfileProjectedVertices = 0L;
+            backProfileDrawCalls = 0L;
+            backProfileWorldSurfacePrimitives = 0L;
+            backProfileTilesVisited = 0L;
+            backProfileEntriesReprojected = 0L;
         }
 
         void ResetFrontBufferState()
@@ -1098,17 +2101,21 @@ namespace AERISFlightControl.Terrain
             frontOrientation = AERISTerrainRenderTargetOrientation.Direct;
             frontCommittedRealtime = 0f;
             frontContentRevision = -1L;
+            frontWorldSurfaceRevision = -1L;
             lastBackAttemptViewGeneration = -1L;
             lastBackAttemptContentRevision = -1L;
             nextBackRefreshRealtime = 0f;
             lastFrontBufferPresented = false;
             lastFrontBufferLatched = false;
             presentedProjection.Valid = false;
+            presentedProjection.Reprojected = false;
+            presentedProjection.ReprojectionErrorPixels = 0f;
             lastHistoryReprojected = false;
             lastHistoryConfidence = 0f;
             lastBackFoundationCoverage = 0f;
             readyBuildingSinceRealtime = -1f;
             readyBuildingViolationLatched = false;
+            CancelProjectionBatch();
         }
 
         void Schedule(AERISTerrainHeightTile tile, string styleKey,
@@ -1448,7 +2455,8 @@ namespace AERISFlightControl.Terrain
         static SurfacePoint CoastBoundaryPoint(SurfacePoint a, SurfacePoint b,
             bool water)
         {
-            float t = AERISTerrainCoastlinePolicy.CrossingFraction(a.Water, b.Water);
+            float t = AERISTerrainCoastlinePolicy.CrossingFraction(a.Water, b.Water,
+                a.ElevationMeters, b.ElevationMeters);
             return new SurfacePoint
             {
                 X = a.X + (b.X - a.X) * t,
@@ -1498,7 +2506,7 @@ namespace AERISFlightControl.Terrain
             mesh.vertices = sourceVertices;
             mesh.colors32 = colours;
             mesh.triangles = builder.Triangles.ToArray();
-            mesh.RecalculateBounds();
+            SetProjectionSafeBounds(mesh);
             // Colours and geographic projection are updated in flight; retain CPU access.
             mesh.UploadMeshData(false);
             return mesh;
@@ -1528,7 +2536,7 @@ namespace AERISFlightControl.Terrain
             mesh.vertices = sourceVertices;
             mesh.colors32 = colours;
             mesh.SetIndices(indices, MeshTopology.Lines, 0);
-            mesh.RecalculateBounds();
+            SetProjectionSafeBounds(mesh);
             mesh.UploadMeshData(false);
             return mesh;
         }
@@ -1570,9 +2578,20 @@ namespace AERISFlightControl.Terrain
             mesh.vertices = sourceVertices;
             mesh.colors32 = colours.ToArray();
             mesh.triangles = triangles.ToArray();
-            mesh.RecalculateBounds();
+            SetProjectionSafeBounds(mesh);
             mesh.UploadMeshData(false);
             return mesh;
+        }
+
+        static void SetProjectionSafeBounds(Mesh mesh)
+        {
+            if (mesh == null) return;
+            // Projection vertices may sit outside the visible 0..1 viewport while the tile
+            // crosses an edge.  Use one conservative fixed bound instead of rebuilding
+            // bounds for ~500k vertices every BACK. Graphics.DrawMeshNow still clips against
+            // the render target, and the wide bound prevents false Unity-side culling.
+            mesh.bounds = new Bounds(new Vector3(0.5f, 0.5f, 0f),
+                new Vector3(16f, 16f, 2f));
         }
 
         static Vector3[] AllocateProjectedVertices(Vector3[] sourceVertices)
@@ -1609,7 +2628,8 @@ namespace AERISFlightControl.Terrain
         }
 
         static void EnsureProjectedGeometry(Entry entry,
-            AERISNdMapProjection context, float movementThresholdMeters)
+            AERISNdMapProjection context, float movementThresholdMeters,
+            bool detailedProfile, ref BackRenderDetailedProfile profile)
         {
             if (entry == null) return;
             bool projectionChanged = double.IsNaN(entry.LastProjectionCenterLatitudeDeg) ||
@@ -1630,15 +2650,16 @@ namespace AERISFlightControl.Terrain
                     movementThresholdMeters * movementThresholdMeters;
             }
             if (!projectionChanged) return;
+            if (detailedProfile) profile.EntriesReprojected++;
 
             ProjectMesh(entry.LandMesh, entry.LandGeographicPoints,
-                entry.LandProjectedVertices, context);
+                entry.LandProjectedVertices, context, detailedProfile, ref profile);
             ProjectMesh(entry.WaterMesh, entry.WaterGeographicPoints,
-                entry.WaterProjectedVertices, context);
+                entry.WaterProjectedVertices, context, detailedProfile, ref profile);
             ProjectMesh(entry.ContourMesh, entry.ContourGeographicPoints,
-                entry.ContourProjectedVertices, context);
+                entry.ContourProjectedVertices, context, detailedProfile, ref profile);
             ProjectMesh(entry.CoastlineMesh, entry.CoastlineGeographicPoints,
-                entry.CoastlineProjectedVertices, context);
+                entry.CoastlineProjectedVertices, context, detailedProfile, ref profile);
             entry.LastProjectionCenterLatitudeDeg =
                 UnitLatitude(context.CenterX, context.CenterY, context.CenterZ);
             entry.LastProjectionCenterLongitudeDeg =
@@ -1650,10 +2671,27 @@ namespace AERISFlightControl.Terrain
         }
 
         static void ProjectMesh(Mesh mesh, GeographicUnitPoint[] points,
-            Vector3[] projectedVertices, AERISNdMapProjection context)
+            Vector3[] projectedVertices, AERISNdMapProjection context,
+            bool detailedProfile, ref BackRenderDetailedProfile profile)
         {
             if (mesh == null || points == null || projectedVertices == null ||
                 points.Length != projectedVertices.Length) return;
+            if (!detailedProfile)
+            {
+                for (int i = 0; i < points.Length; i++)
+                {
+                    GeographicUnitPoint point = points[i];
+                    float u, v;
+                    context.ProjectUnitToRenderNUp(point.X, point.Y, point.Z,
+                        out u, out v);
+                    projectedVertices[i] = new Vector3(u, v, 0f);
+                }
+                mesh.vertices = projectedVertices;
+                SetProjectionSafeBounds(mesh);
+                return;
+            }
+
+            long projectionStartTicks = Stopwatch.GetTimestamp();
             for (int i = 0; i < points.Length; i++)
             {
                 GeographicUnitPoint point = points[i];
@@ -1662,8 +2700,16 @@ namespace AERISFlightControl.Terrain
                     out u, out v);
                 projectedVertices[i] = new Vector3(u, v, 0f);
             }
+            profile.ProjectionCpuMs += ElapsedMilliseconds(projectionStartTicks);
+            profile.ProjectedVertices += points.LongLength;
+
+            long uploadStartTicks = Stopwatch.GetTimestamp();
             mesh.vertices = projectedVertices;
-            mesh.RecalculateBounds();
+            profile.MeshVertexUploadMs += ElapsedMilliseconds(uploadStartTicks);
+
+            long boundsStartTicks = Stopwatch.GetTimestamp();
+            SetProjectionSafeBounds(mesh);
+            profile.BoundsMs += ElapsedMilliseconds(boundsStartTicks);
         }
 
         static double UnitLatitude(double x, double y, double z)
@@ -1688,32 +2734,46 @@ namespace AERISFlightControl.Terrain
 
         bool DrawEntry(Entry entry, Matrix4x4 mapMatrix, bool drawContours,
             AERISTerrainDisplayMode mode, AERISTerrainColourPreset preset,
-            float aircraftAltitudeAslMeters)
+            float aircraftAltitudeAslMeters, bool detailedProfile,
+            ref BackRenderDetailedProfile profile)
         {
             if (entry == null || (entry.LandMesh == null && entry.WaterMesh == null))
                 return false;
-            EnsureLandColours(entry, mode, preset, aircraftAltitudeAslMeters);
+            EnsureLandColours(entry, mode, preset, aircraftAltitudeAslMeters,
+                detailedProfile, ref profile);
+            long drawStartTicks = detailedProfile ? Stopwatch.GetTimestamp() : 0L;
             bool rendered = false;
             if (entry.WaterMesh != null && terrainMaterial.SetPass(0))
             {
                 Graphics.DrawMeshNow(entry.WaterMesh, mapMatrix);
+                if (detailedProfile) profile.DrawCalls++;
                 rendered = true;
             }
             if (entry.LandMesh != null && terrainMaterial.SetPass(0))
             {
                 Graphics.DrawMeshNow(entry.LandMesh, mapMatrix);
+                if (detailedProfile) profile.DrawCalls++;
                 rendered = true;
             }
             if (drawContours && entry.ContourMesh != null &&
                 contourMaterial.SetPass(0))
+            {
                 Graphics.DrawMeshNow(entry.ContourMesh, mapMatrix);
+                if (detailedProfile) profile.DrawCalls++;
+            }
             if (entry.CoastlineMesh != null && coastlineMaterial.SetPass(0))
+            {
                 Graphics.DrawMeshNow(entry.CoastlineMesh, mapMatrix);
+                if (detailedProfile) profile.DrawCalls++;
+            }
+            if (detailedProfile)
+                profile.DrawSubmitMs += ElapsedMilliseconds(drawStartTicks);
             return rendered;
         }
 
         static void EnsureLandColours(Entry entry, AERISTerrainDisplayMode mode,
-            AERISTerrainColourPreset preset, float aircraftAltitudeAslMeters)
+            AERISTerrainColourPreset preset, float aircraftAltitudeAslMeters,
+            bool detailedProfile, ref BackRenderDetailedProfile profile)
         {
             if (entry == null || entry.LandMesh == null ||
                 entry.LandElevationMeters == null || entry.LandShade == null) return;
@@ -1727,13 +2787,20 @@ namespace AERISFlightControl.Terrain
                 entry.LandColours = new Color32[entry.LandElevationMeters.Length];
             float quantizedAltitude = mode == AERISTerrainDisplayMode.Relative ?
                 altitudeBucket * RelativeAltitudeBucketMeters : aircraftAltitudeAslMeters;
+            long colourCpuStartTicks = detailedProfile ? Stopwatch.GetTimestamp() : 0L;
             for (int i = 0; i < entry.LandColours.Length; i++)
             {
                 Color32 baseColour = ResolveLandColour(mode, preset,
-                    entry.LandElevationMeters[i], quantizedAltitude);
+                    entry.LandElevationMeters[i], quantizedAltitude,
+                    entry.TopoMinimumMeters, entry.TopoMaximumMeters);
                 entry.LandColours[i] = ApplyShade(baseColour, entry.LandShade[i], mode);
             }
+            if (detailedProfile)
+                profile.ColourCpuMs += ElapsedMilliseconds(colourCpuStartTicks);
+            long colourUploadStartTicks = detailedProfile ? Stopwatch.GetTimestamp() : 0L;
             entry.LandMesh.colors32 = entry.LandColours;
+            if (detailedProfile)
+                profile.ColourUploadMs += ElapsedMilliseconds(colourUploadStartTicks);
             entry.ColourMode = mode;
             entry.ColourPreset = preset;
             entry.RelativeAltitudeBucket = altitudeBucket;
@@ -1789,7 +2856,7 @@ namespace AERISFlightControl.Terrain
         void EnsureMaterials(AERISTerrainColourPreset preset)
         {
             if (terrainMaterial == null || contourMaterial == null ||
-                coastlineMaterial == null)
+                coastlineMaterial == null || worldSurfaceMaterial == null || reprojectionMaterial == null)
             {
                 Shader shader = Shader.Find("Sprites/Default");
                 if (shader == null) shader = Shader.Find("Unlit/Transparent");
@@ -1812,10 +2879,27 @@ namespace AERISFlightControl.Terrain
                 coastlineMaterial.name = "AERIS_TERRAIN_COASTLINE_MATERIAL";
                 coastlineMaterial.hideFlags = HideFlags.HideAndDontSave;
                 coastlineMaterial.mainTexture = Texture2D.whiteTexture;
+
+                worldSurfaceMaterial = new Material(shader);
+                worldSurfaceMaterial.name = "AERIS_ND_WORLD_SURFACE_MATERIAL";
+                worldSurfaceMaterial.hideFlags = HideFlags.HideAndDontSave;
+                worldSurfaceMaterial.mainTexture = Texture2D.whiteTexture;
+                worldSurfaceMaterial.color = Color.white;
+
+                Shader textureShader = Shader.Find("Unlit/Texture");
+                if (textureShader == null) textureShader = Shader.Find("Sprites/Default");
+                if (textureShader == null) textureShader = Shader.Find("UI/Default");
+                if (textureShader == null) throw new InvalidOperationException(
+                    "No compatible built-in texture reprojection shader");
+                reprojectionMaterial = new Material(textureShader);
+                reprojectionMaterial.name = "AERIS_ND_TEMPORAL_REPROJECTION_MATERIAL";
+                reprojectionMaterial.hideFlags = HideFlags.HideAndDontSave;
+                reprojectionMaterial.color = Color.white;
             }
             terrainMaterial.color = Color.white;
             contourMaterial.color = ResolveContourColour(preset);
             coastlineMaterial.color = Color.white;
+            worldSurfaceMaterial.color = Color.white;
         }
 
 
@@ -1827,10 +2911,12 @@ namespace AERISFlightControl.Terrain
                 virtualDetail.RenderTargetScale;
             int width = Mathf.Clamp(Mathf.CeilToInt(plot.width * scale), 128, 1024);
             int height = Mathf.Clamp(Mathf.CeilToInt(plot.height * scale), 128, 1024);
-            if (backTarget != null && frontTarget != null &&
+            if (backTarget != null && frontTarget != null && presentationTarget != null &&
                 backTarget.width == width && backTarget.height == height &&
                 frontTarget.width == width && frontTarget.height == height &&
-                backTarget.IsCreated() && frontTarget.IsCreated()) return;
+                presentationTarget.width == width && presentationTarget.height == height &&
+                backTarget.IsCreated() && frontTarget.IsCreated() &&
+                presentationTarget.IsCreated()) return;
 
             DestroyRenderTargets();
             if (!SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGB32))
@@ -1856,8 +2942,20 @@ namespace AERISFlightControl.Terrain
             if (!frontTarget.Create())
                 throw new InvalidOperationException(
                     "Terrain front RenderTexture.Create failed");
+            presentationTarget = new RenderTexture(width, height, 0,
+                RenderTextureFormat.ARGB32);
+            presentationTarget.name = "AERIS_ND_TERRAIN_PRESENTATION";
+            presentationTarget.hideFlags = HideFlags.HideAndDontSave;
+            presentationTarget.filterMode = FilterMode.Bilinear;
+            presentationTarget.wrapMode = TextureWrapMode.Clamp;
+            presentationTarget.useMipMap = false;
+            presentationTarget.autoGenerateMips = false;
+            if (!presentationTarget.Create())
+                throw new InvalidOperationException(
+                    "Terrain presentation RenderTexture.Create failed");
             backTargetBytes = (long)width * height * 4L;
             frontTargetBytes = (long)width * height * 4L;
+            presentationTargetBytes = (long)width * height * 4L;
             ResetFrontBufferState();
         }
 
@@ -1977,7 +3075,7 @@ namespace AERISFlightControl.Terrain
         AERISTerrainVirtualDetailProfile ResolveVirtualDetailProfile(float rangeMeters)
         {
             string quality = performance == null || performance.ActiveProfile == null ?
-                "MEDIUM" : performance.ActiveProfile.Name;
+                "LOW" : performance.ActiveProfile.Name;
             return AERISTerrainVirtualDetailPolicy.Resolve(quality, rangeMeters);
         }
 
@@ -1998,6 +3096,71 @@ namespace AERISFlightControl.Terrain
             return AERISTerrainDisplayMode.Topographic;
         }
 
+        static void ResolveTopographicWindow(AERISTerrainHeightTile[] tiles,
+            out int minimumMeters, out int maximumMeters)
+        {
+            float minimum = float.MaxValue;
+            float maximum = float.MinValue;
+            if (tiles != null)
+            {
+                for (int i = 0; i < tiles.Length; i++)
+                {
+                    AERISTerrainHeightTile tile = tiles[i];
+                    if (tile == null) continue;
+                    if (Finite(tile.MinimumElevationMeters))
+                        minimum = Math.Min(minimum, tile.MinimumElevationMeters);
+                    if (Finite(tile.MaximumElevationMeters))
+                        maximum = Math.Max(maximum, tile.MaximumElevationMeters);
+                }
+            }
+            if (minimum == float.MaxValue || maximum == float.MinValue)
+            {
+                minimumMeters = -500;
+                maximumMeters = 12000;
+                return;
+            }
+            // Palette V3: water is rendered as its own categorical surface, therefore
+            // ocean-depth minima must not consume most of the land gradient. This keeps
+            // Kerbin-like coastal terrain spread across the useful colour range.
+            if (minimum < 0f && maximum > 0f) minimum = 0f;
+            float quantizedMinimum = Mathf.Floor(minimum / TopographicWindowBucketMeters) *
+                TopographicWindowBucketMeters;
+            float quantizedMaximum = Mathf.Ceil(maximum / TopographicWindowBucketMeters) *
+                TopographicWindowBucketMeters;
+            if (quantizedMaximum - quantizedMinimum < TopographicMinimumSpanMeters)
+                quantizedMaximum = quantizedMinimum + TopographicMinimumSpanMeters;
+            minimumMeters = Mathf.RoundToInt(quantizedMinimum);
+            maximumMeters = Mathf.RoundToInt(quantizedMaximum);
+        }
+
+        bool TryBuildRefreshMetrics(Vessel vessel, AERISNdMapProjection projection,
+            float rangeMeters, float mapHeadingDeg, bool trackUp,
+            out double maximumErrorPixels, out float minimumUvMargin,
+            out float driftPixels, out float headingDeltaDeg)
+        {
+            if (TemporalShadowSamplingEnabled)
+                return TryBuildTemporalReprojection(vessel, projection, rangeMeters,
+                    out maximumErrorPixels, out minimumUvMargin, out driftPixels,
+                    out headingDeltaDeg);
+            maximumErrorPixels = 0.0;
+            minimumUvMargin = 1f;
+            driftPixels = 0f;
+            headingDeltaDeg = 0f;
+            if (!frontBufferValid || frontTarget == null || !frontTarget.IsCreated())
+                return false;
+            float oldCenterU, oldCenterV;
+            projection.ProjectLatitudeLongitudeToGui(frontCenterLatitudeDeg,
+                frontCenterLongitudeDeg, out oldCenterU, out oldCenterV);
+            float dx = (oldCenterU - 0.5f) * Math.Max(1, frontTarget.width);
+            float dy = (oldCenterV - projection.AnchorGuiV) *
+                Math.Max(1, frontTarget.height);
+            driftPixels = Mathf.Sqrt(dx * dx + dy * dy);
+            if (frontTrackUp != trackUp) headingDeltaDeg = 180f;
+            else if (trackUp) headingDeltaDeg = Mathf.Abs(Mathf.DeltaAngle(
+                frontMapHeadingDeg, mapHeadingDeg));
+            return true;
+        }
+
         static int CompareTilesCoarseFirst(AERISTerrainHeightTile left,
             AERISTerrainHeightTile right)
         {
@@ -2006,6 +3169,11 @@ namespace AERISFlightControl.Terrain
             if (right == null) return 1;
             int lod = ((int)left.Key.Lod).CompareTo((int)right.Key.Lod);
             if (lod != 0) return lod;
+            // Within one geographic LOD, draw lower-resolution foundation first and
+            // transient REAL65/exact refinement last so detail overlays never disappear
+            // beneath the 33x33 base merely because timestamps happen to compare oddly.
+            int resolution = left.Resolution.CompareTo(right.Resolution);
+            if (resolution != 0) return resolution;
             return left.CreatedUtcTicks.CompareTo(right.CreatedUtcTicks);
         }
 
@@ -2287,6 +3455,137 @@ namespace AERISFlightControl.Terrain
                     AERISResidentTileState.RenderReady);
         }
 
+        void HandlePaletteGeneration(AERISTerrainColourPreset preset)
+        {
+            if (activePalettePreset == (AERISTerrainColourPreset)(-1))
+            {
+                activePalettePreset = preset;
+                return;
+            }
+            if (activePalettePreset == preset) return;
+            AERISTerrainColourPreset previous = activePalettePreset;
+            activePalettePreset = preset;
+            paletteGeneration++;
+            gpuContentRevision++;
+            CancelProjectionBatch();
+            ResetFrontBufferState();
+            nextBackRefreshRealtime = 0f;
+            AERISLogger.Info("[CP3.5/ACCESSIBILITY] palette generation " +
+                paletteGeneration + "; " + previous + " -> " + preset +
+                "; exact key-frame/presentation cache invalidated.");
+        }
+
+        void DrawWorldSurfaceNavigation(ProjectionBatch batch, bool detailedProfile,
+            ref BackRenderDetailedProfile profile)
+        {
+            if (batch == null || batch.NavigationFrame == null ||
+                worldSurfaceMaterial == null || backTarget == null) return;
+            AERISPreparedNavigationFrame frame = batch.NavigationFrame;
+            if (!string.Equals(frame.BodyName ?? string.Empty, batch.BodyName ?? string.Empty,
+                StringComparison.Ordinal)) return;
+            long start = detailedProfile ? Stopwatch.GetTimestamp() : 0L;
+            if (!worldSurfaceMaterial.SetPass(0)) return;
+            long primitives = 0L;
+            GL.Begin(GL.QUADS);
+            try
+            {
+                AERISPreparedRunwaySymbol[] runways = frame.Runways ??
+                    new AERISPreparedRunwaySymbol[0];
+                for (int i = 0; i < runways.Length; i++)
+                {
+                    AERISPreparedRunwaySymbol runway = runways[i];
+                    if (runway == null) continue;
+                    float au, avGui, bu, bvGui;
+                    batch.Projection.ProjectLatitudeLongitudeToGui(runway.LatitudeADeg,
+                        runway.LongitudeADeg, out au, out avGui);
+                    batch.Projection.ProjectLatitudeLongitudeToGui(runway.LatitudeBDeg,
+                        runway.LongitudeBDeg, out bu, out bvGui);
+                    float av = GuiToRenderV(batch.Orientation, avGui);
+                    float bv = GuiToRenderV(batch.Orientation, bvGui);
+                    if (!SegmentNearSurface(au, av, bu, bv)) continue;
+                    Color colour = runway.SelectedRunway ? new Color(0.20f, 1f, 0.34f, 0.96f) :
+                        (runway.Certified ? new Color(0.72f, 0.88f, 0.95f, 0.92f) :
+                        (runway.Provisional ? new Color(1f, 0.68f, 0.12f, 0.92f) :
+                        new Color(0.62f, 0.68f, 0.72f, 0.82f)));
+                    float physicalPixels = (float)(Math.Max(8.0, runway.WidthMeters) /
+                        Math.Max(1.0, batch.Projection.VerticalMeters) * backTarget.height);
+                    float widthPixels = Mathf.Clamp(physicalPixels, 1.2f, 7f);
+                    if (runway.SelectedRunway) widthPixels = Mathf.Max(widthPixels, 2.4f);
+                    EmitWorldLineQuad(au, av, bu, bv, widthPixels + 2f,
+                        new Color(0.01f, 0.02f, 0.03f, 0.90f));
+                    EmitWorldLineQuad(au, av, bu, bv, widthPixels, colour);
+                    primitives += 2L;
+                }
+                if (batch.IncludeFacilities)
+                {
+                    AERISPreparedFacilitySymbol[] facilities = frame.Facilities ??
+                        new AERISPreparedFacilitySymbol[0];
+                    int facilityLimit = performance == null || performance.ActiveProfile == null ?
+                        24 : performance.ActiveProfile.MaximumFacilitySymbols;
+                    int drawn = 0;
+                    for (int i = 0; i < facilities.Length && drawn < facilityLimit; i++)
+                    {
+                        AERISPreparedFacilitySymbol facility = facilities[i];
+                        if (facility == null || !facility.HasGeographicPosition) continue;
+                        float u, vGui;
+                        batch.Projection.ProjectLatitudeLongitudeToGui(facility.LatitudeDeg,
+                            facility.LongitudeDeg, out u, out vGui);
+                        float v = GuiToRenderV(batch.Orientation, vGui);
+                        if (u < -0.04f || u > 1.04f || v < -0.04f || v > 1.04f) continue;
+                        Color c = facility.Selected ? new Color(0.20f, 1f, 0.34f, 0.96f) :
+                            new Color(0.62f, 0.86f, 0.94f, 0.88f);
+                        float dx = 4f / Math.Max(128f, backTarget.width);
+                        float dy = 4f / Math.Max(128f, backTarget.height);
+                        EmitWorldLineQuad(u - dx, v, u + dx, v, 1.4f, c);
+                        EmitWorldLineQuad(u, v - dy, u, v + dy, 1.4f, c);
+                        primitives += 2L;
+                        drawn++;
+                    }
+                }
+            }
+            finally
+            {
+                GL.End();
+            }
+            if (detailedProfile)
+            {
+                profile.WorldSurfaceMs += ElapsedMilliseconds(start);
+                profile.WorldSurfacePrimitives += primitives;
+                if (primitives > 0) profile.DrawCalls++;
+            }
+        }
+
+        static float GuiToRenderV(AERISTerrainRenderTargetOrientation orientation,
+            float guiV)
+        {
+            return orientation == AERISTerrainRenderTargetOrientation.Flipped ? guiV :
+                1f - guiV;
+        }
+
+        static bool SegmentNearSurface(float ax, float ay, float bx, float by)
+        {
+            float minX = Math.Min(ax, bx), maxX = Math.Max(ax, bx);
+            float minY = Math.Min(ay, by), maxY = Math.Max(ay, by);
+            return maxX >= -0.08f && minX <= 1.08f && maxY >= -0.08f && minY <= 1.08f;
+        }
+
+        void EmitWorldLineQuad(float ax, float ay, float bx, float by,
+            float widthPixels, Color colour)
+        {
+            float dxPixels = (bx - ax) * Math.Max(128f, backTarget.width);
+            float dyPixels = (by - ay) * Math.Max(128f, backTarget.height);
+            float length = Mathf.Sqrt(dxPixels * dxPixels + dyPixels * dyPixels);
+            if (length <= 0.001f) return;
+            float half = Math.Max(0.5f, widthPixels * 0.5f);
+            float nx = -dyPixels / length * half / Math.Max(128f, backTarget.width);
+            float ny = dxPixels / length * half / Math.Max(128f, backTarget.height);
+            GL.Color(colour);
+            GL.Vertex3(ax + nx, ay + ny, 0f);
+            GL.Vertex3(bx + nx, by + ny, 0f);
+            GL.Vertex3(bx - nx, by - ny, 0f);
+            GL.Vertex3(ax - nx, ay - ny, 0f);
+        }
+
         void FailGpuTerrain(Exception ex)
         {
             gpuFailed = true;
@@ -2300,41 +3599,64 @@ namespace AERISFlightControl.Terrain
 
         static Color32 ResolveLandColour(AERISTerrainDisplayMode mode,
             AERISTerrainColourPreset preset, float terrainAltitudeMeters,
-            float aircraftAltitudeAslMeters)
+            float aircraftAltitudeAslMeters, int topoMinimumMeters,
+            int topoMaximumMeters)
         {
             if (mode == AERISTerrainDisplayMode.Relative)
                 return ResolveRelativeLandColour(preset,
                     aircraftAltitudeAslMeters - terrainAltitudeMeters);
-            float t = Mathf.Clamp01((terrainAltitudeMeters + 500f) / 12500f);
+            float minimum = topoMinimumMeters == int.MinValue ? -500f : topoMinimumMeters;
+            float maximum = topoMaximumMeters == int.MinValue ? 12000f : topoMaximumMeters;
+            if (maximum - minimum < TopographicMinimumSpanMeters)
+                maximum = minimum + TopographicMinimumSpanMeters;
+            float t = Mathf.Clamp01((terrainAltitudeMeters - minimum) /
+                Mathf.Max(1f, maximum - minimum));
             return ResolveTopographicLandColour(preset, t);
         }
 
         static Color32 ResolveRelativeLandColour(AERISTerrainColourPreset preset,
             float clearanceMeters)
         {
+            // Palette V3 deliberately separates hue AND luminance. Profiles must remain
+            // distinguishable in a quick cockpit glance rather than being near-neighbour
+            // recolours of the Standard palette.
             if (clearanceMeters <= 30f)
             {
                 if (preset == AERISTerrainColourPreset.RedGreenAssist)
-                    return new Color32(190, 45, 210, 255);
-                return new Color32(224, 31, 20, 255);
+                    return new Color32(255, 48, 196, 255);   // magenta danger
+                if (preset == AERISTerrainColourPreset.BlueYellowAssist)
+                    return new Color32(255, 54, 54, 255);    // red danger
+                if (preset == AERISTerrainColourPreset.HighContrast)
+                    return new Color32(255, 32, 16, 255);
+                return new Color32(232, 24, 18, 255);
             }
             if (clearanceMeters <= 300f)
-                return preset == AERISTerrainColourPreset.BlueYellowAssist ?
-                    new Color32(242, 235, 225, 255) :
-                    new Color32(235, 184, 20, 255);
+            {
+                if (preset == AERISTerrainColourPreset.RedGreenAssist)
+                    return new Color32(255, 224, 32, 255);
+                if (preset == AERISTerrainColourPreset.BlueYellowAssist)
+                    return new Color32(218, 80, 238, 255);
+                if (preset == AERISTerrainColourPreset.HighContrast)
+                    return new Color32(255, 232, 24, 255);
+                return new Color32(244, 174, 12, 255);
+            }
             if (clearanceMeters <= 600f)
             {
                 if (preset == AERISTerrainColourPreset.RedGreenAssist)
-                    return new Color32(35, 105, 210, 255);
+                    return new Color32(32, 196, 255, 255);
+                if (preset == AERISTerrainColourPreset.BlueYellowAssist)
+                    return new Color32(36, 208, 132, 255);
                 if (preset == AERISTerrainColourPreset.HighContrast)
-                    return new Color32(0, 190, 255, 255);
-                return new Color32(51, 122, 41, 255);
+                    return new Color32(28, 220, 255, 255);
+                return new Color32(68, 162, 56, 255);
             }
             if (preset == AERISTerrainColourPreset.RedGreenAssist)
-                return new Color32(15, 35, 75, 255);
+                return new Color32(54, 66, 82, 255);
+            if (preset == AERISTerrainColourPreset.BlueYellowAssist)
+                return new Color32(46, 76, 62, 255);
             if (preset == AERISTerrainColourPreset.HighContrast)
-                return new Color32(0, 20, 12, 255);
-            return new Color32(26, 61, 31, 255);
+                return new Color32(28, 34, 42, 255);
+            return new Color32(28, 70, 34, 255);
         }
 
         static Color32 ResolveTopographicLandColour(
@@ -2344,39 +3666,40 @@ namespace AERISFlightControl.Terrain
             {
                 case AERISTerrainColourPreset.RedGreenAssist:
                     return Gradient(t,
-                        new Color32(25, 55, 105, 255),
-                        new Color32(45, 110, 175, 255),
-                        new Color32(225, 175, 70, 255),
-                        new Color32(150, 105, 85, 255),
-                        new Color32(245, 245, 245, 255));
+                        new Color32(34, 46, 62, 255),
+                        new Color32(28, 158, 226, 255),
+                        new Color32(255, 226, 52, 255),
+                        new Color32(236, 122, 64, 255),
+                        new Color32(250, 250, 246, 255));
                 case AERISTerrainColourPreset.BlueYellowAssist:
                     return Gradient(t,
-                        new Color32(25, 70, 48, 255),
-                        new Color32(70, 135, 75, 255),
-                        new Color32(160, 150, 80, 255),
-                        new Color32(125, 90, 75, 255),
-                        new Color32(245, 245, 245, 255));
+                        new Color32(28, 66, 50, 255),
+                        new Color32(48, 190, 104, 255),
+                        new Color32(202, 72, 224, 255),
+                        new Color32(246, 82, 64, 255),
+                        new Color32(250, 246, 232, 255));
                 case AERISTerrainColourPreset.HighContrast:
                     return Gradient(t,
-                        new Color32(5, 35, 15, 255),
-                        new Color32(40, 150, 40, 255),
-                        new Color32(255, 220, 40, 255),
-                        new Color32(160, 70, 30, 255),
+                        new Color32(18, 20, 24, 255),
+                        new Color32(86, 98, 110, 255),
+                        new Color32(255, 226, 28, 255),
+                        new Color32(255, 92, 28, 255),
                         new Color32(255, 255, 255, 255));
                 default:
                     return Gradient(t,
-                        new Color32(18, 65, 35, 255),
-                        new Color32(55, 125, 55, 255),
-                        new Color32(150, 145, 70, 255),
-                        new Color32(120, 85, 65, 255),
-                        new Color32(235, 235, 235, 255));
+                        new Color32(20, 66, 30, 255),
+                        new Color32(52, 144, 54, 255),
+                        new Color32(178, 158, 52, 255),
+                        new Color32(142, 82, 54, 255),
+                        new Color32(244, 244, 238, 255));
             }
         }
 
         static Color32 ResolveWaterColour()
         {
-            // Water is mode-independent and never receives REL danger colours.
-            return new Color32(8, 52, 118, 255);
+            // Kept invariant for safety/readability; Palette V3 spends its contrast budget
+            // on land and hazard bands while water remains a stable deep-blue reference.
+            return new Color32(6, 42, 112, 255);
         }
 
         static Color32 ApplyShade(Color32 colour, byte shade,
@@ -2386,11 +3709,11 @@ namespace AERISFlightControl.Terrain
             // REL bands are safety symbology: keep their red/yellow/green identity
             // dominant and use only subtle relief shading. TOPO may retain a little
             // more relief, but no longer produces dark triangular blotches.
-            float blend = mode == AERISTerrainDisplayMode.Relative ? 0.30f : 0.55f;
+            float blend = mode == AERISTerrainDisplayMode.Relative ? 0.24f : 0.48f;
             float factor = Mathf.Lerp(1f, raw, blend);
             factor = mode == AERISTerrainDisplayMode.Relative ?
-                Mathf.Clamp(factor, 0.94f, 1.02f) :
-                Mathf.Clamp(factor, 0.88f, 1.035f);
+                Mathf.Clamp(factor, 0.95f, 1.02f) :
+                Mathf.Clamp(factor, 0.90f, 1.03f);
             return new Color32(
                 (byte)Mathf.Clamp(Mathf.RoundToInt(colour.r * factor), 0, 255),
                 (byte)Mathf.Clamp(Mathf.RoundToInt(colour.g * factor), 0, 255),
@@ -2438,8 +3761,10 @@ namespace AERISFlightControl.Terrain
         {
             DestroyRenderTexture(ref backTarget);
             DestroyRenderTexture(ref frontTarget);
+            DestroyRenderTexture(ref presentationTarget);
             backTargetBytes = 0L;
             frontTargetBytes = 0L;
+            presentationTargetBytes = 0L;
             ResetFrontBufferState();
         }
 
@@ -2479,9 +3804,13 @@ namespace AERISFlightControl.Terrain
             DestroyUnityObject(terrainMaterial);
             DestroyUnityObject(contourMaterial);
             DestroyUnityObject(coastlineMaterial);
+            DestroyUnityObject(worldSurfaceMaterial);
+            DestroyUnityObject(reprojectionMaterial);
             terrainMaterial = null;
             contourMaterial = null;
             coastlineMaterial = null;
+            worldSurfaceMaterial = null;
+            reprojectionMaterial = null;
             usedEntryBytes = 0L;
             lastCoverageFraction = 0f;
             lastVisualCoverageFraction = 0f;

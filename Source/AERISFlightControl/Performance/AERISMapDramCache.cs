@@ -69,7 +69,6 @@ namespace AERISFlightControl.Performance
         internal int TerrainFarCount;
         internal int TerrainRouteCount;
         internal int TerrainLocalCount;
-        internal int TerrainLandCount;
         internal long EstimatedBytes;
         internal double LastAirfieldPublishMilliseconds;
         internal double LastTerrainPublishMilliseconds;
@@ -624,8 +623,6 @@ namespace AERISFlightControl.Performance
                     AERISTerrainTileLod.Route),
                 TerrainLocalCount = snapshot.TerrainLodCount(
                     AERISTerrainTileLod.Local),
-                TerrainLandCount = snapshot.TerrainLodCount(
-                    AERISTerrainTileLod.Land),
                 EstimatedBytes = snapshot.EstimatedBytes,
                 LastAirfieldPublishMilliseconds =
                     snapshot.AirfieldPublishMilliseconds,

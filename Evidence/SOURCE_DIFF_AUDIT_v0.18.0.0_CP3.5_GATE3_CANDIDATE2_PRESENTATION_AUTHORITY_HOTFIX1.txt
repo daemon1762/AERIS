@@ -1,0 +1,29 @@
+AERIS v0.18.0.0 CP3.5 Gate 3 Candidate 2 Presentation Authority Hotfix 1
+Source Diff Audit — 2026-08-03
+
+Primary modified runtime file:
+- Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+
+Runtime changes:
+1. TemporalPresentationAuthorityEnabled=false hard-quarantines temporal output from visible presentation authority.
+2. Temporal eligibility/confidence remains measured for shadow telemetry and key-frame refresh logic.
+3. The exact latch now calls PresentFrontDirect directly; it no longer calls TryBuildTemporalReprojection or RenderTemporalReprojection.
+4. PresentFrontDirect now performs an exact overscan crop using frontRange/frontSurfaceRange, horizontal center 0.5, and frontAnchorV.
+5. NaN/Infinity temporal UV/error values fail closed.
+6. Temporal material SetPass is validated before presentationTarget clear.
+7. Telemetry distinguishes EXACT_LATCH and publishes exact_authority_frames, temporal_shadow_eligible, temporal_authority_blocked, and presentation_authority=EXACT_FRONT_ONLY.
+
+Deliberately unchanged:
+- CP3 Frozen FAR/Virtual Route/Virtual Local visual-detail policy.
+- Existing-only Route/Local exact refinement boundary.
+- Multicore projection worker architecture.
+- 1.25x overscan key-frame generation.
+- Unified world-surface phase 1 content.
+- Accessibility palette fixes.
+- AUTO/LOW/MEDIUM/HIGH terrain-quality system; terrain-quality LAND remains removed.
+- AUTOPILOT TAKEOFF/FLIGHT/NAV/LAND and LAND guidance.
+- CPU terrain presentation remains forbidden.
+- GUI.matrix terrain warp remains forbidden.
+
+Risk intentionally accepted for this hotfix:
+- Terrain surface motion may look less smooth because generated temporal frames are not displayed. This is diagnostic/safety behavior and is preferable to an invisible ND. Temporal presentation will be re-enabled only after exact FRONT authority passes runtime validation.

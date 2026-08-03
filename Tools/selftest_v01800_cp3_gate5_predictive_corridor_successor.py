@@ -171,8 +171,9 @@ suite.check("NOT IMPLEMENTED IN GATE 3" in contract and
             "Gate 4 work remains explicitly deferred")
 suite.check("selftest_v01800_cp3_gate5_predictive_corridor_successor.py" in runner,
             "active Gate 5 runner executes the corridor successor")
-suite.check("run_v01800_cp3_gate5_acceptance.py" in build,
-            "build entrypoint runs Gate 5 acceptance")
+suite.check("run_v01800_cp3_gate5_acceptance.py" in build or
+            "run_v01800_cp35_gate1_acceptance.py" in build,
+            "build entrypoint runs Gate 5 acceptance or its CP3.5 Gate 1 successor")
 
 suite.check("void ApplyStandardSchedulerState(bool active)" in builder and
             "runtime.Scheduler.SetStandardPreloadThroughput(active);" in builder,

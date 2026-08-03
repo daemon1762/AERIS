@@ -1,0 +1,15 @@
+AERIS19 CP3.5 Gate 1 Candidate 1 runtime diagnosis — 2026-08-02
+
+User observation:
+- Overall game FPS felt essentially unchanged.
+- ND terrain itself appeared to update at a much lower frame rate.
+
+Runtime log evidence, 160 km interval:
+13:50:33.952  back_render=1475  swaps=1390  forced_recovery=0  forced_recovery_suppressed=34145  back_cadence_s=0.50
+13:50:38.961  back_render=1484  swaps=1399
+13:50:43.966  back_render=1493  swaps=1408
+13:50:48.967  back_render=1502  swaps=1417
+13:50:53.968  back_render=1511  swaps=1426  forced_recovery=0  forced_recovery_suppressed=35448  back_cadence_s=0.50
+
+Delta: 36 BACK renders / 20.016 s = approximately 1.80 Hz.
+Conclusion: forced recovery suppression worked, but Candidate 1's 0.50 s high-range cadence mainly reduced visible ND terrain update rate instead of removing the expensive per-BACK work. Candidate 2 therefore removes the range-dependent slowdown and adds low-rate decomposition profiling before Gate 2 architecture changes.

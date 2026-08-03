@@ -1,0 +1,42 @@
+AERIS Flight Control v0.18.0.0
+CP3.5 Gate 2 — Exact Keyframe / Overscan Temporal Reprojection / Multicore GPU Candidate 2
+STATIC ACCEPTANCE CONTRACT
+
+STATUS: STATIC ACCEPTANCE TARGET
+RUNTIME: KSP/Unity runtime acceptance still required.
+
+SCOPE
+- Replace affine approximate terrain presentation with exact authoritative key frames.
+- Prepare exact geographic projection on shared multicore GeneralCompute workers.
+- Render key frames to a bounded 1.25x overscan FRONT surface.
+- Reproject FRONT to a third PRESENTATION RenderTexture every Repaint when sub-pixel integrity permits.
+- Never use GUI.matrix temporal terrain warp.
+- Never fall back from scheduler admission failure to main-thread full-vertex projection.
+- Preserve GPU-only terrain presentation and Runway Map Lock authority.
+- Carry forward the accepted compact/readable/symmetric AERIS UI and TAKEOFF | FLIGHT | NAV | LAND categories.
+
+STATIC MUST PASS
+1. Inherited CP3.5 Gate 1 Candidate 2 regression.
+2. Candidate 2 exact-keyframe/temporal/multicore selftest.
+3. CP2 definite-assignment compile regression.
+4. CP3 Gate 4A supply successor regression.
+5. SOURCE and PACKAGE SHA-256 manifests.
+6. ZIP CRC + clean extraction + rerun.
+
+RUNTIME MUST VERIFY
+- Kerbin 160 km / ~2100 m/s.
+- No Candidate 1 affine line flicker/seams.
+- Temporal accepted frames stay <=0.75 px measured interpolation error.
+- forced_recovery=0 and cpu_terrain_draw=0.
+- Multicore projection worker fanout works.
+- ND remains visually smooth between authoritative key frames.
+- Runway Map Lock <=1 px; no phantom runway or black wedge.
+- ND ON/OFF performance delta improves and does not regress.
+
+NON-GOALS FOR THIS CANDIDATE
+- Full static-world-layer RenderTexture unification is Gate 4.
+- Blind DrawMeshNow batching is not performed without profiler evidence.
+- Current-body resident cache/preload architecture is not redesigned.
+
+ROADMAP
+Docs/ROADMAP_CP3.5_ND_PRESENTATION_PERFORMANCE_v0.18.0.0_ja.md

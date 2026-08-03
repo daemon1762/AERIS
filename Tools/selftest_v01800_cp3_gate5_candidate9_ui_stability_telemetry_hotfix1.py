@@ -19,32 +19,59 @@ for name,text in (('AERISWindow',window),('ND',nd),('TerrainTileSystem',tiles)):
     suite.check(clean.count('{')==clean.count('}'),name+' braces balanced')
     suite.check(clean.count('(')==clean.count(')'),name+' parens balanced')
 
-# Fixed-geometry policy. AIRFIELD airport/runway selection rows are the only exception.
-suite.check('const float FixedWideButtonWidth=390f' in window and
-            'const float FixedTabButtonWidth=126f' in window and
-            'const int FixedTabColumns=3' in window,
-            'AERISWindow publishes fixed button geometry constants')
-suite.check('responsiveButtonStyle.wordWrap=false' in window and
-            'airfieldActionButtonStyle.wordWrap=false' in window and
-            'airfieldRowButtonStyle.wordWrap=true' in window,
-            'only AIRFIELD selection-row button style retains wrapping')
-suite.check(window.count('WrappedControlHeight(')==3 and
-            window.count('WrappedControlHeight(airfieldRowButtonStyle,rowLabel')==2,
-            'content-derived button height exists only for AIRFIELD selection rows, including DLC placeholder')
-suite.check('rect.width>=760f?5:(rect.width>=560f?3:2)' not in window and
-            'rect.width<620f' not in window and
-            'rect.width>=820f?7:4' not in window,
-            'window width cannot reflow tabs, AIRFIELD actions, or preload selector rows')
-suite.check('wordWrap=false,clipping=TextClipping.Clip,fixedHeight=MasterButtonHeight' in window,
-            'MASTER uses fixed non-wrapping geometry')
-suite.check('GUILayout.Width(FixedAirfieldActionWidth)' in window and
-            'GUILayout.Height(AirfieldActionButtonHeight)' in window,
-            'AIRFIELD action buttons are fixed-size')
-suite.check('GUILayout.Button(rowLabel,airfieldRowButtonStyle,GUILayout.ExpandWidth(true),GUILayout.Height(rowHeight))' in window,
-            'AIRFIELD page airport/runway selection rows retain the approved variable-size exception')
-suite.check('registry.SelectAirfield(i)' in window and
-            'GUILayout.Width(FixedWideButtonWidth)' in window[window.find('registry.SelectAirfield(i)')-300:window.find('registry.SelectAirfield(i)')+120],
-            'LAND airfield selector is not part of the AIRFIELD-page exception and stays fixed-size')
+# Candidate 9 fixed geometry was intentionally superseded by CP3.5 Gate 1 at user request.
+# In the successor, geometry is a continuous function of window dimensions only; text may
+# never auto-wrap or drive control height. Historical Candidate 9 packages still use the
+# original fixed-geometry assertions below.
+cp35_gate1='DEV CP3.5 GATE 1 — PRESENTATION CADENCE / RESPONSIVE UI CANDIDATE 1' in version
+if cp35_gate1:
+    suite.check('const float BaseWideButtonWidth=390f' in window and
+                'const float BaseTabButtonWidth=126f' in window and
+                'const int BaseTabColumns=3' in window,
+                'CP3.5 Gate 1 publishes responsive baseline geometry constants')
+    suite.check('float ResponsiveWidth(float baseline)' in window and
+                'float ResponsiveHeight(float baseline)' in window,
+                'CP3.5 Gate 1 derives control geometry from window dimensions')
+    suite.check('WrappedControlHeight(' not in window and 'CalcHeight(' not in window and
+                re.search(r'wordWrap\s*=\s*true',window) is None,
+                'CP3.5 Gate 1 removes content-derived height and automatic wrapping')
+    suite.check('return Mathf.CeilToInt(5f/BaseTabColumns);' in window and
+                'rect.width<540f' not in window and 'rect.width<720f' not in window,
+                'CP3.5 Gate 1 keeps tab topology stable without width-threshold jumps')
+    suite.check('airfieldActionButtonStyle,GUILayout.ExpandWidth(true),GUILayout.Height(CompactControlHeight())' in window,
+                'CP3.5 successor AIRFIELD action buttons fill the symmetric row without text clipping')
+    suite.check('GUILayout.Button(rowLabel,airfieldRowButtonStyle,GUILayout.ExpandWidth(true),GUILayout.Height(rowHeight))' in window and
+                'float rowHeight=ResponsiveHeight(38f);' in window,
+                'CP3.5 Gate 1 AIRFIELD rows retain fixed topology with window-driven height')
+    landpos=window.find('registry.SelectAirfield(i)')
+    suite.check(landpos>=0 and 'GUILayout.ExpandWidth(true)' in window[landpos-320:landpos+160],
+                'CP3.5 successor LAND airfield selector fills responsive window geometry')
+else:
+    suite.check('const float FixedWideButtonWidth=390f' in window and
+                'const float FixedTabButtonWidth=126f' in window and
+                'const int FixedTabColumns=3' in window,
+                'AERISWindow publishes fixed button geometry constants')
+    suite.check('responsiveButtonStyle.wordWrap=false' in window and
+                'airfieldActionButtonStyle.wordWrap=false' in window and
+                'airfieldRowButtonStyle.wordWrap=true' in window,
+                'only AIRFIELD selection-row button style retains wrapping')
+    suite.check(window.count('WrappedControlHeight(')==3 and
+                window.count('WrappedControlHeight(airfieldRowButtonStyle,rowLabel')==2,
+                'content-derived button height exists only for AIRFIELD selection rows, including DLC placeholder')
+    suite.check('rect.width>=760f?5:(rect.width>=560f?3:2)' not in window and
+                'rect.width<620f' not in window and
+                'rect.width>=820f?7:4' not in window,
+                'window width cannot reflow tabs, AIRFIELD actions, or preload selector rows')
+    suite.check('wordWrap=false,clipping=TextClipping.Clip,fixedHeight=MasterButtonHeight' in window,
+                'MASTER uses fixed non-wrapping geometry')
+    suite.check('GUILayout.Width(FixedAirfieldActionWidth)' in window and
+                'GUILayout.Height(AirfieldActionButtonHeight)' in window,
+                'AIRFIELD action buttons are fixed-size')
+    suite.check('GUILayout.Button(rowLabel,airfieldRowButtonStyle,GUILayout.ExpandWidth(true),GUILayout.Height(rowHeight))' in window,
+                'AIRFIELD page airport/runway selection rows retain the approved variable-size exception')
+    suite.check('registry.SelectAirfield(i)' in window and
+                'GUILayout.Width(FixedWideButtonWidth)' in window[window.find('registry.SelectAirfield(i)')-300:window.find('registry.SelectAirfield(i)')+120],
+                'LAND airfield selector is not part of the AIRFIELD-page exception and stays fixed-size')
 suite.check('wordWrap = false' in nd and 'clipping = TextClipping.Clip' in nd,
             'ND button style explicitly forbids wrapping while Rect geometry stays authoritative')
 
@@ -52,18 +79,21 @@ suite.check('wordWrap = false' in nd and 'clipping = TextClipping.Clip' in nd,
 for line in window.splitlines():
     if 'GUILayout.Button' not in line:
         continue
-    allowed=('airfieldRowButtonStyle' in line)
+    allowed=('airfieldRowButtonStyle' in line or
+             'return GUILayout.Button(label,responsiveButtonStyle' in line)
     if allowed:
         continue
-    suite.check('GUILayout.Width(' in line and 'GUILayout.Height(' in line,
-                'non-AIRFIELD GUILayout.Button has explicit width+height: '+line.strip()[:80])
+    suite.check(('GUILayout.Width(' in line or 'GUILayout.ExpandWidth(true)' in line) and 'GUILayout.Height(' in line,
+                'non-AIRFIELD GUILayout.Button has bounded responsive geometry: '+line.strip()[:80])
 for line in window.splitlines():
     if 'GUILayout.SelectionGrid' in line:
         suite.check('GUILayout.Width(' in line and 'GUILayout.Height(' in line,
                     'SelectionGrid has explicit width+height: '+line.strip()[:80])
     if 'GUILayout.Toggle' in line and ('GUI.skin.button' in line or 'responsiveButtonStyle' in line):
-        suite.check('GUILayout.Width(' in line and 'GUILayout.Height(' in line,
-                    'button-style Toggle has explicit width+height: '+line.strip()[:80])
+        if 'return GUILayout.Toggle(value,label,responsiveButtonStyle' in line:
+            continue
+        suite.check(('GUILayout.Width(' in line or 'GUILayout.ExpandWidth(true)' in line) and 'GUILayout.Height(' in line,
+                    'button-style Toggle has bounded responsive geometry: '+line.strip()[:80])
 
 # Preload UI telemetry must not traverse the whole database on every IMGUI event.
 suite.check('const float PreloadStatusUiRefreshSeconds = 0.25f' in tiles and

@@ -1,0 +1,18 @@
+AERIS Flight Control v0.18.0.0
+CP3.5 Gate 2 — Exact Keyframe / Overscan Temporal Reprojection / Multicore GPU Candidate 2 — Compile Hotfix 1
+
+Scope:
+- Fix CS0120 in Terrain/AERISTerrainGpuTileRenderer.cs only.
+- DrawPreparedEntry must be an instance method because it consumes renderer-owned terrainMaterial, contourMaterial and coastlineMaterial.
+- Preserve Candidate 2 runtime behavior and all accepted UI requirements.
+- Update in-game UiCheckpoint/build/AVC identity to Compile Hotfix 1.
+
+Acceptance:
+1. `static bool DrawPreparedEntry` is absent.
+2. `bool DrawPreparedEntry` remains called from instance `RenderPreparedBackBuffer`.
+3. terrainMaterial / contourMaterial / coastlineMaterial SetPass calls remain unchanged in behavior.
+4. Candidate 2 architecture regression remains PASS.
+5. CP2 definite-assignment compile regression remains PASS.
+6. CP3 Gate 4A supply regression remains PASS.
+7. Source/package manifests and ZIP CRC pass.
+8. Native Ubuntu xbuild is required on the user's KSP installation for final compile confirmation.

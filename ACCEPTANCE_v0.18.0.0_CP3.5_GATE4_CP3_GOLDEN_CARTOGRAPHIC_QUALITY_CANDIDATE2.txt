@@ -1,0 +1,38 @@
+AERIS Flight Control v0.18.0.0 DEV
+CP3.5 Gate 4 — CP3 Golden Cartographic Quality Candidate 2
+ACCEPTANCE CONTRACT
+
+PURPOSE
+- Reject Gate 4 Candidate 1 runtime visual regression.
+- Make late-CP3 cartographic quality the hard visual floor, including LOW.
+- Reuse the proven CP3 FAR33 -> VIRTUAL ROUTE65 / VIRTUAL LOCAL97 worker reconstruction.
+- Retain Candidate 3/Hotfix 1 ownship, prediction and range authority fixes.
+- Retain bounded HIGH REAL65 refinement but prevent it from invalidating Exact FRONT.
+
+STATIC CONTRACT
+1. Persistent FAR/preload payload remains REAL33; GLOBAL remains 17.
+2. LOW <=20 km reconstructs REAL33 -> CP3 VIRTUAL LOCAL97 with no additional PQS.
+3. LOW 20..80 km reconstructs REAL33 -> CP3 VIRTUAL ROUTE65 with no additional PQS.
+4. LOW >80 km uses late-CP3 FAR/Hi-DPI presentation.
+5. MIDDLE uses CP3 LOCAL97 near / ROUTE65 farther, plus bounded render-target supersampling.
+6. HIGH never falls below a CP3-quality fallback; complete bounded REAL65 tiles may reconstruct to VIRTUAL129.
+7. Categorical land/sea reconstruction and sub-cell coastline crossing remain active.
+8. Contours are generated from reconstructed presentation geometry.
+9. HIGH REAL65 partial tiles never replace complete REAL33 foundation.
+10. HIGH REAL65 completion is RAM-only and does not increment global terrainGeneration.
+11. Render-ready gpuContentRevision remains the refinement redraw signal.
+12. All-visible REAL65/129 PQS generation remains forbidden.
+13. Temporal presentation remains quarantined; Exact FRONT remains authority.
+14. Ownship fixed anchor, ownship-relative prediction and wrong-range FRONT rejection remain intact.
+
+RUNTIME HARD FAIL CONDITIONS
+- Any blue-only/blank terrain after FAR foundation is complete and GPU pending settles.
+- Any recurring CP3_GATE4B_READY_BUILDING_VIOLATION in a stable viewport.
+- Giant block-mosaic / early-CP2-style coarse red shapes at 20/40/80 km.
+- LOW visually worse than the supplied late-CP3 Golden Visual Reference.
+- Unreadable landmass/coastline at 160 km.
+- Ownship/prediction/range-authority regression.
+- HIGH refinement causes BUILD/EVICT/REBUILD thrash or severe frame collapse.
+
+RUNTIME REQUIRED
+Native xbuild against the user's actual KSP 1.12.5 assemblies and in-game visual/performance acceptance are mandatory. Static acceptance cannot prove the visual floor by itself.

@@ -1,0 +1,29 @@
+AERIS v0.18.0.0 CP3.5 Gate 3 Candidate 2 — Presentation Authority Hotfix 1
+CP3 FROZEN VISUAL PATH RECOVERY / BOUNDED EXACT REFINEMENT
+
+Runtime trigger:
+- AERIS58 showed a valid FAR foundation and repeated exact key-frame commits while the visible ND remained ocean-blue/empty.
+- Temporal telemetry could report confidence=1.000 / error=0 while the presentation surface was visibly wrong.
+- Therefore temporal confidence is not sufficient evidence that presentationTarget contains a valid frame.
+
+Hotfix contract:
+1. Exact committed FRONT is the hard visible authority.
+2. Temporal reprojection is shadow-only in this hotfix and cannot suppress Exact FRONT.
+3. Exact FRONT presentation crops the 1.25x overscan surface back to the committed visible range around U=0.5 and the committed vertical anchor; it must not scale the whole overscan surface into the ND.
+4. NaN/Infinity temporal coordinates fail closed.
+5. A failed reprojection material SetPass must occur before any presentationTarget clear.
+6. World-locked overlays continue to consume the renderer-published committed projection.
+7. CP3 Frozen visual policy, existing-only refinement, multicore projection, accessibility palette fixes, responsive UI and terrain-quality LAND removal are unchanged.
+8. No CPU terrain presentation and no GUI.matrix temporal terrain warp may be reintroduced.
+
+Runtime PASS criteria:
+- Once the first Exact FRONT commits, terrain remains visible instead of returning to ocean-blue/empty.
+- [CP3_GATE4C_VIRTUAL_DETAIL] reports front=EXACT_LATCH during the hotfix authority phase.
+- direct_frames / exact_authority_frames increase continuously while the ND is visible.
+- [CP3.5_GATE2_TEMPORAL] reports presentation_authority=EXACT_FRONT_ONLY.
+- temporal_shadow_eligible may increase, but temporal frames must not become presentation authority.
+- No READY_BUILDING violation after a valid Exact FRONT exists.
+- No runway/airfield/world-surface drift relative to the displayed Exact FRONT.
+
+Performance note:
+This hotfix prioritizes visibility authority over generated-frame smoothness. Performance and temporal re-enablement are deferred until Exact FRONT runtime visibility is confirmed.

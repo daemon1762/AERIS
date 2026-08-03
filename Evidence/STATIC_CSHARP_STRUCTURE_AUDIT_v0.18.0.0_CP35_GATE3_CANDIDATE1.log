@@ -1,0 +1,3 @@
+PASS: balanced C# delimiters/comments/literals across 139 source files
+PASS: native compiler still required on KSP host; this audit is structural only
+PASS: build_ubuntu.sh bash syntax

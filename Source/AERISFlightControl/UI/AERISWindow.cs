@@ -18,7 +18,7 @@ namespace AERISFlightControl.UI
  {
   const int Id=741129;
   const int ResizeControlHint=741130;
-  const float MinWindowWidth=440f;
+  const float MinWindowWidth=480f;
   const float MinWindowHeight=360f;
   const float MaxWindowWidth=1050f;
   const float MaxWindowHeight=920f;
@@ -26,24 +26,28 @@ namespace AERISFlightControl.UI
   const float ResizeGripWidth=48f;
   const float FooterHeight=46f;
   const float HeaderDragHeight=22f;
-  const float CompactButtonHeight=22f;
-  const float MasterButtonHeight=46f;
+  const float CompactButtonHeight=20f;
+  const float MasterButtonHeight=40f;
+  static readonly string[] FlightArchiveLimitLabels=new string[]{"1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30"};
   const float SmallButtonWidth=82f;
   const float ActionButtonWidth=124f;
   const float CompactLabelWidth=82f;
   const float CompactFieldWidth=78f;
-  // Candidate 9 UI stability contract: AERIS-owned buttons never resize/reflow
-  // because text changes or the window crosses a width threshold. The sole
-  // exception is the AIRFIELD airport/runway selection row, whose size may
-  // expand to show its name. All other buttons clip text inside fixed geometry.
-  const float FixedWideButtonWidth=390f;
-  const float FixedTabButtonWidth=126f;
-  const int FixedTabColumns=3;
-  const float FixedSelectorWidth=330f;
-  const float FixedAirfieldActionWidth=360f;
+  // CP3.5 Gate 1 UI geometry contract: control geometry follows window size only.
+  // Text/content is never allowed to wrap or resize/reflow a control. This restores
+  // the visually responsive pre-Candidate-9 behaviour without reintroducing
+  // content-driven button jumps.
+  const float BaseWideButtonWidth=390f;
+  // Historical responsive baseline retained for inherited Gate 5 regression; top-row
+  // Candidate 2 geometry is computed from the full available row width instead.
+  const float BaseTabButtonWidth=126f;
+  const int BaseTabColumns=3;
+  const float TopTabGap=2f;
+  const float BaseSelectorWidth=330f;
+  const float BaseAirfieldActionWidth=360f;
   const float AirfieldActionButtonHeight=36f;
   const float UiTelemetryRefreshSeconds=0.25f;
-  Rect rect; readonly AERISSettings settings; readonly AERISBootstrap core; internal bool Visible; internal bool PreloadStatusVisible; int tab=3; int systemPage; bool advanced; bool confirmResetAllFbw; bool confirmResetSettings; int lateralMode; int verticalMode; int speedMode; bool verticalMaster; bool speedMaster; bool takeoffConfigExpanded; Vector2 contentScroll; Vector2 navPlanScroll; Vector2 landAirfieldScroll; Vector2 landDirectionScroll; Vector2 airfieldsScroll; Vector2 preloadMapsScroll; string airfieldDetailId=""; string preloadDestructiveConfirm=""; string navLibraryMessage="READY"; string landMessage="READY"; string runwayCalibrationMessage="READY"; string runwayWarpMessage="READY"; GUIStyle wrappedLabelStyle; GUIStyle airfieldRowButtonStyle; GUIStyle airfieldActionButtonStyle; GUIStyle responsiveButtonStyle;
+  Rect rect; readonly AERISSettings settings; readonly AERISBootstrap core; internal bool Visible; internal bool PreloadStatusVisible; int tab=3; int systemPage; int autopilotPage=1; bool advanced; bool confirmResetAllFbw; bool confirmResetSettings; int lateralMode; int verticalMode; int speedMode; bool verticalMaster; bool speedMaster; bool takeoffConfigExpanded; Vector2 contentScroll; Vector2 navPlanScroll; Vector2 landAirfieldScroll; Vector2 landDirectionScroll; Vector2 airfieldsScroll; Vector2 preloadMapsScroll; string airfieldDetailId=""; string preloadDestructiveConfirm=""; string navLibraryMessage="READY"; string landMessage="READY"; string runwayCalibrationMessage="READY"; string runwayWarpMessage="READY"; GUIStyle wrappedLabelStyle; GUIStyle airfieldRowButtonStyle; GUIStyle airfieldActionButtonStyle; GUIStyle responsiveButtonStyle;
   bool resizing; int resizeControlId; Vector2 resizeStartSize; Vector2 resizeStartPointerScreen; Vector2 resizeAccumulatedDelta; bool resizeCommitPending; bool resizeHasChanged; Vector2 pendingResizeSize;
   int hotkeyCaptureAction=-1; KeyCode capturePrimary=KeyCode.None; KeyCode captureSecondary=KeyCode.None;
   internal bool IsCapturingShortcut { get { return hotkeyCaptureAction>=0; } }
@@ -59,8 +63,25 @@ namespace AERISFlightControl.UI
    // Explicit width/height constraints are required here. Without them GUILayout.Window
    // reflows to its content minimum width after every repaint, which silently erased
    // horizontal resize requests even though the drag handler had captured them.
-   Rect drawnRect=GUILayout.Window(Id,rect,_=>Content(),"AERIS — Flight Control",
-    GUILayout.Width(rect.width),GUILayout.Height(rect.height));
+   GUIStyle skinLabel=GUI.skin.label; GUIStyle skinButton=GUI.skin.button; GUIStyle skinToggle=GUI.skin.toggle; GUIStyle skinBox=GUI.skin.box;
+   bool oldLabelWrap=skinLabel.wordWrap; TextClipping oldLabelClip=skinLabel.clipping;
+   bool oldButtonWrap=skinButton.wordWrap; TextClipping oldButtonClip=skinButton.clipping;
+   bool oldToggleWrap=skinToggle.wordWrap; TextClipping oldToggleClip=skinToggle.clipping;
+   bool oldBoxWrap=skinBox.wordWrap; TextClipping oldBoxClip=skinBox.clipping;
+   Rect drawnRect;
+   try{
+    skinLabel.wordWrap=false;skinLabel.clipping=TextClipping.Clip;
+    skinButton.wordWrap=false;skinButton.clipping=TextClipping.Clip;
+    skinToggle.wordWrap=false;skinToggle.clipping=TextClipping.Clip;
+    skinBox.wordWrap=false;skinBox.clipping=TextClipping.Clip;
+    drawnRect=GUILayout.Window(Id,rect,_=>Content(),"AERIS — Flight Control",
+     GUILayout.Width(rect.width),GUILayout.Height(rect.height));
+   }finally{
+    skinLabel.wordWrap=oldLabelWrap;skinLabel.clipping=oldLabelClip;
+    skinButton.wordWrap=oldButtonWrap;skinButton.clipping=oldButtonClip;
+    skinToggle.wordWrap=oldToggleWrap;skinToggle.clipping=oldToggleClip;
+    skinBox.wordWrap=oldBoxWrap;skinBox.clipping=oldBoxClip;
+   }
    rect.x=drawnRect.x;rect.y=drawnRect.y;
    if(resizeCommitPending){rect.width=ClampWidth(pendingResizeSize.x);rect.height=ClampHeight(pendingResizeSize.y);resizeCommitPending=false;}
    else{rect.width=ClampWidth(drawnRect.width);rect.height=ClampHeight(drawnRect.height);}
@@ -72,8 +93,25 @@ namespace AERISFlightControl.UI
    // toolbar/window route. CP2.5 exposes one standard Preload mode only.
    if(HighLogic.LoadedSceneIsFlight||!PreloadStatusVisible)return;
    ClampRectToScreen();
-   Rect drawnRect=GUILayout.Window(Id,rect,_=>PreloadOnlyContent(),"AERIS — Preload Terrain",
-    GUILayout.Width(rect.width),GUILayout.Height(rect.height));
+   GUIStyle skinLabel=GUI.skin.label; GUIStyle skinButton=GUI.skin.button; GUIStyle skinToggle=GUI.skin.toggle; GUIStyle skinBox=GUI.skin.box;
+   bool oldLabelWrap=skinLabel.wordWrap; TextClipping oldLabelClip=skinLabel.clipping;
+   bool oldButtonWrap=skinButton.wordWrap; TextClipping oldButtonClip=skinButton.clipping;
+   bool oldToggleWrap=skinToggle.wordWrap; TextClipping oldToggleClip=skinToggle.clipping;
+   bool oldBoxWrap=skinBox.wordWrap; TextClipping oldBoxClip=skinBox.clipping;
+   Rect drawnRect;
+   try{
+    skinLabel.wordWrap=false;skinLabel.clipping=TextClipping.Clip;
+    skinButton.wordWrap=false;skinButton.clipping=TextClipping.Clip;
+    skinToggle.wordWrap=false;skinToggle.clipping=TextClipping.Clip;
+    skinBox.wordWrap=false;skinBox.clipping=TextClipping.Clip;
+    drawnRect=GUILayout.Window(Id,rect,_=>PreloadOnlyContent(),"AERIS — Preload Terrain",
+     GUILayout.Width(rect.width),GUILayout.Height(rect.height));
+   }finally{
+    skinLabel.wordWrap=oldLabelWrap;skinLabel.clipping=oldLabelClip;
+    skinButton.wordWrap=oldButtonWrap;skinButton.clipping=oldButtonClip;
+    skinToggle.wordWrap=oldToggleWrap;skinToggle.clipping=oldToggleClip;
+    skinBox.wordWrap=oldBoxWrap;skinBox.clipping=oldBoxClip;
+   }
    rect.x=drawnRect.x;rect.y=drawnRect.y;
    if(resizeCommitPending){rect.width=ClampWidth(pendingResizeSize.x);rect.height=ClampHeight(pendingResizeSize.y);resizeCommitPending=false;}
    else{rect.width=ClampWidth(drawnRect.width);rect.height=ClampHeight(drawnRect.height);}
@@ -84,9 +122,9 @@ namespace AERISFlightControl.UI
    GUILayout.Label(UiBuildTitle("PRELOAD TERRAIN CONTROL"));
    GUILayout.Label("Main Menu / Space Center / VAB / SPH preload control. Automatic preload uses the fixed AERIS default policy; only ON/OFF and body operations are exposed.");
    DrawPreloadTerrainMapsPage();
-   GUILayout.BeginHorizontal(GUILayout.Height(FooterHeight));
-   GUILayout.Label(rect.width<560f?"Resize ↘":"Resize: drag the dedicated ↘ control",GUILayout.ExpandWidth(true));
-   if(GUILayout.Button("Close",GUILayout.Width(70f),GUILayout.Height(CompactButtonHeight)))PreloadStatusVisible=false;
+   GUILayout.BeginHorizontal(GUILayout.Height(ResponsiveHeight(FooterHeight)));
+   GUILayout.Label("Resize: drag the dedicated ↘ control",GUILayout.ExpandWidth(true));
+   if(GUILayout.Button("Close",GUILayout.Width(ResponsiveWidth(70f)),GUILayout.Height(CompactControlHeight())))PreloadStatusVisible=false;
    Rect resizeGrip=GUILayoutUtility.GetRect(ResizeGripWidth,ResizeGripSize,GUILayout.Width(ResizeGripWidth),GUILayout.Height(ResizeGripSize));
    GUILayout.EndHorizontal();
    DrawResizeGrip(resizeGrip);
@@ -103,15 +141,15 @@ namespace AERISFlightControl.UI
    // The footer owns its own layout row.  The scroll view ends above it, so its
    // vertical scrollbar can never overlap the resize hit area.
    int tabRows=MainTabRowCount();
-   float headerReserve=rect.width<540f?190f:(rect.width<720f?170f:150f);
-   float scrollHeight=Mathf.Max(96f,rect.height-(headerReserve+(tabRows-1)*32f));
+   float headerReserve=150f+(tabRows-1)*ResponsiveHeight(32f);
+   float scrollHeight=Mathf.Max(96f,rect.height-headerReserve);
    contentScroll=GUILayout.BeginScrollView(contentScroll,false,true,GUILayout.Height(scrollHeight));
    if(tab==0) DrawFbw(); else if(tab==1) DrawProtect(); else if(tab==2) DrawAutopilot(); else if(tab==3) DrawSystem(); else DrawExtendAddons();
    GUILayout.EndScrollView();
 
-   GUILayout.BeginHorizontal(GUILayout.Height(FooterHeight));
-   GUILayout.Label(rect.width<560f?"Resize ↘":"Resize: drag the dedicated ↘ control",GUILayout.ExpandWidth(true));
-   if(GUILayout.Button("Close",GUILayout.Width(70f),GUILayout.Height(CompactButtonHeight))) Visible=false;
+   GUILayout.BeginHorizontal(GUILayout.Height(ResponsiveHeight(FooterHeight)));
+   GUILayout.Label("Resize: drag the dedicated ↘ control",GUILayout.ExpandWidth(true));
+   if(GUILayout.Button("Close",GUILayout.Width(ResponsiveWidth(70f)),GUILayout.Height(CompactControlHeight()))) Visible=false;
    Rect resizeGrip=GUILayoutUtility.GetRect(ResizeGripWidth,ResizeGripSize,GUILayout.Width(ResizeGripWidth),GUILayout.Height(ResizeGripSize));
    GUILayout.EndHorizontal();
 
@@ -119,8 +157,10 @@ namespace AERISFlightControl.UI
    GUI.DragWindow(new Rect(0,0,Mathf.Max(0f,rect.width-ResizeGripWidth-4f),HeaderDragHeight));
   }
   int MainTabRowCount(){
-   int perRow=rect.width>=720f?5:(rect.width>=540f?3:2);
-   return Mathf.CeilToInt(5f/perRow);
+   // Screenshot-reference topology is fixed: 3 primary tabs, then 2 secondary tabs.
+   // Keep the inherited expression marker; the result is always two rows and never
+   // depends on text content or window-width thresholds.
+   return Mathf.CeilToInt(5f/BaseTabColumns);
   }
   void DrawResizeGrip(Rect grip){
    // This rect is allocated in the unscrollable footer.  Do not derive it from
@@ -172,27 +212,42 @@ namespace AERISFlightControl.UI
   }
   int MainTabs(int selected){
    string[] labels={"FLIGHT CONTROL","PROTECT","AUTOPILOT","SYSTEM","EXTEND ADDONS"};
-   return ResponsiveTabGrid(selected,labels,FixedTabColumns);
+   int next=selected;
+   DrawSymmetricTabRow(ref next,labels,0,3);
+   GUILayout.Space(TopTabGap);
+   DrawSymmetricTabRow(ref next,labels,3,2);
+   return next;
   }
   int SystemTabs(int selected){
    string[] labels={"STATUS","OPTIONS","AIRFIELDS","PRELOAD MAPS"};
-   return ResponsiveTabGrid(selected,labels,FixedTabColumns);
-  }
-  int ResponsiveTabGrid(int selected,string[] labels,int perRow){
-   EnsureAirfieldStyles();
-   int next=selected;int index=0;
-   while(index<labels.Length){
-    int count=Mathf.Min(perRow,labels.Length-index);
-    GUILayout.BeginHorizontal();
-    for(int i=0;i<count;i++){int page=index+i;if(GUILayout.Toggle(next==page,labels[page],responsiveButtonStyle,GUILayout.Width(FixedTabButtonWidth),GUILayout.Height(CompactButtonHeight)))next=page;}
-    GUILayout.EndHorizontal();index+=count;
-   }
+   int next=selected;
+   DrawSymmetricTabRow(ref next,labels,0,3);
+   GUILayout.Space(TopTabGap);
+   // Candidate 13 intentionally removed DIAGNOSTICS. The remaining PRELOAD MAPS row fills
+   // the available width rather than leaving the old missing-button gap on one side.
+   DrawSymmetricTabRow(ref next,labels,3,1);
    return next;
   }
+  void DrawSymmetricTabRow(ref int selected,string[] labels,int start,int count){
+   EnsureAirfieldStyles();
+   float height=CompactControlHeight();
+   Rect row=GUILayoutUtility.GetRect(1f,height,GUILayout.ExpandWidth(true),GUILayout.Height(height));
+   if(labels==null||count<=0)return;
+   int end=Mathf.Min(labels.Length,start+count);
+   int actual=Mathf.Max(0,end-start);
+   if(actual<=0)return;
+   float totalGap=TopTabGap*Mathf.Max(0,actual-1);
+   float width=Mathf.Max(1f,(row.width-totalGap)/actual);
+   for(int i=0;i<actual;i++){
+    int page=start+i;
+    Rect buttonRect=new Rect(row.x+i*(width+TopTabGap),row.y,width,row.height);
+    if(GUI.Toggle(buttonRect,selected==page,labels[page],responsiveButtonStyle))selected=page;
+   }
+  }
   static GUIStyle masterButtonStyle;
-  static GUIStyle MasterButtonStyle(){if(masterButtonStyle!=null)return masterButtonStyle;masterButtonStyle=new GUIStyle(GUI.skin.button){alignment=TextAnchor.MiddleCenter,fontSize=14,fontStyle=FontStyle.Bold,wordWrap=false,clipping=TextClipping.Clip,fixedHeight=MasterButtonHeight,stretchHeight=false};return masterButtonStyle;}
+  static GUIStyle MasterButtonStyle(){if(masterButtonStyle!=null)return masterButtonStyle;masterButtonStyle=new GUIStyle(GUI.skin.button){alignment=TextAnchor.MiddleCenter,fontSize=14,fontStyle=FontStyle.Bold,wordWrap=false,clipping=TextClipping.Clip,fixedHeight=0f,stretchHeight=false};return masterButtonStyle;}
   void DrawMasterSwitch(){
-   string standbyReason=string.Empty;bool amber=core.MasterAmber;bool standby=core.Master&&!amber&&core.IsFbwStandby(out standbyReason);Color border=amber?new Color(1.00f,0.72f,0.08f,1f):(standby?new Color(0.55f,0.57f,0.60f,1f):(core.Master?new Color(0.10f,0.85f,0.24f,1f):new Color(0.95f,0.16f,0.16f,1f)));string label=amber?"MASTER ARM  ON   —   GROUND ASSIST ACTIVE":(standby?"MASTER ARM  ON   —   STANDBY: "+standbyReason:(core.Master?"MASTER ARM  ON   —   AA FBW ACTIVE":"MASTER ARM  OFF   —   CLICK TO ARM AA FBW"));Rect r=GUILayoutUtility.GetRect(FixedWideButtonWidth,MasterButtonHeight,GUILayout.Width(FixedWideButtonWidth),GUILayout.Height(MasterButtonHeight));Color oldBackground=GUI.backgroundColor;Color oldColor=GUI.color;try{GUI.backgroundColor=border;if(GUI.Button(r,label,MasterButtonStyle())){bool requested=!core.Master;core.Master=requested;AERISLogger.Info("UI MASTER request: "+(requested?"ON":"OFF"));}GUI.color=border;GUI.DrawTexture(new Rect(r.x,r.y,r.width,1f),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(r.x,r.yMax-1f,r.width,1f),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(r.x,r.y,1f,r.height),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(r.xMax-1f,r.y,1f,r.height),Texture2D.whiteTexture);}finally{GUI.backgroundColor=oldBackground;GUI.color=oldColor;}GUILayout.Space(2);
+   string standbyReason=string.Empty;bool amber=core.MasterAmber;bool standby=core.Master&&!amber&&core.IsFbwStandby(out standbyReason);Color border=amber?new Color(1.00f,0.72f,0.08f,1f):(standby?new Color(0.55f,0.57f,0.60f,1f):(core.Master?new Color(0.10f,0.85f,0.24f,1f):new Color(0.95f,0.16f,0.16f,1f)));string label=amber?"MASTER ARM  ON   —   GROUND ASSIST ACTIVE":(standby?"MASTER ARM  ON   —   STANDBY":(core.Master?"MASTER ARM  ON   —   AA FBW ACTIVE":"MASTER ARM  OFF   —   CLICK TO ARM AA FBW"));float masterHeight=ResponsiveHeight(MasterButtonHeight);Rect r=GUILayoutUtility.GetRect(1f,masterHeight,GUILayout.ExpandWidth(true),GUILayout.Height(masterHeight));Color oldBackground=GUI.backgroundColor;Color oldColor=GUI.color;try{GUI.backgroundColor=border;if(GUI.Button(r,label,MasterButtonStyle())){bool requested=!core.Master;core.Master=requested;AERISLogger.Info("UI MASTER request: "+(requested?"ON":"OFF"));}GUI.color=border;GUI.DrawTexture(new Rect(r.x,r.y,r.width,1f),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(r.x,r.yMax-1f,r.width,1f),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(r.x,r.y,1f,r.height),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(r.xMax-1f,r.y,1f,r.height),Texture2D.whiteTexture);}finally{GUI.backgroundColor=oldBackground;GUI.color=oldColor;}if(standby&&!string.IsNullOrEmpty(standbyReason))GUILayout.Label("STANDBY: "+standbyReason);GUILayout.Space(2);
   }
   void DrawSystem(){GUILayout.Label("SYSTEM CONTROL");systemPage=SystemTabs(systemPage);GUILayout.Space(3);if(systemPage==0)DrawSystemStatus();else if(systemPage==1)DrawSystemOptions();else if(systemPage==2)DrawAirfieldsPage();else DrawPreloadTerrainMapsPage();}
   void DrawSystemStatus(){
@@ -220,16 +275,17 @@ namespace AERISFlightControl.UI
    ToggleOption(ref settings.TerrainContoursEnabled,"Terrain contour lines");
    ToggleOption(ref settings.TerrainShadingEnabled,"Terrain relief shading");
    GUILayout.BeginHorizontal();
-   if(GUILayout.Button("RESET FDI LAYOUT",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){
+   if(ActionButton("RESET FDI LAYOUT")){
     settings.FlightInstrumentLayoutCustomized=false;settings.Save();if(core!=null&&core.Performance!=null)core.Performance.DisplayLayoutChanged();AERISLogger.Info("[SYSTEM/OPTIONS] FDI layout reset to the vertical-gauge-right default.");
    }
-   if(GUILayout.Button("RESET ND LAYOUT",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){
+   if(ActionButton("RESET ND LAYOUT")){
     settings.NavigationDisplayLayoutCustomized=false;settings.Save();if(core!=null&&core.Performance!=null)core.Performance.DisplayLayoutChanged();AERISLogger.Info("[SYSTEM/OPTIONS] ND layout reset to the navball-left default.");
    }
    GUILayout.EndHorizontal();
    GUILayout.Label("Drag either panel by its title bar. Resize with the dedicated bottom-right corner control. Layout is stored relative to the KSP game window.");
    GUILayout.Label("AUTO is the default: panels appear only on demand. ALWAYS keeps a panel visible. OFF suppresses the panel plus display-owned work.");
    GUILayout.EndVertical();
+   GUILayout.BeginVertical("box");GUILayout.Label("FDR / CVR ARCHIVE");DrawFlightDataArchiveLimitSelector();GUILayout.Label("Only verified committed ZIPs are pruned. Active/raw sessions, .zip.tmp and unverified ZIPs are never deleted.");GUILayout.EndVertical();
    GUILayout.BeginVertical("box");GUILayout.Label("SHORTCUT KEYS — UP TO TWO SIMULTANEOUS KEYS");GUILayout.Label("Choose one key or capture two keys. The command fires when all bound keys are held and either key is pressed.");DrawShortcutBinding("Toggle window",AERISShortcutAction.ToggleWindow);DrawShortcutBinding("Toggle MASTER",AERISShortcutAction.ToggleMaster);DrawShortcutBinding("Emergency disable",AERISShortcutAction.EmergencyDisable);if(hotkeyCaptureAction>=0)DrawShortcutCaptureBox();GUILayout.EndVertical();
    GUILayout.BeginVertical("box");GUILayout.Label("SETTINGS RESET");GUILayout.Label("Resets AERIS UI, display, hotkey, integration and recorder settings. It does not reset AA learned/model data or current-aircraft FBW values.");if(!confirmResetSettings){if(ActionButton("RESET AERIS SETTINGS"))confirmResetSettings=true;}else{GUILayout.Label("Reset all AERIS settings to defaults?");GUILayout.BeginHorizontal();if(SmallButton("RESET NOW")){core.ResetAerisSettingsFromUi();ApplySettingsGeometry();confirmResetSettings=false;settings.Save();}if(SmallButton("CANCEL"))confirmResetSettings=false;GUILayout.EndHorizontal();}GUILayout.EndVertical();
   }
@@ -276,11 +332,11 @@ namespace AERISFlightControl.UI
    GUILayout.BeginVertical("box");
    string reloadLabel="↻ RELOAD / RESCAN";
    GUILayout.BeginHorizontal();GUILayout.Label("AIRFIELD / RUNWAY CERTIFICATION",GUILayout.Width(210f));
-   if(GUILayout.Button(reloadLabel,responsiveButtonStyle,GUILayout.Width(176f),GUILayout.Height(CompactButtonHeight))){if(registry!=null)registry.RequestManualReload();}
+   if(GUILayout.Button(reloadLabel,responsiveButtonStyle,GUILayout.Width(ReadableButtonWidth(reloadLabel,176f)),GUILayout.Height(CompactControlHeight()))){if(registry!=null)registry.RequestManualReload();}
    GUILayout.EndHorizontal();
    if(registry==null){WrappedAirfieldLabel("Registry initializing.");GUILayout.EndVertical();return;}
    GUILayout.EndVertical();
-   float airfieldChrome=rect.width<560f?410f:(rect.width<760f?360f:320f);
+   float airfieldChrome=320f+4f*(CompactControlHeight()-CompactButtonHeight);
    airfieldsScroll=GUILayout.BeginScrollView(airfieldsScroll,false,true,GUILayout.Height(Mathf.Max(140f,rect.height-airfieldChrome)));
    try{
     DrawAirfieldCategory(registry,AERISRunwayCertificationState.Certified,"MOD / USER RUNWAYS — MANUAL",ref settings.AirfieldsUserCalibratedExpanded,true);
@@ -301,12 +357,12 @@ namespace AERISFlightControl.UI
     string emptyLabel="▶ "+label+" (0)";
     bool previousEnabled=GUI.enabled;
     GUI.enabled=false;
-    try{GUILayout.Button(emptyLabel,responsiveButtonStyle,GUILayout.Width(FixedWideButtonWidth),GUILayout.Height(CompactButtonHeight));}
+    try{GUILayout.Button(emptyLabel,responsiveButtonStyle,GUILayout.ExpandWidth(true),GUILayout.Height(CompactControlHeight()));}
     finally{GUI.enabled=previousEnabled;}
     return;
    }
    string categoryLabel=(expanded?"▼ ":"▶ ")+label+" ("+count+")";
-   bool next=GUILayout.Toggle(expanded,categoryLabel,responsiveButtonStyle,GUILayout.Width(FixedWideButtonWidth),GUILayout.Height(CompactButtonHeight));
+   bool next=GUILayout.Toggle(expanded,categoryLabel,responsiveButtonStyle,GUILayout.ExpandWidth(true),GUILayout.Height(CompactControlHeight()));
    if(next!=expanded){expanded=next;settings.Save();}
    if(!expanded)return;
    System.Collections.Generic.IList<AERISAirfieldDefinition> airfieldView=registry.Airfields;
@@ -321,7 +377,7 @@ namespace AERISFlightControl.UI
      string status=RunwayGroupStatus(registry,airfield,runway,state,manualCalibratedOnly);
      string row=airfield.DisplayName+"\n"+designation+" | "+runway.LengthMeters.ToString("0")+" m | "+status;
      string rowLabel=(detail?"▼ ":"▶ ")+row;
-     float rowHeight=WrappedControlHeight(airfieldRowButtonStyle,rowLabel,ResponsiveContentWidth(38f),38f,112f);
+     float rowHeight=ResponsiveHeight(38f);
      if(GUILayout.Button(rowLabel,airfieldRowButtonStyle,GUILayout.ExpandWidth(true),GUILayout.Height(rowHeight)))airfieldDetailId=detail?"":key;
      if(detail)DrawAirfieldRunwayGroupDetail(registry,airfield,runway,state,manualCalibratedOnly);
     }
@@ -332,7 +388,7 @@ namespace AERISFlightControl.UI
    string key=airfield.StableId+"|DLC_PLACEHOLDER|"+state+"|"+manualCalibratedOnly;bool detail=string.Equals(airfieldDetailId,key,System.StringComparison.Ordinal);
    string row=airfield.DisplayName+"\nRWY -- | "+registry.DlcRunwayPresentationText(airfield);
    string rowLabel=(detail?"▼ ":"▶ ")+row;
-   float rowHeight=WrappedControlHeight(airfieldRowButtonStyle,rowLabel,ResponsiveContentWidth(38f),38f,112f);
+   float rowHeight=ResponsiveHeight(38f);
    if(GUILayout.Button(rowLabel,airfieldRowButtonStyle,GUILayout.ExpandWidth(true),GUILayout.Height(rowHeight)))airfieldDetailId=detail?"":key;
    if(!detail)return;
    GUILayout.BeginVertical("box");
@@ -417,7 +473,7 @@ namespace AERISFlightControl.UI
     string warpReason;bool canWarp=AERISSandboxNativeSpawnWarpUtility.CanWarp(airfield,runway,out warpReason);
     string warpLabel="WARP TO MOD NATIVE SPAWN";
     bool oldEnabled=GUI.enabled;GUI.enabled=canWarp;
-    try{if(GUILayout.Button(new GUIContent(warpLabel,canWarp?"Sandbox-only registration utility: move the active vessel to this runway site's provider-native aircraft spawn transform. No approach-direction offset is calculated.":warpReason),airfieldActionButtonStyle,GUILayout.Width(FixedAirfieldActionWidth),GUILayout.Height(AirfieldActionButtonHeight))){string message;AERISSandboxNativeSpawnWarpUtility.TryWarp(airfield,runway,out message);runwayWarpMessage=message;}}
+    try{if(GUILayout.Button(new GUIContent(warpLabel,canWarp?"Sandbox-only registration utility: move the active vessel to this runway site's provider-native aircraft spawn transform. No approach-direction offset is calculated.":warpReason),airfieldActionButtonStyle,GUILayout.ExpandWidth(true),GUILayout.Height(CompactControlHeight()))){string message;AERISSandboxNativeSpawnWarpUtility.TryWarp(airfield,runway,out message);runwayWarpMessage=message;}}
     finally{GUI.enabled=oldEnabled;}
     WrappedAirfieldLabel("WARP ACTION: "+runwayWarpMessage);
    }
@@ -444,7 +500,7 @@ namespace AERISFlightControl.UI
    WrappedAirfieldLabel(registry.UserRunwayCalibrationSummary(airfield));bool manualCalibrated=direction.CertificationBasis==AERISRunwayCertificationBasis.UserCalibrated;
    if(manualCalibrated){WrappedAirfieldLabel("MANUAL A/B CALIBRATION IS AUTHORITATIVE AND PROTECTED. CHECK HERE IS DISABLED FOR THIS ENTRY. USE CLEAR EXPLICITLY BEFORE REPLACING THE ENDPOINTS.");}
    else if(airfield.Source!=AERISAirfieldSource.Stock){WrappedAirfieldLabel("NON-STOCK RUNWAY: AUTOMATIC / PROVIDER GEOMETRY IS NOT OPERATIONAL AUTHORITY. USE MARK A AND MARK B AT THE TWO PHYSICAL RUNWAY ENDS.");}
-   else{string checkLabel="CHECK HERE — VERIFY CURRENT VESSEL AGAINST THIS RUNWAY";if(GUILayout.Button(checkLabel,airfieldActionButtonStyle,GUILayout.Width(FixedAirfieldActionWidth),GUILayout.Height(AirfieldActionButtonHeight))){string message;registry.VerifyRunwayPlacement(airfield,runway,direction,FlightGlobals.ActiveVessel,out message);runwayCalibrationMessage=message;}}
+   else{string checkLabel="CHECK HERE — VERIFY CURRENT VESSEL AGAINST THIS RUNWAY";if(GUILayout.Button(checkLabel,airfieldActionButtonStyle,GUILayout.ExpandWidth(true),GUILayout.Height(CompactControlHeight()))){string message;registry.VerifyRunwayPlacement(airfield,runway,direction,FlightGlobals.ActiveVessel,out message);runwayCalibrationMessage=message;}}
    GUILayout.BeginHorizontal();if(SmallButton("MARK A"))HandleRunwayCalibrationMark(registry,airfield,true);if(SmallButton("MARK B"))HandleRunwayCalibrationMark(registry,airfield,false);if(SmallButton("CLEAR")){string message;registry.ClearUserRunwayCalibration(airfield,out message);runwayCalibrationMessage=message;}GUILayout.EndHorizontal();
   }
   void HandleDlcPlaceholderCalibrationMark(AERISAirfieldRegistry registry,AERISAirfieldDefinition airfield,bool thresholdA){
@@ -468,19 +524,40 @@ namespace AERISFlightControl.UI
    settings.Save();
   }
   void EnsureAirfieldStyles(){
-   if(wrappedLabelStyle==null){wrappedLabelStyle=new GUIStyle(GUI.skin.label);wrappedLabelStyle.wordWrap=true;wrappedLabelStyle.stretchWidth=true;wrappedLabelStyle.stretchHeight=true;wrappedLabelStyle.fixedHeight=0f;}
-   // AIRFIELD selection rows are the one approved variable-size button family.
-   if(airfieldRowButtonStyle==null){airfieldRowButtonStyle=new GUIStyle(GUI.skin.button);airfieldRowButtonStyle.wordWrap=true;airfieldRowButtonStyle.alignment=TextAnchor.MiddleLeft;airfieldRowButtonStyle.padding=new RectOffset(6,6,4,4);airfieldRowButtonStyle.stretchHeight=true;airfieldRowButtonStyle.fixedHeight=0f;}
-   if(airfieldActionButtonStyle==null){airfieldActionButtonStyle=new GUIStyle(GUI.skin.button);airfieldActionButtonStyle.wordWrap=false;airfieldActionButtonStyle.clipping=TextClipping.Clip;airfieldActionButtonStyle.alignment=TextAnchor.MiddleCenter;airfieldActionButtonStyle.padding=new RectOffset(6,6,4,4);airfieldActionButtonStyle.stretchHeight=false;airfieldActionButtonStyle.fixedHeight=AirfieldActionButtonHeight;}
-   if(responsiveButtonStyle==null){responsiveButtonStyle=new GUIStyle(GUI.skin.button);responsiveButtonStyle.wordWrap=false;responsiveButtonStyle.clipping=TextClipping.Clip;responsiveButtonStyle.alignment=TextAnchor.MiddleCenter;responsiveButtonStyle.padding=new RectOffset(6,6,3,3);responsiveButtonStyle.stretchHeight=false;responsiveButtonStyle.fixedHeight=CompactButtonHeight;}
+   if(wrappedLabelStyle==null){wrappedLabelStyle=new GUIStyle(GUI.skin.label);wrappedLabelStyle.wordWrap=false;wrappedLabelStyle.clipping=TextClipping.Clip;wrappedLabelStyle.stretchWidth=true;wrappedLabelStyle.stretchHeight=false;wrappedLabelStyle.fixedHeight=0f;}
+   if(airfieldRowButtonStyle==null){airfieldRowButtonStyle=new GUIStyle(GUI.skin.button);airfieldRowButtonStyle.wordWrap=false;airfieldRowButtonStyle.clipping=TextClipping.Clip;airfieldRowButtonStyle.alignment=TextAnchor.MiddleLeft;airfieldRowButtonStyle.padding=new RectOffset(6,6,4,4);airfieldRowButtonStyle.stretchHeight=false;airfieldRowButtonStyle.fixedHeight=0f;}
+   if(airfieldActionButtonStyle==null){airfieldActionButtonStyle=new GUIStyle(GUI.skin.button);airfieldActionButtonStyle.wordWrap=false;airfieldActionButtonStyle.clipping=TextClipping.Clip;airfieldActionButtonStyle.alignment=TextAnchor.MiddleCenter;airfieldActionButtonStyle.padding=new RectOffset(6,6,4,4);airfieldActionButtonStyle.stretchHeight=false;airfieldActionButtonStyle.fixedHeight=0f;}
+   if(responsiveButtonStyle==null){responsiveButtonStyle=new GUIStyle(GUI.skin.button);responsiveButtonStyle.wordWrap=false;responsiveButtonStyle.clipping=TextClipping.Clip;responsiveButtonStyle.alignment=TextAnchor.MiddleCenter;responsiveButtonStyle.padding=new RectOffset(6,6,3,3);responsiveButtonStyle.stretchHeight=false;responsiveButtonStyle.fixedHeight=0f;}
   }
   void WrappedAirfieldLabel(string text){EnsureAirfieldStyles();GUILayout.Label(text??string.Empty,wrappedLabelStyle,GUILayout.ExpandWidth(true));}
-  float ResponsiveContentWidth(float reserve){return Mathf.Max(96f,rect.width-34f-reserve);}
-  static float WrappedControlHeight(GUIStyle style,string text,float width,float minimum,float maximum){
-   if(style==null)return minimum;
-   float measured=style.CalcHeight(new GUIContent(text??string.Empty),Mathf.Max(48f,width));
-   if(float.IsNaN(measured)||float.IsInfinity(measured)||measured<=0f)measured=minimum;
-   return Mathf.Clamp(Mathf.Ceil(measured+2f),minimum,maximum);
+  float ResponsiveWidth(float baseline){
+   float baseContent=Mathf.Max(1f,AERISSettings.DefaultMainWindowWidth-34f);
+   float currentContent=Mathf.Max(1f,rect.width-34f);
+   return Mathf.Max(1f,baseline*(currentContent/baseContent));
+  }
+  float ResponsiveHeight(float baseline){
+   float ratio=rect.height/Mathf.Max(1f,AERISSettings.DefaultMainWindowHeight);
+   return Mathf.Clamp(baseline*ratio,baseline*0.82f,baseline*1.35f);
+  }
+  float CompactControlHeight(){
+   EnsureAirfieldStyles();
+   float textHeight=GUI.skin.button.CalcSize(new GUIContent("Ag")).y+4f;
+   return Mathf.Max(textHeight,ResponsiveHeight(CompactButtonHeight));
+  }
+  float ReadableButtonWidth(string label,float baseline){
+   EnsureAirfieldStyles();
+   float textWidth=GUI.skin.button.CalcSize(new GUIContent(label??string.Empty)).x+14f;
+   return Mathf.Max(textWidth,ResponsiveWidth(baseline));
+  }
+  bool CompactFullRowButton(string label){
+   EnsureAirfieldStyles();
+   return GUILayout.Button(label,responsiveButtonStyle,GUILayout.ExpandWidth(true),
+    GUILayout.Height(CompactControlHeight()));
+  }
+  bool CompactFullRowToggle(string label,bool value){
+   EnsureAirfieldStyles();
+   return GUILayout.Toggle(value,label,responsiveButtonStyle,GUILayout.ExpandWidth(true),
+    GUILayout.Height(CompactControlHeight()));
   }
   static string HumanizeIdentifier(string value){
    if(string.IsNullOrEmpty(value))return string.Empty;
@@ -496,18 +573,19 @@ namespace AERISFlightControl.UI
   static string UiBuildTitle(string suffix){return "AERIS v"+AERISBuildVersion.Semantic+" "+AERISBuildVersion.UiCheckpoint+" — "+suffix;}
   void DrawDisplayModeSelector(string label,ref AERISDisplayMode mode){
    GUILayout.BeginHorizontal();GUILayout.Label(label+" display",GUILayout.Width(150f));
-   int selected=GUILayout.SelectionGrid((int)mode,new string[]{"AUTO","ALWAYS","OFF"},3,GUILayout.Width(270f),GUILayout.Height(CompactButtonHeight));
+   int selected=GUILayout.SelectionGrid((int)mode,new string[]{"AUTO","ALWAYS","OFF"},3,GUILayout.Width(ResponsiveWidth(270f)),GUILayout.Height(CompactControlHeight()));
    GUILayout.EndHorizontal();
    AERISDisplayMode next=(AERISDisplayMode)Mathf.Clamp(selected,0,2);
    if(next!=mode){mode=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] "+label+" display mode="+next);}
   }
-  void DrawTerrainQualitySelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terrain quality",GUILayout.Width(150f));int current=settings.TerrainQualityMode==AERISTerrainQualityMode.Land?-1:(int)settings.TerrainQualityMode;int selected=GUILayout.SelectionGrid(current,new string[]{"AUTO","LOW","MEDIUM","HIGH"},4,GUILayout.Width(FixedSelectorWidth),GUILayout.Height(CompactButtonHeight));GUILayout.EndHorizontal();if(selected>=0&&selected<=3){var next=(AERISTerrainQualityMode)selected;if(next!=settings.TerrainQualityMode){settings.TerrainQualityMode=next;settings.TerrainQualityModelRevision=AERISSettings.CurrentTerrainQualityModelRevision;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Terrain quality="+next);}}}
-  void DrawTerrainModeSelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terrain mode",GUILayout.Width(150f));int selected=GUILayout.SelectionGrid((int)settings.TerrainDisplayMode,new string[]{"AUTO","TOPO","REL","OFF"},4,GUILayout.Width(FixedSelectorWidth),GUILayout.Height(CompactButtonHeight));GUILayout.EndHorizontal();var next=(AERISTerrainDisplayMode)Mathf.Clamp(selected,0,3);if(next!=settings.TerrainDisplayMode){settings.TerrainDisplayMode=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Terrain mode="+next);}}
-  void DrawTerrainGpuSelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terrain GPU",GUILayout.Width(150f));int selected=GUILayout.SelectionGrid((int)settings.TerrainGpuMode,new string[]{"AUTO","ON","OFF"},3,GUILayout.Width(FixedSelectorWidth),GUILayout.Height(CompactButtonHeight));GUILayout.EndHorizontal();var next=(AERISTerrainGpuMode)Mathf.Clamp(selected,0,2);if(next!=settings.TerrainGpuMode){settings.TerrainGpuMode=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Terrain GPU="+next);}}
-  void DrawTerrainColourSelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terrain colours",GUILayout.Width(150f));int selected=GUILayout.SelectionGrid((int)settings.TerrainColourPreset,new string[]{"STD","RG","BY","HIGH"},4,GUILayout.Width(FixedSelectorWidth),GUILayout.Height(CompactButtonHeight));GUILayout.EndHorizontal();var next=(AERISTerrainColourPreset)Mathf.Clamp(selected,0,3);if(next!=settings.TerrainColourPreset){settings.TerrainColourPreset=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Terrain colours="+next);}}
-  void DrawNavigationDisplayUpdateSelector(){GUILayout.BeginHorizontal();GUILayout.Label("ND update",GUILayout.Width(150f));int selected=GUILayout.SelectionGrid((int)settings.NavigationDisplayUpdateMode,new string[]{"AUTO","10","20","30","45","60"},6,GUILayout.Width(FixedSelectorWidth),GUILayout.Height(CompactButtonHeight));GUILayout.EndHorizontal();var next=(AERISNavigationDisplayUpdateMode)Mathf.Clamp(selected,0,5);if(next!=settings.NavigationDisplayUpdateMode){settings.NavigationDisplayUpdateMode=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] ND update="+next);}}
+  void DrawTerrainQualitySelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terrain quality",GUILayout.Width(150f));int current=(int)settings.TerrainQualityMode;int selected=GUILayout.SelectionGrid(current,new string[]{"AUTO","LOW","MIDDLE","HIGH"},4,GUILayout.Width(ResponsiveWidth(BaseSelectorWidth)),GUILayout.Height(CompactControlHeight()));GUILayout.EndHorizontal();if(selected>=0&&selected<=3){var next=(AERISTerrainQualityMode)selected;if(next!=settings.TerrainQualityMode){settings.TerrainQualityMode=next;settings.TerrainQualityModelRevision=AERISSettings.CurrentTerrainQualityModelRevision;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Terrain quality="+next);}}}
+  void DrawTerrainModeSelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terrain mode",GUILayout.Width(150f));int selected=GUILayout.SelectionGrid((int)settings.TerrainDisplayMode,new string[]{"AUTO","TOPO","REL","OFF"},4,GUILayout.Width(ResponsiveWidth(BaseSelectorWidth)),GUILayout.Height(CompactControlHeight()));GUILayout.EndHorizontal();var next=(AERISTerrainDisplayMode)Mathf.Clamp(selected,0,3);if(next!=settings.TerrainDisplayMode){settings.TerrainDisplayMode=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Terrain mode="+next);}}
+  void DrawTerrainGpuSelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terrain GPU",GUILayout.Width(150f));int selected=GUILayout.SelectionGrid((int)settings.TerrainGpuMode,new string[]{"AUTO","ON","OFF"},3,GUILayout.Width(ResponsiveWidth(BaseSelectorWidth)),GUILayout.Height(CompactControlHeight()));GUILayout.EndHorizontal();var next=(AERISTerrainGpuMode)Mathf.Clamp(selected,0,2);if(next!=settings.TerrainGpuMode){settings.TerrainGpuMode=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Terrain GPU="+next);}}
+  void DrawTerrainColourSelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terrain colours",GUILayout.Width(150f));int selected=GUILayout.SelectionGrid((int)settings.TerrainColourPreset,new string[]{"STD","RG","BY","HIGH"},4,GUILayout.Width(ResponsiveWidth(BaseSelectorWidth)),GUILayout.Height(CompactControlHeight()));GUILayout.EndHorizontal();var next=(AERISTerrainColourPreset)Mathf.Clamp(selected,0,3);if(next!=settings.TerrainColourPreset){settings.TerrainColourPreset=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Terrain colours="+next);}}
+  void DrawNavigationDisplayUpdateSelector(){GUILayout.BeginHorizontal();GUILayout.Label("ND update",GUILayout.Width(150f));int selected=GUILayout.SelectionGrid((int)settings.NavigationDisplayUpdateMode,new string[]{"AUTO","10","20","30","45","60"},6,GUILayout.Width(ResponsiveWidth(BaseSelectorWidth)),GUILayout.Height(CompactControlHeight()));GUILayout.EndHorizontal();var next=(AERISNavigationDisplayUpdateMode)Mathf.Clamp(selected,0,5);if(next!=settings.NavigationDisplayUpdateMode){settings.NavigationDisplayUpdateMode=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] ND update="+next);}}
+  void DrawFlightDataArchiveLimitSelector(){GUILayout.Label("Verified flight ZIP limit   (default 10 / range 1-30)");int current=AERISSettings.NormalizeFlightDataArchiveLimit(settings.FlightDataArchiveLimit)-1;int selected=GUILayout.SelectionGrid(current,FlightArchiveLimitLabels,10,GUILayout.ExpandWidth(true),GUILayout.Height(CompactControlHeight()*3f));if(selected>=0&&selected<30){int next=selected+1;if(next!=settings.FlightDataArchiveLimit){settings.FlightDataArchiveLimit=next;settings.Save();AERISFlightDataArchive.ConfigureRetention(next);AERISLogger.Info("[SYSTEM/OPTIONS] FDR/CVR verified ZIP limit="+next);}}}
   void ToggleOption(ref bool value,string label){bool next=GUILayout.Toggle(value,label);if(next!=value){value=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] "+label+"="+next);}}
-  void DrawShortcutBinding(string label,AERISShortcutAction action){GUILayout.BeginHorizontal();GUILayout.Label(label,GUILayout.Width(150f));GUILayout.Label(settings.GetShortcutDisplay(action),GUILayout.ExpandWidth(true));bool capturing=hotkeyCaptureAction==(int)action;if(GUILayout.Button(capturing?"CAPTURE":"SET",GUILayout.Width(76f),GUILayout.Height(CompactButtonHeight)))BeginShortcutCapture(action);if(GUILayout.Button("CLEAR",GUILayout.Width(58f),GUILayout.Height(CompactButtonHeight))){settings.ClearShortcut(action);settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut cleared: "+label);}GUILayout.EndHorizontal();}
+  void DrawShortcutBinding(string label,AERISShortcutAction action){GUILayout.BeginHorizontal();GUILayout.Label(label,GUILayout.Width(150f));GUILayout.Label(settings.GetShortcutDisplay(action),GUILayout.ExpandWidth(true));bool capturing=hotkeyCaptureAction==(int)action;if(GUILayout.Button(capturing?"CAPTURE":"SET",GUILayout.Width(ResponsiveWidth(76f)),GUILayout.Height(CompactControlHeight())))BeginShortcutCapture(action);if(GUILayout.Button("CLEAR",GUILayout.Width(ResponsiveWidth(58f)),GUILayout.Height(CompactControlHeight()))){settings.ClearShortcut(action);settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut cleared: "+label);}GUILayout.EndHorizontal();}
   void BeginShortcutCapture(AERISShortcutAction action){hotkeyCaptureAction=(int)action;capturePrimary=KeyCode.None;captureSecondary=KeyCode.None;AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut capture started: "+action);}
   void DrawShortcutCaptureBox(){GUILayout.BeginVertical("box");var action=(AERISShortcutAction)hotkeyCaptureAction;GUILayout.Label("Capturing "+ShortcutLabel(action)+": "+(capturePrimary==KeyCode.None?"press first key":capturePrimary+(captureSecondary==KeyCode.None?" — press optional second key or APPLY":(" + "+captureSecondary))));GUILayout.Label("ENTER applies a one-key or two-key binding. BACKSPACE clears the second key. ESC cancels.");GUILayout.BeginHorizontal();if(SmallButton("APPLY")){string error;if(settings.TrySetShortcut(action,capturePrimary,captureSecondary,out error)){settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut set: "+ShortcutLabel(action)+" = "+settings.GetShortcutDisplay(action));hotkeyCaptureAction=-1;}else AERISLogger.Warn("[SYSTEM/OPTIONS] Shortcut rejected: "+error);}if(SmallButton("CANCEL")){hotkeyCaptureAction=-1;capturePrimary=KeyCode.None;captureSecondary=KeyCode.None;}GUILayout.EndHorizontal();GUILayout.EndVertical();}
   void ConsumeShortcutCaptureInput(){if(hotkeyCaptureAction<0)return;Event e=Event.current;if(e==null||e.type!=EventType.KeyDown)return;if(e.keyCode==KeyCode.Escape){hotkeyCaptureAction=-1;capturePrimary=KeyCode.None;captureSecondary=KeyCode.None;e.Use();return;}if(e.keyCode==KeyCode.Return||e.keyCode==KeyCode.KeypadEnter){if(capturePrimary!=KeyCode.None){string error;if(settings.TrySetShortcut((AERISShortcutAction)hotkeyCaptureAction,capturePrimary,captureSecondary,out error)){settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut set: "+ShortcutLabel((AERISShortcutAction)hotkeyCaptureAction)+" = "+settings.GetShortcutDisplay((AERISShortcutAction)hotkeyCaptureAction));hotkeyCaptureAction=-1;}else AERISLogger.Warn("[SYSTEM/OPTIONS] Shortcut rejected: "+error);}e.Use();return;}if(e.keyCode==KeyCode.Backspace||e.keyCode==KeyCode.Delete){captureSecondary=KeyCode.None;e.Use();return;}if(capturePrimary==KeyCode.None)capturePrimary=e.keyCode;else if(captureSecondary==KeyCode.None&&e.keyCode!=capturePrimary)captureSecondary=e.keyCode;else if(e.keyCode!=capturePrimary)captureSecondary=e.keyCode;e.Use();}
@@ -599,65 +677,36 @@ namespace AERISFlightControl.UI
   }
 
   void DrawAutopilot(){
+   GUILayout.Label("AERIS AUTOPILOT — TAKEOFF / FLIGHT / NAV / LAND");
+   autopilotPage=DrawAutopilotCategoryTabs(autopilotPage);
+   GUILayout.Space(3);
+   bool drawAutopilotEnabled=GUI.enabled;
+   var takeoff=core.AutoTakeoff;
+   if(autopilotPage==0){DrawAutoTakeoffPage(takeoff);GUI.enabled=drawAutopilotEnabled;return;}
+   if(autopilotPage==2){DrawFlightPlanLibrary();GUI.enabled=drawAutopilotEnabled;return;}
+   if(autopilotPage==3){DrawLandingFoundation();GUI.enabled=drawAutopilotEnabled;return;}
+
    var bank=core.Bank;
    var hdg=core.Hdg;
-   GUILayout.Label("AERIS AUTOPILOT — independent axis permits");
-   if(bank==null){GUILayout.Label("Autopilot directors initializing.");return;}
-   bool drawAutopilotEnabled=GUI.enabled;
+   if(bank==null){GUILayout.Label("Autopilot directors initializing.");GUI.enabled=drawAutopilotEnabled;return;}
 
-   var takeoff=core.AutoTakeoff;
-   GUILayout.BeginVertical("box");
-   GUILayout.Label("AUTO TAKEOFF — TWO-STEP ARM / EXECUTE");
-   if(takeoff==null)GUILayout.Label("Auto Takeoff initializing.");
-   else {
-    GUILayout.Label("Phase: "+takeoff.PhaseText+" | "+takeoff.Status);
-    GUILayout.Label("Propulsion: "+takeoff.PropulsionMode+" | "+takeoff.EngineStageStatus);
-    GUILayout.Label("Attempt generation: "+takeoff.AttemptGeneration+" | Takeoff thrust: MAX (1.000 fixed)");
-    GUILayout.Label("Brakes: "+takeoff.BrakeStatus+(takeoff.BrakeWasAppliedAtExecute?" | pre-EXECUTE parking brake was ON":""));
-    GUILayout.Label("Stall estimate: "+(takeoff.SelectedStallSpeedMps>0f?takeoff.SelectedStallSpeedMps.ToString("0.0")+" m/s":"N/A")+" | Vr: "+takeoff.SelectedVrMps.ToString("0.0")+" m/s | "+takeoff.SelectedVrSource+(takeoff.VrFrozen?" (FROZEN)":""));
-    if(!string.IsNullOrEmpty(takeoff.SelectedVrDetail))GUILayout.Label("Vr detail: "+takeoff.SelectedVrDetail);
-    GUILayout.Label("Speed/radar/V/S: "+takeoff.SurfaceSpeedMps.ToString("0.0")+" m/s / "+takeoff.RadarAltitudeM.ToString("0.0")+" m / "+takeoff.VerticalSpeedMps.ToString("+0.0;-0.0;0.0")+" m/s");
-    if(takeoff.Phase==AutoTakeoffPhase.GroundRoll)GUILayout.Label("Rotation gate: "+takeoff.RotationGateReason);
-    GUILayout.BeginHorizontal();
-    if(!takeoff.Armed){if(GUILayout.Button("ARM AUTO TAKEOFF",GUILayout.Width(160f),GUILayout.Height(CompactButtonHeight))){string err;if(!core.ArmAutoTakeoff(out err))AERISLogger.Warn("[AUTO_TAKEOFF] ARM rejected: "+err);}}
-    else if(takeoff.Phase==AutoTakeoffPhase.Armed){if(GUILayout.Button("EXECUTE TAKEOFF",GUILayout.Width(160f),GUILayout.Height(CompactButtonHeight))){string err;if(!core.ExecuteAutoTakeoff(out err))AERISLogger.Warn("[AUTO_TAKEOFF] EXECUTE rejected: "+err);}if(GUILayout.Button("DISARM",GUILayout.Width(SmallButtonWidth),GUILayout.Height(CompactButtonHeight)))core.DisarmAutoTakeoff("user disarm");}
-    else if(GUILayout.Button("ABORT / TRANSFER",GUILayout.Width(160f),GUILayout.Height(CompactButtonHeight)))core.DisarmAutoTakeoff("user abort / transfer");
-    GUILayout.EndHorizontal();
-    GUILayout.Space(2);
-    if(GUILayout.Button((takeoffConfigExpanded?"▼ ":"▶ ")+"TAKEOFF CONFIGURATION",GUILayout.Width(200f),GUILayout.Height(CompactButtonHeight)))
-     takeoffConfigExpanded=!takeoffConfigExpanded;
-    if(takeoffConfigExpanded){
-     bool configEnabled=GUI.enabled;GUI.enabled=configEnabled&&!takeoff.Executing;
-     TakeoffSettingSlider(ref settings.AutoTakeoffStallFactor,"AA stall factor",1.05f,1.50f,"F2");
-     TakeoffSettingSlider(ref settings.AutoTakeoffManualVrMps,"Fallback Vr m/s",15f,250f,"F0");
-     TakeoffSettingSlider(ref settings.AutoTakeoffRotationPitchDeg,"Rotation pitch deg",3f,20f,"F1");
-     TakeoffSettingSlider(ref settings.AutoTakeoffRotationRateDegPerSec,"Pitch-rate max deg/s",0.5f,5f,"F1");
-     TakeoffSettingSlider(ref settings.AutoTakeoffInitialClimbVsMps,"Initial V/S m/s",2f,50f,"F0");
-     TakeoffSettingSlider(ref settings.AutoTakeoffHandoffRadarAltitudeM,"Handoff radar m",20f,250f,"F0");
-     GUI.enabled=configEnabled;
-    }
-    GUILayout.Label("Gear and flaps remain manual. Brake input aborts. Strong sustained input transfers control; Ground Stability remains independent.");
-   }
-   GUILayout.EndVertical();
-
-   if(core.AnyNormalApArmed)GUILayout.Label("NORMAL AP "+(core.NormalApExecutionPermitted?"ACTIVE — ":"ARMED / WAITING FOR CONFIRMED LIFTOFF — ")+core.ArmedApModesText);
-   else GUILayout.Label("NORMAL AP: no prepared post-takeoff modes.");
+   if(core.AnyNormalApArmed)GUILayout.Label("FLIGHT "+(core.NormalApExecutionPermitted?"ACTIVE — ":"ARMED / WAITING FOR CONFIRMED LIFTOFF — ")+core.ArmedApModesText);
+   else GUILayout.Label("FLIGHT: no prepared post-takeoff modes.");
    bool normalControlsLocked=takeoff!=null && takeoff.Executing;
-   if(normalControlsLocked)GUILayout.Label("Normal AP controls are locked during Auto Takeoff; the prepared reservation is preserved.");
+   if(normalControlsLocked)GUILayout.Label("FLIGHT controls are locked during Auto Takeoff; the prepared reservation is preserved.");
    GUI.enabled=drawAutopilotEnabled&&!normalControlsLocked;
 
-   DrawLandingFoundation();
-   DrawFlightPlanLibrary();
 
    GUILayout.BeginVertical("box");
-   GUILayout.Label("LATERAL — NORMAL AP");
+   GUILayout.Label("LATERAL — FLIGHT");
    bool oldLateralGui=GUI.enabled;
    bool lateralOn=bank.Armed || (hdg!=null && hdg.Armed);
    GUILayout.BeginHorizontal();
-   if(GUILayout.Button(settings.ApLateralSectionExpanded?"▼":"▶",GUILayout.Width(28f),GUILayout.Height(CompactButtonHeight))){settings.ApLateralSectionExpanded=!settings.ApLateralSectionExpanded;settings.Save();}
+   if(GUILayout.Button(settings.ApLateralSectionExpanded?"▼":"▶",GUILayout.Width(ResponsiveWidth(28f)),GUILayout.Height(CompactControlHeight()))){settings.ApLateralSectionExpanded=!settings.ApLateralSectionExpanded;settings.Save();}
    GUI.enabled=oldLateralGui;
    bool requestedLateral=WideAxisSwitch("LATERAL",lateralOn);
    GUI.enabled=oldLateralGui;
+   GUILayout.Space(ResponsiveWidth(28f));
    GUILayout.EndHorizontal();
    if(requestedLateral!=lateralOn){
     if(!requestedLateral){
@@ -689,12 +738,12 @@ namespace AERISFlightControl.UI
     GUILayout.Label("Current bank: "+bank.CurrentBank.ToString("+0.0;-0.0;0.0")+"°");
     if(settings.ShowApErrorDisplay) GUILayout.Label("Bank error: "+bank.BankError.ToString("+0.0;-0.0;0.0")+"°");
     GUILayout.BeginHorizontal();
-    GUILayout.Label("Target bank:",GUILayout.Width(CompactLabelWidth));
-    bank.TargetBankText=AERISNumericField.TextField(bank.TargetBankText,GUILayout.Width(CompactFieldWidth));
+    GUILayout.Label("Target bank:",GUILayout.Width(ResponsiveWidth(CompactLabelWidth)));
+    bank.TargetBankText=AERISNumericField.TextField(bank.TargetBankText,GUILayout.Width(ResponsiveWidth(CompactFieldWidth)));
     GUILayout.EndHorizontal();
     GUILayout.BeginHorizontal();
-    if(GUILayout.Button("APPLY",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){string err; if(!bank.TrySetTarget(bank.TargetBankText,out err))AERISLogger.Warn("[BANK] target rejected: "+err);else SaveBankInput(bank);}
-    if(GUILayout.Button("SET CURRENT",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){bank.SetCurrent(FlightGlobals.ActiveVessel);SaveBankInput(bank);}
+    if(ActionButton("APPLY")){string err; if(!bank.TrySetTarget(bank.TargetBankText,out err))AERISLogger.Warn("[BANK] target rejected: "+err);else SaveBankInput(bank);}
+    if(ActionButton("SET CURRENT")){bank.SetCurrent(FlightGlobals.ActiveVessel);SaveBankInput(bank);}
     GUILayout.EndHorizontal();
    } else if(displayedLateralMode==1){
     if(hdg==null){GUILayout.Label("HDG director initializing.");}
@@ -702,22 +751,22 @@ namespace AERISFlightControl.UI
      GUILayout.Label("Current HDG: "+hdg.CurrentHeading.ToString("000.0")+"°");
      if(settings.ShowApErrorDisplay) GUILayout.Label("HDG error: "+hdg.HeadingError.ToString("+0.0;-0.0;0.0")+"°");
      GUILayout.BeginHorizontal();
-     GUILayout.Label("Target HDG:",GUILayout.Width(CompactLabelWidth));
-     hdg.TargetHeadingText=AERISNumericField.TextField(hdg.TargetHeadingText,GUILayout.Width(CompactFieldWidth));
+     GUILayout.Label("Target HDG:",GUILayout.Width(ResponsiveWidth(CompactLabelWidth)));
+     hdg.TargetHeadingText=AERISNumericField.TextField(hdg.TargetHeadingText,GUILayout.Width(ResponsiveWidth(CompactFieldWidth)));
      GUILayout.EndHorizontal();
      GUILayout.BeginHorizontal();
-     if(GUILayout.Button("APPLY",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){string err; if(!hdg.TrySetTarget(hdg.TargetHeadingText,out err))AERISLogger.Warn("[HDG] target rejected: "+err);else SaveHdgInput(hdg);}
-     if(GUILayout.Button("SET CURRENT",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){hdg.SetCurrent(core.Attitude);SaveHdgInput(hdg);}
+     if(ActionButton("APPLY")){string err; if(!hdg.TrySetTarget(hdg.TargetHeadingText,out err))AERISLogger.Warn("[HDG] target rejected: "+err);else SaveHdgInput(hdg);}
+     if(ActionButton("SET CURRENT")){hdg.SetCurrent(core.Attitude);SaveHdgInput(hdg);}
      GUILayout.EndHorizontal();
      GUILayout.Space(2);
      GUILayout.BeginHorizontal();
-     if(GUILayout.Button("BANK LIMIT: AUTO",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){hdg.SetAutoMaxBankLimit();SaveHdgInput(hdg);}
-     GUILayout.Label(hdg.UseAutoMaxBankLimit ? ("AUTO " + hdg.EffectiveMaxBankLimitDeg.ToString("0.0") + "°") : ("MANUAL " + hdg.ManualMaxBankLimitDeg.ToString("0.0") + "°"),GUILayout.Width(ActionButtonWidth));
+     if(ActionButton("BANK LIMIT: AUTO")){hdg.SetAutoMaxBankLimit();SaveHdgInput(hdg);}
+     GUILayout.Label(hdg.UseAutoMaxBankLimit ? ("AUTO " + hdg.EffectiveMaxBankLimitDeg.ToString("0.0") + "°") : ("MANUAL " + hdg.ManualMaxBankLimitDeg.ToString("0.0") + "°"),GUILayout.Width(ResponsiveWidth(ActionButtonWidth)));
      GUILayout.EndHorizontal();
      GUILayout.BeginHorizontal();
-     GUILayout.Label("Max bank:",GUILayout.Width(CompactLabelWidth));
-     hdg.ManualMaxBankLimitText=AERISNumericField.TextField(hdg.ManualMaxBankLimitText,GUILayout.Width(CompactFieldWidth));
-     if(GUILayout.Button("SET",GUILayout.Width(SmallButtonWidth),GUILayout.Height(CompactButtonHeight))){ string limErr; if(!hdg.TrySetManualMaxBankLimit(hdg.ManualMaxBankLimitText,out limErr)) AERISLogger.Warn("[HDG] bank limit rejected: "+limErr); else SaveHdgInput(hdg); }
+     GUILayout.Label("Max bank:",GUILayout.Width(ResponsiveWidth(CompactLabelWidth)));
+     hdg.ManualMaxBankLimitText=AERISNumericField.TextField(hdg.ManualMaxBankLimitText,GUILayout.Width(ResponsiveWidth(CompactFieldWidth)));
+     if(SmallButton("SET")){ string limErr; if(!hdg.TrySetManualMaxBankLimit(hdg.ManualMaxBankLimitText,out limErr)) AERISLogger.Warn("[HDG] bank limit rejected: "+limErr); else SaveHdgInput(hdg); }
      GUILayout.EndHorizontal();
      bool thinAirAssist=GUILayout.Toggle(settings.ThinAirTurnAssistEnabled,"Enable roll-first high-energy turn (AUTO: 80° hard max, continuous margin + measured-G capability)");
      if(thinAirAssist!=settings.ThinAirTurnAssistEnabled){settings.ThinAirTurnAssistEnabled=thinAirAssist;hdg.ThinAirTurnAssistEnabled=thinAirAssist;settings.Save();AERISLogger.Info("[HDG] adaptive high-G turn assist="+thinAirAssist);}
@@ -738,7 +787,7 @@ namespace AERISFlightControl.UI
    GUILayout.EndVertical();
 
    GUILayout.BeginVertical("box");
-   GUILayout.Label("VERTICAL — NORMAL AP");
+   GUILayout.Label("VERTICAL — FLIGHT");
    var pitch=core.Pitch;
    var vs=core.VerticalSpeed;
    var alt=core.Altitude;
@@ -746,10 +795,11 @@ namespace AERISFlightControl.UI
    bool displayedVerticalMaster=verticalMaster;
    bool oldVerticalGui=GUI.enabled;
    GUILayout.BeginHorizontal();
-   if(GUILayout.Button(settings.ApVerticalSectionExpanded?"▼":"▶",GUILayout.Width(28f),GUILayout.Height(CompactButtonHeight))){settings.ApVerticalSectionExpanded=!settings.ApVerticalSectionExpanded;settings.Save();}
+   if(GUILayout.Button(settings.ApVerticalSectionExpanded?"▼":"▶",GUILayout.Width(ResponsiveWidth(28f)),GUILayout.Height(CompactControlHeight()))){settings.ApVerticalSectionExpanded=!settings.ApVerticalSectionExpanded;settings.Save();}
    GUI.enabled=oldVerticalGui;
    bool requestedVertical=WideAxisSwitch("VERTICAL",displayedVerticalMaster);
    GUI.enabled=oldVerticalGui;
+   GUILayout.Space(ResponsiveWidth(28f));
    GUILayout.EndHorizontal();
    if(requestedVertical!=verticalMaster){
     verticalMaster=requestedVertical;
@@ -768,9 +818,9 @@ namespace AERISFlightControl.UI
     else {
      GUILayout.Label("Current pitch: "+pitch.CurrentPitch.ToString("+0.0;-0.0;0.0")+"°");
      if(settings.ShowApErrorDisplay) GUILayout.Label("Pitch error: "+pitch.PitchError.ToString("+0.0;-0.0;0.0")+"°");
-     GUILayout.BeginHorizontal(); GUILayout.Label("Target pitch:",GUILayout.Width(CompactLabelWidth)); pitch.TargetPitchText=AERISNumericField.TextField(pitch.TargetPitchText,GUILayout.Width(CompactFieldWidth)); GUILayout.EndHorizontal();
-     GUILayout.BeginHorizontal(); if(GUILayout.Button("APPLY",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){string err; if(!pitch.TrySetTarget(pitch.TargetPitchText,out err))AERISLogger.Warn("[PITCH] target rejected: "+err);else SavePitchInput(pitch);}
-     if(GUILayout.Button("SET CURRENT",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){pitch.SetCurrent(core.Attitude);SavePitchInput(pitch);} GUILayout.EndHorizontal();
+     GUILayout.BeginHorizontal(); GUILayout.Label("Target pitch:",GUILayout.Width(ResponsiveWidth(CompactLabelWidth))); pitch.TargetPitchText=AERISNumericField.TextField(pitch.TargetPitchText,GUILayout.Width(ResponsiveWidth(CompactFieldWidth))); GUILayout.EndHorizontal();
+     GUILayout.BeginHorizontal(); if(ActionButton("APPLY")){string err; if(!pitch.TrySetTarget(pitch.TargetPitchText,out err))AERISLogger.Warn("[PITCH] target rejected: "+err);else SavePitchInput(pitch);}
+     if(ActionButton("SET CURRENT")){pitch.SetCurrent(core.Attitude);SavePitchInput(pitch);} GUILayout.EndHorizontal();
     }
    } else if(displayedVerticalMode==1){
     if(vs==null){GUILayout.Label("V/S director initializing.");}
@@ -778,11 +828,11 @@ namespace AERISFlightControl.UI
      GUILayout.Label("Current V/S: "+vs.CurrentVerticalSpeedMps.ToString("+0.0;-0.0;0.0")+" m/s");
      if(settings.ShowApErrorDisplay) GUILayout.Label("V/S error: "+vs.VerticalSpeedErrorMps.ToString("+0.0;-0.0;0.0")+" m/s");
      GUILayout.Label("Pitch target: "+vs.GeneratedPitchTargetDeg.ToString("+0.0;-0.0;0.0")+"°");
-     GUILayout.BeginHorizontal(); GUILayout.Label("Target V/S:",GUILayout.Width(CompactLabelWidth)); vs.TargetVerticalSpeedText=AERISNumericField.TextField(vs.TargetVerticalSpeedText,GUILayout.Width(CompactFieldWidth)); GUILayout.EndHorizontal();
-     GUILayout.BeginHorizontal(); if(GUILayout.Button("APPLY",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){string err; if(!vs.TrySetTarget(vs.TargetVerticalSpeedText,out err))AERISLogger.Warn("[V/S] target rejected: "+err);else SaveVsInput(vs);}
-     if(GUILayout.Button("SET CURRENT",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){vs.SetCurrent(core.Attitude);SaveVsInput(vs);} GUILayout.EndHorizontal();
+     GUILayout.BeginHorizontal(); GUILayout.Label("Target V/S:",GUILayout.Width(ResponsiveWidth(CompactLabelWidth))); vs.TargetVerticalSpeedText=AERISNumericField.TextField(vs.TargetVerticalSpeedText,GUILayout.Width(ResponsiveWidth(CompactFieldWidth))); GUILayout.EndHorizontal();
+     GUILayout.BeginHorizontal(); if(ActionButton("APPLY")){string err; if(!vs.TrySetTarget(vs.TargetVerticalSpeedText,out err))AERISLogger.Warn("[V/S] target rejected: "+err);else SaveVsInput(vs);}
+     if(ActionButton("SET CURRENT")){vs.SetCurrent(core.Attitude);SaveVsInput(vs);} GUILayout.EndHorizontal();
      GUILayout.Space(3);
-     GUILayout.BeginHorizontal(); GUILayout.Label("Max pitch:",GUILayout.Width(CompactLabelWidth)); vs.MaxPitchTargetText=AERISNumericField.TextField(vs.MaxPitchTargetText,GUILayout.Width(CompactFieldWidth)); if(GUILayout.Button("SET LIMIT",GUILayout.Width(SmallButtonWidth),GUILayout.Height(CompactButtonHeight))){string limitErr; if(!vs.TrySetMaxPitchTarget(vs.MaxPitchTargetText,out limitErr))AERISLogger.Warn("[V/S] max pitch rejected: "+limitErr);else SaveVsInput(vs);} GUILayout.EndHorizontal();
+     GUILayout.BeginHorizontal(); GUILayout.Label("Max pitch:",GUILayout.Width(ResponsiveWidth(CompactLabelWidth))); vs.MaxPitchTargetText=AERISNumericField.TextField(vs.MaxPitchTargetText,GUILayout.Width(ResponsiveWidth(CompactFieldWidth))); if(SmallButton("SET LIMIT")){string limitErr; if(!vs.TrySetMaxPitchTarget(vs.MaxPitchTargetText,out limitErr))AERISLogger.Warn("[V/S] max pitch rejected: "+limitErr);else SaveVsInput(vs);} GUILayout.EndHorizontal();
      GUILayout.Label("V/S pitch limit: ±"+vs.MaxPitchTargetDeg.ToString("0.0")+"°");
      if(vs.VsCruiseAccelerationGuideActive) GUILayout.Label("V/S ACC GUIDE: blend "+vs.VsCruiseAccelerationGuideBlend.ToString("0.00")+" | a* "+vs.VsCruiseDesiredVerticalAccelerationMps2.ToString("+0.000;-0.000;0.000")+" m/s² | BasePitch "+vs.VsCruiseAppliedBasePitchRateDegPerSec.ToString("+0.000;-0.000;0.000")+"°/s"+(vs.VsCruisePreBrakeActive?" | PRE-BRAKE":""));
      if(vs.HighQNonZeroVsTrackingProfileActive) GUILayout.Label("HIGH-Q V/S TRACK STAB: q "+vs.DynamicPressureKpa.ToString("0.0")+" kPa | D scale "+vs.HighQNonZeroVsTrackingDampingScale.ToString("0.00")+" | rate slew "+vs.HighQNonZeroVsTrackingRateCommandSlewScale.ToString("0.00"));
@@ -795,12 +845,12 @@ namespace AERISFlightControl.UI
      GUILayout.Label("Display-safe band: "+alt.AltitudeHoldBandLowerMeters.ToString("0.00")+"–"+alt.AltitudeHoldBandUpperMeters.ToString("0.00")+" m | reference "+alt.AltitudeHoldReferenceMeters.ToString("0.000"));
      if(settings.ShowApErrorDisplay) GUILayout.Label("ALT center error: "+alt.AltitudeControlErrorMeters.ToString("+0.00;-0.00;0.00")+" m | band "+(alt.AltitudeInsidePreferredHoldBand?"IN":(alt.AltitudeHoldBandErrorMeters>0f?"LOW":"HIGH"))+" | "+alt.ControlState);
      GUILayout.Label("Planned V/S: "+alt.PlannedVerticalSpeedMps.ToString("+0.0;-0.0;0.0")+" m/s | V/S actual: "+alt.CurrentVerticalSpeedMps.ToString("+0.0;-0.0;0.0")+" m/s");
-     GUILayout.BeginHorizontal(); GUILayout.Label("Target ALT:",GUILayout.Width(CompactLabelWidth)); alt.TargetAltitudeText=AERISNumericField.TextField(alt.TargetAltitudeText,GUILayout.Width(CompactFieldWidth)); GUILayout.EndHorizontal();
-     GUILayout.BeginHorizontal(); if(GUILayout.Button("APPLY",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){string err; if(!alt.TrySetTarget(alt.TargetAltitudeText,out err))AERISLogger.Warn("[ALT] target rejected: "+err);else SaveAltInput(alt);}
-     if(GUILayout.Button("SET CURRENT",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){alt.SetCurrent(FlightGlobals.ActiveVessel);SaveAltInput(alt);} GUILayout.EndHorizontal();
+     GUILayout.BeginHorizontal(); GUILayout.Label("Target ALT:",GUILayout.Width(ResponsiveWidth(CompactLabelWidth))); alt.TargetAltitudeText=AERISNumericField.TextField(alt.TargetAltitudeText,GUILayout.Width(ResponsiveWidth(CompactFieldWidth))); GUILayout.EndHorizontal();
+     GUILayout.BeginHorizontal(); if(ActionButton("APPLY")){string err; if(!alt.TrySetTarget(alt.TargetAltitudeText,out err))AERISLogger.Warn("[ALT] target rejected: "+err);else SaveAltInput(alt);}
+     if(ActionButton("SET CURRENT")){alt.SetCurrent(FlightGlobals.ActiveVessel);SaveAltInput(alt);} GUILayout.EndHorizontal();
      GUILayout.Space(2);
-     GUILayout.BeginHorizontal(); GUILayout.Label("ALT max V/S:",GUILayout.Width(CompactLabelWidth)); alt.MaxAltitudeVerticalSpeedText=AERISNumericField.TextField(alt.MaxAltitudeVerticalSpeedText,GUILayout.Width(CompactFieldWidth)); if(GUILayout.Button("SET LIMIT",GUILayout.Width(SmallButtonWidth),GUILayout.Height(CompactButtonHeight))){string limitErr; if(!alt.TrySetMaxVerticalSpeed(alt.MaxAltitudeVerticalSpeedText,out limitErr))AERISLogger.Warn("[ALT] V/S limit rejected: "+limitErr);else SaveAltInput(alt);} GUILayout.EndHorizontal();
-     GUILayout.BeginHorizontal(); GUILayout.Label("ALT pitch:",GUILayout.Width(CompactLabelWidth)); alt.MaxAltitudePitchText=AERISNumericField.TextField(alt.MaxAltitudePitchText,GUILayout.Width(CompactFieldWidth)); if(GUILayout.Button("SET LIMIT",GUILayout.Width(SmallButtonWidth),GUILayout.Height(CompactButtonHeight))){string limitErr; if(!alt.TrySetMaxPitch(alt.MaxAltitudePitchText,out limitErr))AERISLogger.Warn("[ALT] pitch limit rejected: "+limitErr);else SaveAltInput(alt);} GUILayout.EndHorizontal();
+     GUILayout.BeginHorizontal(); GUILayout.Label("ALT max V/S:",GUILayout.Width(ResponsiveWidth(CompactLabelWidth))); alt.MaxAltitudeVerticalSpeedText=AERISNumericField.TextField(alt.MaxAltitudeVerticalSpeedText,GUILayout.Width(ResponsiveWidth(CompactFieldWidth))); if(SmallButton("SET LIMIT")){string limitErr; if(!alt.TrySetMaxVerticalSpeed(alt.MaxAltitudeVerticalSpeedText,out limitErr))AERISLogger.Warn("[ALT] V/S limit rejected: "+limitErr);else SaveAltInput(alt);} GUILayout.EndHorizontal();
+     GUILayout.BeginHorizontal(); GUILayout.Label("ALT pitch:",GUILayout.Width(ResponsiveWidth(CompactLabelWidth))); alt.MaxAltitudePitchText=AERISNumericField.TextField(alt.MaxAltitudePitchText,GUILayout.Width(ResponsiveWidth(CompactFieldWidth))); if(SmallButton("SET LIMIT")){string limitErr; if(!alt.TrySetMaxPitch(alt.MaxAltitudePitchText,out limitErr))AERISLogger.Warn("[ALT] pitch limit rejected: "+limitErr);else SaveAltInput(alt);} GUILayout.EndHorizontal();
      GUILayout.Label("ALT V/S limit: ±"+alt.MaxAltitudeVerticalSpeedMps.ToString("0.0")+" m/s | ALT pitch limit: ±"+alt.MaxAltitudePitchDeg.ToString("0.0")+"° | Effective cap: ±"+(vs!=null?vs.EffectiveMaxPitchTargetDeg:alt.MaxAltitudePitchDeg).ToString("0.0")+"°");
      if(vs!=null && vs.VsCruiseAccelerationGuideActive) GUILayout.Label("V/S ACC GUIDE: blend "+vs.VsCruiseAccelerationGuideBlend.ToString("0.00")+" | a* "+vs.VsCruiseDesiredVerticalAccelerationMps2.ToString("+0.000;-0.000;0.000")+" m/s² | BasePitch "+vs.VsCruiseAppliedBasePitchRateDegPerSec.ToString("+0.000;-0.000;0.000")+"°/s"+(vs.VsCruisePreBrakeActive?" | PRE-BRAKE":""));
      if(vs!=null && vs.HighQNonZeroVsTrackingProfileActive) GUILayout.Label("HIGH-Q V/S TRACK STAB: q "+vs.DynamicPressureKpa.ToString("0.0")+" kPa | D scale "+vs.HighQNonZeroVsTrackingDampingScale.ToString("0.00")+" | rate slew "+vs.HighQNonZeroVsTrackingRateCommandSlewScale.ToString("0.00"));
@@ -815,17 +865,18 @@ namespace AERISFlightControl.UI
    GUILayout.EndVertical();
 
    GUILayout.BeginVertical("box");
-   GUILayout.Label("SPEED — NORMAL AP");
+   GUILayout.Label("SPEED — FLIGHT");
    var acc=core.Acceleration;
    var vel=core.Velocity;
    bool displayedSpeedMaster=speedMaster;
    int displayedSpeedMode=speedMode;
    bool oldSpeedGui=GUI.enabled;
    GUILayout.BeginHorizontal();
-   if(GUILayout.Button(settings.ApSpeedSectionExpanded?"▼":"▶",GUILayout.Width(28f),GUILayout.Height(CompactButtonHeight))){settings.ApSpeedSectionExpanded=!settings.ApSpeedSectionExpanded;settings.Save();}
+   if(GUILayout.Button(settings.ApSpeedSectionExpanded?"▼":"▶",GUILayout.Width(ResponsiveWidth(28f)),GUILayout.Height(CompactControlHeight()))){settings.ApSpeedSectionExpanded=!settings.ApSpeedSectionExpanded;settings.Save();}
    GUI.enabled=oldSpeedGui;
    bool requestedSpeed=WideAxisSwitch("SPEED",displayedSpeedMaster);
    GUI.enabled=oldSpeedGui;
+   GUILayout.Space(ResponsiveWidth(28f));
    GUILayout.EndHorizontal();
    if(requestedSpeed!=speedMaster){
     speedMaster=requestedSpeed;
@@ -843,10 +894,10 @@ namespace AERISFlightControl.UI
     GUILayout.Label("Surface speed: "+acc.CurrentSurfaceSpeedMps.ToString("0.0")+" m/s | Accel: "+acc.FilteredAccelerationMps2.ToString("+0.00;-0.00;0.00")+" m/s²");
     if(settings.ShowApErrorDisplay) GUILayout.Label("ACC error: "+acc.AccelerationErrorMps2.ToString("+0.00;-0.00;0.00")+" m/s² | "+acc.ControlState);
     if(acc.AccelerationLimitState!="NONE") GUILayout.Label("ACC LIMIT: "+acc.AccelerationLimitState+" | residual: "+acc.AccelerationErrorMps2.ToString("+0.00;-0.00;0.00")+" m/s²");
-    GUILayout.BeginHorizontal(); GUILayout.Label("Target ACC:",GUILayout.Width(CompactLabelWidth)); acc.TargetAccelerationText=AERISNumericField.TextField(acc.TargetAccelerationText,GUILayout.Width(CompactFieldWidth)); GUILayout.Label("m/s²"); GUILayout.EndHorizontal();
+    GUILayout.BeginHorizontal(); GUILayout.Label("Target ACC:",GUILayout.Width(ResponsiveWidth(CompactLabelWidth))); acc.TargetAccelerationText=AERISNumericField.TextField(acc.TargetAccelerationText,GUILayout.Width(ResponsiveWidth(CompactFieldWidth))); GUILayout.Label("m/s²"); GUILayout.EndHorizontal();
     GUILayout.BeginHorizontal();
-    if(GUILayout.Button("APPLY",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){string err; if(!acc.TrySetTarget(acc.TargetAccelerationText,out err))AERISLogger.Warn("[ACC] target rejected: "+err);else SaveAccInput(acc);}
-    if(GUILayout.Button("SET 0",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){acc.SetZeroTarget();SaveAccInput(acc);}
+    if(ActionButton("APPLY")){string err; if(!acc.TrySetTarget(acc.TargetAccelerationText,out err))AERISLogger.Warn("[ACC] target rejected: "+err);else SaveAccInput(acc);}
+    if(ActionButton("SET 0")){acc.SetZeroTarget();SaveAccInput(acc);}
     GUILayout.EndHorizontal();
     GUILayout.Label("Base THR: "+acc.BaseThrottle.ToString("0.000")+" | Demand: "+acc.ThrottleDemand.ToString("0.000")+" | q: "+acc.DynamicPressureKpa.ToString("0.0")+" kPa");
     if(acc.ZeroAccelerationFineTrimActive) GUILayout.Label("ACC 0 HOLD TRIM: "+acc.ZeroAccelerationFineTrimAdaptation.ToString("+0.00000;-0.00000;0.00000")+" / tick");
@@ -855,13 +906,13 @@ namespace AERISFlightControl.UI
    else {
     GUILayout.Label("Surface speed: "+vel.CurrentSurfaceSpeedMps.ToString("0.0")+" m/s | VEL state: "+vel.ControlState);
     if(settings.ShowApErrorDisplay) GUILayout.Label("VEL error: "+vel.VelocityErrorMps.ToString("+0.00;-0.00;0.00")+" m/s | ACC plan: "+vel.PublishedAccelerationMps2.ToString("+0.00;-0.00;0.00")+" m/s²");
-    GUILayout.BeginHorizontal(); GUILayout.Label("Target VEL:",GUILayout.Width(CompactLabelWidth)); vel.TargetSurfaceSpeedText=AERISNumericField.TextField(vel.TargetSurfaceSpeedText,GUILayout.Width(CompactFieldWidth)); GUILayout.Label("m/s"); GUILayout.EndHorizontal();
+    GUILayout.BeginHorizontal(); GUILayout.Label("Target VEL:",GUILayout.Width(ResponsiveWidth(CompactLabelWidth))); vel.TargetSurfaceSpeedText=AERISNumericField.TextField(vel.TargetSurfaceSpeedText,GUILayout.Width(ResponsiveWidth(CompactFieldWidth))); GUILayout.Label("m/s"); GUILayout.EndHorizontal();
     GUILayout.BeginHorizontal();
-    if(GUILayout.Button("APPLY",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){string err; if(!vel.TrySetTarget(vel.TargetSurfaceSpeedText,out err))AERISLogger.Warn("[VEL] target rejected: "+err);else SaveVelInput(vel);}
-    if(GUILayout.Button("SET CURRENT",GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight))){vel.SetCurrent(core.Attitude);SaveVelInput(vel);}
+    if(ActionButton("APPLY")){string err; if(!vel.TrySetTarget(vel.TargetSurfaceSpeedText,out err))AERISLogger.Warn("[VEL] target rejected: "+err);else SaveVelInput(vel);}
+    if(ActionButton("SET CURRENT")){vel.SetCurrent(core.Attitude);SaveVelInput(vel);}
     GUILayout.EndHorizontal();
-    GUILayout.BeginHorizontal(); GUILayout.Label("VEL ACC LIMIT:",GUILayout.Width(CompactLabelWidth)); vel.AccelerationLimitText=AERISNumericField.TextField(vel.AccelerationLimitText,GUILayout.Width(CompactFieldWidth)); GUILayout.Label("m/s²",GUILayout.Width(34));
-    if(GUILayout.Button("SET LIMIT",GUILayout.Width(SmallButtonWidth),GUILayout.Height(CompactButtonHeight))){string limitErr; if(!vel.TrySetAccelerationLimit(vel.AccelerationLimitText,out limitErr))AERISLogger.Warn("[VEL] acceleration limit rejected: "+limitErr); else SaveVelInput(vel);} GUILayout.EndHorizontal();
+    GUILayout.BeginHorizontal(); GUILayout.Label("VEL ACC LIMIT:",GUILayout.Width(ResponsiveWidth(CompactLabelWidth))); vel.AccelerationLimitText=AERISNumericField.TextField(vel.AccelerationLimitText,GUILayout.Width(ResponsiveWidth(CompactFieldWidth))); GUILayout.Label("m/s²",GUILayout.Width(34));
+    if(SmallButton("SET LIMIT")){string limitErr; if(!vel.TrySetAccelerationLimit(vel.AccelerationLimitText,out limitErr))AERISLogger.Warn("[VEL] acceleration limit rejected: "+limitErr); else SaveVelInput(vel);} GUILayout.EndHorizontal();
     GUILayout.Label("VEL accel cap: ±"+vel.ConfiguredAccelerationLimitMps2.ToString("0.0")+" m/s² (before q schedule)");
     if(!vel.TargetConfirmed) GUILayout.Label("VEL SAFETY: set a target or SET CURRENT before throttle control begins.");
     GUILayout.Label("Plan: "+vel.PlannedAccelerationMps2.ToString("+0.00;-0.00;0.00")+" m/s² | ACC: "+acc.FilteredAccelerationMps2.ToString("+0.00;-0.00;0.00")+" m/s² | q: "+vel.DynamicPressureKpa.ToString("0.0")+" kPa");
@@ -887,6 +938,66 @@ namespace AERISFlightControl.UI
    GUILayout.EndVertical();
    GUI.enabled=drawAutopilotEnabled;
   }
+  int DrawAutopilotCategoryTabs(int selected){
+   string[] labels={"TAKEOFF","FLIGHT","NAV","LAND"};
+   bool[] active={
+    core.AutoTakeoff!=null&&(core.AutoTakeoff.Armed||core.AutoTakeoff.Executing),
+    core.AnyNormalApArmed,
+    false,
+    core.Landing!=null&&core.Landing.Armed
+   };
+   EnsureAirfieldStyles();
+   float height=CompactControlHeight();
+   Rect row=GUILayoutUtility.GetRect(1f,height,GUILayout.ExpandWidth(true),GUILayout.Height(height));
+   float gap=TopTabGap;
+   float width=Mathf.Max(1f,(row.width-gap*3f)/4f);
+   for(int i=0;i<4;i++){
+    Rect buttonRect=new Rect(row.x+i*(width+gap),row.y,width,row.height);
+    Color old=GUI.backgroundColor;
+    try{
+     GUI.backgroundColor=active[i]?new Color(0.12f,0.75f,0.16f,1f):new Color(0.78f,0.12f,0.12f,1f);
+     if(GUI.Toggle(buttonRect,selected==i,labels[i],responsiveButtonStyle))selected=i;
+    }finally{GUI.backgroundColor=old;}
+   }
+   return selected;
+  }
+
+  void DrawAutoTakeoffPage(AERISAutoTakeoffDirector takeoff){
+   GUILayout.BeginVertical("box");
+   GUILayout.Label("AUTO TAKEOFF — TWO-STEP ARM / EXECUTE");
+   if(takeoff==null)GUILayout.Label("Auto Takeoff initializing.");
+   else {
+    GUILayout.Label("Phase: "+takeoff.PhaseText+" | "+takeoff.Status);
+    GUILayout.Label("Propulsion: "+takeoff.PropulsionMode+" | "+takeoff.EngineStageStatus);
+    GUILayout.Label("Attempt generation: "+takeoff.AttemptGeneration+" | Takeoff thrust: MAX (1.000 fixed)");
+    GUILayout.Label("Brakes: "+takeoff.BrakeStatus+(takeoff.BrakeWasAppliedAtExecute?" | pre-EXECUTE parking brake was ON":""));
+    GUILayout.Label("Stall estimate: "+(takeoff.SelectedStallSpeedMps>0f?takeoff.SelectedStallSpeedMps.ToString("0.0")+" m/s":"N/A")+" | Vr: "+takeoff.SelectedVrMps.ToString("0.0")+" m/s | "+takeoff.SelectedVrSource+(takeoff.VrFrozen?" (FROZEN)":""));
+    if(!string.IsNullOrEmpty(takeoff.SelectedVrDetail))GUILayout.Label("Vr detail: "+takeoff.SelectedVrDetail);
+    GUILayout.Label("Speed/radar/V/S: "+takeoff.SurfaceSpeedMps.ToString("0.0")+" m/s / "+takeoff.RadarAltitudeM.ToString("0.0")+" m / "+takeoff.VerticalSpeedMps.ToString("+0.0;-0.0;0.0")+" m/s");
+    if(takeoff.Phase==AutoTakeoffPhase.GroundRoll)GUILayout.Label("Rotation gate: "+takeoff.RotationGateReason);
+    GUILayout.BeginHorizontal();
+    if(!takeoff.Armed){if(GUILayout.Button("ARM AUTO TAKEOFF",GUILayout.Width(ReadableButtonWidth("ARM AUTO TAKEOFF",160f)),GUILayout.Height(CompactControlHeight()))){string err;if(!core.ArmAutoTakeoff(out err))AERISLogger.Warn("[AUTO_TAKEOFF] ARM rejected: "+err);}}
+    else if(takeoff.Phase==AutoTakeoffPhase.Armed){if(GUILayout.Button("EXECUTE TAKEOFF",GUILayout.Width(ReadableButtonWidth("EXECUTE TAKEOFF",160f)),GUILayout.Height(CompactControlHeight()))){string err;if(!core.ExecuteAutoTakeoff(out err))AERISLogger.Warn("[AUTO_TAKEOFF] EXECUTE rejected: "+err);}if(SmallButton("DISARM"))core.DisarmAutoTakeoff("user disarm");}
+    else if(GUILayout.Button("ABORT / TRANSFER",GUILayout.Width(ReadableButtonWidth("ABORT / TRANSFER",160f)),GUILayout.Height(CompactControlHeight())))core.DisarmAutoTakeoff("user abort / transfer");
+    GUILayout.EndHorizontal();
+    GUILayout.Space(2);
+    if(CompactFullRowButton((takeoffConfigExpanded?"▼ ":"▶ ")+"TAKEOFF CONFIGURATION"))
+     takeoffConfigExpanded=!takeoffConfigExpanded;
+    if(takeoffConfigExpanded){
+     bool configEnabled=GUI.enabled;GUI.enabled=configEnabled&&!takeoff.Executing;
+     TakeoffSettingSlider(ref settings.AutoTakeoffStallFactor,"AA stall factor",1.05f,1.50f,"F2");
+     TakeoffSettingSlider(ref settings.AutoTakeoffManualVrMps,"Fallback Vr m/s",15f,250f,"F0");
+     TakeoffSettingSlider(ref settings.AutoTakeoffRotationPitchDeg,"Rotation pitch deg",3f,20f,"F1");
+     TakeoffSettingSlider(ref settings.AutoTakeoffRotationRateDegPerSec,"Pitch-rate max deg/s",0.5f,5f,"F1");
+     TakeoffSettingSlider(ref settings.AutoTakeoffInitialClimbVsMps,"Initial V/S m/s",2f,50f,"F0");
+     TakeoffSettingSlider(ref settings.AutoTakeoffHandoffRadarAltitudeM,"Handoff radar m",20f,250f,"F0");
+     GUI.enabled=configEnabled;
+    }
+    GUILayout.Label("Gear and flaps remain manual. Brake input aborts. Strong sustained input transfers control; Ground Stability remains independent.");
+   }
+   GUILayout.EndVertical();
+  }
+
   void DrawLandingFoundation(){
    GUILayout.BeginVertical("box");
    GUILayout.Label("LAND — INDEPENDENT AIRFIELD REGISTRY / FIRST GATE");
@@ -894,12 +1005,12 @@ namespace AERISFlightControl.UI
    var land=core.Landing;
    if(registry==null || land==null){GUILayout.Label("LAND foundation initializing.");GUILayout.EndVertical();return;}
    GUILayout.BeginHorizontal();
-   if(GUILayout.Button(settings.LandSectionExpanded?"▼":"▶",GUILayout.Width(28f),GUILayout.Height(CompactButtonHeight))){settings.LandSectionExpanded=!settings.LandSectionExpanded;settings.Save();}
+   if(GUILayout.Button(settings.LandSectionExpanded?"▼":"▶",GUILayout.Width(ResponsiveWidth(28f)),GUILayout.Height(CompactControlHeight()))){settings.LandSectionExpanded=!settings.LandSectionExpanded;settings.Save();}
    bool armed=land.Armed;
    Color oldArmColor=GUI.backgroundColor;
    try{
     GUI.backgroundColor=armed?new Color(0.95f,0.72f,0.16f,1f):oldArmColor;
-    GUILayout.Label("LAND "+(armed?"ARMED":"STANDBY")+" — CONTROL "+land.ControlText+" / LOC "+land.LocalizerText+" / GS "+land.GlidePathText,GUILayout.ExpandWidth(true),GUILayout.Height(CompactButtonHeight));
+    GUILayout.Label("LAND "+(armed?"ARMED":"STANDBY")+" — CONTROL "+land.ControlText+" / LOC "+land.LocalizerText+" / GS "+land.GlidePathText,GUILayout.ExpandWidth(true),GUILayout.Height(CompactControlHeight()));
    }finally{GUI.backgroundColor=oldArmColor;}
    GUILayout.EndHorizontal();
    if(!settings.LandSectionExpanded){GUILayout.EndVertical();return;}
@@ -922,7 +1033,7 @@ namespace AERISFlightControl.UI
       if(selected)GUI.backgroundColor=new Color(0.12f,0.65f,0.85f,1f);
       string label=(selected?"▶ ":"   ")+airfield.DisplayName+"  ["+airfield.Source.ToString().ToUpperInvariant()+"]  "+registry.ValidationText(airfield);
       bool oldEnabled=GUI.enabled;GUI.enabled=oldEnabled&&!land.Armed;
-      if(GUILayout.Button(label,GUI.skin.button,GUILayout.Width(FixedWideButtonWidth),GUILayout.Height(CompactButtonHeight)))if(registry.SelectAirfield(i))landMessage="Selected "+airfield.DisplayName;
+      if(GUILayout.Button(label,GUI.skin.button,GUILayout.ExpandWidth(true),GUILayout.Height(CompactControlHeight())))if(registry.SelectAirfield(i))landMessage="Selected "+airfield.DisplayName;
       GUI.enabled=oldEnabled;
      }finally{GUI.backgroundColor=old;}
     }
@@ -947,7 +1058,7 @@ namespace AERISFlightControl.UI
        try{
         if(selected)GUI.backgroundColor=new Color(0.12f,0.75f,0.16f,1f);
         bool oldEnabled=GUI.enabled;GUI.enabled=oldEnabled&&!land.Armed;
-        if(GUILayout.Button(direction.DisplayName+"  "+direction.HeadingDeg.ToString("000.0")+"°",GUI.skin.button,GUILayout.Width(160f),GUILayout.Height(CompactButtonHeight)))if(registry.SelectDirection(i))landMessage="Selected "+direction.DisplayName;
+        if(GUILayout.Button(direction.DisplayName+"  "+direction.HeadingDeg.ToString("000.0")+"°",GUI.skin.button,GUILayout.Width(ReadableButtonWidth(direction.DisplayName+"  "+direction.HeadingDeg.ToString("000.0")+"°",160f)),GUILayout.Height(CompactControlHeight())))if(registry.SelectDirection(i))landMessage="Selected "+direction.DisplayName;
         GUI.enabled=oldEnabled;
        }finally{GUI.backgroundColor=old;}
       }
@@ -968,22 +1079,20 @@ namespace AERISFlightControl.UI
     if(selectedRunway!=null)GUILayout.Label("Runway: "+selectedRunway.DisplayName+" | "+selectedRunway.LengthMeters.ToString("0")+" m × "+selectedRunway.WidthMeters.ToString("0")+" m | "+selectedRunway.Surface);
    }
 
-   GUILayout.BeginHorizontal();
    if(!land.Armed){
     bool oldArmEnabled=GUI.enabled;
     GUI.enabled=oldArmEnabled&&selectedDirection!=null&&selectedDirection.HasCertifiedGeometry&&selectedDirection.HeadingMatchesGeometry;
-    if(GUILayout.Button("ARM LAND — OBSERVE",GUILayout.Width(180f),GUILayout.Height(CompactButtonHeight))){
+    if(CompactFullRowButton("ARM LAND — OBSERVE")){
      string error;
      if(core.ArmLanding(out error))landMessage="LAND ARMED — CONTROL REMAINS PILOT";
      else{landMessage=error;AERISLogger.Warn("[LAND_FOUNDATION] ARM rejected: "+error);}
     }
     GUI.enabled=oldArmEnabled;
-   }else if(GUILayout.Button("DISARM LAND",GUILayout.Width(180f),GUILayout.Height(CompactButtonHeight))){
+   }else if(CompactFullRowButton("DISARM LAND")){
     core.DisarmLanding("user disarm");
     landMessage="LAND DISARMED";
    }
    GUILayout.Label("Status: "+land.Status,GUILayout.ExpandWidth(true));
-   GUILayout.EndHorizontal();
 
    AERISRunwayObservation observation=land.Observation;
    if(observation!=null && observation.Valid){
@@ -1008,10 +1117,10 @@ namespace AERISFlightControl.UI
    var library=core.FlightPlans;
    if(library==null){GUILayout.Label("Flight plan library initializing.");GUILayout.EndVertical();return;}
    GUILayout.BeginHorizontal();
-   if(GUILayout.Button(settings.FlightPlanSectionExpanded?"▼":"▶",GUILayout.Width(28f),GUILayout.Height(CompactButtonHeight))){settings.FlightPlanSectionExpanded=!settings.FlightPlanSectionExpanded;settings.Save();}
+   if(GUILayout.Button(settings.FlightPlanSectionExpanded?"▼":"▶",GUILayout.Width(ResponsiveWidth(28f)),GUILayout.Height(CompactControlHeight()))){settings.FlightPlanSectionExpanded=!settings.FlightPlanSectionExpanded;settings.Save();}
    bool oldEnabled=GUI.enabled;
    GUI.enabled=false;
-   GUILayout.Toggle(false,"NAV ARM  UNAVAILABLE",GUI.skin.button,GUILayout.Width(FixedWideButtonWidth),GUILayout.Height(CompactButtonHeight));
+   GUILayout.Toggle(false,"NAV ARM  UNAVAILABLE",GUI.skin.button,GUILayout.ExpandWidth(true),GUILayout.Height(CompactControlHeight()));
    GUI.enabled=oldEnabled;
    GUILayout.EndHorizontal();
    if(!settings.FlightPlanSectionExpanded){GUILayout.EndVertical();return;}
@@ -1025,7 +1134,7 @@ namespace AERISFlightControl.UI
      try{
       if(selected)GUI.backgroundColor=new Color(0.12f,0.65f,0.85f,1f);
       string label=(selected?"▶ ":"   ")+plan.Name+"  ["+(string.IsNullOrEmpty(plan.Body)?"ANY":plan.Body)+"]  "+plan.Fixes.Count+" FIX";
-      if(GUILayout.Button(label,GUI.skin.button,GUILayout.Width(FixedWideButtonWidth),GUILayout.Height(CompactButtonHeight))){if(library.Select(i))navLibraryMessage="Selected "+plan.Name+" (data only)";}
+      if(GUILayout.Button(label,GUI.skin.button,GUILayout.ExpandWidth(true),GUILayout.Height(CompactControlHeight()))){if(library.Select(i))navLibraryMessage="Selected "+plan.Name+" (data only)";}
      }finally{GUI.backgroundColor=old;}
     }
    }finally{GUILayout.EndScrollView();}
@@ -1036,9 +1145,9 @@ namespace AERISFlightControl.UI
     GUILayout.Label("Source: "+selectedPlan.SourcePath);
    }else GUILayout.Label("Selected: NONE");
    GUILayout.BeginHorizontal();
-   if(GUILayout.Button("RELOAD",GUILayout.Width(SmallButtonWidth),GUILayout.Height(CompactButtonHeight))){library.Reload();navLibraryMessage=library.Status;}
+   if(SmallButton("RELOAD")){library.Reload();navLibraryMessage=library.Status;}
    bool saved=GUI.enabled;GUI.enabled=false;
-   GUILayout.Button("ARM NAV",GUILayout.Width(SmallButtonWidth),GUILayout.Height(CompactButtonHeight));
+   SmallButton("ARM NAV");
    GUI.enabled=saved;
    GUILayout.EndHorizontal();
    if(!string.IsNullOrEmpty(navLibraryMessage))GUILayout.Label("Status: "+navLibraryMessage);
@@ -1082,20 +1191,26 @@ namespace AERISFlightControl.UI
    acc.SetArmed(enableSpeed,vessel,core.Attitude);
    if(speedMode==1 && vel!=null) vel.SetArmed(speedMaster,vessel,core.Attitude,acc);
   }
-  bool WideAxisSwitch(string label,bool value){ Color old=GUI.backgroundColor; try{GUI.backgroundColor=value?new Color(0.12f,0.75f,0.16f,1f):new Color(0.78f,0.12f,0.12f,1f);return GUILayout.Toggle(value,label+"  "+(value?"ON":"OFF"),GUI.skin.button,GUILayout.Width(FixedWideButtonWidth),GUILayout.Height(CompactButtonHeight));}finally{GUI.backgroundColor=old;} }
+  bool WideAxisSwitch(string label,bool value){
+   Color old=GUI.backgroundColor;
+   try{
+    GUI.backgroundColor=value?new Color(0.12f,0.75f,0.16f,1f):new Color(0.78f,0.12f,0.12f,1f);
+    return CompactFullRowToggle(label+"  "+(value?"ON":"OFF"),value);
+   }finally{GUI.backgroundColor=old;}
+  }
   bool ModeSelectButton(string label,bool selected,bool interactive=true){
    Color oldColor=GUI.backgroundColor;
    bool oldEnabled=GUI.enabled;
    try{
     GUI.enabled=true;
     GUI.backgroundColor=selected?new Color(0.12f,0.75f,0.16f,1f):oldColor;
-    bool clicked=GUILayout.Button(label,GUI.skin.button,GUILayout.Width(SmallButtonWidth),GUILayout.Height(CompactButtonHeight));
+    bool clicked=GUILayout.Button(label,GUI.skin.button,GUILayout.Width(ReadableButtonWidth(label,SmallButtonWidth)),GUILayout.Height(CompactControlHeight()));
     return interactive&&clicked;
    }finally{GUI.backgroundColor=oldColor;GUI.enabled=oldEnabled;}
   }
-  bool SmallButton(string label){ return GUILayout.Button(label,GUILayout.Width(SmallButtonWidth),GUILayout.Height(CompactButtonHeight)); }
-  bool ActionButton(string label){ return GUILayout.Button(label,GUILayout.Width(ActionButtonWidth),GUILayout.Height(CompactButtonHeight)); }
-  void PlannedModeButton(string label){ bool old=GUI.enabled;try{GUI.enabled=false;GUILayout.Toggle(false,label,GUI.skin.button,GUILayout.Width(SmallButtonWidth),GUILayout.Height(CompactButtonHeight));}finally{GUI.enabled=old;} }
+  bool SmallButton(string label){ return GUILayout.Button(label,GUILayout.Width(ReadableButtonWidth(label,SmallButtonWidth)),GUILayout.Height(CompactControlHeight())); }
+  bool ActionButton(string label){ return GUILayout.Button(label,GUILayout.Width(ReadableButtonWidth(label,ActionButtonWidth)),GUILayout.Height(CompactControlHeight())); }
+  void PlannedModeButton(string label){ bool old=GUI.enabled;try{GUI.enabled=false;GUILayout.Toggle(false,label,GUI.skin.button,GUILayout.Width(ReadableButtonWidth(label,SmallButtonWidth)),GUILayout.Height(CompactControlHeight()));}finally{GUI.enabled=old;} }
 
 
   void DrawExtendAddons(){

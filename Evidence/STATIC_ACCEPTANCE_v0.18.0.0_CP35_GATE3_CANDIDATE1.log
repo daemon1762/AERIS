@@ -1,0 +1,121 @@
+
+=== Gate 3 unified world surface / hi-res / accessibility ===
+PASS: generated source identity
+PASS: build generator identity
+PASS: build display identity
+PASS: AVC identity
+PASS: build invokes Gate 3 acceptance
+PASS: retired terrain-quality token absent: AERISTerrainQualityMode.Land
+PASS: retired terrain-quality token absent: AERISTerrainTileLod.Land
+PASS: retired terrain-quality token absent: TerrainLandRuntimeQualityEnabled
+PASS: retired terrain-quality token absent: AERISTerrainLandDetailActivationPolicy
+PASS: retired terrain-quality token absent: LandDetailActive
+PASS: retired terrain-quality token absent: SetLandDetailActive
+PASS: retired terrain-quality token absent: AERISResidentPinReason.Landing
+PASS: retired terrain-quality token absent: AERISTerrainRequestLane.Landing
+PASS: retired terrain-quality token absent: LAND_SITES
+PASS: retired terrain-quality token absent: terrainLandRuntimeQualityEnabled
+PASS: retired LAND detail policy source deleted
+PASS: project excludes retired LAND detail policy
+PASS: quality enum is exactly AUTO/LOW/MEDIUM/HIGH
+PASS: quality selector is exactly four choices
+PASS: quality model migration revision advanced
+PASS: retired-quality migration is explicit
+PASS: hidden LAND performance profile removed
+PASS: exactly three explicit performance profiles remain
+PASS: request-lane LAND specialization removed
+PASS: tile LOD LAND specialization removed
+PASS: LAND guidance/profile display remains independent and intact
+PASS: virtual detail uses screen-space error
+PASS: adaptive route reconstruction is 65x65
+PASS: adaptive local reconstruction is 129x129
+PASS: renderer supplies actual ND viewport pixels
+PASS: renderer calls screen-space policy
+PASS: coast classification receives sub-cell continuous reconstruction
+PASS: reconstruction bounded to authoritative FAR cells
+PASS: progressive exact viewport refinement enabled
+PASS: HIGH profile expands bounded exact refinement neighbourhood
+PASS: exact refinement neighbourhood remains bounded
+PASS: MEDIUM can request exact Route refinement at 160 km
+PASS: existing exact detail wins refinement priority
+PASS: GPU assist identifies unified world surface
+PASS: dedicated world-surface material exists
+PASS: world-surface material has stable identity
+PASS: renderer accepts prepared navigation frame
+PASS: renderer exposes exact surface-current latch
+PASS: projection batch carries immutable navigation frame
+PASS: projection batch carries world-surface revision
+PASS: key frame snapshots current world navigation authority
+PASS: navigation geometry is composed during authoritative BACK render
+PASS: runways use shared exact geographic projection
+PASS: facilities use shared exact geographic projection
+PASS: world geometry batches through one GPU quad pass
+PASS: FRONT latches matching world-surface revision
+PASS: world-surface profiler fields emitted
+PASS: prepared facilities preserve geography
+PASS: facility geography populated on worker pipeline
+PASS: ND publishes prepared navigation authority to GPU surface
+PASS: ND checks exact integrated FRONT before suppressing overlay geometry
+PASS: IMGUI facility/runway geometry is suppressed only when integrated surface is current
+PASS: dynamic runway preview highlight remains realtime
+PASS: palette switch is generation-managed
+PASS: palette change invalidates content generation
+PASS: palette change cancels stale worker batch
+PASS: palette change discards stale exact/presentation FRONT
+PASS: palette generation is telemetry-visible
+PASS: HIGH safe REL terrain is visible charcoal, not black
+PASS: HIGH caution retains high luminance contrast
+PASS: HIGH near-safe band remains distinct from sea
+PASS: BY safe band is separated from sea blue
+PASS: RG safe band is neutral/slate rather than sea blue
+PASS: BY caution avoids white saturation
+PASS: old near-black HIGH safe color removed
+PASS: old near-white BY caution color removed
+PASS: water remains stable dark blue reference
+PASS: relief shading reduced to preserve accessibility bands
+PASS: REL shading luminance range bounded
+PASS: Compile Hotfix 1 instance-material repair retained
+PASS: DrawPreparedEntry remains instance method
+PASS: terrain temporal path never regresses to GUI.matrix warp
+PASS: overscan temporal surface retained
+PASS: sub-pixel temporal acceptance retained
+PASS: AUTOPILOT child categories retained
+PASS: main UI no-wrap contract retained
+PASS: responsive compact UI retained
+PASS: AERISTerrainTileLod references resolve to declared members
+PASS: AERISTerrainRequestLane references resolve to declared members
+PASS: AERISTerrainQualityMode references resolve to declared members
+PASS: Gate 3 acceptance contract included
+PASS: Gate 3 runtime test card included
+PASS: revised CP3.5 roadmap included
+[v0.18.0.0 CP3.5 Gate 3 Unified World Surface / Adaptive Hi-Res / Accessibility Candidate 1] 88/88 PASS
+
+=== CP2 C# definite-assignment compile regression ===
+PASS: terrain tile system source exists
+PASS: navigation display source exists
+PASS: disk-write availability is initialized before the synchronization scope
+PASS: disk-write availability declaration precedes lock scope
+PASS: disk-write availability is assigned from the read-aware limit inside lock scope
+PASS: disk writes reserve the last I/O slot while reads are pending
+PASS: disk-write availability is not block-scoped inside lock
+PASS: initialized availability is consumed after lock scope
+PASS: traffic frame is initialized before short-circuit expression
+PASS: traffic frame short-circuit acquisition remains intact
+PASS: invalid traffic frame is explicitly cleared
+PASS: definitely assigned traffic frame reaches map interaction
+PASS: GPU Draw has the explicit progressive draw-state return type
+PASS: navigation display initializes progressive draw state
+PASS: navigation display assigns renderer result before use
+PASS: every progressive renderer exit returns the initialized state field
+PASS: progressive draw-state enum is compiled in shared terrain contracts
+PASS: preview slope interval variables are assigned before use
+PASS: RAM preview telemetry accepts the already imported generic collection contract
+PASS: terrain display mode enum can be parsed
+PASS: all terrain display mode references resolve to declared enum members
+PASS: terrain request generation uses Automatic, never the nonexistent Auto member
+PASS: runway placement quarantine detail is initialized before short-circuit
+PASS: runway placement stored initialization precedes witness-library null gate
+PASS: uninitialized runway placement quarantine detail cannot regress
+[v0.18.0.0 CP2 C# definite-assignment compile regression] 25/25 PASS
+
+[v0.18.0.0 CP3.5 Gate 3 Candidate 1] 2/2 acceptance suites PASS

@@ -1,0 +1,109 @@
+AERIS Flight Control v0.18.0.0
+CP3.5 Gate 2 — Parallel Projection / Compact Autopilot UI Candidate 1
+
+STATUS: STATIC CANDIDATE — NATIVE BUILD / RUNTIME ACCEPTANCE REQUIRED
+
+PURPOSE
+1. Remove the measured dominant ND BACK cost from the Unity main thread without
+   violating Unity/KSP main-thread API boundaries.
+2. Use the shared AERIS worker scheduler and as many currently permitted CPU workers
+   as practical for pure geographic projection and terrain-colour preparation.
+3. Preserve a bounded one-batch presentation pipeline with natural backpressure;
+   never accumulate an unbounded queue when projection takes longer than target cadence.
+4. Remove per-refresh RecalculateBounds from the prepared path and retain only
+   Mesh/colour upload, GPU draw submission, and atomic FRONT/BACK swap on main thread.
+5. Integrate the accepted compact/responsive UI requirements, including the
+   TAKEOFF / FLIGHT / NAV / LAND AUTOPILOT child categories.
+
+GATE 1 EVIDENCE DRIVING THIS CHANGE
+- Candidate 2 runtime evidence at 160 km / approximately 2100 m/s showed about
+  34.1 ms median BACK generation.
+- CPU geographic projection was about 28.0 ms (~82%).
+- projection + vertex upload + RecalculateBounds represented about 93% of BACK cost.
+- DrawMeshNow submission was comparatively small (~0.5 ms).
+Therefore Gate 2 Candidate 1 targets projection/bounds first rather than draw batching.
+
+PARALLEL WORKER CONTRACT
+- Projection uses AERISRuntimeLane.GeneralCompute through AERISWorkerScheduler.
+- Worker count is min(drawable entries, Scheduler.WorkerCount, ActivePermits), at
+  least one worker when the scheduler is available.
+- Drawable entries are sorted by projected vertex count and greedily distributed
+  to the currently permitted workers by accumulated vertex weight.
+- Shared scheduler worker capacity remains CPU-count-derived and preserves its
+  safety reserve/backoff policy; Gate 2 does not create an independent thread farm.
+- Only one projection batch may be outstanding.
+- Workers receive immutable projection snapshots and disjoint managed scratch arrays.
+- Worker code may perform pure mathematical projection and terrain colour preparation.
+- Worker code MUST NOT call Mesh, Material, RenderTexture, Graphics, GL, GameObject,
+  Transform, FlightGlobals, Vessel, or other Unity/KSP object APIs.
+
+MAIN-THREAD BOUNDARY
+- Main thread retains RenderTexture/GL setup and clear.
+- Main thread uploads prepared Vector3[] to Mesh.vertices.
+- Main thread uploads prepared Color32[] when colour data changed.
+- Main thread assigns a fixed projection-safe bounds volume; no per-refresh
+  Mesh.RecalculateBounds() occurs in the renderer.
+- Main thread performs material passes / Graphics.DrawMeshNow and atomic swap.
+- Synchronous full projection remains only as an emergency compatibility fallback
+  if the shared runtime scheduler is unavailable.
+
+PRESENTATION / BACKPRESSURE
+- Target schedule interval: 0.05 s (20 Hz request ceiling).
+- A successor cannot be scheduled while one batch is pending, so slower hardware
+  automatically lowers completed ND update rate without queue growth.
+- Gate 1 forced-recovery full-render bypass remains prohibited.
+- GUI.matrix temporal terrain warp remains prohibited.
+- CPU terrain presentation remains prohibited.
+
+UI CONTRACT
+- Screenshot-reference top layout retained:
+  MASTER ARM full row;
+  FLIGHT CONTROL / PROTECT / AUTOPILOT equal 3-way row;
+  SYSTEM / EXTEND ADDONS equal 2-way row.
+- Left and right outer margins remain equal; row gaps remain symmetric.
+- No automatic text wrapping.
+- Main window cannot shrink below the compact readable baseline.
+- Button minimum height is derived from button text height rather than blindly compressed.
+- Long one-line controls use compact small-MASTER full-row layout where applicable.
+- Explicit two-line runway rows retain the taller two-line geometry.
+- AUTOPILOT child categories are TAKEOFF / FLIGHT / NAV / LAND.
+- Category status colour is green if any function in that category is active and red
+  if none are active; display state is derived from existing controller authority.
+- FLIGHT owns existing BANK / HDG / PITCH / V/S / ALT / ACC / VEL controls.
+
+STATIC ACCEPTANCE
+- Full inherited CP3.5 Gate 1 Candidate 2 regression runner must pass.
+- Gate 2 Candidate 1 dedicated selftest must pass.
+- Source identity/build/AVC metadata must identify Gate 2 Candidate 1.
+- Frozen runway authority, terrain supply contracts and AP control boundaries must
+  remain unchanged except for explicitly documented UI/presentation files.
+- Package manifest and clean-extraction verification must pass before delivery.
+
+RUNTIME PASS CONDITIONS
+A. 160 km / approximately 2100 m/s, TERRAIN ON, ND ON for >=30 s:
+   - forced_recovery=0
+   - [CP3.5_GATE2_PARALLEL] records present
+   - workers_last should normally be >1 on a multicore machine when permits allow
+   - pending remains bounded to 0/1
+   - admission/submission failures do not continuously accumulate
+   - [CP3.5_GATE1_BACK_PROFILE] projection_cpu_avg_ms on prepared BACKs should fall
+     close to zero compared with Candidate 2's ~28 ms
+   - bounds_avg_ms should be near zero compared with Candidate 2's ~3 ms
+   - main-thread BACK total and ND ON frame impact materially improve
+   - no black flash, phantom runway, terrain/runway drift, or FRONT authority regression.
+B. ND OFF for 15-20 s before/after ON section for frame-time comparison.
+C. Resize AERIS window minimum -> medium -> maximum -> medium:
+   - no clipped/crushed button labels
+   - no automatic wrapping
+   - no sudden row/topology jumps
+   - equal left/right margins preserved
+   - one-line controls stay compact; intentional two-line runway entries remain readable.
+D. AUTOPILOT:
+   - TAKEOFF / FLIGHT / NAV / LAND all selectable
+   - any active function makes its category green; none active makes it red
+   - existing control behavior/authority is unchanged.
+
+NATIVE BUILD NOTE
+This environment does not provide the target KSP managed assemblies or Mono xbuild,
+so native DLL compilation cannot be completed here. The package build_ubuntu.sh runs
+all Gate 2 static acceptance before compiling against the user's KSP 1.12.5 install.

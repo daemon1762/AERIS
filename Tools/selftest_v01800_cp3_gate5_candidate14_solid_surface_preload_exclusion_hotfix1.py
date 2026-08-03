@@ -62,9 +62,10 @@ suite.check('bool supported = BodyHasSolidSurface(body);' in tiles and
 method_lower=strip_csharp_comments_and_literals(method).lower()
 suite.check('jool' not in method_lower and 'sun' not in method_lower and 'kerbin' not in method_lower,
             'surface exclusion is capability-based, not stock-name whitelist')
-# Candidate 13 final UI/policy and runway/control boundaries are untouched.
+# Candidate 13 final policy/runway/control boundaries remain frozen. CP3.5 Gate 1
+# intentionally supersedes only the Candidate 9/13 UI geometry contract.
+cp35_gate1='DEV CP3.5 GATE 1 — PRESENTATION CADENCE / RESPONSIVE UI CANDIDATE 1' in version
 expected={
- 'UI/AERISWindow.cs':'9053619f2c662c85a6f2762d950e940d2489000572b75ea643f1762c0a4fd9d9',
  'Landing/AERISAirfieldRegistry.cs':'c1e70635741b779f585d0dd3d7a486e0c5761588f14cee41a710ba4f69cf800e',
  'Terrain/AERISTerrainGpuTileRasterizer.cs':'f931ec7b381ebdf6323ae711c31d063256a961fa574995a650507c11b10cd032',
  'Autopilot/AERISBankDirector.cs':'bc65d86ef3c1263ae850f0b6b1426dc7d7080cb16fe1d7316ac02d6cb8a5d7d7',
@@ -72,6 +73,14 @@ expected={
 for rel,h in expected.items():
     suite.check(hashlib.sha256((SOURCE/rel).read_bytes()).hexdigest()==h,
                 'Candidate 13 protected boundary byte-identical: '+rel)
+if cp35_gate1:
+    suite.check('BaseWideButtonWidth=390f' in window and 'ResponsiveWidth(float baseline)' in window and
+                'wordWrap=false' in window,
+                'CP3.5 Gate 1 intentionally supersedes Candidate 13 UI geometry with responsive no-wrap UI')
+else:
+    suite.check(hashlib.sha256((SOURCE/'UI/AERISWindow.cs').read_bytes()).hexdigest()==
+                '9053619f2c662c85a6f2762d950e940d2489000572b75ea643f1762c0a4fd9d9',
+                'Candidate 13 protected boundary byte-identical: UI/AERISWindow.cs')
 for rel,h in {
  'GameData/AERISFlightControl/Airfields/Defaults/01_Stock_DLC_Foundation.cfg':'a8116c248ced084b264f0174a54b3ee1cd679614bbc4923f36efb3e44ea336eb',
  'GameData/AERISFlightControl/Airfields/Defaults/03_Field_Verified_Runway_Calibrations.cfg':'6bfd7d57ad066ae042a4759ae8e60931a13f96c21a24b5d1a7aa9c4be8af5345',
@@ -79,7 +88,12 @@ for rel,h in {
     suite.check(hashlib.sha256((ROOT/rel).read_bytes()).hexdigest()==h,
                 'runway baseline unchanged: '+Path(rel).name)
 identity='UiCheckpoint = "DEV CP3 GATE 5 — INTEGRATED ACCEPTANCE CANDIDATE 14 — SOLID-SURFACE PRELOAD EXCLUSION HOTFIX 1"'
-suite.check(identity in version and identity in build,'Candidate 14 in-game/build identity exact')
+if cp35_gate1:
+    suite.check('UiCheckpoint = "DEV CP3.5 GATE 1 — PRESENTATION CADENCE / RESPONSIVE UI CANDIDATE 1"' in version and
+                'DEV CP3.5 GATE 1 PRESENTATION CADENCE RESPONSIVE UI CANDIDATE 1' in build,
+                'Candidate 14 successor publishes exact CP3.5 Gate 1 identity')
+else:
+    suite.check(identity in version and identity in build,'Candidate 14 in-game/build identity exact')
 suite.check('Candidate 14 Solid-Surface Preload Exclusion Hotfix 1' in avc,'Candidate 14 AVC identity')
 suite.check('Candidate 14' in readme and 'body-local PQS terrain controller' in readme,
             'README documents solid-surface preload exclusion')

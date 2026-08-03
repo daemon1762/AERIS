@@ -1,0 +1,48 @@
+AERIS Flight Control v0.18.0.0
+CP3.5 Gate 1 — Back Render Profiler / Symmetric Top UI Candidate 2
+
+STATUS: STATIC CANDIDATE — RUNTIME ACCEPTANCE REQUIRED
+
+PURPOSE
+1. Reject Candidate 1's 160 km 0.50 s presentation slowdown as a final solution.
+2. Return all ND ranges to the explicit 0.20 s scheduled BACK cadence while keeping
+   forced-recovery full renders suppressed.
+3. Decompose the remaining expensive BACK render into low-rate aggregate timing so
+   Gate 2 can target the actual main-thread bottleneck.
+4. Apply the user's screenshot-reference top-window layout: MASTER full row, main
+   tabs 3+2, symmetric/equal allocation, no one-sided blank area, responsive resize,
+   and no automatic text wrapping.
+
+STATIC ACCEPTANCE
+- Old forced full-render recovery path absent.
+- forced_recovery_suppressed telemetry retained.
+- Candidate 1 0.25/0.33/0.50 s range slowdown removed; scheduled bridge = 0.20 s.
+- Detailed BACK profile samples one in four BACK renders; no per-tile log spam.
+- Profile separates projection CPU, mesh vertex upload, bounds, colour CPU/upload,
+  draw submission, setup/finalize, plus residual time and workload counts.
+- CPU terrain presentation remains prohibited; GUI.matrix terrain warp absent.
+- MASTER and top tab rows consume full available GUILayout row width.
+- Main top topology fixed at 3 + 2 with equal widths and equal inter-button gaps.
+- Left/right outer margins are inherited symmetrically from the same full-width row.
+- SYSTEM DIAGNOSTICS remains removed; PRELOAD MAPS fills its row.
+- Automatic word wrapping remains disabled/clipped.
+- Frozen terrain supply, runway authority and AP boundary files remain byte-identical.
+- 41 physical runway / 82 reciprocal direction baseline remains intact.
+
+RUNTIME PASS CONDITIONS
+A. 160 km / approximately 2100 m/s:
+   - forced_recovery=0
+   - back_cadence_s=0.20
+   - no black terrain flash / phantom runway / terrain-runway alignment regression
+   - collect at least 3 [CP3.5_GATE1_BACK_PROFILE] records.
+B. Compare ND OFF / ON / OFF frame timing and report which profiler component dominates.
+C. Resize main window minimum -> medium -> maximum -> medium:
+   - MASTER stays full-width within symmetric window content margins
+   - FLIGHT CONTROL / PROTECT / AUTOPILOT remain equal 3-way row
+   - SYSTEM / EXTEND ADDONS remain equal 2-way row
+   - no one-sided dead whitespace
+   - no text auto-wrap and no topology/coordinate jump at width thresholds.
+
+NATIVE BUILD NOTE
+The source package contains the Ubuntu build/install entrypoint. Native DLL build requires
+KSP 1.12.5 managed assemblies from the target installation and is runtime-environment dependent.

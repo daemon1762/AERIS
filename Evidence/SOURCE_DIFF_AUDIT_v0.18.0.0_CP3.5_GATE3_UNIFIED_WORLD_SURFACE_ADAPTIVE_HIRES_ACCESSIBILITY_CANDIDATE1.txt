@@ -1,0 +1,17 @@
+Scope audit — Gate 3 Candidate 1
+
+Intentional operational areas:
+- Terrain/AERISTerrainGpuTileRenderer.cs: unified world surface, palette generation, adaptive detail caller, profiling.
+- Terrain/AERISTerrainVirtualDetail.cs: screen-space high-res reconstruction and continuous coastline classification.
+- Terrain/AERISTerrainTileSystem.cs: bounded exact Route/Local progressive refinement; retired terrain-quality LAND request state removal.
+- Terrain/AERISTerrainPerformance.cs / TileContracts / Awareness / preload/cache files: terrain-quality LAND removal and three-profile budgets.
+- Performance/AERISNavigationDisplayPipeline.cs: facility geodetic coordinates for GPU world surface.
+- UI/AERISNavigationDisplay.cs: suppress duplicate IMGUI runway/facility geometry only when matching integrated FRONT is current.
+- Settings/AERISSettings.cs / UI/AERISWindow.cs: four-value terrain quality model and migration.
+- Build/version/docs/tests: checkpoint identity and acceptance.
+
+Explicit non-scope:
+- LAND autopilot/guidance state machine.
+- LAND runway registry authority.
+- AP/FBW/PROTECT flight-control laws.
+- Runway calibrated endpoint database.

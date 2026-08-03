@@ -1,0 +1,831 @@
+=== Inherited CP3.5 Gate 1 Candidate 2 regression ===
+
+=== selftest_v01800_cp3_gate5_candidate14_solid_surface_preload_exclusion_hotfix1.py ===
+PASS: tiles braces balanced
+PASS: tiles parens balanced
+PASS: builder braces balanced
+PASS: builder parens balanced
+PASS: solid-surface predicate requires body-local PQS controller
+PASS: global/shared PQS fallback removed from solid-surface predicate
+PASS: surface reflection failure is fail-closed
+PASS: unknown/non-PQS bodies are unsupported
+PASS: body refresh excludes surface-less bodies before plan creation
+PASS: automatic scheduler selection rejects surface-less bodies
+PASS: automatic refinement promotion rejects surface-less bodies
+PASS: automatic priority marks surface-less bodies disabled
+PASS: preload status filters stale database bodies by current solid-surface capability
+PASS: preload status filters persisted plans for unsupported bodies
+PASS: preload UI remains solid-surface-only
+PASS: shared supported-body gate exists for manual preload operations
+PASS: RequestBuild rejects unsupported bodies
+PASS: Pause rejects unsupported bodies
+PASS: Resume rejects unsupported bodies
+PASS: REBUILD rejects unsupported bodies before maintenance queue
+PASS: unsupported manual request reports deterministic skip state
+PASS: flight/current-body terrain support shares strict solid-surface predicate
+PASS: surface exclusion is capability-based, not stock-name whitelist
+PASS: Candidate 13 protected boundary byte-identical: Landing/AERISAirfieldRegistry.cs
+PASS: Candidate 13 protected boundary byte-identical: Terrain/AERISTerrainGpuTileRasterizer.cs
+PASS: Candidate 13 protected boundary byte-identical: Autopilot/AERISBankDirector.cs
+PASS: CP3.5 Gate 1 intentionally supersedes Candidate 13 UI geometry with responsive no-wrap UI
+PASS: runway baseline unchanged: 01_Stock_DLC_Foundation.cfg
+PASS: runway baseline unchanged: 03_Field_Verified_Runway_Calibrations.cfg
+PASS: Candidate 14 successor publishes exact CP3.5 Gate 1 identity
+PASS: Candidate 14 AVC identity
+PASS: README documents solid-surface preload exclusion
+PASS: Gate 5 runner executes Candidate 14 regression
+PASS: Candidate 14 acceptance document present
+PASS: Candidate 14 runtime test card present
+PASS: Candidate 14 source audit evidence present
+PASS: build_ubuntu.sh executable bit retained
+[v0.18.0.0 CP3 Gate 5 Candidate 14 Solid-Surface Preload Exclusion Hotfix 1] 37/37 PASS
+
+=== selftest_v01800_cp3_gate5_candidate9_ui_stability_telemetry_hotfix1.py ===
+PASS: AERISWindow braces balanced
+PASS: AERISWindow parens balanced
+PASS: ND braces balanced
+PASS: ND parens balanced
+PASS: TerrainTileSystem braces balanced
+PASS: TerrainTileSystem parens balanced
+PASS: CP3.5 Gate 1 publishes responsive baseline geometry constants
+PASS: CP3.5 Gate 1 derives control geometry from window dimensions
+PASS: CP3.5 Gate 1 removes content-derived height and automatic wrapping
+PASS: CP3.5 Gate 1 keeps tab topology stable without width-threshold jumps
+PASS: CP3.5 successor AIRFIELD action buttons fill the symmetric row without text clipping
+PASS: CP3.5 Gate 1 AIRFIELD rows retain fixed topology with window-driven height
+PASS: CP3.5 successor LAND airfield selector fills responsive window geometry
+PASS: ND button style explicitly forbids wrapping while Rect geometry stays authoritative
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: if(GUILayout.Button("Close",GUILayout.Width(ResponsiveWidth(70f)),GUILayout.Heig
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: if(GUILayout.Button("Close",GUILayout.Width(ResponsiveWidth(70f)),GUILayout.Heig
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: if(GUILayout.Button(reloadLabel,responsiveButtonStyle,GUILayout.Width(ReadableBu
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: try{GUILayout.Button(emptyLabel,responsiveButtonStyle,GUILayout.ExpandWidth(true
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: try{if(GUILayout.Button(new GUIContent(warpLabel,canWarp?"Sandbox-only registrat
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: else{string checkLabel="CHECK HERE — VERIFY CURRENT VESSEL AGAINST THIS RUNWAY";
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: void DrawShortcutBinding(string label,AERISShortcutAction action){GUILayout.Begi
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: if(GUILayout.Button(settings.ApLateralSectionExpanded?"▼":"▶",GUILayout.Width(Re
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: if(GUILayout.Button(settings.ApVerticalSectionExpanded?"▼":"▶",GUILayout.Width(R
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: if(GUILayout.Button(settings.ApSpeedSectionExpanded?"▼":"▶",GUILayout.Width(Resp
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: if(!takeoff.Armed){if(GUILayout.Button("ARM AUTO TAKEOFF",GUILayout.Width(Readab
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: else if(takeoff.Phase==AutoTakeoffPhase.Armed){if(GUILayout.Button("EXECUTE TAKE
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: else if(GUILayout.Button("ABORT / TRANSFER",GUILayout.Width(ReadableButtonWidth(
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: if(GUILayout.Button(settings.LandSectionExpanded?"▼":"▶",GUILayout.Width(Respons
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: if(GUILayout.Button(label,GUI.skin.button,GUILayout.ExpandWidth(true),GUILayout.
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: if(GUILayout.Button(direction.DisplayName+"  "+direction.HeadingDeg.ToString("00
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: if(GUILayout.Button(settings.FlightPlanSectionExpanded?"▼":"▶",GUILayout.Width(R
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: if(GUILayout.Button(label,GUI.skin.button,GUILayout.ExpandWidth(true),GUILayout.
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: bool clicked=GUILayout.Button(label,GUI.skin.button,GUILayout.Width(ReadableButt
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: bool SmallButton(string label){ return GUILayout.Button(label,GUILayout.Width(Re
+PASS: non-AIRFIELD GUILayout.Button has bounded responsive geometry: bool ActionButton(string label){ return GUILayout.Button(label,GUILayout.Width(R
+PASS: button-style Toggle has bounded responsive geometry: bool next=GUILayout.Toggle(expanded,categoryLabel,responsiveButtonStyle,GUILayou
+PASS: SelectionGrid has explicit width+height: int selected=GUILayout.SelectionGrid((int)mode,new string[]{"AUTO","ALWAYS","OFF
+PASS: SelectionGrid has explicit width+height: void DrawTerrainQualitySelector(){GUILayout.BeginHorizontal();GUILayout.Label("T
+PASS: SelectionGrid has explicit width+height: void DrawTerrainModeSelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terr
+PASS: SelectionGrid has explicit width+height: void DrawTerrainGpuSelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terra
+PASS: SelectionGrid has explicit width+height: void DrawTerrainColourSelector(){GUILayout.BeginHorizontal();GUILayout.Label("Te
+PASS: SelectionGrid has explicit width+height: void DrawNavigationDisplayUpdateSelector(){GUILayout.BeginHorizontal();GUILayout
+PASS: button-style Toggle has bounded responsive geometry: GUILayout.Toggle(false,"NAV ARM  UNAVAILABLE",GUI.skin.button,GUILayout.ExpandWi
+PASS: button-style Toggle has bounded responsive geometry: void PlannedModeButton(string label){ bool old=GUI.enabled;try{GUI.enabled=false
+PASS: PreloadStatus full snapshot is cached at 4 Hz
+PASS: PreloadStatus invokes the full index snapshot only when its UI cache expires
+PASS: all remaining preload user operations invalidate the display cache immediately
+PASS: Candidate 9 telemetry cadence marker retained for lineage
+PASS: successor removes heavy SYSTEM diagnostic snapshot helpers
+PASS: AERISWindow has no SYSTEM diagnostic call site for tiles.SnapshotTelemetry()
+PASS: AERISWindow has no SYSTEM diagnostic call site for resident.SnapshotTelemetry()
+PASS: AERISWindow has no SYSTEM diagnostic call site for cache.SnapshotTelemetry()
+PASS: Candidate 8 ND telemetry throttles remain intact
+PASS: legacy AA GUI is unreachable from the current AERIS host
+PASS: build_ubuntu.sh is executable in the source tree
+PASS: quality/authority boundary byte-identical: Terrain/AERISTerrainTileContracts.cs
+PASS: quality/authority boundary byte-identical: Terrain/AERISTerrainGpuTileRasterizer.cs
+PASS: quality/authority boundary byte-identical: Autopilot/AERISBankDirector.cs
+PASS: original 40-runway field-verified baseline remains present; successor may add verified defaults
+PASS: Candidate 9 lineage marker retained in successor
+PASS: Candidate 9 AVC identity
+PASS: README documents fixed geometry and display-rate telemetry
+PASS: Gate 5 acceptance executes Candidate 9 regression first
+PASS: Candidate 9 acceptance document present
+PASS: Candidate 9 runtime test card present
+PASS: Candidate 9 source audit evidence present
+[v0.18.0.0 CP3 Gate 5 Candidate 9 UI Stability / Telemetry Hotfix 1] 66/66 PASS
+
+=== selftest_v01800_cp3_gate5_candidate8_nd_phantom_runway_performance_hotfix1.py ===
+PASS: ND braces balanced
+PASS: ND parens balanced
+PASS: Map DRAM braces balanced
+PASS: Map DRAM parens balanced
+PASS: Preload DB braces balanced
+PASS: Preload DB parens balanced
+PASS: Preload builder braces balanced
+PASS: Preload builder parens balanced
+PASS: Terrain block pipeline braces balanced
+PASS: Terrain block pipeline parens balanced
+PASS: GPU renderer braces balanced
+PASS: GPU renderer parens balanced
+PASS: runway hit-testing consumes exact committed GPU FRONT projection
+PASS: invisible runway cannot become a click-preview candidate
+PASS: runway hit-testing and rendering share conservative off-screen pre-cull
+PASS: selected runway edge-pointer behavior bypasses pre-cull
+PASS: runway layer creates one shared spherical projection per repaint
+PASS: per-runway projection reconstruction is removed
+PASS: renderer and hit-test reuse immutable map projection
+PASS: explicitly selected off-scale runway pointer remains available
+PASS: terrain cache telemetry snapshot allocation is limited to 2 Hz
+PASS: ND GC memory sampling is limited to 1 Hz repaint sampling
+PASS: ND event timing probe is allocation-free
+PASS: Map DRAM snapshot carries cached domain-size estimates
+PASS: terrain publish avoids redundant full airfield/terrain size rescans
+PASS: routine terrain-index INFO logs are coalesced instead of emitted per commit
+PASS: unchanged immutable Map DRAM tile wrappers are reused
+PASS: DRAM-only publish no longer sorts a list whose ordering has no lookup semantics
+PASS: persistent manifest keeps deterministic sorted order
+PASS: background PQS preload budget load-sheds under runtime pressure
+PASS: validated CP2.5 standard producer envelope remains the starting contract
+PASS: PQS per-frame deadline uses allocation-free timestamp timing
+PASS: GPU frame/upload timing probes are allocation-free
+PASS: Candidate 7 quality/authority boundary remains byte-identical: Terrain/AERISTerrainTileContracts.cs
+PASS: Candidate 7 quality/authority boundary remains byte-identical: Terrain/AERISTerrainGpuTileRasterizer.cs
+PASS: Candidate 7 quality/authority boundary remains byte-identical: Autopilot/AERISBankDirector.cs
+PASS: original 40-runway field-verified baseline remains present; successor may add verified defaults
+PASS: performance/ND hotfix remains control-authority free: FlightCtrlState
+PASS: performance/ND hotfix remains control-authority free: MainThrottle
+PASS: performance/ND hotfix remains control-authority free: mainThrottle
+PASS: performance/ND hotfix remains control-authority free: OnFlyByWire
+PASS: Candidate 8 tab/build identity exact
+PASS: Candidate 8 AVC identity
+PASS: README documents Candidate 8 scope
+PASS: Gate 5 acceptance executes Candidate 8 regression first
+PASS: Candidate 8 acceptance document present
+PASS: Candidate 8 runtime test card present
+PASS: Candidate 8 runtime diagnosis evidence present
+PASS: Candidate 8 source diff audit present
+[v0.18.0.0 CP3 Gate 5 Candidate 8 ND Phantom Runway / Performance Hotfix 1] 49/49 PASS
+
+=== selftest_v01800_cp2_csharp_compile_regression.py ===
+PASS: terrain tile system source exists
+PASS: navigation display source exists
+PASS: disk-write availability is initialized before the synchronization scope
+PASS: disk-write availability declaration precedes lock scope
+PASS: disk-write availability is assigned from the read-aware limit inside lock scope
+PASS: disk writes reserve the last I/O slot while reads are pending
+PASS: disk-write availability is not block-scoped inside lock
+PASS: initialized availability is consumed after lock scope
+PASS: traffic frame is initialized before short-circuit expression
+PASS: traffic frame short-circuit acquisition remains intact
+PASS: invalid traffic frame is explicitly cleared
+PASS: definitely assigned traffic frame reaches map interaction
+PASS: GPU Draw has the explicit progressive draw-state return type
+PASS: navigation display initializes progressive draw state
+PASS: navigation display assigns renderer result before use
+PASS: every progressive renderer exit returns the initialized state field
+PASS: progressive draw-state enum is compiled in shared terrain contracts
+PASS: preview slope interval variables are assigned before use
+PASS: RAM preview telemetry accepts the already imported generic collection contract
+PASS: terrain display mode enum can be parsed
+PASS: all terrain display mode references resolve to declared enum members
+PASS: terrain request generation uses Automatic, never the nonexistent Auto member
+PASS: runway placement quarantine detail is initialized before short-circuit
+PASS: runway placement stored initialization precedes witness-library null gate
+PASS: uninitialized runway placement quarantine detail cannot regress
+[v0.18.0.0 CP2 C# definite-assignment compile regression] 25/25 PASS
+
+=== selftest_v01800_cp3_gate4a_supply_pipeline_successor.py ===
+PASS: explicit supply contract: AERISTerrainRequestLane
+PASS: explicit supply contract: Viewport = 0
+PASS: explicit supply contract: Landing = 1
+PASS: explicit supply contract: LookAhead = 2
+PASS: explicit supply contract: Background = 3
+PASS: explicit supply contract: AERISTerrainSamplingStage
+PASS: explicit supply contract: Preview = 0
+PASS: explicit supply contract: Final = 1
+PASS: explicit supply contract: FinalResolution
+PASS: explicit supply contract: ViewDistanceMeters
+PASS: stale plan cancellation: desiredRequestIds
+PASS: stale plan cancellation: desiredVisibleIds
+PASS: stale plan cancellation: diskLoadingRequests
+PASS: stale plan cancellation: ram.CountPreviewTiles(desiredRequestIds)
+PASS: stale plan cancellation: ReconcilePlannedRequests
+PASS: stale plan cancellation: runtime.Scheduler.CancelKey
+PASS: stale plan cancellation: OBSOLETE TERRAIN REQUESTS CANCELLED
+PASS: obsolete work is cancelled before admitting a new viewport plan
+PASS: selected-runway LAND candidates are reserved before predictive look-ahead expansion
+PASS: Gate 3 predictive expansion remains explicitly bounded
+PASS: starvation-free lane ordering: AERISTerrainRequestLane.Viewport
+PASS: starvation-free lane ordering: AERISTerrainRequestLane.Landing
+PASS: starvation-free lane ordering: AERISTerrainRequestLane.LookAhead
+PASS: starvation-free lane ordering: AERISTerrainRequestLane.Background
+PASS: starvation-free lane ordering: requestScratch.Sort(CompareRequests)
+PASS: starvation-free lane ordering: int readLane = ((int)a.ReadLane).CompareTo((int)b.ReadLane)
+PASS: starvation-free lane ordering: int lane = ((int)a.Lane).CompareTo((int)b.Lane)
+PASS: starvation-free lane ordering: int stage = ((int)a.Stage).CompareTo((int)b.Stage)
+PASS: preview then final refinement: ResolvePreviewResolution
+PASS: preview then final refinement: Global: desired = 5
+PASS: preview then final refinement: Far:
+                case AERISTerrainTileLod.Route: desired = 7
+PASS: preview then final refinement: default: desired = 9
+PASS: preview then final refinement: CloneForFinal
+PASS: preview then final refinement: TERRAIN PREVIEW AVAILABLE
+PASS: preview then final refinement: TERRAIN BLOCK DETAIL
+PASS: global preview uses 25 samples
+PASS: far/route preview uses 49 samples
+PASS: local/LAND preview uses 81 samples
+PASS: normal final detail remains 1089 samples
+PASS: largest preview is under one tenth of normal final work
+PASS: bounded deduplicated admission: states.TryGetValue(id, out existing)
+PASS: bounded deduplicated admission: existing.Request.RequestSequence = Math.Max
+PASS: bounded deduplicated admission: MaximumActiveTiles = 48
+PASS: bounded deduplicated admission: states.Count >= MaximumActiveTiles
+PASS: bounded deduplicated admission: FindLowestPriorityRequestLocked
+PASS: bounded deduplicated admission: maximum * 2
+PASS: time-bounded PQS supply: TilePqsQueriesPerSecond
+PASS: time-bounded PQS supply: MaximumTileSamplesPerFrame
+PASS: time-bounded PQS supply: TileMainThreadBudgetMs
+PASS: time-bounded PQS supply: Stopwatch watch = Stopwatch.StartNew()
+PASS: time-bounded PQS supply: watch.Elapsed.TotalMilliseconds < budget
+PASS: time-bounded PQS supply: RecordTilePqsCost
+PASS: time-bounded PQS supply: lastSamplingBatchSamples
+PASS: time-bounded PQS supply: lastSamplingBatchMilliseconds
+PASS: quality profile supply budget: TileMainThreadBudgetMs
+PASS: quality profile supply budget: 120f, 6, 0.35f
+PASS: quality profile supply budget: 360f, 16, 0.75f
+PASS: quality profile supply budget: 720f, 32, 1.25f
+PASS: quality profile supply budget: 1200f, 48, 1.80f
+PASS: only final tiles enter persistent disk-write path
+PASS: preview provenance is preserved in immutable RAM tiles
+PASS: Gate 4A GPU-only composition: AERISTerrainGpuDrawState.Partial
+PASS: Gate 4A GPU-only composition: MeasureViewportCoverage
+PASS: Gate 4A GPU-only composition: RenderTexture backTarget
+PASS: Gate 4A GPU-only composition: RenderTexture frontTarget
+PASS: Gate 4A GPU-only composition: GL.Clear(true, true, Color.clear)
+PASS: Gate 4A GPU-only composition: GUI.DrawTextureWithTexCoords(plot, frontTarget, uv, true)
+PASS: Gate 4A GPU-only composition: LastCoverageFraction
+PASS: incomplete BACK terrain is never presented
+PASS: partial GPU readiness is visible without CPU terrain substitution
+PASS: preview slope cell-size correction: finalIntervals
+PASS: preview slope cell-size correction: actualIntervals
+PASS: preview slope cell-size correction: finalIntervals / actualIntervals
+PASS: field telemetry column: terrain_tile_preview_generated
+PASS: field telemetry column: terrain_tile_final_generated
+PASS: field telemetry column: terrain_tile_obsolete_cancelled
+PASS: field telemetry column: terrain_tile_desired
+PASS: field telemetry column: terrain_tile_visible
+PASS: field telemetry column: terrain_tile_preview_count
+PASS: field telemetry column: terrain_tile_sample_batch
+PASS: field telemetry column: terrain_tile_sample_batch_ms
+PASS: field telemetry column: terrain_tile_pqs_sample_ema_ms
+PASS: field telemetry column: terrain_gpu_coverage
+PASS: terrain supply creates no private worker pool
+PASS: terrain supply never consumes Safety/LAND worker lanes
+PASS: CP2 runner includes supply-pipeline regression
+PASS: visible viewport preview wins independent scheduler model
+PASS: new view cancels three obsolete requests
+PASS: reconciled request set is bounded by the newest plan
+[v0.18.0.0 CP3 Gate 4A Terrain Supply successor] 89/89 PASS
+
+=== selftest_v01800_cp3_gate4a_runway_terrain_safety_successor.py ===
+PASS: runway certification cache algorithm is invalidated
+PASS: runway direction safety model: ThresholdBearingDeg
+PASS: runway direction safety model: HeadingGeometryErrorDeg
+PASS: runway direction safety model: HeadingMatchesGeometry
+PASS: runway direction safety model: GeometryDirectionAutoCorrected
+PASS: runway direction safety model: GeometryDirectionDetail
+PASS: certified geometry requires heading/end-point consistency
+PASS: heading/end-point tolerance is bounded to ten degrees
+PASS: resolver reciprocal safety: NormalizeDirectionGeometry(direction)
+PASS: resolver reciprocal safety: reciprocal endpoint order corrected
+PASS: resolver reciprocal safety: Swap(ref direction.Threshold
+PASS: resolver reciprocal safety: HeadingDifference(direction.HeadingDeg
+PASS: resolver reciprocal safety: ReciprocalMismatch
+PASS: resolver reciprocal safety: RUNWAY GEOMETRY HEADING MISMATCH
+PASS: resolver reciprocal safety: CERTIFICATION REJECTED
+PASS: endpoint direction is normalized before touchdown/GS references are generated
+PASS: Kola-class reciprocal endpoint mismatch is auto-correctable
+PASS: heading difference wraps correctly
+PASS: LAND observation/arming safety: !direction.HeadingMatchesGeometry
+PASS: LAND observation/arming safety: RUNWAY GEOMETRY HEADING MISMATCH
+PASS: LAND observation/arming safety: OnApproachSide
+PASS: LAND observation/arming safety: double.NaN
+PASS: LAND observation/arming safety: NOT ON APPROACH SIDE
+PASS: LAND observation/arming safety: GlidePathText
+PASS: LAND observation/arming safety: return "N/A"
+PASS: future Track Token handoff rejects invalid direction geometry
+PASS: public Track Token constructor boundary rejects invalid direction geometry
+PASS: LAND safety hotfix remains observation-only: FlightCtrlState
+PASS: LAND safety hotfix remains observation-only: MainThrottle
+PASS: LAND safety hotfix remains observation-only: mainThrottle
+PASS: LAND safety hotfix remains observation-only: wheelThrottle
+PASS: LAND safety hotfix remains observation-only: wheelSteer
+PASS: LAND safety hotfix remains observation-only: OnFlyByWire
+PASS: ND fails safe for invalid/wrong-side approach: RUNWAY GEOMETRY INVALID
+PASS: ND fails safe for invalid/wrong-side approach: LOC N/A\nNOT ON APPROACH SIDE
+PASS: ND fails safe for invalid/wrong-side approach: GS N/A\nRUNWAY GEOMETRY INVALID
+PASS: ND fails safe for invalid/wrong-side approach: GS N/A\nNOT ON APPROACH SIDE
+PASS: ND fails safe for invalid/wrong-side approach: DrawClippedLine
+PASS: LAND UI exposes safety state: Geometry bearing
+PASS: LAND UI exposes safety state: heading error
+PASS: LAND UI exposes safety state: LAND ARM INHIBITED
+PASS: LAND UI exposes safety state: RECIPROCAL ENDPOINT ORDER AUTO-CORRECTED
+PASS: LAND UI exposes safety state: GP target N/A
+PASS: LAND UI exposes safety state: "N/A"
+PASS: terrain worker land/water boundary: ElevationMeters
+PASS: terrain worker land/water boundary: CoastlineSegments
+PASS: terrain worker land/water boundary: BuildCoastlines
+PASS: terrain worker land/water boundary: tile.Flags[a] == 2
+PASS: terrain worker land/water boundary: AddWaterCrossing
+PASS: GPU terrain explicit-colour safety: LandMesh
+PASS: GPU terrain explicit-colour safety: WaterMesh
+PASS: GPU terrain explicit-colour safety: CoastlineMesh
+PASS: GPU terrain explicit-colour safety: AppendClippedTriangle
+PASS: GPU terrain explicit-colour safety: ResolveRelativeLandColour
+PASS: GPU terrain explicit-colour safety: ResolveTopographicLandColour
+PASS: GPU terrain explicit-colour safety: ResolveWaterColour
+PASS: GPU terrain explicit-colour safety: aircraftAltitudeAslMeters - terrainAltitudeMeters
+PASS: GPU terrain explicit-colour safety: return new Color32(8, 52, 118, 255)
+PASS: GPU terrain explicit-colour safety: CoastlineHalfWidthNormalized
+PASS: GPU terrain explicit-colour safety: EXPLICIT_VERTEX
+PASS: GPU terrain explicit-colour safety: water=FIXED_BLUE
+PASS: unreliable built-in shader palette transform is removed
+PASS: land warning colours cannot interpolate into the water mesh
+PASS: coastline has a dedicated band while contours remain thin lines
+PASS: GPU AUTO fails closed without restoring CPU terrain presentation
+PASS: REL low-clearance warning
+PASS: REL intermediate warning
+PASS: REL caution band
+PASS: REL high-clearance safe band
+PASS: build identity names the runway/terrain safety hotfix
+[v0.18.0.0 CP3 Gate 4A runway/terrain safety successor] 70/70 PASS
+
+=== selftest_v01800_cp3_gate4a_runway_map_lock_successor.py ===
+PASS: per-vertex spherical terrain projection: GeographicUnitPoint
+PASS: per-vertex spherical terrain projection: AERISNdMapProjection
+PASS: per-vertex spherical terrain projection: BuildGeographicPoints
+PASS: per-vertex spherical terrain projection: EnsureProjectedGeometry
+PASS: per-vertex spherical terrain projection: ProjectMesh
+PASS: per-vertex spherical terrain projection: LandGeographicPoints
+PASS: per-vertex spherical terrain projection: WaterGeographicPoints
+PASS: per-vertex spherical terrain projection: ContourGeographicPoints
+PASS: per-vertex spherical terrain projection: CoastlineGeographicPoints
+PASS: per-vertex spherical terrain projection: LandProjectedVertices
+PASS: per-vertex spherical terrain projection: WaterProjectedVertices
+PASS: per-vertex spherical terrain projection: geometryProjection=SHARED_SCALE_CORRECTED
+PASS: per-vertex spherical terrain projection: ResolveRenderableEntries(tile, styleKey
+PASS: per-vertex spherical terrain projection: Entry drawEntry = currentEntry != null ? currentEntry : fallbackEntry
+PASS: per-vertex spherical terrain projection: DrawEntry(drawEntry, mapRotation
+PASS: per-vertex spherical terrain projection: mesh.MarkDynamic()
+PASS: per-vertex spherical terrain projection: mesh.UploadMeshData(false)
+PASS: per-vertex spherical terrain projection: movementThresholdMeters
+PASS: tile rectangle is never used as the terrain draw transform
+PASS: terrain meshes receive only the shared map-heading matrix
+PASS: worker carries immutable tile geography: SouthLatitudeDeg
+PASS: worker carries immutable tile geography: NorthLatitudeDeg
+PASS: worker carries immutable tile geography: WestLongitudeDeg
+PASS: worker carries immutable tile geography: EastLongitudeDeg
+PASS: runway geodetic endpoint contract: internal double LatitudeADeg
+PASS: runway geodetic endpoint contract: internal double LongitudeADeg
+PASS: runway geodetic endpoint contract: internal double LatitudeBDeg
+PASS: runway geodetic endpoint contract: internal double LongitudeBDeg
+PASS: runway geodetic endpoint contract: LatitudeADeg = item.LatitudeADeg
+PASS: runway geodetic endpoint contract: LongitudeBDeg = item.LongitudeBDeg
+PASS: live-centre runway projection: TryProjectGeographicPoint(vessel.mainBody
+PASS: live-centre runway projection: runway.LatitudeADeg
+PASS: live-centre runway projection: runway.LongitudeBDeg
+PASS: live-centre runway projection: runway.CenterLatitudeDeg,
+PASS: live-centre runway projection: double centerLatitudeDeg = planMode ? planCenterLatitudeDeg
+PASS: runway draw no longer subtracts a stale prepared tangent-frame origin
+PASS: runway mouse hit-testing uses the same live geodetic projection
+PASS: submitted Global rectangle reproduces >40 m runway/terrain displacement
+PASS: spherical terrain vertex and live runway geodesic agree below 5 cm
+PASS: build and AVC identity name the runway/map lock hotfix
+PASS: Autopilot/AERISBankDirector.cs remains byte-identical
+PASS: Terrain/AERISTerrainGpuTileRenderer.cs remains control-free: FlightCtrlState
+PASS: Terrain/AERISTerrainGpuTileRenderer.cs remains control-free: MainThrottle
+PASS: Terrain/AERISTerrainGpuTileRenderer.cs remains control-free: mainThrottle
+PASS: Terrain/AERISTerrainGpuTileRenderer.cs remains control-free: OnFlyByWire
+PASS: Performance/AERISNavigationDisplayPipeline.cs remains control-free: FlightCtrlState
+PASS: Performance/AERISNavigationDisplayPipeline.cs remains control-free: MainThrottle
+PASS: Performance/AERISNavigationDisplayPipeline.cs remains control-free: mainThrottle
+PASS: Performance/AERISNavigationDisplayPipeline.cs remains control-free: OnFlyByWire
+PASS: UI/AERISNavigationDisplay.cs remains control-free: FlightCtrlState
+PASS: UI/AERISNavigationDisplay.cs remains control-free: MainThrottle
+PASS: UI/AERISNavigationDisplay.cs remains control-free: mainThrottle
+PASS: UI/AERISNavigationDisplay.cs remains control-free: OnFlyByWire
+[v0.18.0.0 CP3 Gate 4A runway/map geodetic lock successor] 53/53 PASS
+
+=== selftest_v01800_cp3_gate4a_nd_core_successor.py ===
+PASS: ND exposes exactly the certified six fixed ranges
+PASS: automatic range is disabled for the CP1 fixed-range baseline
+PASS: legacy/manual values normalize to the nearest certified range
+PASS: factory CFG uses fixed-range mode
+PASS: ND worker pipeline is compiled
+PASS: shared ND pipeline contract: AERISNavigationDisplaySnapshot
+PASS: shared ND pipeline contract: AERISPreparedNavigationFrame
+PASS: shared ND pipeline contract: AERISPreparedNavigationFrameApi
+PASS: shared ND pipeline contract: JobKey = "navigation-display-preprocess"
+PASS: shared ND pipeline contract: AERISRuntimeLane.GeneralCompute
+PASS: shared ND pipeline contract: SubmitLatest
+PASS: shared ND pipeline contract: context.ThrowIfStale()
+PASS: ND worker boundary excludes FlightGlobals
+PASS: ND worker boundary excludes FlightCtrlState
+PASS: ND worker boundary excludes Vessel
+PASS: ND worker boundary excludes CelestialBody
+PASS: ND worker boundary excludes UnityEngine
+PASS: ND worker boundary excludes Texture2D
+PASS: ND worker boundary excludes GameObject
+PASS: ND worker boundary excludes Task.Run
+PASS: ND worker boundary excludes new Thread
+PASS: ND preprocessing cannot consume the Safety/LAND lane
+PASS: Performance Runtime owns ND pipeline: readonly AERISNavigationDisplayPipeline navigationDisplay
+PASS: Performance Runtime owns ND pipeline: SubmitNavigationDisplay
+PASS: Performance Runtime owns ND pipeline: AERISPreparedNavigationFrameApi.Clear()
+PASS: Performance Runtime owns ND pipeline: navigationDisplay.Dispose()
+PASS: scheduler publishes ND metric: NavigationDisplayWorkerP95Ms
+PASS: scheduler publishes ND metric: NavigationDisplayResultAgeMs
+PASS: scheduler publishes ND metric: navigationDisplaySamples
+PASS: scheduler publishes ND metric: lastNavigationDisplayCommitTicks
+PASS: performance CSV includes nd_layout_ema_ms
+PASS: performance CSV includes nd_repaint_ema_ms
+PASS: performance CSV includes nd_capture_ema_ms
+PASS: performance CSV includes nd_texture_upload_ema_ms
+PASS: performance CSV includes nd_gc_positive_delta_ema_bytes
+PASS: performance CSV includes nd_facilities
+PASS: performance CSV includes nd_runways
+PASS: performance CSV includes nd_plan
+PASS: performance CSV includes nd_range_m
+PASS: performance telemetry header/data column count
+PASS: performance telemetry header names are unique
+PASS: Layout/Repaint split metric: RecordNdLayoutCost
+PASS: Layout/Repaint split metric: RecordNdRepaintCost
+PASS: Layout/Repaint split metric: NdLayoutEmaMs
+PASS: Layout/Repaint split metric: NdRepaintEmaMs
+PASS: Layout/Repaint split metric: UpdateNdAggregate
+PASS: ND reports Layout/Repaint event cost to Performance Runtime
+PASS: ND main-thread capture cost is measured
+PASS: GPU mesh/render-ready upload cost is measured
+PASS: ND timing/GC probes run only on Layout and Repaint events
+PASS: stale prepared frames are rejected after database or selection changes
+PASS: PLAN interaction contract: planMode
+PASS: PLAN interaction contract: mapDragging
+PASS: PLAN interaction contract: EnterPlanAt
+PASS: PLAN interaction contract: RecenterPlan
+PASS: PLAN interaction contract: orientationBeforePlanTrackUp
+PASS: PLAN interaction contract: N/PLAN
+PASS: PLAN interaction contract: RECENTER
+PASS: PLAN interaction contract: DRAG MAP  PLAN
+PASS: PLAN forces NORTH UP without mutating the saved orientation
+PASS: RECENTER restores the pre-PLAN orientation
+PASS: NORTH UP centers ownship while TRACK UP uses the lower anchor
+PASS: PLAN drag uses the exact inverse horizontal/vertical map scale
+PASS: runway display contract: DrawPreparedRunway
+PASS: runway display contract: DirectionAName
+PASS: runway display contract: DirectionBName
+PASS: runway display contract: DrawSelectedRunwayEdgePointer
+PASS: runway display contract: RunwayName
+PASS: runway display contract: AirfieldName
+PASS: runway display contract: widthPixels
+PASS: runway display contract: DirectionASelectableIndex
+PASS: runway display contract: DirectionBSelectableIndex
+PASS: all prepared runways are rendered without a runway-count cap
+PASS: LAND suppresses unrelated facilities but retains the runway layer
+PASS: registered runway layer and selected LAND overlay coexist
+PASS: explicit runway preview/confirmation contract: PreviewRunwayAt
+PASS: explicit runway preview/confirmation contract: previewRunwayStableId
+PASS: explicit runway preview/confirmation contract: "SELECT"
+PASS: explicit runway preview/confirmation contract: "CENTER"
+PASS: explicit runway preview/confirmation contract: "ARM"
+PASS: direct map click only previews and never changes registry selection
+PASS: SELECT explicitly confirms airfield and direction
+PASS: LAND observation ARM is exposed only after explicit selection
+PASS: pipeline remains control/NAV free: FlightCtrlState
+PASS: pipeline remains control/NAV free: MainThrottle
+PASS: pipeline remains control/NAV free: wheelThrottle
+PASS: pipeline remains control/NAV free: wheelSteer
+PASS: pipeline remains control/NAV free: AERISNavDirector
+PASS: pipeline remains control/NAV free: TryStartNavLanding
+PASS: pipeline remains control/NAV free: NAV_LANDING
+PASS: SYSTEM options explain CP1 fixed-range behavior
+PASS: successor removes ND performance debug readout from SYSTEM
+[v0.18.0.0 CP3 Gate 4A ND core successor] 92/92 PASS
+
+=== selftest_v01800_cp3_gate4a_alignment_diagnostic_successor.py ===
+PASS: explicit RenderTexture presentation orientation enum exists
+PASS: DIRECT is the safe diagnostic default
+PASS: terrain orientation is loaded and persisted
+PASS: packaged default configuration selects DIRECT
+PASS: backend UV heuristic no longer controls terrain presentation
+PASS: DIRECT/FLIPPED presentation paths are explicit
+PASS: alignment longitude helper has one definition
+PASS: alignment diagnostics have invariant numeric formatting support
+PASS: DIRECT presentation maps the RenderTexture ownship anchor to GUI ownship
+PASS: rate-limited alignment diagnostics expose coordinates and coverage
+PASS: complete FRONT presentation is separated from BACK FAR readiness
+PASS: requested-quality coverage cannot count fallback entries
+PASS: explicitly cleared LAND selection persists
+PASS: registry can clear airfield, runway direction, and persisted state
+PASS: a new user selection cancels the explicit-clear latch
+PASS: ND CLEAR disarms LAND observation and clears the registry
+PASS: preview-panel controls are excluded from map drag/preview handling
+PASS: LAND geometry no longer disappears when a runway endpoint is off-screen
+PASS: runway and LOC funnel segments use viewport clipping
+PASS: bounded Liang-Barsky line clipping is implemented
+PASS: high aircraft altitude no longer compresses GS geometry
+PASS: GS profile includes persistent upper/lower funnel bounds
+PASS: clipping model preserves a horizontal ILS segment across the viewport
+PASS: clipping model rejects a fully external segment
+PASS: clipping model preserves a vertical crossing segment
+PASS: build entrypoint identifies the diagnostic checkpoint
+PASS: AVC metadata identifies the diagnostic checkpoint
+PASS: BANK source remains byte-identical
+[v0.18.0.0 CP3 Gate 4A Alignment Diagnostic successor] 28/28 PASS
+
+=== selftest_v01800_cp3_gate5_predictive_corridor_successor.py ===
+PASS: resident owner C# braces are balanced
+PASS: resident owner C# parentheses are balanced
+PASS: terrain tile system C# braces are balanced
+PASS: terrain tile system C# parentheses are balanced
+PASS: predictive corridor C# braces are balanced
+PASS: predictive corridor C# parentheses are balanced
+PASS: preload database C# braces are balanced
+PASS: preload database C# parentheses are balanced
+PASS: predictive corridor source is included by the C# project
+PASS: Gate 3 planner and telemetry snapshot exist
+PASS: prediction inputs are horizontal ground speed, shared track and vertical-axis turn rate
+PASS: prediction thresholds and point count are bounded
+PASS: look-ahead time, distance and total heading change are bounded
+PASS: constant-turn-rate local tangent prediction is implemented
+PASS: left/right uncertainty edges are generated
+PASS: predictive corridor itself never emits LAND LOD
+PASS: predictive planner remains control-free and I/O-free: FlightCtrlState
+PASS: predictive planner remains control-free and I/O-free: ctrlState
+PASS: predictive planner remains control-free and I/O-free: SetBankMode
+PASS: predictive planner remains control-free and I/O-free: SetHeadingMode
+PASS: predictive planner remains control-free and I/O-free: MainThrottle
+PASS: predictive planner remains control-free and I/O-free: SafetyLand
+PASS: predictive planner remains control-free and I/O-free: File.
+PASS: predictive planner remains control-free and I/O-free: Directory.
+PASS: predictive planner remains control-free and I/O-free: FileStream
+PASS: planner output feeds the existing bounded look-ahead request lane
+PASS: selected LAND runway demand is admitted before speculative corridor demand
+PASS: only predictive centerline points are selected for corridor pinning
+PASS: corridor requests remain inside the non-foundation detail budget
+PASS: LAND payload demand requires both ARM and LAND detail policy
+PASS: selected runway endpoints request LAND plus Local fallback
+PASS: cruise background population excludes LAND LOD
+PASS: live demand path allows current-body LAND promotion
+PASS: all Gate 3 pin reasons have explicit priority
+PASS: only indexed SSD payloads receive generation-scoped resident leases
+PASS: stale plan leases are released when requests leave the accepted plan
+PASS: pin/corridor reset boundary exists: VIEWPORT SUSPENDED
+PASS: pin/corridor reset boundary exists: TERRAIN DISPLAY OFF
+PASS: pin/corridor reset boundary exists: BODY TRANSITION
+PASS: pin/corridor reset boundary exists: SHUTDOWN
+PASS: explicit reset releases plan leases before Resident scope reset
+PASS: Resident owner accepts demand-gated LAND payloads
+PASS: unpinned LAND becomes the first budget eviction class
+PASS: LAND residency has independent telemetry
+PASS: Gate 2 generation-checked async promotion remains the only payload route
+PASS: state contract remains fixed: Indexed
+PASS: state contract remains fixed: SsdReady
+PASS: state contract remains fixed: Decoded
+PASS: state contract remains fixed: RamResident
+PASS: state contract remains fixed: RenderReady
+PASS: state contract remains fixed: GpuReady
+PASS: resident population remains on shared GeneralCompute, never SafetyLand
+PASS: SSD read/decode remains inside the shared worker
+PASS: successor removes Resident debug line from SYSTEM
+PASS: successor removes predictive corridor debug telemetry from SYSTEM
+PASS: generated/build tab version names Gate 5 acceptance
+PASS: assembly and build identities name Gate 3
+PASS: AVC package identity names Gate 3
+PASS: startup log states the live Gate 3.1 corridor boundary
+PASS: runtime card rejects stale CP2/Gate 2 tab labels
+PASS: Japanese Gate 3 spec records all prediction bounds
+PASS: spec records cruise LAND exclusion
+PASS: Gate 4 work remains explicitly deferred
+PASS: active Gate 5 runner executes the corridor successor
+PASS: build entrypoint runs Gate 5 acceptance or its CP3.5 Gate 1 successor
+PASS: Gate 1 compile hotfix remains present
+PASS: STANDARD scheduler API remains available
+PASS: Map DRAM implementation remains metadata-only after approved performance successor
+PASS: Map DRAM source still forbids decoded/GPU payload ownership
+PASS: FULL BOOST remains absent: StartPreloadBoost
+PASS: FULL BOOST remains absent: StopPreloadBoost
+PASS: FULL BOOST remains absent: START PRELOAD BOOST
+PASS: FULL BOOST remains absent: STOP PRELOAD BOOST
+PASS: FULL BOOST remains absent: [PRELOAD_BOOST]
+PASS: unrelated Landing code remains byte-identical outside authorized successor deltas
+PASS: Candidate 5 retains the native spawn registration utility
+PASS: unrelated MOD airfield survey catalog remains byte-identical
+PASS: protected tree remains byte-identical: Source/AERISFlightControl/AA
+PASS: protected tree remains byte-identical: Source/AERISFlightControl/Autopilot
+PASS: protected tree remains byte-identical: Source/AERISFlightControl/Protect
+PASS: protected tree remains byte-identical: Source/AERISFlightControl/FlightState
+PASS: protected tree remains byte-identical: Source/AERISFlightControl/Integrations
+[v0.18.0.0 CP3 Gate 5 Predictive Corridor Frozen Successor] 82/82 PASS
+
+=== selftest_v01800_cp25_map_dram_cache_foundation_hotfix2.py ===
+PASS: Source/AERISFlightControl/Performance/AERISMapDramCache.cs exists
+PASS: Source/AERISFlightControl/Performance/AERISMapDramDiskGuard.cs exists
+PASS: Source/AERISFlightControl/Landing/AERISAirfieldRegistry.cs exists
+PASS: Source/AERISFlightControl/Terrain/AERISTerrainPreloadDatabase.cs exists
+PASS: Source/AERISFlightControl/UI/AERISWindow.cs exists
+PASS: Source/AERISFlightControl/Core/AERISBootstrap.cs exists
+PASS: Source/AERISFlightControl/UI/AERISNavigationDisplay.cs exists
+PASS: Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs exists
+PASS: Source/AERISFlightControl/AERISFlightControl.csproj exists
+PASS: Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs exists
+PASS: build_ubuntu.sh exists
+PASS: GameData/AERISFlightControl/AERISFlightControl.version exists
+PASS: Tools/run_v01800_cp25_acceptance.py exists
+PASS: Docs/CP25_MAP_DRAM_CACHE_FOUNDATION_HOTFIX_2_v0.18.0.0_ja.md exists
+PASS: Docs/ND_CP25_MAP_DRAM_CACHE_FOUNDATION_HOTFIX_2_TEST_CARD_v0.18.0.0_ja.md exists
+PASS: ACCEPTANCE_v0.18.0.0_CP2.5_MAP_DRAM_CACHE_FOUNDATION_HOTFIX2.txt exists
+PASS: runtime disk guard is compiled by xbuild
+PASS: thread-local normal-lookup scope and disk interception exist
+PASS: disk guard records both allowed maintenance I/O and lookup violations
+PASS: disk guard itself performs no filesystem operation
+PASS: Airfield list lookup is a measured DRAM normal-lookup path
+PASS: snapshot-owned Airfield, Runway and ILS-direction ID views exist
+PASS: all Airfield ID dictionaries enter normal-lookup scope
+PASS: Terrain presence and chunk-ID dictionaries enter the same guard scope
+PASS: guarded, allowed and violation counters are independent
+PASS: runtime guard counters have actual increment call sites
+PASS: compatibility violation entry point is live rather than an orphan counter
+PASS: violations include last domain and operation evidence
+PASS: shutdown summary reports PASS or VIOLATION from measured telemetry
+PASS: Map DRAM owner remains filesystem-free
+PASS: Hotfix 2 does not cross the CP3 terrain-payload boundary
+PASS: runtime Registry Airfields property reads the shared snapshot
+PASS: mutable list fallback exists only for build-only/no-cache instances
+PASS: public registry count follows the DRAM view
+PASS: index-based selection reads the DRAM list
+PASS: selected Airport, Runway and ILS direction use stable-ID dictionaries
+PASS: Registry façades use zero-copy immutable snapshot views
+PASS: committed revision publishes before selection restore reads DRAM
+PASS: persisted selection restoration searches the DRAM snapshot
+PASS: ND symbols and Terrain runway requests consume the routed Registry view
+PASS: Airfield producer I/O is wired to the runtime guard
+PASS: Airfield guard covers AIRFIELD_CACHE_LOAD
+PASS: Airfield guard covers AIRFIELD_WITNESS_RELOAD
+PASS: Airfield guard covers AIRFIELD_DISCOVERY_CREATE_DIRECTORY
+PASS: Airfield guard covers AIRFIELD_DISCOVERY_ENUMERATE_CFG
+PASS: Airfield guard covers AIRFIELD_DISCOVERY_PARSE_CFG
+PASS: Airfield guard covers AIRFIELD_DISCOVERY_LOAD_SURVEY_CATALOG
+PASS: Airfield guard covers AIRFIELD_CACHE_SAVE
+PASS: Terrain Preload Database has one guard adapter
+PASS: Terrain guard covers TERRAIN_MANIFEST_OPEN_READ
+PASS: Terrain guard covers TERRAIN_MANIFEST_CHUNK_EXISTS
+PASS: Terrain guard covers TERRAIN_RECOVERY_ENUMERATE_CHUNKS
+PASS: Terrain guard covers TERRAIN_RECOVERY_READ_CHUNK
+PASS: Terrain guard covers TERRAIN_COMMIT_WRITE_RECOVERY_MARKER
+PASS: Terrain guard covers TERRAIN_COMMIT_VERIFY_READ
+PASS: Terrain guard covers TERRAIN_PAYLOAD_READ_CHUNK
+PASS: Terrain guard covers TERRAIN_CHUNK_OPEN_WRITE
+PASS: Terrain guard covers TERRAIN_MANIFEST_OPEN_WRITE
+PASS: Terrain guard covers TERRAIN_ATOMIC_REPLACE
+PASS: Terrain guard covers TERRAIN_DELETE_FILE
+PASS: every direct Airfield Registry filesystem call is guard-adjacent
+PASS: every direct Terrain Preload Database filesystem call is guard-adjacent
+PASS: successor removes Map DRAM guard debug presentation from SYSTEM
+PASS: successor hides Airfield read-routing debug while runtime guard remains
+PASS: successor hides violation debug while actionable telemetry remains in owner
+PASS: AERIS shutdown emits one Map DRAM session summary before logger shutdown
+PASS: summary is emitted while the dedicated logger is still active
+PASS: identity adds Hotfix 2 while preserving Hotfix 1 regression identity
+PASS: Ubuntu build entrypoint generates Hotfix 2 identity
+PASS: KSP version metadata identifies Hotfix 2
+PASS: CP2.5 acceptance runner includes Hotfix 2
+PASS: specification, runtime test card and acceptance contract are included
+PASS: Hotfix 2 adds no FlightInputHandler.state authority/content
+PASS: Hotfix 2 adds no MainThrottle = authority/content
+PASS: Hotfix 2 adds no RunwayMasterCorrection authority/content
+PASS: Hotfix 2 adds no CURATED_RUNWAY_GEODETIC_DEFAULTS authority/content
+PASS: Map DRAM and Terrain database remain outside CP3 Resident ownership
+[v0.18.0.0 CP2.5 Map DRAM Cache Foundation Hotfix 2] 77/77 PASS
+
+=== selftest_v01800_cp35_gate1_back_render_profiler_symmetric_top_ui_candidate2.py ===
+PASS: renderer braces balanced
+PASS: renderer parens balanced
+PASS: window braces balanced
+PASS: window parens balanced
+PASS: nd braces balanced
+PASS: nd parens balanced
+PASS: forced recovery full-render path remains removed
+PASS: suppressed forced-recovery demand remains observable
+PASS: successor uses its explicit bounded BACK cadence
+PASS: Candidate 1 range slowdown removed: BackRefresh40KmSeconds
+PASS: Candidate 1 range slowdown removed: BackRefresh80KmSeconds
+PASS: Candidate 1 range slowdown removed: BackRefresh160KmSeconds
+PASS: range-independent cadence resolver returns the current explicit schedule
+PASS: scheduled BACK deadline remains explicit
+PASS: only initial FRONT attempt bypasses cadence
+PASS: no executable GUI.matrix terrain warp
+PASS: CPU terrain presentation remains prohibited
+PASS: detailed profiler samples one in four BACK renders
+PASS: sampling stride is enforced at BACK entry
+PASS: aggregated BACK profile telemetry marker exists
+PASS: profile telemetry includes setup_clear_avg_ms=
+PASS: profile telemetry includes projection_cpu_avg_ms=
+PASS: profile telemetry includes mesh_vertex_upload_avg_ms=
+PASS: profile telemetry includes bounds_avg_ms=
+PASS: profile telemetry includes colour_cpu_avg_ms=
+PASS: profile telemetry includes colour_upload_avg_ms=
+PASS: profile telemetry includes draw_submit_avg_ms=
+PASS: profile telemetry includes finalize_avg_ms=
+PASS: profile telemetry includes other_avg_ms=
+PASS: profile telemetry includes projected_vertices_avg=
+PASS: profile telemetry includes draw_calls_avg=
+PASS: profile telemetry includes cadence_s=
+PASS: BACK profiler uses one aggregated log site, not per-tile logging
+PASS: successor preserves a bounded presentation path while Gate 2 removes normal main-thread projection
+PASS: projection CPU, vertex upload and bounds costs are separately timed
+PASS: colour generation and mesh colour upload are separately timed
+PASS: material/DrawMeshNow submission has separate timing and draw count
+PASS: existing GPU presentation total-cost telemetry remains fed
+PASS: main top labels match screenshot-reference row set
+PASS: main top UI is fixed 3 + 2 row topology
+PASS: button widths are equal subdivisions of the full available row
+PASS: top buttons advance by equal width and equal gap from the same left edge
+PASS: top rows occupy the available window width with symmetric outer margins
+PASS: MASTER uses the full available symmetric row width
+PASS: SYSTEM row preserves Candidate 13 removal and fills PRELOAD row symmetrically
+PASS: removed SYSTEM DIAGNOSTICS functionality is not reintroduced
+PASS: automatic text wrapping remains prohibited
+PASS: raw AERIS window skin text is forced no-wrap while drawing
+PASS: topology cannot jump at historical width thresholds
+PASS: main tab row count is invariant and text-independent
+PASS: preload UI snapshot caching remains at 4 Hz
+PASS: ND telemetry/GC throttles remain inherited
+PASS: frozen supply/authority boundary byte-identical: Terrain/AERISTerrainTileContracts.cs
+PASS: frozen supply/authority boundary byte-identical: Terrain/AERISTerrainGpuTileRasterizer.cs
+PASS: frozen supply/authority boundary byte-identical: Landing/AERISAirfieldRegistry.cs
+PASS: frozen supply/authority boundary byte-identical: Autopilot/AERISBankDirector.cs
+PASS: 41 physical runway field-verified baseline remains present
+PASS: source current UiCheckpoint is Candidate 2 or its Gate 2 successor
+PASS: build identity is Candidate 2
+PASS: AVC identity is Candidate 2
+PASS: README documents profiling bridge and symmetric top UI
+PASS: Candidate 2 acceptance document present
+PASS: Candidate 2 runtime test card present
+PASS: Candidate 2 source diff audit present
+PASS: Candidate 1 runtime diagnosis evidence preserved
+PASS: build_ubuntu.sh executable permission retained
+[v0.18.0.0 CP3.5 Gate 1 Back Render Profiler / Symmetric Top UI Candidate 2] 66/66 PASS
+
+[v0.18.0.0 CP3.5 Gate 1 Back Render Profiler / Symmetric Top UI Candidate 2] 12/12 scripts PASS
+
+=== Gate 2 Candidate 1 dedicated selftest ===
+PASS: renderer braces balanced
+PASS: renderer parens balanced
+PASS: scheduler braces balanced
+PASS: scheduler parens balanced
+PASS: window braces balanced
+PASS: window parens balanced
+PASS: Gate 2 publishes 50 ms target cadence
+PASS: only one projection batch may be outstanding
+PASS: Draw consumes completed batch then schedules successor
+PASS: synchronous full projection is emergency fallback only
+PASS: per-refresh RecalculateBounds removed in favour of safe fixed bounds
+PASS: Gate 2 worker telemetry marker exists
+PASS: Gate 2 telemetry includes workers_last=
+PASS: Gate 2 telemetry includes worker_cpu_ms_per_completed=
+PASS: Gate 2 telemetry includes worker_wall_ms_per_completed=
+PASS: Gate 2 telemetry includes projected_vertices=
+PASS: Gate 2 telemetry includes colour_vertices=
+PASS: Gate 2 telemetry includes target_cadence_s=
+PASS: worker fan-out follows scheduler pool and active permit limits
+PASS: entries are vertex-weight balanced across all currently permitted workers
+PASS: projection chunks use shared GeneralCompute scheduler with required commits
+PASS: shared scheduler scales worker pool from logical CPU count with reserved cores
+PASS: terrain worker telemetry includes projection jobs
+PASS: worker pure-data boundary excludes Graphics.
+PASS: worker pure-data boundary excludes RenderTexture
+PASS: worker pure-data boundary excludes Material.
+PASS: worker pure-data boundary excludes GL.
+PASS: worker pure-data boundary excludes Mesh 
+PASS: worker pure-data boundary excludes mesh.
+PASS: worker pure-data boundary excludes FlightGlobals
+PASS: worker pure-data boundary excludes Vessel 
+PASS: worker pure-data boundary excludes UnityEngine.Object
+PASS: worker pure-data boundary excludes GameObject
+PASS: worker pure-data boundary excludes Transform
+PASS: worker owns geographic projection and colour preparation
+PASS: Unity Mesh upload and draw remain on prepared main-thread commit path
+PASS: reset lets one bounded worker batch retire instead of racing cancelled scratch writers
+PASS: compact readable window/button baseline published
+PASS: button minimum geometry is text-readable rather than blindly compressed
+PASS: automatic text wrapping remains prohibited
+PASS: long one-line controls use full-row small-MASTER layout
+PASS: explicit two-line runway rows retain their taller layout
+PASS: screenshot-reference top layout remains 3+2 with symmetric rows
+PASS: AUTOPILOT child categories are TAKEOFF / FLIGHT / NAV / LAND
+PASS: category colours derive from real controller state
+PASS: category buttons use green-any-active / red-none-active status colours
+PASS: AUTOPILOT pages are functionally separated and FLIGHT owns normal AP controls
+PASS: source identity is Gate 2 Candidate 1
+PASS: Ubuntu build generator publishes Gate 2 Candidate 1
+PASS: AVC metadata publishes Gate 2 Candidate 1
+PASS: README documents Gate 2 performance and UI contracts
+PASS: build_ubuntu.sh executable permission retained
+[v0.18.0.0 CP3.5 Gate 2 Parallel Projection / Compact Autopilot UI Candidate 1] 52/52 PASS
+
+[CP3.5 Gate 2 Candidate 1 pre-manifest static] 2/2 suites PASS

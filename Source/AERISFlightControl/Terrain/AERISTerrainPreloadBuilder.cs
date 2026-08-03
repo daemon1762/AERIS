@@ -782,7 +782,7 @@ namespace AERISFlightControl.Terrain
                 plan.QualityLimit < AERISTerrainTileLod.Local)
                 return ScanResult.Complete;
 
-            int variants = plan.QualityLimit >= AERISTerrainTileLod.Land ? 18 : 9;
+            const int variants = 9;
             int total = localPoints.Count * variants;
             if (total <= 0) return ScanResult.Complete;
             if (plan.PointCursor < 0 || plan.PointCursor >= total) plan.PointCursor = 0;
@@ -797,8 +797,7 @@ namespace AERISFlightControl.Terrain
                 AERISTerrainPreloadPoint point = localPoints[(linear / variants) %
                     localPoints.Count];
                 int variant = linear % variants;
-                AERISTerrainTileLod lod = variant >= 9 ?
-                    AERISTerrainTileLod.Land : AERISTerrainTileLod.Local;
+                AERISTerrainTileLod lod = AERISTerrainTileLod.Local;
                 if (lod > plan.QualityLimit || lod > point.MaximumLod)
                 {
                     plan.PointScannedWithoutMiss++;
@@ -1232,41 +1231,10 @@ namespace AERISFlightControl.Terrain
 
         bool TryAdvanceAutomaticPlan(CelestialBody currentBody)
         {
-            if (mode == AERISTerrainPreloadMode.Off ||
-                mode == AERISTerrainPreloadMode.Manual || HasManualRequest()) return false;
-            BodyPlan selected = null;
-            lock (sync)
-            {
-                foreach (BodyPlan candidate in plans.Values)
-                {
-                    if (candidate == null || candidate.Paused || candidate.Cancelled ||
-                        candidate.QualityOverride ||
-                        candidate.Priority < AERISTerrainBodyPriority.High ||
-                        candidate.QualityLimit != AERISTerrainTileLod.Far ||
-                        !AutomaticTargetComplete(candidate) ||
-                        !HasPreloadPointsLocked(candidate.BodyName) ||
-                        BodyAtStorageLimit(candidate)) continue;
-                    CelestialBody body = FindBody(candidate.BodyName);
-                    if (body == null ||
-                        !AERISTerrainTileSystem.BodyHasSolidSurface(body)) continue;
-                    if (selected == null ||
-                        ComparePlans(candidate, selected, currentBody) < 0)
-                        selected = candidate;
-                }
-                if (selected == null) return false;
-                selected.QualityLimit = AERISTerrainTileLod.Land;
-                selected.AutomaticPointRefinementOnly = true;
-                selected.EstimatedTargetTiles = 0L;
-                InvalidateAutomaticCompletion(selected);
-                ResetScanState(selected);
-                selected.Generation++;
-                stateDirty = true;
-            }
-            status = "PRELOAD AUTO REFINE SITES: " + selected.BodyName;
-            AERISLogger.Info("[PRELOAD_AUTO] body=" + selected.BodyName +
-                "; event=PROMOTE; from=FAR_GLOBAL; to=LAND_SITES; " +
-                "routeGlobal=False");
-            return true;
+            // CP3.5 quality simplification: automatic preload ends at the validated
+            // Global/Far foundation. High-resolution ND detail is reconstructed or
+            // viewport-demanded; there is no hidden landing-site promotion stage.
+            return false;
         }
 
         bool HasPreloadPointsLocked(string bodyName)
@@ -1310,8 +1278,7 @@ namespace AERISFlightControl.Terrain
         static string AutomaticTargetLabel(BodyPlan plan)
         {
             if (plan == null) return "UNKNOWN";
-            return plan.AutomaticPointRefinementOnly
-                ? "LAND_SITES" : plan.QualityLimit.ToString().ToUpperInvariant() + "_GLOBAL";
+            return plan.QualityLimit.ToString().ToUpperInvariant() + "_GLOBAL";
         }
 
         static int ComparePlans(BodyPlan a, BodyPlan b, CelestialBody currentBody)
@@ -1882,7 +1849,6 @@ namespace AERISFlightControl.Terrain
                     if (string.Equals(points[i].BodyName, body.name,
                         StringComparison.OrdinalIgnoreCase)) pointCount++;
             if (plan.QualityLimit >= AERISTerrainTileLod.Local) total += pointCount * 9L;
-            if (plan.QualityLimit >= AERISTerrainTileLod.Land) total += pointCount * 9L;
             if (plan.QualityLimit >= AERISTerrainTileLod.Far)
                 total += CountTiles(body, AERISTerrainTileLod.Far);
             if (plan.QualityLimit >= AERISTerrainTileLod.Route &&
