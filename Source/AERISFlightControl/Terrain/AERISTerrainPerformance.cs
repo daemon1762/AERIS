@@ -74,13 +74,12 @@ namespace AERISFlightControl.Terrain
         {
             new AERISTerrainPerformanceProfile("LOW", 13, 9, 3, 25f, 1, 2.0f, 12, 1.5f, 15f, 30f,
                 18, 0, 1, 120f, 6, 0.35f, AERISTerrainTileLod.Route, 64, 512, 48),
-            new AERISTerrainPerformanceProfile("MIDDLE", 17, 11, 3, 60f, 2, 1.0f, 18, 3f, 24f, 45f,
+            new AERISTerrainPerformanceProfile("MEDIUM", 17, 11, 3, 60f, 2, 1.0f, 18, 3f, 24f, 45f,
                 32, 1, 2, 360f, 16, 0.75f, AERISTerrainTileLod.Local, 128, 1024, 96),
-            // Frozen CP3 / Gate 2 envelope. Candidate 1 widened this working set for
-            // generated hi-res tiles and could not keep it resident; Candidate 2
-            // deliberately returns to the known bounded budget.
             new AERISTerrainPerformanceProfile("HIGH", 21, 15, 4, 120f, 4, 0.55f, 24, 5f, 30f, 60f,
                 48, 1, 3, 720f, 32, 1.25f, AERISTerrainTileLod.Local, 256, 2048, 192),
+            new AERISTerrainPerformanceProfile("LAND", 25, 17, 4, 240f, 6, 0.30f, 32, 8f, 45f, 60f,
+                64, 2, 4, 1200f, 48, 1.80f, AERISTerrainTileLod.Land, 512, 4096, 384),
         };
         const int MaximumAutomaticQualityIndex = 2;
 
@@ -101,6 +100,7 @@ namespace AERISFlightControl.Terrain
         float nextEvaluationRealtime;
         float lastFrameRealtime;
         bool workerBacklogged;
+        bool landDetailActive;
         bool externalMaintenanceActive;
         bool maintenanceFreezeLogged;
         float maintenanceHoldUntilRealtime;
@@ -127,12 +127,22 @@ namespace AERISFlightControl.Terrain
         {
             get
             {
+                if (landDetailActive && settings != null &&
+                    settings.TerrainLandRuntimeQualityEnabled) return Profiles[3];
                 int index = QualityIndexFromSettings();
                 return Profiles[Mathf.Clamp(index, 0, MaximumAutomaticQualityIndex)];
             }
         }
 
         internal string EffectiveQualityName { get { return ActiveProfile.Name; } }
+        internal bool LandDetailActive { get { return landDetailActive; } }
+
+        internal void SetLandDetailActive(bool active)
+        {
+            if (landDetailActive == active) return;
+            landDetailActive = active;
+            profileRevision++;
+        }
         internal void SetExternalMaintenanceActive(bool active)
         {
             if (active)
@@ -396,6 +406,9 @@ namespace AERISFlightControl.Terrain
                 case AERISTerrainQualityMode.Low: return 0;
                 case AERISTerrainQualityMode.Medium: return 1;
                 case AERISTerrainQualityMode.High: return 2;
+                // Legacy/stray LAND is a base-quality HIGH fallback. The central
+                // Gate 3 policy alone may activate Profiles[3].
+                case AERISTerrainQualityMode.Land: return 2;
                 default: return automaticQualityIndex;
             }
         }

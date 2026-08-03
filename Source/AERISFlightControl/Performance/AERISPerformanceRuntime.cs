@@ -124,6 +124,7 @@ namespace AERISFlightControl.Performance
         int cp3ResidentFarCount;
         int cp3ResidentRouteCount;
         int cp3ResidentLocalCount;
+        int cp3ResidentLandCount;
         int cp3ResidentPinnedCount;
         long cp3ResidentCacheHits;
         long cp3ResidentCacheMisses;
@@ -530,6 +531,7 @@ namespace AERISFlightControl.Performance
                 cp3ResidentFarCount = Math.Max(0, resident.FarCount);
                 cp3ResidentRouteCount = Math.Max(0, resident.RouteCount);
                 cp3ResidentLocalCount = Math.Max(0, resident.LocalCount);
+                cp3ResidentLandCount = Math.Max(0, resident.LandCount);
                 cp3ResidentPinnedCount = Math.Max(0, resident.PinnedEntryCount);
                 cp3ResidentCacheHits = Math.Max(0L, resident.CacheHits);
                 cp3ResidentCacheMisses = Math.Max(0L, resident.CacheMisses);
@@ -756,7 +758,7 @@ namespace AERISFlightControl.Performance
                 cp3ResidentEntryCount, cp3ResidentRamCount,
                 cp3ResidentGlobalCount, cp3ResidentFarCount,
                 cp3ResidentRouteCount, cp3ResidentLocalCount,
-                cp3ResidentPinnedCount,
+                cp3ResidentLandCount, cp3ResidentPinnedCount,
                 cp3ResidentCacheHits, cp3ResidentCacheMisses,
                 cp3ResidentDecodeSubmissions, cp3ResidentDecodeSuccesses,
                 cp3ResidentDecodeFailures, cp3ResidentStaleRejects,

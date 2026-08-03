@@ -1,0 +1,60 @@
+AERIS Flight Control v0.18.0.0
+CP3.75 PURE ND REBASE CANDIDATE 1 — STATIC ACCEPTANCE
+
+PURPOSE
+Restore the late/final CP3 Candidate14 ND terrain/geographic/runway presentation authority
+on top of the latest AERIS20 non-ND baseline. This candidate intentionally performs no
+performance optimization.
+
+SOURCE AUTHORITIES
+PASS — CP3 Candidate14 exact archive SHA-256:
+350758594c3bb8ab36eed5c096515dfd20e2989b96a2089c96c52a624093b140
+PASS — AERIS20 CP3.5 Gate4 Candidate2 current/rejected archive SHA-256:
+aa473f1f77d0b3c5356290ecdfc1b0a07d120616eeba7307229bff8b6722656e
+
+STATIC REBASE CONTRACT
+PASS — 19 ND/supply dependency files restored byte-for-byte from Candidate14.
+PASS — AERISTerrainLandDetailActivationPolicy.cs restored and compiled by csproj.
+PASS — 121 protected non-ND runtime/airfield files unchanged from AERIS20 Candidate2.
+PASS — FDR/CVR verified ZIP retention preserved (default 10, selectable 1..30).
+PASS — Candidate14 terrain quality model revision/LAND capability restored.
+PASS — Candidate14 ND presentation file restored byte-for-byte.
+PASS — rejected CP3.5 Gate4 identity removed from active build identity.
+PASS — CP2 C# definite-assignment compile regression 25/25.
+
+STATIC TOOLS
+Tools/run_v01800_cp375_candidate1_prebuild.py
+Tools/run_v01800_cp375_candidate1_full_acceptance.py
+Tools/selftest_v01800_cp375_candidate1_pure_nd_rebase.py
+Tools/verify_cp375_candidate1_source_manifest.py
+Tools/verify_cp375_candidate1_package_manifest.py
+
+RUNTIME GATES — REQUIRED, NOT YET CLAIMED
+Gate C Golden Visual:
+- 20 km dense contour/terrain relief comparable to late CP3.
+- 160 km readable coastline/landmass silhouette.
+- no giant block mosaic, coarse red polygon map, blank/blue-only terrain.
+
+Gate D Geographic Authority:
+- ownship/terrain/runway/prediction share projection authority.
+- TRK UP and NORTH UP both correct.
+- 5/10/20/40/80/160 km scaling correct.
+
+Gate E Runway Visibility:
+- selected runway visible in TRK UP and NORTH UP.
+- no phantom runway.
+- 41 physical / 82 reciprocal runway authority retained.
+
+Gate F Runtime Stability:
+- no exception/crash/endless BUILDING/generation chase.
+- scene/body transition recovery.
+- solid-surface-only preload.
+
+Gate G Performance:
+DEFERRED until Gates C-F pass. Measure ND ON/Terrain ON, ND ON/Terrain OFF and ND OFF
+for >=15-20 s under the same fixture. Do not optimize quality before baseline capture.
+
+STATUS
+STATIC ACCEPTANCE: PASS
+NATIVE UBUNTU xbuild: USER ENVIRONMENT REQUIRED
+KSP RUNTIME ACCEPTANCE: REQUIRED

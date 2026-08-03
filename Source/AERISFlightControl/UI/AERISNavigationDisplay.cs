@@ -243,8 +243,7 @@ namespace AERISFlightControl.UI
             centerStyle = new GUIStyle(textStyle)
             {
                 alignment = TextAnchor.MiddleCenter,
-                wordWrap = false,
-                clipping = TextClipping.Clip
+                wordWrap = true
             };
             buttonStyle = new GUIStyle(GUI.skin.button)
             {
@@ -357,10 +356,6 @@ namespace AERISFlightControl.UI
             double terrainCenterLongitudeDeg = vessel == null ? 0.0 :
                 (planMode ? planCenterLongitudeDeg : vessel.longitude);
             float anchorV = planMode || !effectiveTrackUp ? 0.5f : 0.75f;
-            bool drawNonRunwayFacilities = !landActive;
-            if (terrainTileRenderer != null)
-                terrainTileRenderer.SetWorldSurfaceNavigationFrame(hasFrame ? frame : null,
-                    drawNonRunwayFacilities);
             bool repaint = Event.current == null || Event.current.type == EventType.Repaint;
             if (repaint)
             {
@@ -416,34 +411,20 @@ namespace AERISFlightControl.UI
                         frame.OriginLongitudeDeg, presentedCenterLatitudeDeg,
                         presentedCenterLongitudeDeg, out centerEast, out centerNorth);
                 }
-                // CP3.5 Gate 3 Candidate 3 authority hotfix: ownship is a high-frequency
-                // cockpit overlay, not world-surface symbology. In normal ND modes it must
-                // stay on the live ownship anchor even while an older exact terrain FRONT
-                // is latched. PLAN mode remains geographic and therefore follows the
-                // presented world projection.
                 Vector2 aircraftPoint;
-                if (!planMode)
-                {
-                    aircraftPoint = new Vector2(plan.x + plan.width * 0.5f,
-                        plan.y + plan.height * anchorV);
-                }
-                else
-                {
-                    TryMapPoint(ownEast - centerEast, ownNorth - centerNorth,
-                        presentedRange, presentedHeading, presentedTrackUp, plan,
-                        presentedAnchorV, out aircraftPoint);
-                }
+                TryMapPoint(ownEast - centerEast, ownNorth - centerNorth,
+                    presentedRange, presentedHeading, presentedTrackUp, plan,
+                    presentedAnchorV, out aircraftPoint);
                 DrawRangeRings(plan, aircraftPoint, scale);
                 DrawTrail(plan, vessel, presentedRange, presentedHeading, presentedTrackUp,
                     presentedAnchorV, presentedCenterLatitudeDeg,
                     presentedCenterLongitudeDeg, scale);
-                bool worldSurfaceIntegrated = terrainTileRenderer != null &&
-                    terrainTileRenderer.IsWorldSurfaceNavigationCurrent(frame,
-                        drawNonRunwayFacilities);
+                bool drawNonRunwayFacilities = false;
+                if (!landActive) drawNonRunwayFacilities = true;
                 DrawPreparedNavigation(plan, frame, vessel, presentedRange,
                     presentedHeading, presentedTrackUp, presentedAnchorV, centerEast,
                     centerNorth, presentedCenterLatitudeDeg, presentedCenterLongitudeDeg,
-                    scale, drawNonRunwayFacilities, worldSurfaceIntegrated);
+                    scale, drawNonRunwayFacilities);
                 DrawPreparedTraffic(plan, trafficFrame, vessel, presentedRange,
                     presentedHeading, presentedTrackUp, presentedAnchorV,
                     presentedCenterLatitudeDeg, presentedCenterLongitudeDeg, scale);
@@ -846,8 +827,7 @@ namespace AERISFlightControl.UI
         void DrawPreparedNavigation(Rect plot, AERISPreparedNavigationFrame frame,
             Vessel vessel, float range, float heading, bool trackUp, float anchorV,
             double centerEast, double centerNorth, double centerLatitudeDeg,
-            double centerLongitudeDeg, float scale, bool drawFacilities,
-            bool geometryAlreadyInWorldSurface)
+            double centerLongitudeDeg, float scale, bool drawFacilities)
         {
             if (frame == null) return;
             AERISPreparedFacilitySymbol[] facilities = frame.Facilities ??
@@ -855,7 +835,7 @@ namespace AERISFlightControl.UI
             int facilityLimit = core.Terrain != null && core.Terrain.Performance != null ?
                 core.Terrain.Performance.ActiveProfile.MaximumFacilitySymbols : 24;
             int facilityDrawn = 0;
-            for (int i = 0; drawFacilities && !geometryAlreadyInWorldSurface && i < facilities.Length &&
+            for (int i = 0; drawFacilities && i < facilities.Length &&
                 facilityDrawn < facilityLimit; i++)
             {
                 AERISPreparedFacilitySymbol facility = facilities[i];
@@ -892,16 +872,14 @@ namespace AERISFlightControl.UI
                 if (!runway.SelectedRunway && !RunwayMayIntersectVisibleMap(runway,
                     centerEast, centerNorth, range, anchorV)) continue;
                 DrawPreparedRunway(plot, runway, vessel, range, anchorV,
-                    centerLatitudeDeg, centerLongitudeDeg, runwayProjection, scale,
-                    geometryAlreadyInWorldSurface);
+                    centerLatitudeDeg, centerLongitudeDeg, runwayProjection, scale);
             }
         }
 
         void DrawPreparedRunway(Rect plot, AERISPreparedRunwaySymbol runway,
             Vessel vessel, float range, float anchorV,
             double centerLatitudeDeg, double centerLongitudeDeg,
-            AERISNdMapProjection projection, float scale,
-            bool geometryAlreadyInWorldSurface)
+            AERISNdMapProjection projection, float scale)
         {
             if (runway == null || vessel == null || vessel.mainBody == null) return;
             Vector2 a, b, center;
@@ -928,26 +906,20 @@ namespace AERISFlightControl.UI
             float widthPixels = Mathf.Clamp((float)(Math.Max(8.0, runway.WidthMeters) /
                 Math.Max(1.0, range * 2.0) * plot.height), 1.2f, 7f);
             if (selected) widthPixels = Mathf.Max(widthPixels, 2.4f * scale);
-            bool previewOnlyHighlight = !runway.SelectedRunway &&
-                string.Equals(runway.RunwayStableId, previewRunwayStableId,
-                    StringComparison.Ordinal);
+            DrawLine(a, b, new Color(0.01f, 0.02f, 0.03f, 0.90f), widthPixels + 2f);
+            DrawLine(a, b, color, widthPixels);
+            DrawLine(a, b, new Color(color.r, color.g, color.b, 0.52f), 1f);
             bool showRunwayEndNumbers = range <= 20000f;
             Vector2 axis = b - a;
-            if (!geometryAlreadyInWorldSurface || previewOnlyHighlight)
+            if (showRunwayEndNumbers && axis.sqrMagnitude > 0.1f)
             {
-                DrawLine(a, b, new Color(0.01f, 0.02f, 0.03f, 0.90f), widthPixels + 2f);
-                DrawLine(a, b, color, widthPixels);
-                DrawLine(a, b, new Color(color.r, color.g, color.b, 0.52f), 1f);
-                if (showRunwayEndNumbers && axis.sqrMagnitude > 0.1f)
-                {
-                    axis.Normalize();
-                    Vector2 perpendicular = new Vector2(-axis.y, axis.x);
-                    float tick = Mathf.Clamp(4f * scale, 2f, 7f);
-                    DrawLine(a - perpendicular * tick, a + perpendicular * tick,
-                        color, Mathf.Max(1f, 1.3f * scale));
-                    DrawLine(b - perpendicular * tick, b + perpendicular * tick,
-                        color, Mathf.Max(1f, 1.3f * scale));
-                }
+                axis.Normalize();
+                Vector2 perpendicular = new Vector2(-axis.y, axis.x);
+                float tick = Mathf.Clamp(4f * scale, 2f, 7f);
+                DrawLine(a - perpendicular * tick, a + perpendicular * tick,
+                    color, Mathf.Max(1f, 1.3f * scale));
+                DrawLine(b - perpendicular * tick, b + perpendicular * tick,
+                    color, Mathf.Max(1f, 1.3f * scale));
             }
             // CP3 Gate 4C runway-end declutter: the old 36px label attempted to draw
             // the full direction name (for example "RWY 09") and collapsed to an
@@ -1564,15 +1536,8 @@ namespace AERISFlightControl.UI
             double trackRad = cachedFallbackMapHeading * Math.PI / 180.0;
             double east = Math.Sin(trackRad) * distance;
             double north = Math.Cos(trackRad) * distance;
-            // Prediction is ownship-relative. The previous implementation projected
-            // delta-east/north from the world-surface centre, so a latched FRONT made the
-            // vector endpoint drift away from the live ownship (especially at short range).
-            Vector2 projectionOrigin, projectedEnd;
-            if (!TryMapPoint(0.0, 0.0, range, heading, trackUp, plot, anchorV,
-                out projectionOrigin) ||
-                !TryMapPoint(east, north, range, heading, trackUp, plot, anchorV,
-                out projectedEnd)) return;
-            Vector2 end = aircraftPoint + (projectedEnd - projectionOrigin);
+            Vector2 end;
+            TryMapPoint(east, north, range, heading, trackUp, plot, anchorV, out end);
             end = ClampToRect(end, plot, 3f);
             Color color = new Color(0.55f, 0.96f, 1f, 0.88f);
             DrawLine(aircraftPoint, end, color, Mathf.Max(1f, 1.2f * scale));
@@ -1583,10 +1548,9 @@ namespace AERISFlightControl.UI
                 double tickDistance = Math.Min(distance, speed * tickSeconds[i]);
                 double tickEast = Math.Sin(trackRad) * tickDistance;
                 double tickNorth = Math.Cos(trackRad) * tickDistance;
-                Vector2 projectedTick;
+                Vector2 tick;
                 if (!TryMapPoint(tickEast, tickNorth, range, heading, trackUp,
-                    plot, anchorV, out projectedTick)) continue;
-                Vector2 tick = aircraftPoint + (projectedTick - projectionOrigin);
+                    plot, anchorV, out tick)) continue;
                 Vector2 direction = (end - aircraftPoint).normalized;
                 Vector2 perpendicular = new Vector2(-direction.y, direction.x);
                 DrawLine(tick - perpendicular * 2.5f, tick + perpendicular * 2.5f,

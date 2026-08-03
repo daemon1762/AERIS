@@ -1083,6 +1083,7 @@ namespace AERISFlightControl.Terrain
                     StringComparison.OrdinalIgnoreCase);
             if (protectedBody) score += 2000;
             if (chunk.Lod == AERISTerrainTileLod.Global) score += 1500;
+            else if (chunk.Lod == AERISTerrainTileLod.Land) score += 1200;
             else if (chunk.Lod == AERISTerrainTileLod.Far) score += 300;
             else if (chunk.Lod == AERISTerrainTileLod.Route) score += 100;
             return score;

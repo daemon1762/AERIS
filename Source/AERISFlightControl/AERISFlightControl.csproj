@@ -119,6 +119,7 @@
     <Compile Include="Landing\AERISLandingFoundation.cs" />
     <Compile Include="Terrain\AERISTerrainPerformance.cs" />
     <Compile Include="Terrain\AERISTerrainViewportActivationPolicy.cs" />
+    <Compile Include="Terrain\AERISTerrainLandDetailActivationPolicy.cs" />
     <Compile Include="Terrain\AERISNdMapProjection.cs" />
     <Compile Include="Terrain\AERISTerrainViewportFoundationPlanner.cs" />
     <Compile Include="Terrain\AERISTerrainTileContracts.cs" />

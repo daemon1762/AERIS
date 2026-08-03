@@ -98,9 +98,6 @@ namespace AERISFlightControl.Performance
         internal string Name = string.Empty;
         internal int FacilityKind;
         internal bool Selected;
-        internal double LatitudeDeg;
-        internal double LongitudeDeg;
-        internal bool HasGeographicPosition;
         internal double EastMeters;
         internal double NorthMeters;
         internal double DistanceFromOriginMeters;
@@ -254,12 +251,6 @@ namespace AERISFlightControl.Performance
                     Name = item.Name ?? string.Empty,
                     FacilityKind = item.FacilityKind,
                     Selected = item.Selected,
-                    LatitudeDeg = item.LatitudeDeg,
-                    LongitudeDeg = item.LongitudeDeg,
-                    HasGeographicPosition = !double.IsNaN(item.LatitudeDeg) &&
-                        !double.IsInfinity(item.LatitudeDeg) &&
-                        !double.IsNaN(item.LongitudeDeg) &&
-                        !double.IsInfinity(item.LongitudeDeg),
                     EastMeters = east,
                     NorthMeters = north,
                     DistanceFromOriginMeters = Math.Sqrt(east * east + north * north)

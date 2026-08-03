@@ -31,7 +31,8 @@ namespace AERISFlightControl.Terrain
         Global = 0,
         Far = 1,
         Route = 2,
-        Local = 3
+        Local = 3,
+        Land = 4
     }
 
     internal enum AERISTerrainTilePriority
@@ -47,8 +48,9 @@ namespace AERISFlightControl.Terrain
     internal enum AERISTerrainRequestLane
     {
         Viewport = 0,
-        LookAhead = 1,
-        Background = 2
+        Landing = 1,
+        LookAhead = 2,
+        Background = 3
     }
 
     internal enum AERISTerrainSamplingStage
@@ -75,6 +77,7 @@ namespace AERISFlightControl.Terrain
         {
             switch (lod)
             {
+                case AERISTerrainTileLod.Land: return 8.0;
                 case AERISTerrainTileLod.Local: return 64.0;
                 case AERISTerrainTileLod.Route: return 256.0;
                 case AERISTerrainTileLod.Far: return 1024.0;
@@ -257,10 +260,6 @@ namespace AERISFlightControl.Terrain
         internal long DatabaseGeneration;
         internal AERISTerrainReadLane ReadLane;
         internal AERISTerrainWorkOwner WorkOwner;
-        // Gate 4 HIGH real-65 refinement is a bounded runtime overlay. It is never
-        // persisted to the 33x33 preload database and partial commits never replace
-        // the complete 33x33 foundation currently visible to the pilot.
-        internal bool TransientRefinement;
         internal bool Visible;
     }
 

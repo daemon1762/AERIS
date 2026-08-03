@@ -30,6 +30,7 @@ namespace AERISFlightControl.Terrain
         readonly AERISTerrainPerformanceController performance;
         readonly AERISTerrainTileSystem displayTiles;
         readonly AERISTerrainViewportActivationPolicy viewportActivation;
+        readonly AERISTerrainLandDetailActivationPolicy landDetailActivation;
         readonly float[] activeElevation = new float[MaximumGridCells];
         readonly byte[] activeFlags = new byte[MaximumGridCells];
         readonly float[] pendingElevation = new float[MaximumGridCells];
@@ -87,6 +88,7 @@ namespace AERISFlightControl.Terrain
             this.settings = settings;
             performance = new AERISTerrainPerformanceController(settings);
             viewportActivation = new AERISTerrainViewportActivationPolicy();
+            landDetailActivation = new AERISTerrainLandDetailActivationPolicy();
             displayTiles = new AERISTerrainTileSystem(settings, performance,
                 mapDramCache);
         }
@@ -101,6 +103,10 @@ namespace AERISFlightControl.Terrain
         internal AERISTerrainViewportActivationPolicy ViewportActivation
         {
             get { return viewportActivation; }
+        }
+        internal AERISTerrainLandDetailActivationPolicy LandDetailActivation
+        {
+            get { return landDetailActivation; }
         }
         internal bool FlightViewportActive
         {
@@ -154,6 +160,8 @@ namespace AERISFlightControl.Terrain
             Array.Clear(activeFlags, 0, activeFlags.Length);
             Array.Clear(pendingFlags, 0, pendingFlags.Length);
             if (viewportActivation != null) viewportActivation.Reset(reason);
+            if (landDetailActivation != null) landDetailActivation.Reset(reason);
+            if (performance != null) performance.SetLandDetailActive(false);
             if (displayTiles != null) displayTiles.Reset(reason);
         }
 
@@ -194,11 +202,35 @@ namespace AERISFlightControl.Terrain
                         viewportActivation.AltitudeAslMeters.ToString("0.0",
                             CultureInfo.InvariantCulture) : "N/A"));
 
+            bool landArmDemand = landing != null && landing.Armed;
+            // Approach and Auto Landing are explicit future demand inputs. They remain
+            // false while independent LAND is observation-only and legacy NAV is absent.
+            bool landActivationChanged = landDetailActivation != null &&
+                landDetailActivation.Evaluate(flightEligible, flightViewportActive,
+                    settings != null && settings.TerrainLandRuntimeQualityEnabled,
+                    landArmDemand, false, false,
+                    vessel == null || vessel.mainBody == null ? string.Empty :
+                    vessel.mainBody.name);
+            bool landDetailActive = landDetailActivation != null &&
+                landDetailActivation.Active;
+            if (performance != null) performance.SetLandDetailActive(landDetailActive);
+            if (landActivationChanged)
+                AERISLogger.Info("[CP2.5/LAND_DETAIL] " +
+                    landDetailActivation.StatusText + " | body=" +
+                    landDetailActivation.BodyName + " | enabled=" +
+                    landDetailActivation.CapabilityEnabled + " | demand=" +
+                    AERISTerrainLandDetailActivationPolicy.FormatDemand(
+                        landDetailActivation.Demand) + " | profile=" +
+                    (performance == null ? "N/A" :
+                        performance.EffectiveQualityName));
+
             // Preload generation must continue in safe non-Flight scenes and while the
             // flight viewport is altitude-gated OFF. Only viewport request generation,
-            // fallback sampling and display-visible terrain work are suspended.
+            // fallback sampling and display-visible terrain work are suspended. LAND
+            // runtime requests additionally require the central Gate 3 demand.
             if (displayTiles != null)
-                displayTiles.Tick(vessel, landing, airfields, flightViewportActive);
+                displayTiles.Tick(vessel, landing, airfields, flightViewportActive,
+                    landDetailActive);
             if (!flightEligible)
             {
                 ClearInactiveFlightViewportState(activationChanged);

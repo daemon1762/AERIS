@@ -1,3 +1,9 @@
+# AERIS Flight Control v0.18.0.0 DEV CP3.75 — Pure ND Rebase Candidate 1
+
+CP3.75 Candidate 1 abandons the rejected CP3.5 ND presentation line and restores the exact CP3 Gate 5 Candidate 14 ND terrain/projection authority on top of the latest AERIS20 non-ND baseline. Terrain presentation, coastline/contours, runway projection, ownship/map geography, fixed 5/10/20/40/80/160 km range behavior, Current-Body Resident Cache dependencies and solid-surface-only preload are restored from the Candidate 14 Golden Authority.
+
+This is deliberately a **pure recovery candidate, not a performance optimization**. The later verified FDR/CVR bounded archive-retention feature and other protected non-ND AERIS20 runtime code remain preserved. Runtime acceptance must first prove CP3-late visual quality, geographic authority, runway visibility and stability before any performance work resumes.
+
 # AERIS Flight Control v0.18.0.0 DEV CP3.5 Gate 4 — CP3 Golden Cartographic Quality Candidate 2
 
 Gate 4 Candidate 1 runtime is rejected. Candidate 2 makes the user-supplied late-CP3 screenshots the **Golden Visual Reference** and restores the proven CP3 cartographic reconstruction path as the quality floor.

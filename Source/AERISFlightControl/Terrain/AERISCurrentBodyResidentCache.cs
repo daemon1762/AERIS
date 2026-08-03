@@ -7,7 +7,7 @@ namespace AERISFlightControl.Terrain
 {
     // CP3 state contract. Gate 3.1 keeps Global/Far as the sole background-populated
     // current-body base. Route/Local remain legal on-demand exact bridge payloads and
-    // adaptive presentation refinement is reconstructed from that base.
+    // LAND remains demand-gated; render preparation and temporal reconstruction are next.
     internal enum AERISResidentTileState
     {
         Indexed = 0,
@@ -25,8 +25,9 @@ namespace AERISFlightControl.Terrain
         GlobalFoundation = 1,
         Viewport = 2,
         ForwardCorridor = 4,
-        Runway = 8,
-        RenderPreparation = 16
+        Landing = 8,
+        Runway = 16,
+        RenderPreparation = 32
     }
 
     internal enum AERISResidentEvictionReason
@@ -131,6 +132,7 @@ namespace AERISFlightControl.Terrain
         internal int FarCount;
         internal int RouteCount;
         internal int LocalCount;
+        internal int LandCount;
         internal int PinnedEntryCount;
         internal int PinLeaseCount;
         internal long Registrations;
@@ -154,10 +156,12 @@ namespace AERISFlightControl.Terrain
         internal long FarBudgetRejects;
         internal long RouteBudgetRejects;
         internal long LocalBudgetRejects;
+        internal long LandBudgetRejects;
         internal long GlobalBudgetEvictions;
         internal long FarBudgetEvictions;
         internal long RouteBudgetEvictions;
         internal long LocalBudgetEvictions;
+        internal long LandBudgetEvictions;
         internal string LastCause = string.Empty;
         internal string Status = "INACTIVE";
     }
@@ -247,10 +251,12 @@ namespace AERISFlightControl.Terrain
         long farBudgetRejects;
         long routeBudgetRejects;
         long localBudgetRejects;
+        long landBudgetRejects;
         long globalBudgetEvictions;
         long farBudgetEvictions;
         long routeBudgetEvictions;
         long localBudgetEvictions;
+        long landBudgetEvictions;
         int pinLeaseCount;
         string lastCause = string.Empty;
         string status = "INACTIVE";
@@ -759,10 +765,12 @@ namespace AERISFlightControl.Terrain
                     FarBudgetRejects = farBudgetRejects,
                     RouteBudgetRejects = routeBudgetRejects,
                     LocalBudgetRejects = localBudgetRejects,
+                    LandBudgetRejects = landBudgetRejects,
                     GlobalBudgetEvictions = globalBudgetEvictions,
                     FarBudgetEvictions = farBudgetEvictions,
                     RouteBudgetEvictions = routeBudgetEvictions,
                     LocalBudgetEvictions = localBudgetEvictions,
+                    LandBudgetEvictions = landBudgetEvictions,
                     LastCause = lastCause,
                     Status = status
                 };
@@ -787,6 +795,7 @@ namespace AERISFlightControl.Terrain
                             case AERISTerrainTileLod.Far: snapshot.FarCount++; break;
                             case AERISTerrainTileLod.Route: snapshot.RouteCount++; break;
                             case AERISTerrainTileLod.Local: snapshot.LocalCount++; break;
+                            case AERISTerrainTileLod.Land: snapshot.LandCount++; break;
                         }
                     }
                     if (entry.PinCount > 0) snapshot.PinnedEntryCount++;
@@ -1016,7 +1025,7 @@ namespace AERISFlightControl.Terrain
             if (disposed) status = "DISPOSED";
             else if (!active) status = "INACTIVE";
             else if (ramBytes > ramBudgetBytes) status = "PINNED OVER BUDGET";
-            else if (localBudgetRejects > 0L ||
+            else if (landBudgetRejects > 0L || localBudgetRejects > 0L ||
                 routeBudgetRejects > 0L || farBudgetRejects > 0L ||
                 globalBudgetRejects > 0L)
                 status = "GATE 4A RENDER-READY RESIDENT — BUDGET DEGRADED";
@@ -1029,7 +1038,8 @@ namespace AERISFlightControl.Terrain
             return lod == AERISTerrainTileLod.Global ||
                 lod == AERISTerrainTileLod.Far ||
                 lod == AERISTerrainTileLod.Route ||
-                lod == AERISTerrainTileLod.Local;
+                lod == AERISTerrainTileLod.Local ||
+                lod == AERISTerrainTileLod.Land;
         }
 
         // Higher values are protected first. Under pressure the cache degrades in
@@ -1042,6 +1052,7 @@ namespace AERISFlightControl.Terrain
                 case AERISTerrainTileLod.Far: return 3;
                 case AERISTerrainTileLod.Route: return 2;
                 case AERISTerrainTileLod.Local: return 1;
+                case AERISTerrainTileLod.Land: return 0;
                 default: return 0;
             }
         }
@@ -1054,6 +1065,7 @@ namespace AERISFlightControl.Terrain
                 case AERISTerrainTileLod.Far: farBudgetRejects++; break;
                 case AERISTerrainTileLod.Route: routeBudgetRejects++; break;
                 case AERISTerrainTileLod.Local: localBudgetRejects++; break;
+                case AERISTerrainTileLod.Land: landBudgetRejects++; break;
             }
         }
 
@@ -1065,6 +1077,7 @@ namespace AERISFlightControl.Terrain
                 case AERISTerrainTileLod.Far: farBudgetEvictions++; break;
                 case AERISTerrainTileLod.Route: routeBudgetEvictions++; break;
                 case AERISTerrainTileLod.Local: localBudgetEvictions++; break;
+                case AERISTerrainTileLod.Land: landBudgetEvictions++; break;
             }
         }
 
