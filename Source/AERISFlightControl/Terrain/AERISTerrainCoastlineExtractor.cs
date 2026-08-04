@@ -9,7 +9,7 @@ namespace AERISFlightControl.Terrain
     internal static class AERISTerrainCoastlineExtractor
     {
         internal const int HighDensityResolution = 129;
-        internal const int HighDensityFormatVersion = 1;
+        internal const int HighDensityFormatVersion = 2;
 
         internal static bool ContainsLandWaterBoundary(AERISTerrainHeightTile tile)
         {
@@ -29,9 +29,11 @@ namespace AERISFlightControl.Terrain
 
         internal static bool HasCurrentHighDensityPayload(AERISTerrainHeightTile tile)
         {
-            return tile != null &&
-                tile.HighDensityCoastlineResolution >= HighDensityResolution &&
-                tile.HighDensityCoastlineSegments != null;
+            if (tile == null || tile.HighDensityCoastlineResolution != HighDensityResolution ||
+                tile.HighDensityCoastlineSegments == null ||
+                tile.HighDensityCoastalFlags == null) return false;
+            int required = HighDensityResolution * HighDensityResolution;
+            return tile.HighDensityCoastalFlags.Length == required;
         }
 
         internal static float[] Build(AERISTerrainHeightTile tile)

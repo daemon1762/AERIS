@@ -36,12 +36,16 @@ namespace AERISFlightControl.Terrain
             internal long FarCursor;
             internal long RouteCursor;
             internal int PointCursor;
-            // Candidate6 high-density coastline upgrade scan. This is independent of
-            // terrain LOD progress so promoting FAR_GLOBAL to LAND_SITES never rebuilds
-            // already-complete coastline vectors.
+            // Candidate7 high-density coastal-boundary phase. The persisted terrain
+            // height field remains low-resolution, but every FAR tile is classified by
+            // this phase and every coastal tile receives a 129x129 land/water mask plus
+            // the matching coastline vector before the body may report 100% READY.
             internal long CoastlineCursor;
             internal long CoastlineScannedWithoutUpgrade;
             internal bool CoastlineComplete;
+            internal long CoastlineTotalTiles;
+            internal readonly HashSet<string> CoastlineProcessedTileIds =
+                new HashSet<string>(StringComparer.Ordinal);
             internal int CompletedCoastlineFormatVersion;
             internal string CompletedCoastlineEnvironmentHash = string.Empty;
             // Transient cyclic scan counters. They are deliberately not persisted: after
@@ -571,13 +575,14 @@ namespace AERISFlightControl.Terrain
                     body.StorageLimitBytes = plan.StorageLimitBytes;
                     body.PendingTiles = CountPendingForBody(plan.BodyName);
                     long target = EstimateTargetTiles(plan, supportedBody);
-                    body.CoverageRatio = target <= 0L ? 0.0 :
-                        Math.Max(0.0, Math.Min(1.0, body.CompleteTiles / (double)target));
+                    body.CoverageRatio = CombinedPreloadCoverage(plan, supportedBody,
+                        body.CompleteTiles, target);
+                    bool ready = AutomaticTargetComplete(plan);
                     body.Status = plan.Paused ? "PAUSED" : plan.Cancelled ? "CANCELLED" :
-                        BodyAtStorageLimit(plan) ? "CAP REACHED" :
+                        BodyAtStorageLimit(plan) ? "CAP REACHED" : ready ? "READY" :
                         string.Equals(activeBodyName, plan.BodyName,
                             StringComparison.OrdinalIgnoreCase) && !flightSuspended ?
-                            "BUILDING" : body.CompleteTiles > 0 ? "READY" : "QUEUED";
+                            "BUILDING" : body.CompleteTiles > 0 ? "BUILDING" : "QUEUED";
                 }
             }
             var bodies = new List<AERISTerrainPreloadBodyStatus>(byName.Values);
@@ -684,15 +689,15 @@ namespace AERISFlightControl.Terrain
                     return false;
                 }
 
-                // Candidate6 adds one post-FAR refinement phase without changing the
-                // established terrain tiles. Existing v1 payloads are decoded, only
-                // mixed land/water FAR tiles are resampled at 129x129, and the resulting
-                // coastline vector is embedded back into the original 33x33 tile.
+                // Candidate7 makes the post-FAR coastal-boundary phase part of the
+                // preload completion contract. Every FAR tile is classified; coastal
+                // tiles are resampled at 129x129 and persist both the land/water mask and
+                // the matching coastline vector. No body may report 100% before it ends.
                 if (!CoastlineTargetComplete(plan, body))
                 {
                     activeLod = AERISTerrainTileLod.Far;
                     bool coastlineQueued = ScheduleCoastlineUpgradeScan(plan, body);
-                    status = "PRELOAD COASTLINE HD: " + plan.BodyName;
+                    status = "PRELOAD COASTAL BOUNDARY HD: " + plan.BodyName;
                     return coastlineQueued;
                 }
 
@@ -948,6 +953,9 @@ namespace AERISFlightControl.Terrain
                 AERISTerrainCoastlineExtractor.HighDensityFormatVersion;
             plan.CompletedCoastlineEnvironmentHash = plan.EnvironmentHash ?? string.Empty;
             plan.CoastlineScannedWithoutUpgrade = 0L;
+            if (plan.CoastlineTotalTiles > 0L)
+                plan.CoastlineCursor = plan.CoastlineTotalTiles;
+            plan.CoastlineProcessedTileIds.Clear();
         }
 
         static void InvalidateCoastlineCompletion(BodyPlan plan)
@@ -958,6 +966,49 @@ namespace AERISFlightControl.Terrain
             plan.CompletedCoastlineEnvironmentHash = string.Empty;
             plan.CoastlineCursor = 0L;
             plan.CoastlineScannedWithoutUpgrade = 0L;
+            plan.CoastlineTotalTiles = 0L;
+            plan.CoastlineProcessedTileIds.Clear();
+        }
+
+        void MarkCoastlineTileProcessed(BodyPlan plan, string stableId)
+        {
+            if (plan == null || string.IsNullOrEmpty(stableId)) return;
+            lock (sync) plan.CoastlineProcessedTileIds.Add(stableId);
+        }
+
+        int CoastlineProcessedCount(BodyPlan plan)
+        {
+            if (plan == null) return 0;
+            lock (sync) return plan.CoastlineProcessedTileIds.Count;
+        }
+
+        double CoastlineCoverageRatio(BodyPlan plan, CelestialBody body)
+        {
+            if (plan == null || body == null || !body.ocean) return 1.0;
+            if (plan.CoastlineComplete) return 1.0;
+            long total = plan.CoastlineTotalTiles > 0L ? plan.CoastlineTotalTiles :
+                CountTiles(body, AERISTerrainTileLod.Far);
+            if (total <= 0L) return 1.0;
+            return Math.Max(0.0, Math.Min(0.999,
+                CoastlineProcessedCount(plan) / (double)total));
+        }
+
+        double CombinedPreloadCoverage(BodyPlan plan, CelestialBody body,
+            int completeTerrainTiles, long terrainTargetTiles)
+        {
+            if (plan == null || body == null || terrainTargetTiles <= 0L) return 0.0;
+            double terrainDone = Math.Max(0.0, Math.Min(1.0,
+                completeTerrainTiles / (double)terrainTargetTiles));
+            if (!body.ocean)
+                return AutomaticTargetComplete(plan) ? terrainDone :
+                    Math.Min(0.999, terrainDone);
+            long coastalUnits = Math.Max(1L, CountTiles(body, AERISTerrainTileLod.Far));
+            double coastDone = CoastlineCoverageRatio(plan, body);
+            double completed = terrainDone * terrainTargetTiles + coastDone * coastalUnits;
+            double total = terrainTargetTiles + (double)coastalUnits;
+            double ratio = total <= 0.0 ? 0.0 : completed / total;
+            if (!AutomaticTargetComplete(plan)) ratio = Math.Min(0.999, ratio);
+            return Math.Max(0.0, Math.Min(1.0, ratio));
         }
 
         bool ScheduleCoastlineUpgradeScan(BodyPlan plan, CelestialBody body)
@@ -980,6 +1031,7 @@ namespace AERISFlightControl.Terrain
             int lonCount = AERISTerrainTileSystem.LongitudeTileCountFor(body,
                 AERISTerrainTileLod.Far);
             long total = (long)latCount * lonCount;
+            plan.CoastlineTotalTiles = total;
             if (total <= 0L)
             {
                 MarkCoastlineComplete(plan);
@@ -1052,9 +1104,15 @@ namespace AERISFlightControl.Terrain
                             continue;
                         }
                         if (AERISTerrainCoastlineExtractor.HasCurrentHighDensityPayload(tile))
+                        {
+                            MarkCoastlineTileProcessed(plan, key.StableId);
                             continue;
+                        }
                         if (!AERISTerrainCoastlineExtractor.ContainsLandWaterBoundary(tile))
+                        {
+                            MarkCoastlineTileProcessed(plan, key.StableId);
                             continue;
+                        }
                         if (TryEnqueueHighDensityCoastline(plan, body, tile)) upgrades++;
                         else incomplete = true;
                     }
@@ -1064,7 +1122,7 @@ namespace AERISFlightControl.Terrain
                     else
                         plan.CoastlineScannedWithoutUpgrade = 0L;
 
-                    if (plan.CoastlineScannedWithoutUpgrade >= total &&
+                    if (CoastlineProcessedCount(plan) >= total &&
                         PendingCoastlineSamplingCount(plan.BodyName) == 0 &&
                         CountPendingForBody(plan.BodyName) == 0)
                     {
@@ -1175,22 +1233,28 @@ namespace AERISFlightControl.Terrain
                     DatabaseGeneration = database.RequestGeneration
                 })) return;
 
+            int hdResolution = AERISTerrainCoastlineExtractor.HighDensityResolution;
+            int hdCount = hdResolution * hdResolution;
+            if (sampledTile.Resolution != hdResolution || sampledTile.Flags == null ||
+                sampledTile.Flags.Length != hdCount) return;
             float[] segments = AERISTerrainCoastlineExtractor.Build(sampledTile);
             AERISTerrainHeightTile upgraded = baseTile.CloneImmutable();
-            upgraded.HighDensityCoastlineResolution =
-                AERISTerrainCoastlineExtractor.HighDensityResolution;
+            upgraded.HighDensityCoastlineResolution = hdResolution;
             upgraded.HighDensityCoastlineSegments = segments ?? new float[0];
+            upgraded.HighDensityCoastalFlags = (byte[])sampledTile.Flags.Clone();
             upgraded.CreatedUtcTicks = DateTime.UtcNow.Ticks;
             upgraded.Source = AERISTerrainTileSource.PreloadBuilderGenerated;
             upgraded.SamplingComplete = true;
             upgraded.IsPreview = false;
             CommitGeneratedTile(plan, upgraded, true);
+            MarkCoastlineTileProcessed(plan, id);
             plan.CoastlineScannedWithoutUpgrade = 0L;
             stateDirty = true;
             AERISLogger.Info("[PRELOAD_COAST_HD] body=" + plan.BodyName +
                 "; event=READY; tile=" + id + "; resolution=" +
                 AERISTerrainCoastlineExtractor.HighDensityResolution +
-                "; segments=" + (segments == null ? 0 : segments.Length / 4));
+                "; segments=" + (segments == null ? 0 : segments.Length / 4) +
+                "; mask=" + hdCount);
         }
 
         int PendingCoastlineSamplingCount(string bodyName)
@@ -2198,6 +2262,8 @@ namespace AERISFlightControl.Terrain
             plan.PointCursor = 0;
             plan.CoastlineCursor = 0L;
             plan.CoastlineScannedWithoutUpgrade = 0L;
+            plan.CoastlineTotalTiles = 0L;
+            plan.CoastlineProcessedTileIds.Clear();
             plan.GlobalScannedWithoutMiss = 0L;
             plan.FarScannedWithoutMiss = 0L;
             plan.RouteScannedWithoutMiss = 0L;
@@ -2349,7 +2415,7 @@ namespace AERISFlightControl.Terrain
                     if (!string.Equals(magic, AERISTerrainPreloadFormat.StateMagic,
                         StringComparison.Ordinal)) return false;
                     int version = reader.ReadInt32();
-                    if (version != 1 && version != 2 && version != 3) return false;
+                    if (version != 4) return false;
                     loadedMode = (AERISTerrainPreloadMode)reader.ReadInt32();
                     if (!Enum.IsDefined(typeof(AERISTerrainPreloadMode), loadedMode))
                         loadedMode = AERISTerrainPreloadMode.AggressiveIdle;
@@ -2364,16 +2430,13 @@ namespace AERISFlightControl.Terrain
                             PriorityOverride = reader.ReadBoolean(),
                             QualityLimit = (AERISTerrainTileLod)reader.ReadInt32()
                         };
-                        if (version >= 2)
-                        {
-                            plan.QualityOverride = reader.ReadBoolean();
-                            plan.AutomaticPointRefinementOnly = reader.ReadBoolean();
-                            plan.AutomaticComplete = reader.ReadBoolean();
-                            plan.CompletedQualityLimit =
-                                (AERISTerrainTileLod)reader.ReadInt32();
-                            plan.CompletedPointRefinementOnly = reader.ReadBoolean();
-                            plan.CompletedEnvironmentHash = reader.ReadString();
-                        }
+                        plan.QualityOverride = reader.ReadBoolean();
+                        plan.AutomaticPointRefinementOnly = reader.ReadBoolean();
+                        plan.AutomaticComplete = reader.ReadBoolean();
+                        plan.CompletedQualityLimit =
+                            (AERISTerrainTileLod)reader.ReadInt32();
+                        plan.CompletedPointRefinementOnly = reader.ReadBoolean();
+                        plan.CompletedEnvironmentHash = reader.ReadString();
                         plan.StorageLimitBytes = reader.ReadInt64();
                         plan.LastVisitedUtcTicks = reader.ReadInt64();
                         plan.GlobalCursor = reader.ReadInt64();
@@ -2382,13 +2445,10 @@ namespace AERISFlightControl.Terrain
                         plan.PointCursor = reader.ReadInt32();
                         plan.EnvironmentHash = reader.ReadString();
                         plan.Paused = reader.ReadBoolean();
-                        if (version >= 3)
-                        {
-                            plan.CoastlineCursor = reader.ReadInt64();
-                            plan.CoastlineComplete = reader.ReadBoolean();
-                            plan.CompletedCoastlineFormatVersion = reader.ReadInt32();
-                            plan.CompletedCoastlineEnvironmentHash = reader.ReadString();
-                        }
+                        plan.CoastlineCursor = reader.ReadInt64();
+                        plan.CoastlineComplete = reader.ReadBoolean();
+                        plan.CompletedCoastlineFormatVersion = reader.ReadInt32();
+                        plan.CompletedCoastlineEnvironmentHash = reader.ReadString();
                         // Candidate 13 removes all per-body preload tuning. Legacy
                         // overrides and caps are discarded while progress/cursors remain.
                         plan.PriorityOverride = false;
@@ -2400,8 +2460,7 @@ namespace AERISFlightControl.Terrain
                         if (!Enum.IsDefined(typeof(AERISTerrainTileLod),
                             plan.CompletedQualityLimit))
                             InvalidateAutomaticCompletion(plan);
-                        if (version < 3 ||
-                            plan.CompletedCoastlineFormatVersion !=
+                        if (plan.CompletedCoastlineFormatVersion !=
                                 AERISTerrainCoastlineExtractor.HighDensityFormatVersion ||
                             !string.Equals(plan.CompletedCoastlineEnvironmentHash,
                                 plan.EnvironmentHash, StringComparison.Ordinal))
@@ -2494,7 +2553,7 @@ namespace AERISFlightControl.Terrain
                 using (var writer = new BinaryWriter(stream))
                 {
                     writer.Write(AERISTerrainPreloadFormat.StateMagic);
-                    writer.Write(3);
+                    writer.Write(4);
                     writer.Write((int)snapshotMode);
                     writer.Write(snapshot == null ? 0 : snapshot.Count);
                     if (snapshot != null)

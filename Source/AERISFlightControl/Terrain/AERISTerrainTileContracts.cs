@@ -68,10 +68,10 @@ namespace AERISFlightControl.Terrain
 
     internal static class AERISTerrainTileFormat
     {
-        internal const int Version = 2;
+        internal const int Version = 3;
         internal const int DefaultResolution = 33;
         internal const int GlobalResolution = 17;
-        internal const string Magic = "AERIS_TERRAIN_TILE_V2";
+        internal const string Magic = "AERIS_TERRAIN_TILE_V3";
 
         internal static double NominalCellMeters(AERISTerrainTileLod lod)
         {
@@ -197,11 +197,13 @@ namespace AERISFlightControl.Terrain
         internal string PqsConfigurationHash = string.Empty;
         internal string GameDataHash = string.Empty;
         internal long TerrainGenerationId;
-        // CP3.75 Candidate6: optional high-density coastline vector payload.
+        // CP3.75 Candidate7: coastal tiles carry a high-density boundary authority.
         // Coordinates are normalized tile-local x/y segment pairs (x0,y0,x1,y1...).
-        // The base height field remains the established 33x33/17x17 authority.
+        // The 33x33/17x17 height field remains the elevation/contour authority; the
+        // 129x129 class mask controls land/water fill geometry and coastline geometry.
         internal int HighDensityCoastlineResolution;
         internal float[] HighDensityCoastlineSegments;
+        internal byte[] HighDensityCoastalFlags;
 
         internal long EstimatedBytes
         {
@@ -211,7 +213,9 @@ namespace AERISFlightControl.Terrain
                 long flags = Flags == null ? 0L : Flags.LongLength;
                 long coastline = HighDensityCoastlineSegments == null ? 0L :
                     HighDensityCoastlineSegments.LongLength * sizeof(float);
-                return 272L + elevation + flags + coastline;
+                long coastalFlags = HighDensityCoastalFlags == null ? 0L :
+                    HighDensityCoastalFlags.LongLength;
+                return 280L + elevation + flags + coastline + coastalFlags;
             }
         }
 
@@ -240,7 +244,9 @@ namespace AERISFlightControl.Terrain
                 TerrainGenerationId = TerrainGenerationId,
                 HighDensityCoastlineResolution = HighDensityCoastlineResolution,
                 HighDensityCoastlineSegments = HighDensityCoastlineSegments == null ? null :
-                    (float[])HighDensityCoastlineSegments.Clone()
+                    (float[])HighDensityCoastlineSegments.Clone(),
+                HighDensityCoastalFlags = HighDensityCoastalFlags == null ? null :
+                    (byte[])HighDensityCoastalFlags.Clone()
             };
         }
     }

@@ -168,7 +168,7 @@ namespace AERISFlightControl.Terrain
                 "AERISFlightControl", "PluginData", "TerrainCache");
             disk = new AERISTerrainDiskTileCache(legacyRoot, diskLimit);
             string preloadRoot = Path.Combine(KSPUtil.ApplicationRootPath, "GameData",
-                "AERISFlightControl", "PluginData", "TerrainPreloadDatabase");
+                "AERISFlightControl", "PluginData", "TerrainPreloadDatabaseV3");
             preloadDatabase = new AERISTerrainPreloadDatabase(preloadRoot,
                 ResolvePreloadLimitBytes(settings), mapDramCache);
             warm = new AERISTerrainWarmTileCache(Math.Max(16L * 1024L * 1024L,

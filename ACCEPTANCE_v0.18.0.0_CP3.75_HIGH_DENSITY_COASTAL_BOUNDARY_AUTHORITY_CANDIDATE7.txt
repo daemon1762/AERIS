@@ -1,0 +1,26 @@
+AERIS v0.18.0.0 DEV CP3.75 HIGH-DENSITY COASTAL BOUNDARY AUTHORITY CANDIDATE 7
+
+Hard acceptance authority:
+- Candidate7 build identity and build entrypoint
+- preload DB/tile/payload format v3; legacy preload DB is not runtime authority
+- clean runtime preload root: PluginData/TerrainPreloadDatabaseV3
+- base terrain elevation/contours remain established LOW 33x33 (Global 17x17)
+- coastal FAR tiles persist 129x129 land/water class mask + matching coastline vector
+- land/water fill uses the same 129 class authority whenever an HD coastal payload exists
+- coastline line uses the matching 129 vector authority
+- high-density display heights are class-preserving interpolation of the low-res terrain height field; no new relief authority
+- >65535 vertex surface/line meshes use UInt32 index format
+- PRELOAD percentage includes coastal-boundary work; incomplete bodies cannot display 100.0%
+- READY / automatic completion requires coastal-boundary completion
+- oceanless bodies have no coastal workload
+- Candidate5 10/20/40/80/160 km, RG deep-blue sea, LOW-only, fixed 10 Hz retained
+- Candidate2/3/4 projection/prediction/line-stroke stabilization retained
+- protected non-ND baseline unchanged
+
+Runtime gate:
+- start with Candidate7 V3 preload root empty; do not copy Candidate6 DB into V3 root
+- confirm PRELOAD percentage continues below 100% after base terrain completion while coastal boundary work remains
+- confirm 100.0% appears only after PRELOAD_COAST_HD COMPLETE and body READY
+- at 20 km verify land/water fill boundary no longer shows Candidate6 33x33 staircase blocks
+- at 160 km verify coastline/landmass remains map-readable and stable
+- no blue-only/blank terrain, exceptions, crash, endless BUILDING, or forced-recovery regression

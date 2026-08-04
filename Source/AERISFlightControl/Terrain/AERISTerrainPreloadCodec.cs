@@ -43,8 +43,8 @@ namespace AERISFlightControl.Terrain
 
     internal static class AERISTerrainPreloadCodec
     {
-        const byte PayloadVersion = 2;
-        const byte MinimumSupportedPayloadVersion = 1;
+        const byte PayloadVersion = 3;
+        const byte MinimumSupportedPayloadVersion = 3;
         const byte FlagWaterOnly = 1;
         const byte FlagConstantHeight = 2;
         const byte FlagFlatTile = 4;
@@ -125,20 +125,29 @@ namespace AERISFlightControl.Terrain
                     }
                 }
 
-                // Candidate6 appends an optional high-density coastline vector. The
-                // 33x33 height/flag payload remains unchanged and older v1 payloads are
-                // still decoded below, so an existing preload database is upgraded tile
-                // by tile instead of being invalidated wholesale.
-                int coastlineResolution = Math.Max(0,
-                    tile.HighDensityCoastlineResolution);
+                // Candidate7 payload v3: coastal tiles persist one 129x129 land/water
+                // classification mask alongside the coastline vector. The normal height
+                // field remains 33x33/17x17; the high-density mask is boundary authority.
+                int coastlineResolution = Math.Max(0, tile.HighDensityCoastlineResolution);
                 float[] coastline = tile.HighDensityCoastlineSegments;
+                byte[] coastalFlags = tile.HighDensityCoastalFlags;
                 int coastlineCount = coastline == null ? 0 : coastline.Length;
+                int coastalFlagCount = coastalFlags == null ? 0 : coastalFlags.Length;
                 if (coastlineCount > 0 && (coastlineCount & 3) != 0)
                     throw new InvalidDataException("high-density coastline segment payload malformed");
                 if (coastlineCount > 4000000)
                     throw new InvalidDataException("high-density coastline segment payload too large");
-                if (coastlineCount > 0 && coastlineResolution < 2)
-                    throw new InvalidDataException("high-density coastline resolution missing");
+                if (coastlineResolution == 0)
+                {
+                    if (coastlineCount != 0 || coastalFlagCount != 0)
+                        throw new InvalidDataException("coastal boundary resolution missing");
+                }
+                else
+                {
+                    if (coastlineResolution != AERISTerrainCoastlineExtractor.HighDensityResolution ||
+                        coastalFlagCount != coastlineResolution * coastlineResolution)
+                        throw new InvalidDataException("coastal boundary mask size mismatch");
+                }
                 for (int i = 0; i < coastlineCount; i++)
                 {
                     float value = coastline[i];
@@ -146,9 +155,14 @@ namespace AERISFlightControl.Terrain
                         value < -0.001f || value > 1.001f)
                         throw new InvalidDataException("high-density coastline coordinate invalid");
                 }
+                for (int i = 0; i < coastalFlagCount; i++)
+                    if (coastalFlags[i] > 2)
+                        throw new InvalidDataException("coastal boundary class invalid");
                 writer.Write(coastlineResolution);
                 writer.Write(coastlineCount);
                 for (int i = 0; i < coastlineCount; i++) writer.Write(coastline[i]);
+                writer.Write(coastalFlagCount);
+                if (coastalFlagCount > 0) writer.Write(coastalFlags);
                 writer.Flush();
                 raw = memory.ToArray();
             }
@@ -257,34 +271,47 @@ namespace AERISFlightControl.Terrain
                         throw new InvalidDataException("terrain flag RLE incomplete");
                 }
 
-                int coastlineResolution = 0;
-                float[] coastline = null;
-                if (version >= 2)
+                int coastlineResolution = reader.ReadInt32();
+                int coastlineCount = reader.ReadInt32();
+                if (coastlineResolution < 0 ||
+                    coastlineResolution > AERISTerrainCoastlineExtractor.HighDensityResolution ||
+                    coastlineCount < 0 || coastlineCount > 4000000 ||
+                    (coastlineCount & 3) != 0)
+                    throw new InvalidDataException("high-density coastline metadata invalid");
+                long segmentBytes = (long)coastlineCount * sizeof(float);
+                if (memory.Position + segmentBytes + sizeof(int) > memory.Length)
+                    throw new InvalidDataException("high-density coastline payload truncated");
+                var coastline = new float[coastlineCount];
+                for (int i = 0; i < coastlineCount; i++)
                 {
-                    if (memory.Position + 8 > memory.Length)
-                        throw new InvalidDataException("high-density coastline header missing");
-                    coastlineResolution = reader.ReadInt32();
-                    int coastlineCount = reader.ReadInt32();
-                    if (coastlineResolution < 0 || coastlineResolution > 2049 ||
-                        coastlineCount < 0 || coastlineCount > 4000000 ||
-                        (coastlineCount & 3) != 0 ||
-                        (coastlineCount > 0 && coastlineResolution < 2))
-                        throw new InvalidDataException("high-density coastline metadata invalid");
-                    long requiredBytes = (long)coastlineCount * sizeof(float);
-                    if (memory.Position + requiredBytes != memory.Length)
-                        throw new InvalidDataException("high-density coastline payload size mismatch");
-                    coastline = new float[coastlineCount];
-                    for (int i = 0; i < coastlineCount; i++)
-                    {
-                        float value = reader.ReadSingle();
-                        if (float.IsNaN(value) || float.IsInfinity(value) ||
-                            value < -0.001f || value > 1.001f)
-                            throw new InvalidDataException("high-density coastline coordinate invalid");
-                        coastline[i] = value;
-                    }
+                    float value = reader.ReadSingle();
+                    if (float.IsNaN(value) || float.IsInfinity(value) ||
+                        value < -0.001f || value > 1.001f)
+                        throw new InvalidDataException("high-density coastline coordinate invalid");
+                    coastline[i] = value;
                 }
-                else if (memory.Position != memory.Length)
-                    throw new InvalidDataException("legacy terrain payload trailing data");
+                int coastalFlagCount = reader.ReadInt32();
+                if (coastlineResolution == 0)
+                {
+                    if (coastlineCount != 0 || coastalFlagCount != 0)
+                        throw new InvalidDataException("coastal boundary payload without resolution");
+                }
+                else if (coastlineResolution !=
+                    AERISTerrainCoastlineExtractor.HighDensityResolution ||
+                    coastalFlagCount != coastlineResolution * coastlineResolution)
+                    throw new InvalidDataException("coastal boundary mask metadata invalid");
+                if (coastalFlagCount < 0 || memory.Position + coastalFlagCount != memory.Length)
+                    throw new InvalidDataException("coastal boundary mask payload size mismatch");
+                var coastalFlags = new byte[coastalFlagCount];
+                if (coastalFlagCount > 0)
+                {
+                    int read = reader.Read(coastalFlags, 0, coastalFlagCount);
+                    if (read != coastalFlagCount)
+                        throw new InvalidDataException("coastal boundary mask payload truncated");
+                    for (int i = 0; i < coastalFlags.Length; i++)
+                        if (coastalFlags[i] > 2)
+                            throw new InvalidDataException("coastal boundary class invalid");
+                }
 
                 return new AERISTerrainHeightTile
                 {
@@ -308,7 +335,8 @@ namespace AERISFlightControl.Terrain
                     GameDataHash = encoded.GameDataHash,
                     TerrainGenerationId = encoded.TerrainGenerationId,
                     HighDensityCoastlineResolution = coastlineResolution,
-                    HighDensityCoastlineSegments = coastline
+                    HighDensityCoastlineSegments = coastline,
+                    HighDensityCoastalFlags = coastalFlags
                 };
             }
         }

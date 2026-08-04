@@ -1524,6 +1524,8 @@ namespace AERISFlightControl.Terrain
             var mesh = new Mesh();
             mesh.name = name;
             mesh.hideFlags = HideFlags.HideAndDontSave;
+            if (builder.Vertices.Count > 65535)
+                mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             mesh.MarkDynamic();
             sourceVertices = builder.Vertices.ToArray();
             mesh.vertices = sourceVertices;
@@ -1554,6 +1556,8 @@ namespace AERISFlightControl.Terrain
             var mesh = new Mesh();
             mesh.name = name;
             mesh.hideFlags = HideFlags.HideAndDontSave;
+            if (vertexCount > 65535)
+                mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             mesh.MarkDynamic();
             sourceVertices = vertices;
             mesh.vertices = sourceVertices;

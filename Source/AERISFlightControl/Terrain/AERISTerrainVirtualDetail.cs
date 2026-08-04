@@ -180,7 +180,9 @@ namespace AERISFlightControl.Terrain
                     source.HighDensityCoastlineResolution,
                 HighDensityCoastlineSegments =
                     source.HighDensityCoastlineSegments == null ? null :
-                    (float[])source.HighDensityCoastlineSegments.Clone()
+                    (float[])source.HighDensityCoastlineSegments.Clone(),
+                HighDensityCoastalFlags = source.HighDensityCoastalFlags == null ? null :
+                    (byte[])source.HighDensityCoastalFlags.Clone()
             };
         }
 

@@ -71,12 +71,12 @@ namespace AERISFlightControl.Terrain
 
     internal static class AERISTerrainPreloadFormat
     {
-        internal const int DatabaseFormatVersion = 2;
+        internal const int DatabaseFormatVersion = 3;
         internal const int CodecVersion = 1;
         internal const int ChunkEdgeTiles = 8;
-        internal const string ManifestMagic = "AERIS_PRELOAD_TERRAIN_MANIFEST_V2";
-        internal const string ChunkMagic = "AERIS_PRELOAD_TERRAIN_CHUNK_V2";
-        internal const string StateMagic = "AERIS_PRELOAD_TERRAIN_STATE_V1";
+        internal const string ManifestMagic = "AERIS_PRELOAD_TERRAIN_MANIFEST_V3";
+        internal const string ChunkMagic = "AERIS_PRELOAD_TERRAIN_CHUNK_V3";
+        internal const string StateMagic = "AERIS_PRELOAD_TERRAIN_STATE_V2";
     }
 
     internal sealed class AERISTerrainPreloadEncodedTile
