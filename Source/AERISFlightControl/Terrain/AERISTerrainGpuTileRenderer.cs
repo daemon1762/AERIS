@@ -129,7 +129,6 @@ namespace AERISFlightControl.Terrain
         }
 
         const string GraphicsAssistName = "UNITY GPU EXACT FAR PRESENTATION";
-        const float CoastlineHalfWidthNormalized = 0.0025f;
         const float RelativeAltitudeBucketMeters = 5f;
         // Gate 4B Recovery Hotfix 1: keep a wider GPU history surface than the
         // visible ND viewport so normal aircraft translation/rotation does not
@@ -1382,8 +1381,15 @@ namespace AERISFlightControl.Terrain
             Mesh contourMesh = BuildLineMesh("AERIS_TERRAIN_CONTOUR_" +
                 result.Key.FileStem, result.ContourSegments,
                 new Color32(255, 255, 255, 210), out contourSource);
-            Mesh coastlineMesh = BuildCoastlineMesh("AERIS_TERRAIN_COAST_" +
-                result.Key.FileStem, result.CoastlineSegments, out coastlineSource);
+            // CP3.75 Candidate 3 baseline repair: render coastline segments through
+            // the same MeshTopology.Lines path as contour segments.  The previous
+            // per-segment quad expansion produced variable-width/join artifacts that
+            // appeared as cut/tape marks along otherwise correct coastline geometry.
+            // Keep the Golden coastline extraction data unchanged; only presentation
+            // is unified with the proven contour-line path.
+            Mesh coastlineMesh = BuildLineMesh("AERIS_TERRAIN_COAST_" +
+                result.Key.FileStem, result.CoastlineSegments,
+                new Color32(185, 225, 255, 245), out coastlineSource);
 
             // Each drawable vertex retains one unit-sphere point (3 doubles) and one
             // projected Vector3 (3 floats) so cache accounting remains conservative.
@@ -1534,48 +1540,6 @@ namespace AERISFlightControl.Terrain
             mesh.vertices = sourceVertices;
             mesh.colors32 = colours;
             mesh.SetIndices(indices, MeshTopology.Lines, 0);
-            mesh.RecalculateBounds();
-            mesh.UploadMeshData(false);
-            return mesh;
-        }
-
-        static Mesh BuildCoastlineMesh(string name, float[] segments,
-            out Vector3[] sourceVertices)
-        {
-            sourceVertices = null;
-            if (segments == null || segments.Length < 4 || segments.Length % 4 != 0)
-                return null;
-            var vertices = new List<Vector3>(segments.Length);
-            var triangles = new List<int>(segments.Length * 3 / 2);
-            var colours = new List<Color32>(segments.Length);
-            Color32 colour = new Color32(185, 225, 255, 245);
-            for (int i = 0; i < segments.Length; i += 4)
-            {
-                float x0 = segments[i], y0 = segments[i + 1];
-                float x1 = segments[i + 2], y1 = segments[i + 3];
-                float dx = x1 - x0, dy = y1 - y0;
-                float length = Mathf.Sqrt(dx * dx + dy * dy);
-                if (length <= 0.000001f) continue;
-                float nx = -dy / length * CoastlineHalfWidthNormalized;
-                float ny = dx / length * CoastlineHalfWidthNormalized;
-                int start = vertices.Count;
-                vertices.Add(new Vector3(x0 + nx, y0 + ny, 0f));
-                vertices.Add(new Vector3(x0 - nx, y0 - ny, 0f));
-                vertices.Add(new Vector3(x1 + nx, y1 + ny, 0f));
-                vertices.Add(new Vector3(x1 - nx, y1 - ny, 0f));
-                for (int j = 0; j < 4; j++) colours.Add(colour);
-                triangles.Add(start); triangles.Add(start + 1); triangles.Add(start + 2);
-                triangles.Add(start + 2); triangles.Add(start + 1); triangles.Add(start + 3);
-            }
-            if (vertices.Count == 0) return null;
-            var mesh = new Mesh();
-            mesh.name = name;
-            mesh.hideFlags = HideFlags.HideAndDontSave;
-            mesh.MarkDynamic();
-            sourceVertices = vertices.ToArray();
-            mesh.vertices = sourceVertices;
-            mesh.colors32 = colours.ToArray();
-            mesh.triangles = triangles.ToArray();
             mesh.RecalculateBounds();
             mesh.UploadMeshData(false);
             return mesh;

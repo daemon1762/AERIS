@@ -1,0 +1,14 @@
+AERIS v0.18.0.0 DEV CP3.75 COASTLINE / CONTOUR PATH UNIFICATION CANDIDATE 3
+
+STATIC ACCEPTANCE REQUIREMENTS
+- Candidate3 build identity PASS
+- Candidate2 LOW-only / fixed-10Hz policy retained
+- Candidate2 high-speed FRONT stabilization retained
+- BuildCoastlineMesh absent
+- CoastlineHalfWidthNormalized absent
+- coastline creation uses BuildLineMesh + MeshTopology.Lines
+- Golden BuildCoastlines extraction retained
+- protected non-ND hash baseline PASS
+- source/package manifest PASS
+- native Ubuntu xbuild remains required
+- KSP runtime coastline visual gate remains required
