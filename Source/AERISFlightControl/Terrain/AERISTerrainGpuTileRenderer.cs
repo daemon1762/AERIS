@@ -1403,7 +1403,10 @@ namespace AERISFlightControl.Terrain
             if (result.ContourSegments != null)
                 bytes += result.ContourSegments.Length * 4L;
             if (result.CoastlineSegments != null)
-                bytes += result.CoastlineSegments.Length * 4L * 4L;
+                // Candidate 4: coastline now uses the same line topology as contours;
+                // account the immutable float segment payload once, not the retired
+                // four-vertex quad expansion from pre-Candidate3 presentation.
+                bytes += result.CoastlineSegments.Length * 4L;
             return new Entry
             {
                 CacheKey = cacheKey,
@@ -1460,7 +1463,8 @@ namespace AERISFlightControl.Terrain
         static SurfacePoint CoastBoundaryPoint(SurfacePoint a, SurfacePoint b,
             bool water)
         {
-            float t = AERISTerrainCoastlinePolicy.CrossingFraction(a.Water, b.Water);
+            float t = AERISTerrainCoastlinePolicy.CrossingFraction(a.Water, b.Water,
+                a.ElevationMeters, b.ElevationMeters);
             return new SurfacePoint
             {
                 X = a.X + (b.X - a.X) * t,
