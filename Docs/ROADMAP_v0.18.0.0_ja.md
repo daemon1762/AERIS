@@ -28,7 +28,7 @@
 - click preview＋明示SELECT
 - TRACK UP／NORTH UP
 - PLAN／RECENTER
-- 5／10／20／40／80／160km
+- 10／20／40／80／160km
 
 ## Gate 3 — Terrain Tile／LOD／三層Cache
 

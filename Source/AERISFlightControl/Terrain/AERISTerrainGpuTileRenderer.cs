@@ -72,6 +72,8 @@ namespace AERISFlightControl.Terrain
             internal Color32[] LandColours;
             internal AERISTerrainDisplayMode ColourMode = (AERISTerrainDisplayMode)(-1);
             internal AERISTerrainColourPreset ColourPreset = (AERISTerrainColourPreset)(-1);
+            internal AERISTerrainColourPreset WaterColourPreset =
+                (AERISTerrainColourPreset)(-1);
             internal int RelativeAltitudeBucket = int.MinValue;
             internal int Resolution;
             internal byte[] Valid;
@@ -1503,7 +1505,8 @@ namespace AERISFlightControl.Terrain
             if (builder == null || builder.Vertices.Count < 3 ||
                 builder.Triangles.Count < 3) return null;
             var colours = new Color32[builder.Vertices.Count];
-            Color32 initial = water ? ResolveWaterColour() :
+            Color32 initial = water ?
+                ResolveWaterColour(AERISTerrainColourPreset.Standard) :
                 new Color32(255, 255, 255, 255);
             for (int i = 0; i < colours.Length; i++) colours[i] = initial;
             var mesh = new Mesh();
@@ -1667,6 +1670,7 @@ namespace AERISFlightControl.Terrain
             if (entry == null || (entry.LandMesh == null && entry.WaterMesh == null))
                 return false;
             EnsureLandColours(entry, mode, preset, aircraftAltitudeAslMeters);
+            EnsureWaterColour(entry, preset);
             bool rendered = false;
             if (entry.WaterMesh != null && terrainMaterial.SetPass(0))
             {
@@ -1684,6 +1688,20 @@ namespace AERISFlightControl.Terrain
             if (entry.CoastlineMesh != null && coastlineMaterial.SetPass(0))
                 Graphics.DrawMeshNow(entry.CoastlineMesh, mapMatrix);
             return rendered;
+        }
+
+        static void EnsureWaterColour(Entry entry,
+            AERISTerrainColourPreset preset)
+        {
+            if (entry == null || entry.WaterMesh == null ||
+                entry.WaterColourPreset == preset) return;
+            int vertexCount = entry.WaterMesh.vertexCount;
+            if (vertexCount <= 0) return;
+            Color32 colour = ResolveWaterColour(preset);
+            var colours = new Color32[vertexCount];
+            for (int i = 0; i < colours.Length; i++) colours[i] = colour;
+            entry.WaterMesh.colors32 = colours;
+            entry.WaterColourPreset = preset;
         }
 
         static void EnsureLandColours(Entry entry, AERISTerrainDisplayMode mode,
@@ -2347,9 +2365,13 @@ namespace AERISFlightControl.Terrain
             }
         }
 
-        static Color32 ResolveWaterColour()
+        static Color32 ResolveWaterColour(AERISTerrainColourPreset preset)
         {
-            // Water is mode-independent and never receives REL danger colours.
+            // CP3.75 Candidate 5: RG assistance must distinguish water from the
+            // blue low-elevation land bands without changing any other palette.
+            // Keep STD/BY/HIGH at the frozen Candidate4 water colour.
+            if (preset == AERISTerrainColourPreset.RedGreenAssist)
+                return new Color32(0, 20, 70, 255);
             return new Color32(8, 52, 118, 255);
         }
 

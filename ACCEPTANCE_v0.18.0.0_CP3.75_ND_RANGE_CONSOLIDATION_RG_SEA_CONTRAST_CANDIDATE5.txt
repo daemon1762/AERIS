@@ -1,0 +1,16 @@
+AERIS v0.18.0.0 DEV CP3.75 ND RANGE CONSOLIDATION / RG SEA CONTRAST CANDIDATE 5
+
+Static acceptance:
+- Candidate5 build identity and build entrypoint
+- ND range authority exactly 10/20/40/80/160 km
+- legacy settings/profile range migration to 10 km minimum
+- RG-only deep-blue sea colour with STD/BY/HIGH unchanged
+- cached water mesh palette refresh without terrain rebuild
+- Candidate2 runtime stabilization preserved
+- Candidate3 coastline line-path unification preserved
+- Candidate4 sub-cell interpolation/cache accounting preserved
+- protected non-ND hash baseline unchanged
+- CP2 C# regression suite PASS
+- SOURCE/PACKAGE manifest verification PASS
+
+Runtime acceptance remains required on Ubuntu/KSP 1.12.5.

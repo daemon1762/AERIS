@@ -266,7 +266,7 @@ namespace AERISFlightControl.UI
    DrawDisplayModeSelector("FDI",ref settings.FlightInstrumentDisplayMode);
    DrawDisplayModeSelector("ND",ref settings.NavigationDisplayMode);
    ToggleOption(ref settings.NavigationDisplayTrackUp,"Navigation display track-up");
-   GUILayout.Label("ND ranges are fixed at 5 / 10 / 20 / 40 / 80 / 160 km. Drag the map to enter PLAN; RECENTER restores the prior orientation.");
+   GUILayout.Label("ND ranges are fixed at 10 / 20 / 40 / 80 / 160 km. Drag the map to enter PLAN; RECENTER restores the prior orientation.");
    DrawTerrainQualitySelector();
    DrawTerrainModeSelector();
    DrawTerrainGpuSelector();

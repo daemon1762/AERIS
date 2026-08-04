@@ -64,7 +64,7 @@ namespace AERISFlightControl.Settings
     internal sealed class AERISSettings
     {
         internal static readonly float[] NavigationDisplayRangeStepsMeters =
-            { 5000f, 10000f, 20000f, 40000f, 80000f, 160000f };
+            { 10000f, 20000f, 40000f, 80000f, 160000f };
         internal const float DefaultMainWindowWidth = 520f;
         internal const float DefaultMainWindowHeight = 610f;
         internal float MainWindowX = 260f;
@@ -342,10 +342,22 @@ namespace AERISFlightControl.Settings
                     "navigationDisplayMode", navigationFallback);
                 settings.NavigationDisplayTrackUp = ReadBool(node, "navigationDisplayTrackUp", true);
                 // CP1 fixed-range baseline. The legacy AUTO key remains readable for
-                // compatibility but no longer changes the six certified ND ranges.
+                // compatibility but no longer changes the five certified ND ranges.
                 settings.NavigationDisplayAutoRange = false;
+                float rawNavigationDisplayRangeMeters = ReadFloat(node,
+                    "navigationDisplayManualRangeMeters", 20000f);
                 settings.NavigationDisplayManualRangeMeters = NormalizeNavigationRange(
-                    ReadFloat(node, "navigationDisplayManualRangeMeters", 20000f));
+                    rawNavigationDisplayRangeMeters);
+                // CP3.75 Candidate 5 removes the 5 km user range completely.  Legacy
+                // settings at 5 km are migrated once to the new 10 km minimum and saved.
+                if (rawNavigationDisplayRangeMeters > 0f &&
+                    rawNavigationDisplayRangeMeters < 10000f)
+                {
+                    saveSettingsMigration = true;
+                    AERISLogger.Info("[CP3.75/ND_RANGE] legacy range=" +
+                        rawNavigationDisplayRangeMeters.ToString("F0",
+                            System.Globalization.CultureInfo.InvariantCulture) + " m -> 10000 m.");
+                }
                 int terrainQualityRevision = ReadInt(node,
                     "terrainQualityModelRevision", 0);
                 string rawTerrainQuality = node.HasValue("terrainQualityMode") ?

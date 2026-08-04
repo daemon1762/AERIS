@@ -151,9 +151,12 @@ namespace AERISFlightControl.Settings
                 if (!int.TryParse(root.GetValue("schemaVersion"), out schema) ||
                     schema != SchemaVersion) return;
                 ConfigNode[] nodes = root.GetNodes("PROFILE");
+                bool rangeMigrationRequired = false;
                 for (int i = 0; i < nodes.Length; i++)
                 {
-                    Profile value = Read(nodes[i]);
+                    bool profileRangeMigrated;
+                    Profile value = Read(nodes[i], out profileRangeMigrated);
+                    rangeMigrationRequired |= profileRangeMigrated;
                     if (value == null || string.IsNullOrEmpty(value.Signature)) continue;
                     Profile existing;
                     if (!profiles.TryGetValue(value.Signature, out existing) ||
@@ -161,6 +164,12 @@ namespace AERISFlightControl.Settings
                         profiles[value.Signature] = value;
                 }
                 Trim();
+                if (rangeMigrationRequired)
+                {
+                    AERISLogger.Info("[CP3.75/ND_RANGE] migrated legacy ND profiles to " +
+                        "the 10 km minimum range.");
+                    SaveFile();
+                }
             }
             catch (Exception ex)
             {
@@ -223,8 +232,9 @@ namespace AERISFlightControl.Settings
             for (int i = 0; i < keep; i++) profiles[ordered[i].Signature] = ordered[i];
         }
 
-        static Profile Read(ConfigNode node)
+        static Profile Read(ConfigNode node, out bool rangeMigrated)
         {
+            rangeMigrated = false;
             if (node == null) return null;
             Profile value = new Profile();
             value.Signature = node.GetValue("signature") ?? string.Empty;
@@ -236,7 +246,10 @@ namespace AERISFlightControl.Settings
             float range;
             if (float.TryParse(node.GetValue("rangeMeters"), NumberStyles.Float,
                 CultureInfo.InvariantCulture, out range))
+            {
                 value.RangeMeters = AERISSettings.NormalizeNavigationRange(range);
+                rangeMigrated = Math.Abs(value.RangeMeters - range) > 0.5f;
+            }
             value.TrackUp = ReadBool(node, "trackUp", true);
             value.Trail = ReadBool(node, "trail", false);
             value.Vector = ReadBool(node, "vector", true);
