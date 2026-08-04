@@ -43,7 +43,8 @@ namespace AERISFlightControl.Terrain
 
     internal static class AERISTerrainPreloadCodec
     {
-        const byte PayloadVersion = 1;
+        const byte PayloadVersion = 2;
+        const byte MinimumSupportedPayloadVersion = 1;
         const byte FlagWaterOnly = 1;
         const byte FlagConstantHeight = 2;
         const byte FlagFlatTile = 4;
@@ -123,6 +124,31 @@ namespace AERISFlightControl.Terrain
                         index += run;
                     }
                 }
+
+                // Candidate6 appends an optional high-density coastline vector. The
+                // 33x33 height/flag payload remains unchanged and older v1 payloads are
+                // still decoded below, so an existing preload database is upgraded tile
+                // by tile instead of being invalidated wholesale.
+                int coastlineResolution = Math.Max(0,
+                    tile.HighDensityCoastlineResolution);
+                float[] coastline = tile.HighDensityCoastlineSegments;
+                int coastlineCount = coastline == null ? 0 : coastline.Length;
+                if (coastlineCount > 0 && (coastlineCount & 3) != 0)
+                    throw new InvalidDataException("high-density coastline segment payload malformed");
+                if (coastlineCount > 4000000)
+                    throw new InvalidDataException("high-density coastline segment payload too large");
+                if (coastlineCount > 0 && coastlineResolution < 2)
+                    throw new InvalidDataException("high-density coastline resolution missing");
+                for (int i = 0; i < coastlineCount; i++)
+                {
+                    float value = coastline[i];
+                    if (float.IsNaN(value) || float.IsInfinity(value) ||
+                        value < -0.001f || value > 1.001f)
+                        throw new InvalidDataException("high-density coastline coordinate invalid");
+                }
+                writer.Write(coastlineResolution);
+                writer.Write(coastlineCount);
+                for (int i = 0; i < coastlineCount; i++) writer.Write(coastline[i]);
                 writer.Flush();
                 raw = memory.ToArray();
             }
@@ -181,7 +207,7 @@ namespace AERISFlightControl.Terrain
             using (var reader = new BinaryReader(memory))
             {
                 byte version = reader.ReadByte();
-                if (version != PayloadVersion)
+                if (version < MinimumSupportedPayloadVersion || version > PayloadVersion)
                     throw new InvalidDataException("unsupported terrain payload version");
                 byte payloadFlags = reader.ReadByte();
                 int resolution = reader.ReadInt32();
@@ -230,6 +256,36 @@ namespace AERISFlightControl.Terrain
                     if (index != sampleCount)
                         throw new InvalidDataException("terrain flag RLE incomplete");
                 }
+
+                int coastlineResolution = 0;
+                float[] coastline = null;
+                if (version >= 2)
+                {
+                    if (memory.Position + 8 > memory.Length)
+                        throw new InvalidDataException("high-density coastline header missing");
+                    coastlineResolution = reader.ReadInt32();
+                    int coastlineCount = reader.ReadInt32();
+                    if (coastlineResolution < 0 || coastlineResolution > 2049 ||
+                        coastlineCount < 0 || coastlineCount > 4000000 ||
+                        (coastlineCount & 3) != 0 ||
+                        (coastlineCount > 0 && coastlineResolution < 2))
+                        throw new InvalidDataException("high-density coastline metadata invalid");
+                    long requiredBytes = (long)coastlineCount * sizeof(float);
+                    if (memory.Position + requiredBytes != memory.Length)
+                        throw new InvalidDataException("high-density coastline payload size mismatch");
+                    coastline = new float[coastlineCount];
+                    for (int i = 0; i < coastlineCount; i++)
+                    {
+                        float value = reader.ReadSingle();
+                        if (float.IsNaN(value) || float.IsInfinity(value) ||
+                            value < -0.001f || value > 1.001f)
+                            throw new InvalidDataException("high-density coastline coordinate invalid");
+                        coastline[i] = value;
+                    }
+                }
+                else if (memory.Position != memory.Length)
+                    throw new InvalidDataException("legacy terrain payload trailing data");
+
                 return new AERISTerrainHeightTile
                 {
                     Key = encoded.Key,
@@ -250,7 +306,9 @@ namespace AERISFlightControl.Terrain
                     Source = AERISTerrainTileSource.PreloadDatabase,
                     PqsConfigurationHash = encoded.PqsConfigurationHash,
                     GameDataHash = encoded.GameDataHash,
-                    TerrainGenerationId = encoded.TerrainGenerationId
+                    TerrainGenerationId = encoded.TerrainGenerationId,
+                    HighDensityCoastlineResolution = coastlineResolution,
+                    HighDensityCoastlineSegments = coastline
                 };
             }
         }

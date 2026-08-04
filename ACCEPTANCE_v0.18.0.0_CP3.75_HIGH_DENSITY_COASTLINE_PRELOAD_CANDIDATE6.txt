@@ -1,0 +1,22 @@
+AERIS v0.18.0.0 DEV CP3.75 HIGH-DENSITY COASTLINE PRELOAD CANDIDATE 6
+
+Static acceptance:
+- Candidate6 build identity and build entrypoint
+- Candidate5 range/RG sea/LOW/10Hz authority preserved
+- Candidate2 high-speed presentation stabilization preserved
+- Candidate3 MeshTopology.Lines coastline presentation preserved
+- Candidate4 sea-level sub-cell crossing preserved
+- high-density coastline authority = temporary 129x129 sampling on candidate FAR tiles
+- only coastline vectors are persisted; established low-resolution height/flags remain authoritative
+- existing payload v1 remains decodable; new vector payload is v2
+- outer database format/codec versions remain unchanged to avoid wholesale preload invalidation
+- existing FAR DB is scanned and upgraded tile-by-tile outside Flight
+- only coarse mixed land/water tiles are refined in Candidate6
+- state v3 migrates old state files into coastline-only augmentation
+- flight render-ready path prefers high-density coastline and falls back to Candidate5 coastline
+- GPU telemetry exposes high-density coastline entry count
+- protected non-ND hash baseline unchanged except documented Candidate5 profile migration / Candidate6 terrain codec scope
+- CP2 C# regression suite PASS
+- SOURCE/PACKAGE manifest verification PASS
+
+Runtime acceptance remains required on Ubuntu/KSP 1.12.5.

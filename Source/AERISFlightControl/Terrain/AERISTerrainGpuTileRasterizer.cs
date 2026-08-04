@@ -39,6 +39,7 @@ namespace AERISFlightControl.Terrain
         internal int[] Triangles;
         internal float[] ContourSegments;
         internal float[] CoastlineSegments;
+        internal int CoastlineResolution;
         internal float MeshMilliseconds;
         internal float ContourMilliseconds;
         internal float WorkerMilliseconds;
@@ -276,7 +277,11 @@ namespace AERISFlightControl.Terrain
             float[] contours = request.ContoursEnabled ?
                 BuildContours(tile, Math.Max(25f, request.ContourIntervalMeters)) :
                 new float[0];
-            float[] coastlines = BuildCoastlines(tile);
+            bool highDensityCoastline =
+                AERISTerrainCoastlineExtractor.HasCurrentHighDensityPayload(tile);
+            float[] coastlines = highDensityCoastline ?
+                (float[])tile.HighDensityCoastlineSegments.Clone() :
+                AERISTerrainCoastlineExtractor.Build(tile);
             contourWatch.Stop();
             watch.Stop();
             return new AERISTerrainGpuTileRasterResult
@@ -299,6 +304,8 @@ namespace AERISFlightControl.Terrain
                 Triangles = triangles.ToArray(),
                 ContourSegments = contours,
                 CoastlineSegments = coastlines,
+                CoastlineResolution = highDensityCoastline ?
+                    tile.HighDensityCoastlineResolution : tile.Resolution,
                 MeshMilliseconds = meshMilliseconds,
                 ContourMilliseconds = (float)contourWatch.Elapsed.TotalMilliseconds,
                 WorkerMilliseconds = (float)watch.Elapsed.TotalMilliseconds,
@@ -379,68 +386,6 @@ namespace AERISFlightControl.Terrain
             return output.ToArray();
         }
 
-
-        static float[] BuildCoastlines(AERISTerrainHeightTile tile)
-        {
-            var output = new List<float>(tile.Resolution * tile.Resolution * 2);
-            int resolution = tile.Resolution;
-            for (int row = 0; row < resolution - 1; row++)
-            {
-                for (int column = 0; column < resolution - 1; column++)
-                {
-                    int a = row * resolution + column;
-                    int b = a + 1;
-                    int c = a + resolution;
-                    int d = c + 1;
-                    if (tile.Flags[a] == 0 || tile.Flags[b] == 0 ||
-                        tile.Flags[c] == 0 || tile.Flags[d] == 0) continue;
-                    // Match the exact triangle diagonal used by the fill mesh. This
-                    // eliminates the old marching-square/triangle disagreement that
-                    // made land colour appear outside the visible coast line.
-                    AddTriangleCoastline(output,
-                        column, row, tile.Flags[a] == 2, tile.Elevation[a],
-                        column, row + 1, tile.Flags[c] == 2, tile.Elevation[c],
-                        column + 1, row, tile.Flags[b] == 2, tile.Elevation[b],
-                        resolution);
-                    AddTriangleCoastline(output,
-                        column + 1, row, tile.Flags[b] == 2, tile.Elevation[b],
-                        column, row + 1, tile.Flags[c] == 2, tile.Elevation[c],
-                        column + 1, row + 1, tile.Flags[d] == 2, tile.Elevation[d],
-                        resolution);
-                }
-            }
-            return output.ToArray();
-        }
-
-        static void AddTriangleCoastline(List<float> output,
-            int x0, int y0, bool water0, float elevation0,
-            int x1, int y1, bool water1, float elevation1,
-            int x2, int y2, bool water2, float elevation2, int resolution)
-        {
-            var points = new float[6];
-            int pointCount = 0;
-            AddWaterCrossing(points, ref pointCount, x0, y0, x1, y1,
-                water0, water1, elevation0, elevation1, resolution);
-            AddWaterCrossing(points, ref pointCount, x1, y1, x2, y2,
-                water1, water2, elevation1, elevation2, resolution);
-            AddWaterCrossing(points, ref pointCount, x2, y2, x0, y0,
-                water2, water0, elevation2, elevation0, resolution);
-            if (pointCount != 2) return;
-            output.Add(points[0]); output.Add(points[1]);
-            output.Add(points[2]); output.Add(points[3]);
-        }
-
-        static void AddWaterCrossing(float[] points, ref int pointCount,
-            int x0, int y0, int x1, int y1, bool water0, bool water1,
-            float elevation0, float elevation1, int resolution)
-        {
-            if (pointCount >= 3 || water0 == water1) return;
-            float t = AERISTerrainCoastlinePolicy.CrossingFraction(water0, water1,
-                elevation0, elevation1);
-            points[pointCount * 2] = (x0 + (x1 - x0) * t) / (resolution - 1f);
-            points[pointCount * 2 + 1] = (y0 + (y1 - y0) * t) / (resolution - 1f);
-            pointCount++;
-        }
 
         static void AddCrossing(float[] points, ref int pointCount,
             int x0, int y0, int x1, int y1, float v0, float v1, float level,

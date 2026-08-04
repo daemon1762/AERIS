@@ -133,6 +133,7 @@
     <Compile Include="Terrain\AERISTerrainPreloadBuilder.cs" />
     <Compile Include="Terrain\AERISTerrainTileSystem.cs" />
     <Compile Include="Terrain\AERISTerrainCoastlinePolicy.cs" />
+    <Compile Include="Terrain\AERISTerrainCoastlineExtractor.cs" />
     <Compile Include="Terrain\AERISTerrainVirtualDetail.cs" />
     <Compile Include="Terrain\AERISTerrainGpuTileRasterizer.cs" />
     <Compile Include="Terrain\AERISTerrainGpuTileRenderer.cs" />

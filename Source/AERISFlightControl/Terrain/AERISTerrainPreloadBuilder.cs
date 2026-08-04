@@ -36,6 +36,14 @@ namespace AERISFlightControl.Terrain
             internal long FarCursor;
             internal long RouteCursor;
             internal int PointCursor;
+            // Candidate6 high-density coastline upgrade scan. This is independent of
+            // terrain LOD progress so promoting FAR_GLOBAL to LAND_SITES never rebuilds
+            // already-complete coastline vectors.
+            internal long CoastlineCursor;
+            internal long CoastlineScannedWithoutUpgrade;
+            internal bool CoastlineComplete;
+            internal int CompletedCoastlineFormatVersion;
+            internal string CompletedCoastlineEnvironmentHash = string.Empty;
             // Transient cyclic scan counters. They are deliberately not persisted: after
             // restart every phase is safely rechecked against the index, so a crash between
             // cursor advance and atomic tile commit can never strand a missing tile forever.
@@ -125,6 +133,8 @@ namespace AERISFlightControl.Terrain
             new HashSet<string>(StringComparer.Ordinal);
         readonly HashSet<string> validatedEnvironments =
             new HashSet<string>(StringComparer.Ordinal);
+        readonly Dictionary<string, AERISTerrainHeightTile> pendingCoastlineBaseTiles =
+            new Dictionary<string, AERISTerrainHeightTile>(StringComparer.Ordinal);
         readonly string statePath;
         readonly string stateTemporaryPath;
         readonly AERISTerrainPreloadTelemetry telemetry;
@@ -145,6 +155,8 @@ namespace AERISFlightControl.Terrain
         bool operationInFlight;
         bool indexRecoveryInFlight;
         bool standardSchedulerApplied;
+        bool coastlineScanInFlight;
+        string coastlineScanBodyName = string.Empty;
         bool disposed;
         int completedSinceStart;
         int failedSinceStart;
@@ -164,6 +176,8 @@ namespace AERISFlightControl.Terrain
         float nextThroughputLogRealtime;
         const int StandardEncodeCommitFloor = 16;
         const int StandardEncodeCommitCeiling = 32;
+        const int CoastlineScanBatchSize = 8;
+        const int CoastlineSamplingActiveLimit = 2;
 
         long encodeAdmissionBackpressure;
         long writeAdmissionBackpressure;
@@ -383,6 +397,7 @@ namespace AERISFlightControl.Terrain
                 request.WorkOwner != AERISTerrainWorkOwner.PreloadBuilder ||
                 !string.Equals(request.Key.BodyName, bodyName,
                     StringComparison.OrdinalIgnoreCase));
+            ClearPendingCoastlineForBody(bodyName);
             status = "PRELOAD CANCELLED: " + bodyName;
             stateDirty = true;
         }
@@ -422,6 +437,7 @@ namespace AERISFlightControl.Terrain
                     flightSuspended = true;
                     blockPipeline.CancelWhere(request => request == null ||
                         request.WorkOwner != AERISTerrainWorkOwner.PreloadBuilder);
+                    ClearPendingCoastlineForBody(string.Empty);
                 }
                 status = "PRELOAD SUSPENDED / FLIGHT READ PRIORITY";
                 bottleneck = "FLIGHT SAFETY";
@@ -667,12 +683,27 @@ namespace AERISFlightControl.Terrain
                     status = "PRELOAD INDEX SCAN: " + plan.BodyName;
                     return false;
                 }
+
+                // Candidate6 adds one post-FAR refinement phase without changing the
+                // established terrain tiles. Existing v1 payloads are decoded, only
+                // mixed land/water FAR tiles are resampled at 129x129, and the resulting
+                // coastline vector is embedded back into the original 33x33 tile.
+                if (!CoastlineTargetComplete(plan, body))
+                {
+                    activeLod = AERISTerrainTileLod.Far;
+                    bool coastlineQueued = ScheduleCoastlineUpgradeScan(plan, body);
+                    status = "PRELOAD COASTLINE HD: " + plan.BodyName;
+                    return coastlineQueued;
+                }
+
                 plan.ManualRequested = false;
                 MarkAutomaticComplete(plan);
                 status = "PRELOAD COMPLETE: " + plan.BodyName + " " +
                     AutomaticTargetLabel(plan);
                 AERISLogger.Info("[PRELOAD_AUTO] body=" + plan.BodyName +
                     "; event=COMPLETE; target=" + AutomaticTargetLabel(plan) +
+                    "; coastline_hd=" +
+                    AERISTerrainCoastlineExtractor.HighDensityResolution +
                     "; environment=" + (plan.EnvironmentHash ?? string.Empty));
                 stateDirty = true;
                 return false;
@@ -892,6 +923,317 @@ namespace AERISFlightControl.Terrain
                 pendingEncodes[id] = work;
             }
             SchedulePendingEncodes();
+        }
+
+        bool CoastlineTargetComplete(BodyPlan plan, CelestialBody body)
+        {
+            if (plan == null || body == null) return false;
+            if (!body.ocean)
+            {
+                MarkCoastlineComplete(plan);
+                return true;
+            }
+            return plan.CoastlineComplete &&
+                plan.CompletedCoastlineFormatVersion ==
+                    AERISTerrainCoastlineExtractor.HighDensityFormatVersion &&
+                string.Equals(plan.CompletedCoastlineEnvironmentHash,
+                    plan.EnvironmentHash, StringComparison.Ordinal);
+        }
+
+        static void MarkCoastlineComplete(BodyPlan plan)
+        {
+            if (plan == null) return;
+            plan.CoastlineComplete = true;
+            plan.CompletedCoastlineFormatVersion =
+                AERISTerrainCoastlineExtractor.HighDensityFormatVersion;
+            plan.CompletedCoastlineEnvironmentHash = plan.EnvironmentHash ?? string.Empty;
+            plan.CoastlineScannedWithoutUpgrade = 0L;
+        }
+
+        static void InvalidateCoastlineCompletion(BodyPlan plan)
+        {
+            if (plan == null) return;
+            plan.CoastlineComplete = false;
+            plan.CompletedCoastlineFormatVersion = 0;
+            plan.CompletedCoastlineEnvironmentHash = string.Empty;
+            plan.CoastlineCursor = 0L;
+            plan.CoastlineScannedWithoutUpgrade = 0L;
+        }
+
+        bool ScheduleCoastlineUpgradeScan(BodyPlan plan, CelestialBody body)
+        {
+            if (plan == null || body == null || database == null || disposed) return false;
+            if (CoastlineTargetComplete(plan, body)) return false;
+
+            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
+            if (runtime == null || runtime.Scheduler == null) return false;
+
+            lock (sync)
+            {
+                if (coastlineScanInFlight ||
+                    PendingCoastlineSamplingCountLocked(plan.BodyName) >=
+                        CoastlineSamplingActiveLimit) return false;
+            }
+
+            int latCount = AERISTerrainTileSystem.LatitudeTileCountFor(body,
+                AERISTerrainTileLod.Far);
+            int lonCount = AERISTerrainTileSystem.LongitudeTileCountFor(body,
+                AERISTerrainTileLod.Far);
+            long total = (long)latCount * lonCount;
+            if (total <= 0L)
+            {
+                MarkCoastlineComplete(plan);
+                stateDirty = true;
+                return false;
+            }
+            if (plan.CoastlineCursor < 0L || plan.CoastlineCursor >= total)
+                plan.CoastlineCursor = 0L;
+
+            var keys = new List<AERISTerrainTileKey>(CoastlineScanBatchSize);
+            long cursor = plan.CoastlineCursor;
+            int inspected = 0;
+            while (inspected++ < CoastlineScanBatchSize && keys.Count < CoastlineScanBatchSize)
+            {
+                long linear = cursor;
+                cursor = (cursor + 1L) % total;
+                int lat = (int)(linear / lonCount);
+                int lon = (int)(linear % lonCount);
+                var key = new AERISTerrainTileKey(body.name, body.Radius,
+                    plan.EnvironmentHash, AERISTerrainTileLod.Far, lat, lon);
+                // The normal FAR phase is authoritative. If a tile disappeared after the
+                // terrain scan, let that phase recover it instead of inventing coastline
+                // data around a missing base payload.
+                if (!database.Contains(key))
+                {
+                    plan.FarScannedWithoutMiss = 0L;
+                    plan.CoastlineScannedWithoutUpgrade = 0L;
+                    stateDirty = true;
+                    return false;
+                }
+                keys.Add(key);
+            }
+            if (keys.Count == 0) return false;
+
+            string gameDataHash = CurrentGameDataHash();
+            long capturedGeneration = plan.Generation;
+            string capturedEnvironment = plan.EnvironmentHash ?? string.Empty;
+            bool accepted = runtime.Scheduler.SubmitRequired(
+                AERISRuntimeLane.GeneralCompute,
+                "preload-coast-scan:" + plan.BodyName,
+                runtime.CaptureStamp(), context =>
+                {
+                    var output = new Dictionary<string, AERISTerrainHeightTile>(
+                        StringComparer.Ordinal);
+                    database.TryLoadBatch(keys, null, output, null, gameDataHash);
+                    return output;
+                }, value =>
+                {
+                    lock (sync)
+                    {
+                        coastlineScanInFlight = false;
+                        coastlineScanBodyName = string.Empty;
+                    }
+                    var loaded = value as Dictionary<string, AERISTerrainHeightTile>;
+                    if (disposed || HighLogic.LoadedSceneIsFlight || plan.Cancelled ||
+                        plan.Paused || plan.Generation != capturedGeneration ||
+                        !string.Equals(plan.EnvironmentHash, capturedEnvironment,
+                            StringComparison.Ordinal)) return;
+
+                    bool incomplete = loaded == null || loaded.Count != keys.Count;
+                    int upgrades = 0;
+                    for (int i = 0; i < keys.Count; i++)
+                    {
+                        AERISTerrainTileKey key = keys[i];
+                        AERISTerrainHeightTile tile;
+                        if (loaded == null || !loaded.TryGetValue(key.StableId, out tile) ||
+                            tile == null)
+                        {
+                            incomplete = true;
+                            continue;
+                        }
+                        if (AERISTerrainCoastlineExtractor.HasCurrentHighDensityPayload(tile))
+                            continue;
+                        if (!AERISTerrainCoastlineExtractor.ContainsLandWaterBoundary(tile))
+                            continue;
+                        if (TryEnqueueHighDensityCoastline(plan, body, tile)) upgrades++;
+                        else incomplete = true;
+                    }
+
+                    if (!incomplete && upgrades == 0)
+                        plan.CoastlineScannedWithoutUpgrade += keys.Count;
+                    else
+                        plan.CoastlineScannedWithoutUpgrade = 0L;
+
+                    if (plan.CoastlineScannedWithoutUpgrade >= total &&
+                        PendingCoastlineSamplingCount(plan.BodyName) == 0 &&
+                        CountPendingForBody(plan.BodyName) == 0)
+                    {
+                        MarkCoastlineComplete(plan);
+                        AERISLogger.Info("[PRELOAD_COAST_HD] body=" + plan.BodyName +
+                            "; event=COMPLETE; resolution=" +
+                            AERISTerrainCoastlineExtractor.HighDensityResolution +
+                            "; format=" +
+                            AERISTerrainCoastlineExtractor.HighDensityFormatVersion +
+                            "; environment=" + (plan.EnvironmentHash ?? string.Empty));
+                    }
+                    stateDirty = true;
+                }, false);
+            if (!accepted) return false;
+
+            lock (sync)
+            {
+                coastlineScanInFlight = true;
+                coastlineScanBodyName = plan.BodyName;
+            }
+            plan.CoastlineCursor = cursor;
+            stateDirty = true;
+            return true;
+        }
+
+        bool TryEnqueueHighDensityCoastline(BodyPlan plan, CelestialBody body,
+            AERISTerrainHeightTile baseTile)
+        {
+            if (plan == null || body == null || baseTile == null ||
+                baseTile.Key.Lod != AERISTerrainTileLod.Far) return false;
+            string id = baseTile.Key.StableId;
+            lock (sync)
+            {
+                if (pendingCoastlineBaseTiles.ContainsKey(id) || pendingWrites.Contains(id) ||
+                    PendingCoastlineSamplingCountLocked(plan.BodyName) >=
+                        CoastlineSamplingActiveLimit) return false;
+                pendingCoastlineBaseTiles[id] = baseTile.CloneImmutable();
+            }
+
+            AERISTerrainTileRequest request = CreateHighDensityCoastlineRequest(body,
+                baseTile, plan);
+            bool accepted = blockPipeline.Enqueue(body, request,
+                AERISTerrainTileSource.PreloadBuilderGenerated,
+                plan.EnvironmentHash, CurrentGameDataHash(), database.DatabaseGeneration,
+                candidate => IsBuilderRequestCurrent(plan, candidate),
+                (committedRequest, tile, final) =>
+                    CommitGeneratedHighDensityCoastline(plan, tile, final));
+            if (accepted)
+            {
+                AERISLogger.Info("[PRELOAD_COAST_HD] body=" + plan.BodyName +
+                    "; event=QUEUE; tile=" + id + "; base_res=" + baseTile.Resolution +
+                    "; target_res=" +
+                    AERISTerrainCoastlineExtractor.HighDensityResolution);
+                return true;
+            }
+            lock (sync) pendingCoastlineBaseTiles.Remove(id);
+            return false;
+        }
+
+        AERISTerrainTileRequest CreateHighDensityCoastlineRequest(CelestialBody body,
+            AERISTerrainHeightTile baseTile, BodyPlan plan)
+        {
+            int resolution = AERISTerrainCoastlineExtractor.HighDensityResolution;
+            return new AERISTerrainTileRequest
+            {
+                Key = baseTile.Key,
+                Stage = AERISTerrainSamplingStage.Final,
+                Resolution = resolution,
+                FinalResolution = resolution,
+                SouthLatitudeDeg = baseTile.SouthLatitudeDeg,
+                NorthLatitudeDeg = baseTile.NorthLatitudeDeg,
+                WestLongitudeDeg = baseTile.WestLongitudeDeg,
+                EastLongitudeDeg = baseTile.EastLongitudeDeg,
+                CenterLatitudeDeg = (baseTile.SouthLatitudeDeg +
+                    baseTile.NorthLatitudeDeg) * 0.5,
+                CenterLongitudeDeg = NormalizeLongitude((baseTile.WestLongitudeDeg +
+                    baseTile.EastLongitudeDeg) * 0.5),
+                ViewDistanceMeters = double.MaxValue,
+                RequestSequence = DateTime.UtcNow.Ticks,
+                BodyGeneration = plan.LastVisitedUtcTicks,
+                TerrainGeneration = plan.Generation,
+                DatabaseGeneration = database.RequestGeneration,
+                WorkOwner = AERISTerrainWorkOwner.PreloadBuilder,
+                ReadLane = AERISTerrainReadLane.Background,
+                Lane = AERISTerrainRequestLane.Background,
+                Priority = AERISTerrainTilePriority.Low,
+                Visible = false
+            };
+        }
+
+        void CommitGeneratedHighDensityCoastline(BodyPlan plan,
+            AERISTerrainHeightTile sampledTile, bool final)
+        {
+            if (!final || plan == null || sampledTile == null) return;
+            string id = sampledTile.Key.StableId;
+            AERISTerrainHeightTile baseTile;
+            lock (sync)
+            {
+                if (!pendingCoastlineBaseTiles.TryGetValue(id, out baseTile) ||
+                    baseTile == null) return;
+                pendingCoastlineBaseTiles.Remove(id);
+            }
+            if (!IsBuilderRequestCurrent(plan, new AERISTerrainTileRequest
+                {
+                    Key = sampledTile.Key,
+                    WorkOwner = AERISTerrainWorkOwner.PreloadBuilder,
+                    TerrainGeneration = plan.Generation,
+                    DatabaseGeneration = database.RequestGeneration
+                })) return;
+
+            float[] segments = AERISTerrainCoastlineExtractor.Build(sampledTile);
+            AERISTerrainHeightTile upgraded = baseTile.CloneImmutable();
+            upgraded.HighDensityCoastlineResolution =
+                AERISTerrainCoastlineExtractor.HighDensityResolution;
+            upgraded.HighDensityCoastlineSegments = segments ?? new float[0];
+            upgraded.CreatedUtcTicks = DateTime.UtcNow.Ticks;
+            upgraded.Source = AERISTerrainTileSource.PreloadBuilderGenerated;
+            upgraded.SamplingComplete = true;
+            upgraded.IsPreview = false;
+            CommitGeneratedTile(plan, upgraded, true);
+            plan.CoastlineScannedWithoutUpgrade = 0L;
+            stateDirty = true;
+            AERISLogger.Info("[PRELOAD_COAST_HD] body=" + plan.BodyName +
+                "; event=READY; tile=" + id + "; resolution=" +
+                AERISTerrainCoastlineExtractor.HighDensityResolution +
+                "; segments=" + (segments == null ? 0 : segments.Length / 4));
+        }
+
+        int PendingCoastlineSamplingCount(string bodyName)
+        {
+            lock (sync) return PendingCoastlineSamplingCountLocked(bodyName);
+        }
+
+        int PendingCoastlineSamplingCountLocked(string bodyName)
+        {
+            int count = 0;
+            foreach (KeyValuePair<string, AERISTerrainHeightTile> pair in
+                pendingCoastlineBaseTiles)
+            {
+                AERISTerrainHeightTile tile = pair.Value;
+                if (tile != null && string.Equals(tile.Key.BodyName, bodyName,
+                    StringComparison.OrdinalIgnoreCase)) count++;
+            }
+            return count;
+        }
+
+        void ClearPendingCoastlineForBody(string bodyName)
+        {
+            lock (sync)
+            {
+                var remove = new List<string>();
+                foreach (KeyValuePair<string, AERISTerrainHeightTile> pair in
+                    pendingCoastlineBaseTiles)
+                {
+                    AERISTerrainHeightTile tile = pair.Value;
+                    if (string.IsNullOrEmpty(bodyName) || (tile != null &&
+                        string.Equals(tile.Key.BodyName, bodyName,
+                            StringComparison.OrdinalIgnoreCase)))
+                        remove.Add(pair.Key);
+                }
+                for (int i = 0; i < remove.Count; i++)
+                    pendingCoastlineBaseTiles.Remove(remove[i]);
+                if (string.IsNullOrEmpty(bodyName) || string.Equals(
+                    coastlineScanBodyName, bodyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    coastlineScanInFlight = false;
+                    coastlineScanBodyName = string.Empty;
+                }
+            }
         }
 
         void SchedulePendingEncodes()
@@ -1285,6 +1627,11 @@ namespace AERISFlightControl.Terrain
                 plan.CompletedPointRefinementOnly ==
                     plan.AutomaticPointRefinementOnly &&
                 string.Equals(plan.CompletedEnvironmentHash,
+                    plan.EnvironmentHash, StringComparison.Ordinal) &&
+                plan.CoastlineComplete &&
+                plan.CompletedCoastlineFormatVersion ==
+                    AERISTerrainCoastlineExtractor.HighDensityFormatVersion &&
+                string.Equals(plan.CompletedCoastlineEnvironmentHash,
                     plan.EnvironmentHash, StringComparison.Ordinal);
         }
 
@@ -1491,6 +1838,7 @@ namespace AERISFlightControl.Terrain
                 StringComparison.Ordinal)) return;
             plan.EnvironmentHash = environment;
             InvalidateAutomaticCompletion(plan);
+            InvalidateCoastlineCompletion(plan);
             plan.Generation++;
             ResetScanState(plan);
             stateDirty = true;
@@ -1591,6 +1939,7 @@ namespace AERISFlightControl.Terrain
                     {
                         ResetScanState(plan);
                         InvalidateAutomaticCompletion(plan);
+                        InvalidateCoastlineCompletion(plan);
                         plan.ManualRequested = true;
                         plan.Cancelled = false;
                         plan.Paused = false;
@@ -1847,6 +2196,8 @@ namespace AERISFlightControl.Terrain
             plan.FarCursor = 0L;
             plan.RouteCursor = 0L;
             plan.PointCursor = 0;
+            plan.CoastlineCursor = 0L;
+            plan.CoastlineScannedWithoutUpgrade = 0L;
             plan.GlobalScannedWithoutMiss = 0L;
             plan.FarScannedWithoutMiss = 0L;
             plan.RouteScannedWithoutMiss = 0L;
@@ -1998,7 +2349,7 @@ namespace AERISFlightControl.Terrain
                     if (!string.Equals(magic, AERISTerrainPreloadFormat.StateMagic,
                         StringComparison.Ordinal)) return false;
                     int version = reader.ReadInt32();
-                    if (version != 1 && version != 2) return false;
+                    if (version != 1 && version != 2 && version != 3) return false;
                     loadedMode = (AERISTerrainPreloadMode)reader.ReadInt32();
                     if (!Enum.IsDefined(typeof(AERISTerrainPreloadMode), loadedMode))
                         loadedMode = AERISTerrainPreloadMode.AggressiveIdle;
@@ -2031,6 +2382,13 @@ namespace AERISFlightControl.Terrain
                         plan.PointCursor = reader.ReadInt32();
                         plan.EnvironmentHash = reader.ReadString();
                         plan.Paused = reader.ReadBoolean();
+                        if (version >= 3)
+                        {
+                            plan.CoastlineCursor = reader.ReadInt64();
+                            plan.CoastlineComplete = reader.ReadBoolean();
+                            plan.CompletedCoastlineFormatVersion = reader.ReadInt32();
+                            plan.CompletedCoastlineEnvironmentHash = reader.ReadString();
+                        }
                         // Candidate 13 removes all per-body preload tuning. Legacy
                         // overrides and caps are discarded while progress/cursors remain.
                         plan.PriorityOverride = false;
@@ -2042,6 +2400,12 @@ namespace AERISFlightControl.Terrain
                         if (!Enum.IsDefined(typeof(AERISTerrainTileLod),
                             plan.CompletedQualityLimit))
                             InvalidateAutomaticCompletion(plan);
+                        if (version < 3 ||
+                            plan.CompletedCoastlineFormatVersion !=
+                                AERISTerrainCoastlineExtractor.HighDensityFormatVersion ||
+                            !string.Equals(plan.CompletedCoastlineEnvironmentHash,
+                                plan.EnvironmentHash, StringComparison.Ordinal))
+                            InvalidateCoastlineCompletion(plan);
                         if (!string.IsNullOrEmpty(plan.BodyName))
                             loaded[plan.BodyName] = plan;
                     }
@@ -2108,7 +2472,13 @@ namespace AERISFlightControl.Terrain
                         RouteCursor = plan.RouteCursor,
                         PointCursor = plan.PointCursor,
                         EnvironmentHash = plan.EnvironmentHash,
-                        Paused = plan.Paused
+                        Paused = plan.Paused,
+                        CoastlineCursor = plan.CoastlineCursor,
+                        CoastlineComplete = plan.CoastlineComplete,
+                        CompletedCoastlineFormatVersion =
+                            plan.CompletedCoastlineFormatVersion,
+                        CompletedCoastlineEnvironmentHash =
+                            plan.CompletedCoastlineEnvironmentHash
                     });
             return snapshot;
         }
@@ -2124,7 +2494,7 @@ namespace AERISFlightControl.Terrain
                 using (var writer = new BinaryWriter(stream))
                 {
                     writer.Write(AERISTerrainPreloadFormat.StateMagic);
-                    writer.Write(2);
+                    writer.Write(3);
                     writer.Write((int)snapshotMode);
                     writer.Write(snapshot == null ? 0 : snapshot.Count);
                     if (snapshot != null)
@@ -2150,6 +2520,11 @@ namespace AERISFlightControl.Terrain
                             writer.Write(plan.PointCursor);
                             writer.Write(plan.EnvironmentHash ?? string.Empty);
                             writer.Write(plan.Paused);
+                            writer.Write(plan.CoastlineCursor);
+                            writer.Write(plan.CoastlineComplete);
+                            writer.Write(plan.CompletedCoastlineFormatVersion);
+                            writer.Write(plan.CompletedCoastlineEnvironmentHash ??
+                                string.Empty);
                         }
                     }
                     writer.Flush();
@@ -2211,6 +2586,7 @@ namespace AERISFlightControl.Terrain
             if (disposed) return;
             blockPipeline.CancelWhere(request => request == null ||
                 request.WorkOwner != AERISTerrainWorkOwner.PreloadBuilder);
+            ClearPendingCoastlineForBody(string.Empty);
             FlushPendingBatchesSynchronously();
             // Final shutdown checkpoint is intentionally synchronous: Flight control is no
             // longer active and losing builder progress is worse than a bounded close flush.

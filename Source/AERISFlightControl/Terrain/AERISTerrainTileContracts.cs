@@ -197,6 +197,11 @@ namespace AERISFlightControl.Terrain
         internal string PqsConfigurationHash = string.Empty;
         internal string GameDataHash = string.Empty;
         internal long TerrainGenerationId;
+        // CP3.75 Candidate6: optional high-density coastline vector payload.
+        // Coordinates are normalized tile-local x/y segment pairs (x0,y0,x1,y1...).
+        // The base height field remains the established 33x33/17x17 authority.
+        internal int HighDensityCoastlineResolution;
+        internal float[] HighDensityCoastlineSegments;
 
         internal long EstimatedBytes
         {
@@ -204,7 +209,9 @@ namespace AERISFlightControl.Terrain
             {
                 long elevation = Elevation == null ? 0L : Elevation.LongLength * sizeof(float);
                 long flags = Flags == null ? 0L : Flags.LongLength;
-                return 256L + elevation + flags;
+                long coastline = HighDensityCoastlineSegments == null ? 0L :
+                    HighDensityCoastlineSegments.LongLength * sizeof(float);
+                return 272L + elevation + flags + coastline;
             }
         }
 
@@ -230,7 +237,10 @@ namespace AERISFlightControl.Terrain
                 Source = Source,
                 PqsConfigurationHash = PqsConfigurationHash ?? string.Empty,
                 GameDataHash = GameDataHash ?? string.Empty,
-                TerrainGenerationId = TerrainGenerationId
+                TerrainGenerationId = TerrainGenerationId,
+                HighDensityCoastlineResolution = HighDensityCoastlineResolution,
+                HighDensityCoastlineSegments = HighDensityCoastlineSegments == null ? null :
+                    (float[])HighDensityCoastlineSegments.Clone()
             };
         }
     }

@@ -175,7 +175,12 @@ namespace AERISFlightControl.Terrain
                 Source = source.Source,
                 PqsConfigurationHash = source.PqsConfigurationHash,
                 GameDataHash = source.GameDataHash,
-                TerrainGenerationId = source.TerrainGenerationId
+                TerrainGenerationId = source.TerrainGenerationId,
+                HighDensityCoastlineResolution =
+                    source.HighDensityCoastlineResolution,
+                HighDensityCoastlineSegments =
+                    source.HighDensityCoastlineSegments == null ? null :
+                    (float[])source.HighDensityCoastlineSegments.Clone()
             };
         }
 

@@ -76,6 +76,7 @@ namespace AERISFlightControl.Terrain
                 (AERISTerrainColourPreset)(-1);
             internal int RelativeAltitudeBucket = int.MinValue;
             internal int Resolution;
+            internal int CoastlineResolution;
             internal byte[] Valid;
             internal float CoverageFraction;
             internal long Bytes;
@@ -229,6 +230,7 @@ namespace AERISFlightControl.Terrain
         long virtualRouteBuilds;
         long virtualLocalBuilds;
         long exactDetailOverlayDraws;
+        int highDensityCoastlineEntries;
         string lastVirtualDetailName = "FAR DIRECT";
 
         internal AERISTerrainGpuTileRenderer(AERISSettings settings,
@@ -1085,7 +1087,10 @@ namespace AERISFlightControl.Terrain
                 "; render_ready=" + renderReadyFields.Count + "/" + renderReadyBytes +
                 "; virtual_builds=" + virtualRouteBuilds + "/" +
                 virtualLocalBuilds + "; exact_overlay_draws=" +
-                exactDetailOverlayDraws + "; cpu_terrain_draw=0.");
+                exactDetailOverlayDraws + "; coast_hd_entries=" +
+                highDensityCoastlineEntries + "; coast_hd_res=" +
+                AERISTerrainCoastlineExtractor.HighDensityResolution +
+                "; cpu_terrain_draw=0.");
         }
 
         void ResetFrontBufferState()
@@ -1171,6 +1176,9 @@ namespace AERISFlightControl.Terrain
                         RemoveSupersededEntries(result.Key, cacheKey);
                     entries[cacheKey] = entry;
                     usedEntryBytes += entry.Bytes;
+                    if (entry.CoastlineResolution >=
+                        AERISTerrainCoastlineExtractor.HighDensityResolution)
+                        highDensityCoastlineEntries++;
                     uploaded++;
                     gpuContentRevision++;
                     MarkGpuReady(result);
@@ -1243,6 +1251,9 @@ namespace AERISFlightControl.Terrain
                 if (entries.TryGetValue(cacheKey, out old)) Remove(old);
                 entries[cacheKey] = entry;
                 usedEntryBytes += entry.Bytes;
+                if (entry.CoastlineResolution >=
+                    AERISTerrainCoastlineExtractor.HighDensityResolution)
+                    highDensityCoastlineEntries++;
                 uploaded++;
                 gpuContentRevision++;
                 MarkGpuReady(field);
@@ -1443,6 +1454,7 @@ namespace AERISFlightControl.Terrain
                 LandShade = land.Shade.ToArray(),
                 LandColours = new Color32[land.Vertices.Count],
                 Resolution = result.Resolution,
+                CoastlineResolution = result.CoastlineResolution,
                 Valid = (byte[])result.Valid.Clone(),
                 CoverageFraction = TriangleCoverage(result),
                 Bytes = Math.Max(1L, bytes),
@@ -2262,6 +2274,9 @@ namespace AERISFlightControl.Terrain
         {
             if (entry == null) return;
             entries.Remove(entry.CacheKey);
+            if (entry.CoastlineResolution >=
+                AERISTerrainCoastlineExtractor.HighDensityResolution)
+                highDensityCoastlineEntries = Math.Max(0, highDensityCoastlineEntries - 1);
             usedEntryBytes = Math.Max(0L,
                 usedEntryBytes - Math.Max(0L, entry.Bytes));
             DestroyUnityObject(entry.LandMesh);
