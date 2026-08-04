@@ -1,0 +1,24 @@
+AERIS Flight Control v0.18.0.0
+CP3.75 Sparse Coastal Correction Candidate 8
+
+PURPOSE
+- Recover from Candidate7 runtime failure (2 FPS) without discarding the proven 129x129 coastline authority.
+- Keep the ordinary terrain/relief/contour surface at the Candidate5 LOW 33x33 baseline.
+- Use the 129x129 coastal mask only inside coarse parent cells actually crossed by the high-density shoreline.
+- Keep PRELOAD percentage authority from Candidate7: coastal work is part of 100%.
+
+HARD ACCEPTANCE
+1. Main terrain surface resolution never switches from the normal LOW tile resolution to 129.
+2. High-density coastline line remains 129-derived when a complete HD payload is present.
+3. Land/water correction geometry is emitted only for crossed coarse parent cells.
+4. A pathological tile with more than 256 correction parent cells falls back to HD line + coarse fill rather than expanding toward a whole-tile HD mesh.
+5. Correction geometry shares the same geographic projection authority as the base terrain.
+6. Base -> water correction -> land correction -> contours -> coastline painter order is preserved.
+7. PRELOAD 100% still includes coastline processing.
+8. Candidate5 range/RG sea, Candidate2 runtime stabilization, and protected non-ND code remain unchanged.
+
+RUNTIME GATE
+- Re-test the Candidate7 KSC/20 km fixture first.
+- Candidate7-level 2 FPS is an immediate FAIL.
+- Target: return near Candidate5/Candidate6 frame-rate class while keeping visibly finer coastline/fill geometry.
+- Confirm telemetry coast_sparse_entries/coast_sparse_parents is non-zero on refined coastal tiles.

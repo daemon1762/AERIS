@@ -46,14 +46,23 @@ namespace AERISFlightControl.Terrain
             internal string StyleKey;
             internal Mesh LandMesh;
             internal Mesh WaterMesh;
+            // Candidate8 sparse coastal correction overlays. These replace only the
+            // coarse parent cells crossed by the 129x129 boundary; they never promote
+            // the whole FAR tile to a 129x129 surface mesh.
+            internal Mesh CoastalLandCorrectionMesh;
+            internal Mesh CoastalWaterCorrectionMesh;
             internal Mesh ContourMesh;
             internal Mesh CoastlineMesh;
             internal GeographicUnitPoint[] LandGeographicPoints;
             internal GeographicUnitPoint[] WaterGeographicPoints;
+            internal GeographicUnitPoint[] CoastalLandCorrectionGeographicPoints;
+            internal GeographicUnitPoint[] CoastalWaterCorrectionGeographicPoints;
             internal GeographicUnitPoint[] ContourGeographicPoints;
             internal GeographicUnitPoint[] CoastlineGeographicPoints;
             internal Vector3[] LandProjectedVertices;
             internal Vector3[] WaterProjectedVertices;
+            internal Vector3[] CoastalLandCorrectionProjectedVertices;
+            internal Vector3[] CoastalWaterCorrectionProjectedVertices;
             internal Vector3[] ContourProjectedVertices;
             internal Vector3[] CoastlineProjectedVertices;
             internal double SouthLatitudeDeg;
@@ -70,6 +79,9 @@ namespace AERISFlightControl.Terrain
             internal float[] LandElevationMeters;
             internal byte[] LandShade;
             internal Color32[] LandColours;
+            internal float[] CoastalLandCorrectionElevationMeters;
+            internal byte[] CoastalLandCorrectionShade;
+            internal Color32[] CoastalLandCorrectionColours;
             internal AERISTerrainDisplayMode ColourMode = (AERISTerrainDisplayMode)(-1);
             internal AERISTerrainColourPreset ColourPreset = (AERISTerrainColourPreset)(-1);
             internal AERISTerrainColourPreset WaterColourPreset =
@@ -77,6 +89,7 @@ namespace AERISFlightControl.Terrain
             internal int RelativeAltitudeBucket = int.MinValue;
             internal int Resolution;
             internal int CoastlineResolution;
+            internal int CoastalCorrectionParentCells;
             internal byte[] Valid;
             internal float CoverageFraction;
             internal long Bytes;
@@ -231,6 +244,8 @@ namespace AERISFlightControl.Terrain
         long virtualLocalBuilds;
         long exactDetailOverlayDraws;
         int highDensityCoastlineEntries;
+        int sparseCoastalCorrectionEntries;
+        long sparseCoastalCorrectionParentCells;
         string lastVirtualDetailName = "FAR DIRECT";
 
         internal AERISTerrainGpuTileRenderer(AERISSettings settings,
@@ -1090,6 +1105,8 @@ namespace AERISFlightControl.Terrain
                 exactDetailOverlayDraws + "; coast_hd_entries=" +
                 highDensityCoastlineEntries + "; coast_hd_res=" +
                 AERISTerrainCoastlineExtractor.HighDensityResolution +
+                "; coast_sparse_entries=" + sparseCoastalCorrectionEntries +
+                "; coast_sparse_parents=" + sparseCoastalCorrectionParentCells +
                 "; cpu_terrain_draw=0.");
         }
 
@@ -1179,6 +1196,12 @@ namespace AERISFlightControl.Terrain
                     if (entry.CoastlineResolution >=
                         AERISTerrainCoastlineExtractor.HighDensityResolution)
                         highDensityCoastlineEntries++;
+                    if (entry.CoastalCorrectionParentCells > 0)
+                    {
+                        sparseCoastalCorrectionEntries++;
+                        sparseCoastalCorrectionParentCells +=
+                            entry.CoastalCorrectionParentCells;
+                    }
                     uploaded++;
                     gpuContentRevision++;
                     MarkGpuReady(result);
@@ -1254,6 +1277,12 @@ namespace AERISFlightControl.Terrain
                 if (entry.CoastlineResolution >=
                     AERISTerrainCoastlineExtractor.HighDensityResolution)
                     highDensityCoastlineEntries++;
+                if (entry.CoastalCorrectionParentCells > 0)
+                {
+                    sparseCoastalCorrectionEntries++;
+                    sparseCoastalCorrectionParentCells +=
+                        entry.CoastalCorrectionParentCells;
+                }
                 uploaded++;
                 gpuContentRevision++;
                 MarkGpuReady(field);
@@ -1391,6 +1420,15 @@ namespace AERISFlightControl.Terrain
                 result.Key.FileStem, land, false, out landSource);
             Mesh waterMesh = BuildSurfaceMesh("AERIS_TERRAIN_WATER_" +
                 result.Key.FileStem, water, true, out waterSource);
+            Vector3[] coastalLandCorrectionSource, coastalWaterCorrectionSource;
+            Mesh coastalLandCorrectionMesh = BuildTriangleListMesh(
+                "AERIS_TERRAIN_COAST_LAND_FIX_" + result.Key.FileStem,
+                result.CoastalLandCorrectionVertices, false,
+                out coastalLandCorrectionSource);
+            Mesh coastalWaterCorrectionMesh = BuildTriangleListMesh(
+                "AERIS_TERRAIN_COAST_WATER_FIX_" + result.Key.FileStem,
+                result.CoastalWaterCorrectionVertices, true,
+                out coastalWaterCorrectionSource);
             Mesh contourMesh = BuildLineMesh("AERIS_TERRAIN_CONTOUR_" +
                 result.Key.FileStem, result.ContourSegments,
                 new Color32(255, 255, 255, 210), out contourSource);
@@ -1407,12 +1445,19 @@ namespace AERISFlightControl.Terrain
             // Each drawable vertex retains one unit-sphere point (3 doubles) and one
             // projected Vector3 (3 floats) so cache accounting remains conservative.
             long projectedVertexBytes = (long)(land.Vertices.Count +
-                water.Vertices.Count + (contourSource == null ? 0 : contourSource.Length) +
+                water.Vertices.Count +
+                (coastalLandCorrectionSource == null ? 0 : coastalLandCorrectionSource.Length) +
+                (coastalWaterCorrectionSource == null ? 0 : coastalWaterCorrectionSource.Length) +
+                (contourSource == null ? 0 : contourSource.Length) +
                 (coastlineSource == null ? 0 : coastlineSource.Length)) * (3L * 8L + 3L * 4L);
             long bytes = result.Valid.Length + projectedVertexBytes +
                 land.Vertices.Count * (3L * 4L + 4L + 4L) +
                 water.Vertices.Count * (3L * 4L + 4L) +
-                (land.Triangles.Count + water.Triangles.Count) * 4L;
+                (land.Triangles.Count + water.Triangles.Count) * 4L +
+                (coastalLandCorrectionSource == null ? 0L :
+                    coastalLandCorrectionSource.LongLength * (3L * 4L + 4L + 4L)) +
+                (coastalWaterCorrectionSource == null ? 0L :
+                    coastalWaterCorrectionSource.LongLength * (3L * 4L + 4L));
             if (result.ContourSegments != null)
                 bytes += result.ContourSegments.Length * 4L;
             if (result.CoastlineSegments != null)
@@ -1428,6 +1473,8 @@ namespace AERISFlightControl.Terrain
                 StyleKey = result.StyleKey,
                 LandMesh = landMesh,
                 WaterMesh = waterMesh,
+                CoastalLandCorrectionMesh = coastalLandCorrectionMesh,
+                CoastalWaterCorrectionMesh = coastalWaterCorrectionMesh,
                 ContourMesh = contourMesh,
                 CoastlineMesh = coastlineMesh,
                 LandGeographicPoints = BuildGeographicPoints(landSource,
@@ -1436,6 +1483,14 @@ namespace AERISFlightControl.Terrain
                 WaterGeographicPoints = BuildGeographicPoints(waterSource,
                     result.SouthLatitudeDeg, result.NorthLatitudeDeg,
                     result.WestLongitudeDeg, result.EastLongitudeDeg),
+                CoastalLandCorrectionGeographicPoints = BuildGeographicPoints(
+                    coastalLandCorrectionSource, result.SouthLatitudeDeg,
+                    result.NorthLatitudeDeg, result.WestLongitudeDeg,
+                    result.EastLongitudeDeg),
+                CoastalWaterCorrectionGeographicPoints = BuildGeographicPoints(
+                    coastalWaterCorrectionSource, result.SouthLatitudeDeg,
+                    result.NorthLatitudeDeg, result.WestLongitudeDeg,
+                    result.EastLongitudeDeg),
                 ContourGeographicPoints = BuildGeographicPoints(contourSource,
                     result.SouthLatitudeDeg, result.NorthLatitudeDeg,
                     result.WestLongitudeDeg, result.EastLongitudeDeg),
@@ -1444,6 +1499,10 @@ namespace AERISFlightControl.Terrain
                     result.WestLongitudeDeg, result.EastLongitudeDeg),
                 LandProjectedVertices = AllocateProjectedVertices(landSource),
                 WaterProjectedVertices = AllocateProjectedVertices(waterSource),
+                CoastalLandCorrectionProjectedVertices =
+                    AllocateProjectedVertices(coastalLandCorrectionSource),
+                CoastalWaterCorrectionProjectedVertices =
+                    AllocateProjectedVertices(coastalWaterCorrectionSource),
                 ContourProjectedVertices = AllocateProjectedVertices(contourSource),
                 CoastlineProjectedVertices = AllocateProjectedVertices(coastlineSource),
                 SouthLatitudeDeg = result.SouthLatitudeDeg,
@@ -1453,8 +1512,17 @@ namespace AERISFlightControl.Terrain
                 LandElevationMeters = land.Elevation.ToArray(),
                 LandShade = land.Shade.ToArray(),
                 LandColours = new Color32[land.Vertices.Count],
+                CoastalLandCorrectionElevationMeters =
+                    result.CoastalLandCorrectionElevationMeters == null ? null :
+                    (float[])result.CoastalLandCorrectionElevationMeters.Clone(),
+                CoastalLandCorrectionShade =
+                    result.CoastalLandCorrectionShade == null ? null :
+                    (byte[])result.CoastalLandCorrectionShade.Clone(),
+                CoastalLandCorrectionColours = coastalLandCorrectionSource == null ? null :
+                    new Color32[coastalLandCorrectionSource.Length],
                 Resolution = result.Resolution,
                 CoastlineResolution = result.CoastlineResolution,
+                CoastalCorrectionParentCells = result.CoastalCorrectionParentCells,
                 Valid = (byte[])result.Valid.Clone(),
                 CoverageFraction = TriangleCoverage(result),
                 Bytes = Math.Max(1L, bytes),
@@ -1533,6 +1601,38 @@ namespace AERISFlightControl.Terrain
             mesh.triangles = builder.Triangles.ToArray();
             mesh.RecalculateBounds();
             // Colours and geographic projection are updated in flight; retain CPU access.
+            mesh.UploadMeshData(false);
+            return mesh;
+        }
+
+        static Mesh BuildTriangleListMesh(string name, float[] xy,
+            bool water, out Vector3[] sourceVertices)
+        {
+            sourceVertices = null;
+            if (xy == null || xy.Length < 6 || (xy.Length & 1) != 0) return null;
+            int vertexCount = xy.Length / 2;
+            if (vertexCount % 3 != 0) return null;
+            sourceVertices = new Vector3[vertexCount];
+            var indices = new int[vertexCount];
+            var colours = new Color32[vertexCount];
+            Color32 initial = water ? ResolveWaterColour(AERISTerrainColourPreset.Standard) :
+                new Color32(255, 255, 255, 255);
+            for (int i = 0; i < vertexCount; i++)
+            {
+                sourceVertices[i] = new Vector3(xy[i * 2], xy[i * 2 + 1], 0f);
+                indices[i] = i;
+                colours[i] = initial;
+            }
+            var mesh = new Mesh();
+            mesh.name = name;
+            mesh.hideFlags = HideFlags.HideAndDontSave;
+            if (vertexCount > 65535)
+                mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            mesh.MarkDynamic();
+            mesh.vertices = sourceVertices;
+            mesh.colors32 = colours;
+            mesh.triangles = indices;
+            mesh.RecalculateBounds();
             mesh.UploadMeshData(false);
             return mesh;
         }
@@ -1628,6 +1728,12 @@ namespace AERISFlightControl.Terrain
                 entry.LandProjectedVertices, context);
             ProjectMesh(entry.WaterMesh, entry.WaterGeographicPoints,
                 entry.WaterProjectedVertices, context);
+            ProjectMesh(entry.CoastalLandCorrectionMesh,
+                entry.CoastalLandCorrectionGeographicPoints,
+                entry.CoastalLandCorrectionProjectedVertices, context);
+            ProjectMesh(entry.CoastalWaterCorrectionMesh,
+                entry.CoastalWaterCorrectionGeographicPoints,
+                entry.CoastalWaterCorrectionProjectedVertices, context);
             ProjectMesh(entry.ContourMesh, entry.ContourGeographicPoints,
                 entry.ContourProjectedVertices, context);
             ProjectMesh(entry.CoastlineMesh, entry.CoastlineGeographicPoints,
@@ -1698,6 +1804,19 @@ namespace AERISFlightControl.Terrain
                 Graphics.DrawMeshNow(entry.LandMesh, mapMatrix);
                 rendered = true;
             }
+            // Candidate8 painter-order correction: the sparse 129-derived coastal band
+            // overwrites only coarse shoreline parent cells. Water is applied first, then
+            // land, matching the normal surface ordering while avoiding a full-HD tile.
+            if (entry.CoastalWaterCorrectionMesh != null && terrainMaterial.SetPass(0))
+            {
+                Graphics.DrawMeshNow(entry.CoastalWaterCorrectionMesh, mapMatrix);
+                rendered = true;
+            }
+            if (entry.CoastalLandCorrectionMesh != null && terrainMaterial.SetPass(0))
+            {
+                Graphics.DrawMeshNow(entry.CoastalLandCorrectionMesh, mapMatrix);
+                rendered = true;
+            }
             if (drawContours && entry.ContourMesh != null &&
                 contourMaterial.SetPass(0))
                 Graphics.DrawMeshNow(entry.ContourMesh, mapMatrix);
@@ -1709,15 +1828,19 @@ namespace AERISFlightControl.Terrain
         static void EnsureWaterColour(Entry entry,
             AERISTerrainColourPreset preset)
         {
-            if (entry == null || entry.WaterMesh == null ||
-                entry.WaterColourPreset == preset) return;
-            int vertexCount = entry.WaterMesh.vertexCount;
-            if (vertexCount <= 0) return;
+            if (entry == null || entry.WaterColourPreset == preset) return;
             Color32 colour = ResolveWaterColour(preset);
-            var colours = new Color32[vertexCount];
-            for (int i = 0; i < colours.Length; i++) colours[i] = colour;
-            entry.WaterMesh.colors32 = colours;
+            ApplyUniformMeshColour(entry.WaterMesh, colour);
+            ApplyUniformMeshColour(entry.CoastalWaterCorrectionMesh, colour);
             entry.WaterColourPreset = preset;
+        }
+
+        static void ApplyUniformMeshColour(Mesh mesh, Color32 colour)
+        {
+            if (mesh == null || mesh.vertexCount <= 0) return;
+            var colours = new Color32[mesh.vertexCount];
+            for (int i = 0; i < colours.Length; i++) colours[i] = colour;
+            mesh.colors32 = colours;
         }
 
         static void EnsureLandColours(Entry entry, AERISTerrainDisplayMode mode,
@@ -1742,6 +1865,26 @@ namespace AERISFlightControl.Terrain
                 entry.LandColours[i] = ApplyShade(baseColour, entry.LandShade[i], mode);
             }
             entry.LandMesh.colors32 = entry.LandColours;
+            if (entry.CoastalLandCorrectionMesh != null &&
+                entry.CoastalLandCorrectionElevationMeters != null &&
+                entry.CoastalLandCorrectionShade != null)
+            {
+                int count = entry.CoastalLandCorrectionElevationMeters.Length;
+                if (entry.CoastalLandCorrectionColours == null ||
+                    entry.CoastalLandCorrectionColours.Length != count)
+                    entry.CoastalLandCorrectionColours = new Color32[count];
+                for (int i = 0; i < count; i++)
+                {
+                    Color32 baseColour = ResolveLandColour(mode, preset,
+                        entry.CoastalLandCorrectionElevationMeters[i], quantizedAltitude);
+                    byte shade = i < entry.CoastalLandCorrectionShade.Length ?
+                        entry.CoastalLandCorrectionShade[i] : (byte)255;
+                    entry.CoastalLandCorrectionColours[i] =
+                        ApplyShade(baseColour, shade, mode);
+                }
+                entry.CoastalLandCorrectionMesh.colors32 =
+                    entry.CoastalLandCorrectionColours;
+            }
             entry.ColourMode = mode;
             entry.ColourPreset = preset;
             entry.RelativeAltitudeBucket = altitudeBucket;
@@ -2281,14 +2424,26 @@ namespace AERISFlightControl.Terrain
             if (entry.CoastlineResolution >=
                 AERISTerrainCoastlineExtractor.HighDensityResolution)
                 highDensityCoastlineEntries = Math.Max(0, highDensityCoastlineEntries - 1);
+            if (entry.CoastalCorrectionParentCells > 0)
+            {
+                sparseCoastalCorrectionEntries = Math.Max(0,
+                    sparseCoastalCorrectionEntries - 1);
+                sparseCoastalCorrectionParentCells = Math.Max(0L,
+                    sparseCoastalCorrectionParentCells -
+                    entry.CoastalCorrectionParentCells);
+            }
             usedEntryBytes = Math.Max(0L,
                 usedEntryBytes - Math.Max(0L, entry.Bytes));
             DestroyUnityObject(entry.LandMesh);
             DestroyUnityObject(entry.WaterMesh);
+            DestroyUnityObject(entry.CoastalLandCorrectionMesh);
+            DestroyUnityObject(entry.CoastalWaterCorrectionMesh);
             DestroyUnityObject(entry.ContourMesh);
             DestroyUnityObject(entry.CoastlineMesh);
             entry.LandMesh = null;
             entry.WaterMesh = null;
+            entry.CoastalLandCorrectionMesh = null;
+            entry.CoastalWaterCorrectionMesh = null;
             entry.ContourMesh = null;
             entry.CoastlineMesh = null;
             AERISTerrainRenderReadyHeightField field;

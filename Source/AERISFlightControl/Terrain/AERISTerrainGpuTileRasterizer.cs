@@ -40,6 +40,14 @@ namespace AERISFlightControl.Terrain
         internal float[] ContourSegments;
         internal float[] CoastlineSegments;
         internal int CoastlineResolution;
+        // Candidate8 sparse coastal correction: only high-density sub-cells that belong
+        // to coarse parent cells crossed by the 129x129 boundary are emitted. The base
+        // terrain mesh remains 33x33/17x17. XY arrays are triangle-list vertices.
+        internal float[] CoastalLandCorrectionVertices;
+        internal float[] CoastalLandCorrectionElevationMeters;
+        internal byte[] CoastalLandCorrectionShade;
+        internal float[] CoastalWaterCorrectionVertices;
+        internal int CoastalCorrectionParentCells;
         internal float MeshMilliseconds;
         internal float ContourMilliseconds;
         internal float WorkerMilliseconds;
@@ -62,6 +70,14 @@ namespace AERISFlightControl.Terrain
                 bytes += Triangles == null ? 0L : Triangles.LongLength * sizeof(int);
                 bytes += ContourSegments == null ? 0L : ContourSegments.LongLength * sizeof(float);
                 bytes += CoastlineSegments == null ? 0L : CoastlineSegments.LongLength * sizeof(float);
+                bytes += CoastalLandCorrectionVertices == null ? 0L :
+                    CoastalLandCorrectionVertices.LongLength * sizeof(float);
+                bytes += CoastalLandCorrectionElevationMeters == null ? 0L :
+                    CoastalLandCorrectionElevationMeters.LongLength * sizeof(float);
+                bytes += CoastalLandCorrectionShade == null ? 0L :
+                    CoastalLandCorrectionShade.LongLength;
+                bytes += CoastalWaterCorrectionVertices == null ? 0L :
+                    CoastalWaterCorrectionVertices.LongLength * sizeof(float);
                 return Math.Max(0L, bytes);
             }
         }
@@ -80,6 +96,9 @@ namespace AERISFlightControl.Terrain
     // and a dedicated coastline polyline on the bounded GeneralCompute lane.
     internal sealed class AERISTerrainGpuTileRasterizer : IDisposable
     {
+        // Hard runtime safety rail: a pathological coastline must never expand the
+        // sparse correction back toward Candidate7's whole-tile 129x129 cost.
+        const int MaximumSparseCorrectionParentCells = 64;
         sealed class PendingState
         {
             internal int Generation;
@@ -218,16 +237,13 @@ namespace AERISFlightControl.Terrain
             AERISTerrainHeightTile sourceTile = request.Tile;
             AERISTerrainHeightTile tile = AERISTerrainVirtualDetailPolicy.ReconstructFar(
                 sourceTile, request.VirtualDetailProfile);
-            int baseResolution = tile == null ? 0 : tile.Resolution;
-            if (baseResolution < 2 || baseResolution > 257) return null;
-            int baseCount = baseResolution * baseResolution;
-            if (tile.Elevation.Length < baseCount || tile.Flags.Length < baseCount) return null;
+            int resolution = tile == null ? 0 : tile.Resolution;
+            if (resolution < 2 || resolution > 257) return null;
+            int count = resolution * resolution;
+            if (tile.Elevation.Length < count || tile.Flags.Length < count) return null;
 
             bool highDensityBoundary =
                 AERISTerrainCoastlineExtractor.HasCurrentHighDensityPayload(tile);
-            int resolution = highDensityBoundary ?
-                tile.HighDensityCoastlineResolution : baseResolution;
-            int count = checked(resolution * resolution);
 
             Stopwatch watch = Stopwatch.StartNew();
             var x = new float[count];
@@ -236,43 +252,9 @@ namespace AERISFlightControl.Terrain
             var water = new byte[count];
             var valid = new byte[count];
             var shade = new byte[count];
-            // Candidate7 keeps the authoritative elevation field at 33x33/17x17. On a
-            // coastal tile only the land/water class grid is 129x129; display heights
-            // are class-preserving interpolation of the low-resolution height field.
-            // This gives the fill and coastline the same boundary density without
-            // silently promoting terrain relief/contours to a new sampling authority.
-            for (int row = 0; row < resolution; row++)
-            {
-                for (int column = 0; column < resolution; column++)
-                {
-                    int index = row * resolution + column;
-                    float nx = column / (float)(resolution - 1);
-                    float ny = row / (float)(resolution - 1);
-                    x[index] = nx;
-                    y[index] = ny;
-                    byte classFlag;
-                    float value;
-                    if (highDensityBoundary)
-                    {
-                        classFlag = tile.HighDensityCoastalFlags[index];
-                        value = SampleClassPreservingHeight(tile, nx, ny, classFlag);
-                    }
-                    else
-                    {
-                        int sourceIndex = row * baseResolution + column;
-                        classFlag = tile.Flags[sourceIndex];
-                        value = tile.Elevation[sourceIndex];
-                    }
-                    bool isValid = classFlag != 0 && Finite(value);
-                    valid[index] = isValid ? (byte)255 : (byte)0;
-                    water[index] = classFlag == 2 ? (byte)1 : (byte)0;
-                    elevationMeters[index] = isValid ? value : 0f;
-                }
-            }
-
-            // Preview/high-density boundary meshes span the same physical tile as the
-            // base FAR tile. Scale cell metres by the actual display-grid intervals so
-            // the fixed-NW relief shading remains spatially stable.
+            // Candidate8 restores the Candidate5 33x33/17x17 base mesh. High-density
+            // coastal data is applied later as a narrow correction overlay, never as a
+            // full 129x129 surface mesh.
             double finalIntervals = Math.Max(1,
                 AERISTerrainTileFormat.Resolution(tile.Key.Lod) - 1);
             double actualIntervals = Math.Max(1, resolution - 1);
@@ -280,18 +262,21 @@ namespace AERISFlightControl.Terrain
                 AERISTerrainTileFormat.NominalCellMeters(tile.Key.Lod) *
                 finalIntervals / actualIntervals);
             for (int row = 0; row < resolution; row++)
+            {
                 for (int column = 0; column < resolution; column++)
                 {
                     int index = row * resolution + column;
-                    if (valid[index] == 0 || water[index] != 0 || !request.ShadingEnabled)
-                        shade[index] = 255;
-                    else if (highDensityBoundary)
-                        shade[index] = ResolveShadeGrid(elevationMeters, valid, resolution,
-                            row, column, elevationMeters[index], cellMeters);
-                    else
-                        shade[index] = ResolveShade(tile, row, column,
-                            elevationMeters[index], cellMeters);
+                    x[index] = column / (float)(resolution - 1);
+                    y[index] = row / (float)(resolution - 1);
+                    float value = tile.Elevation[index];
+                    bool isValid = tile.Flags[index] != 0 && Finite(value);
+                    valid[index] = isValid ? (byte)255 : (byte)0;
+                    water[index] = tile.Flags[index] == 2 ? (byte)1 : (byte)0;
+                    elevationMeters[index] = isValid ? value : 0f;
+                    shade[index] = isValid && request.ShadingEnabled && water[index] == 0 ?
+                        ResolveShade(tile, row, column, value, cellMeters) : (byte)255;
                 }
+            }
 
             var triangles = new List<int>((resolution - 1) * (resolution - 1) * 6);
             for (int row = 0; row < resolution - 1; row++)
@@ -308,6 +293,17 @@ namespace AERISFlightControl.Terrain
                     { triangles.Add(b); triangles.Add(c); triangles.Add(d); }
                 }
             }
+
+            float[] correctionLandXY = new float[0];
+            float[] correctionLandElevation = new float[0];
+            byte[] correctionLandShade = new byte[0];
+            float[] correctionWaterXY = new float[0];
+            int correctionParents = 0;
+            if (highDensityBoundary)
+                BuildSparseCoastalCorrections(tile, request.ShadingEnabled,
+                    out correctionLandXY, out correctionLandElevation,
+                    out correctionLandShade, out correctionWaterXY,
+                    out correctionParents);
 
             float meshMilliseconds = (float)watch.Elapsed.TotalMilliseconds;
             Stopwatch contourWatch = Stopwatch.StartNew();
@@ -341,6 +337,11 @@ namespace AERISFlightControl.Terrain
                 CoastlineSegments = coastlines,
                 CoastlineResolution = highDensityBoundary ?
                     tile.HighDensityCoastlineResolution : tile.Resolution,
+                CoastalLandCorrectionVertices = correctionLandXY,
+                CoastalLandCorrectionElevationMeters = correctionLandElevation,
+                CoastalLandCorrectionShade = correctionLandShade,
+                CoastalWaterCorrectionVertices = correctionWaterXY,
+                CoastalCorrectionParentCells = correctionParents,
                 MeshMilliseconds = meshMilliseconds,
                 ContourMilliseconds = (float)contourWatch.Elapsed.TotalMilliseconds,
                 WorkerMilliseconds = (float)watch.Elapsed.TotalMilliseconds,
@@ -348,6 +349,221 @@ namespace AERISFlightControl.Terrain
                     AERISTerrainVirtualDetailLevel.FarDirect :
                     request.VirtualDetailProfile.Level
             };
+        }
+
+        struct CorrectionPoint
+        {
+            internal float X;
+            internal float Y;
+            internal byte ClassFlag;
+            internal float Elevation;
+        }
+
+        static void BuildSparseCoastalCorrections(AERISTerrainHeightTile tile,
+            bool shadingEnabled, out float[] landXY, out float[] landElevation,
+            out byte[] landShade, out float[] waterXY, out int parentCellCount)
+        {
+            landXY = new float[0];
+            landElevation = new float[0];
+            landShade = new byte[0];
+            waterXY = new float[0];
+            parentCellCount = 0;
+            if (tile == null || tile.HighDensityCoastalFlags == null ||
+                tile.HighDensityCoastlineResolution !=
+                    AERISTerrainCoastlineExtractor.HighDensityResolution)
+                return;
+            int hd = tile.HighDensityCoastlineResolution;
+            int baseResolution = tile.Resolution;
+            if (baseResolution < 2 || hd < 2 ||
+                (hd - 1) % (baseResolution - 1) != 0) return;
+            int factor = (hd - 1) / (baseResolution - 1);
+            if (factor <= 0) return;
+            byte[] flags = tile.HighDensityCoastalFlags;
+            if (flags.Length != hd * hd) return;
+
+            int parentWidth = baseResolution - 1;
+            var parents = new bool[parentWidth * parentWidth];
+            for (int row = 0; row < hd - 1; row++)
+            {
+                for (int column = 0; column < hd - 1; column++)
+                {
+                    int a = row * hd + column;
+                    int b = a + 1;
+                    int c = a + hd;
+                    int d = c + 1;
+                    byte fa = flags[a], fb = flags[b], fc = flags[c], fd = flags[d];
+                    if (fa == 0 || fb == 0 || fc == 0 || fd == 0) continue;
+                    bool wa = fa == 2, wb = fb == 2, wc = fc == 2, wd = fd == 2;
+                    if (wa == wb && wa == wc && wa == wd) continue;
+                    int pr = Math.Min(parentWidth - 1, row / factor);
+                    int pc = Math.Min(parentWidth - 1, column / factor);
+                    parents[pr * parentWidth + pc] = true;
+                }
+            }
+
+            int detectedParents = 0;
+            for (int i = 0; i < parents.Length; i++)
+                if (parents[i]) detectedParents++;
+            if (detectedParents <= 0 ||
+                detectedParents > MaximumSparseCorrectionParentCells)
+                return;
+
+            var land = new List<float>(2048);
+            var water = new List<float>(2048);
+            var landHeights = new List<float>(1024);
+            var landShades = new List<byte>(1024);
+            float baseCellMeters = (float)Math.Max(1.0,
+                AERISTerrainTileFormat.NominalCellMeters(tile.Key.Lod));
+            for (int pr = 0; pr < parentWidth; pr++)
+            {
+                for (int pc = 0; pc < parentWidth; pc++)
+                {
+                    if (!parents[pr * parentWidth + pc]) continue;
+                    parentCellCount++;
+                    int rowStart = pr * factor;
+                    int columnStart = pc * factor;
+                    for (int sr = 0; sr < factor; sr++)
+                    {
+                        int row = rowStart + sr;
+                        for (int sc = 0; sc < factor; sc++)
+                        {
+                            int column = columnStart + sc;
+                            CorrectionPoint a = CorrectionSample(tile, flags, hd,
+                                row, column);
+                            CorrectionPoint b = CorrectionSample(tile, flags, hd,
+                                row, column + 1);
+                            CorrectionPoint c = CorrectionSample(tile, flags, hd,
+                                row + 1, column);
+                            CorrectionPoint d = CorrectionSample(tile, flags, hd,
+                                row + 1, column + 1);
+                            if (a.ClassFlag == 0 || b.ClassFlag == 0 ||
+                                c.ClassFlag == 0 || d.ClassFlag == 0) continue;
+                            AppendCorrectionTriangle(tile, land, landHeights, landShades,
+                                water, a, c, b, shadingEnabled, baseCellMeters);
+                            AppendCorrectionTriangle(tile, land, landHeights, landShades,
+                                water, b, c, d, shadingEnabled, baseCellMeters);
+                        }
+                    }
+                }
+            }
+            landXY = land.ToArray();
+            landElevation = landHeights.ToArray();
+            landShade = landShades.ToArray();
+            waterXY = water.ToArray();
+        }
+
+        static CorrectionPoint CorrectionSample(AERISTerrainHeightTile tile,
+            byte[] flags, int resolution, int row, int column)
+        {
+            int index = row * resolution + column;
+            byte classFlag = flags[index];
+            float x = column / (float)(resolution - 1);
+            float y = row / (float)(resolution - 1);
+            return new CorrectionPoint
+            {
+                X = x,
+                Y = y,
+                ClassFlag = classFlag,
+                Elevation = classFlag == 0 ? 0f :
+                    SampleClassPreservingHeight(tile, x, y, classFlag)
+            };
+        }
+
+        static void AppendCorrectionTriangle(AERISTerrainHeightTile tile,
+            List<float> land, List<float> landHeights, List<byte> landShades,
+            List<float> water, CorrectionPoint a, CorrectionPoint b,
+            CorrectionPoint c, bool shadingEnabled, float baseCellMeters)
+        {
+            var input = new CorrectionPoint[] { a, b, c };
+            AppendCorrectionPolygon(tile, land, landHeights, landShades, input,
+                false, shadingEnabled, baseCellMeters);
+            AppendCorrectionPolygon(tile, water, null, null, input,
+                true, false, baseCellMeters);
+        }
+
+        static void AppendCorrectionPolygon(AERISTerrainHeightTile tile,
+            List<float> output, List<float> elevations, List<byte> shades,
+            CorrectionPoint[] input, bool targetWater, bool shadingEnabled,
+            float baseCellMeters)
+        {
+            var clipped = new CorrectionPoint[6];
+            int count = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                CorrectionPoint current = input[i];
+                CorrectionPoint next = input[(i + 1) % 3];
+                bool currentInside = (current.ClassFlag == 2) == targetWater;
+                bool nextInside = (next.ClassFlag == 2) == targetWater;
+                if (currentInside) clipped[count++] = current;
+                if (currentInside != nextInside)
+                    clipped[count++] = CorrectionCrossing(current, next,
+                        targetWater ? (byte)2 : (byte)1);
+            }
+            if (count < 3) return;
+            for (int i = 1; i < count - 1; i++)
+            {
+                AppendCorrectionVertex(tile, output, elevations, shades, clipped[0],
+                    targetWater, shadingEnabled, baseCellMeters);
+                AppendCorrectionVertex(tile, output, elevations, shades, clipped[i],
+                    targetWater, shadingEnabled, baseCellMeters);
+                AppendCorrectionVertex(tile, output, elevations, shades, clipped[i + 1],
+                    targetWater, shadingEnabled, baseCellMeters);
+            }
+        }
+
+        static CorrectionPoint CorrectionCrossing(CorrectionPoint a,
+            CorrectionPoint b, byte targetClass)
+        {
+            float t = AERISTerrainCoastlinePolicy.CrossingFraction(a.ClassFlag == 2,
+                b.ClassFlag == 2, a.Elevation, b.Elevation);
+            return new CorrectionPoint
+            {
+                X = a.X + (b.X - a.X) * t,
+                Y = a.Y + (b.Y - a.Y) * t,
+                ClassFlag = targetClass,
+                Elevation = a.Elevation + (b.Elevation - a.Elevation) * t
+            };
+        }
+
+        static void AppendCorrectionVertex(AERISTerrainHeightTile tile,
+            List<float> output, List<float> elevations, List<byte> shades,
+            CorrectionPoint point, bool targetWater, bool shadingEnabled,
+            float baseCellMeters)
+        {
+            output.Add(point.X);
+            output.Add(point.Y);
+            if (targetWater || elevations == null || shades == null) return;
+            float elevation = SampleClassPreservingHeight(tile, point.X, point.Y, 1);
+            elevations.Add(elevation);
+            shades.Add(shadingEnabled ? ResolveShadeAtNormalized(tile, point.X, point.Y,
+                elevation, baseCellMeters) : (byte)255);
+        }
+
+        static byte ResolveShadeAtNormalized(AERISTerrainHeightTile tile,
+            float normalizedX, float normalizedY, float fallback, float cellMeters)
+        {
+            if (tile == null || tile.Resolution < 2) return 255;
+            float step = 1f / Math.Max(1, tile.Resolution - 1);
+            float west = SampleClassPreservingHeight(tile,
+                Math.Max(0f, normalizedX - step), normalizedY, 1);
+            float east = SampleClassPreservingHeight(tile,
+                Math.Min(1f, normalizedX + step), normalizedY, 1);
+            float south = SampleClassPreservingHeight(tile, normalizedX,
+                Math.Max(0f, normalizedY - step), 1);
+            float north = SampleClassPreservingHeight(tile, normalizedX,
+                Math.Min(1f, normalizedY + step), 1);
+            if (!Finite(west)) west = fallback;
+            if (!Finite(east)) east = fallback;
+            if (!Finite(south)) south = fallback;
+            if (!Finite(north)) north = fallback;
+            float nx = -(east - west) / Math.Max(2f, cellMeters * 2f);
+            float ny = -(north - south) / Math.Max(2f, cellMeters * 2f);
+            float nz = 1f;
+            float inverse = 1f / (float)Math.Sqrt(nx * nx + ny * ny + nz * nz);
+            nx *= inverse; ny *= inverse; nz *= inverse;
+            float diffuse = Math.Max(0f, nx * -0.55f + ny * 0.55f + nz * 0.63f);
+            float factor = Clamp(0.82f + diffuse * 0.20f, 0.82f, 1.04f);
+            return (byte)Math.Max(0, Math.Min(255, (int)Math.Round(factor * 227f)));
         }
 
         static float SampleClassPreservingHeight(AERISTerrainHeightTile tile,
