@@ -1,0 +1,45 @@
+AERIS Flight Control v0.18.0.0 DEV CP3.75
+CONTOUR LEVEL BUDGET / COASTAL CLIP CANDIDATE 11
+
+PURPOSE
+- Repair the remaining contour collapse seen most clearly at 10/20/40 km.
+- Preserve Candidate8 sparse coastal performance and Candidate9 unified coastline/fill authority.
+- Do not modify AP/FBW/PROTECT or other protected non-ND systems.
+
+ROOT CAUSES ADDRESSED
+1. Candidate10 limited each triangle to the lowest 16 contour levels. At 50 m cadence,
+   a triangle spanning >800 m silently lost all higher contours, spatially biasing steep
+   islands and mountains into dense lower bands plus missing upper relief.
+2. Candidate10 suppressed an entire coarse parent cell whenever the 129x129 coastal mask
+   crossed it. This prevented water intrusion but created visible contour gaps at high zoom.
+
+CANDIDATE11 DESIGN
+- Contours continue to use the exact same two-triangle topology as the terrain surface.
+- Remove the per-triangle 16-level truncation entirely.
+- Compute one deterministic level stride from the whole tile.
+- Preserve requested 50/100/250/500 m cadence while total tile levels <= 96.
+- If an extreme tile exceeds 96 levels, thin uniformly by integer level stride across the
+  entire tile; never truncate only one spatial region.
+- In coastal parent cells, retain contour generation and clip the final segment against the
+  persisted 129x129 land/water classification with bounded subdivision.
+- Maximum coastal clipping subdivision is 16 pieces per contour segment.
+- No 129x129 whole-tile terrain surface is introduced.
+
+STATIC ACCEPTANCE
+- Candidate11 contour selftest PASS.
+- CP2 C# compile-regression suite PASS.
+- C# syntax parse PASS before runtime release.
+
+RUNTIME HARD GATES
+- Verify on-screen build string says CANDIDATE 11.
+- Repeat the same steep island/shoreline views at 160/80/40/20/10 km.
+- No lower-elevation contour hatching/bundling caused by a 16-level cutoff.
+- No rectangular contour holes along HD coastline parent cells.
+- Contours remain land-only and do not visibly cross water.
+- Candidate8/9 coastline/fill quality must not regress.
+- Performance must remain within the Candidate8-10 acceptable class; Candidate7-level
+  collapse is an immediate FAIL.
+
+FOUNDATION COMPLETION
+Candidate11 may close the CP3.75 basic ND drawing structure only after all runtime hard
+Gates above pass. Flicker remains a separate watch item unless it reproducibly returns.
