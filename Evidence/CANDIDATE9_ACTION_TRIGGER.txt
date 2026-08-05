@@ -1,2 +1,0 @@
-CP3.75 Candidate9 one-shot renderer source patch trigger.
-This file is temporary and is removed by the one-shot workflow.
