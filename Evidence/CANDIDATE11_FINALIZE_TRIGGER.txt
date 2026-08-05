@@ -1,0 +1,2 @@
+Trigger Candidate11 final build-entrypoint update and static validation.
+Temporary; finalization workflow removes this file if configured.
