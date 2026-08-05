@@ -1,0 +1,5 @@
+CP3.75 Candidate10 GitHub validation:
+triangle-consistent contour topology selftest: PASS
+inherited Candidate9 coastal/palette authority checks: PASS
+CP2 compile-regression static suite: PASS
+tree-sitter C# syntax: PASS
