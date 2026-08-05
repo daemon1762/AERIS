@@ -350,23 +350,115 @@ namespace AERISFlightControl.Terrain
 
         static float[] BuildContours(AERISTerrainHeightTile tile, float interval)
         {
-            var output = new List<float>(tile.Resolution * tile.Resolution); var points = new float[8]; int resolution = tile.Resolution;
-            for (int row = 0; row < resolution - 1; row++) for (int column = 0; column < resolution - 1; column++)
+            var output = new List<float>(tile.Resolution * tile.Resolution);
+            int resolution = tile.Resolution;
+            for (int row = 0; row < resolution - 1; row++)
             {
-                int a = row * resolution + column, b = a + 1, c = a + resolution, d = c + 1;
-                if (tile.Flags[a] == 0 || tile.Flags[b] == 0 || tile.Flags[c] == 0 || tile.Flags[d] == 0 || tile.Flags[a] == 2 || tile.Flags[b] == 2 || tile.Flags[c] == 2 || tile.Flags[d] == 2) continue;
-                float va = tile.Elevation[a], vb = tile.Elevation[b], vc = tile.Elevation[c], vd = tile.Elevation[d]; if (!Finite(va) || !Finite(vb) || !Finite(vc) || !Finite(vd)) continue;
-                float minimum = Math.Min(Math.Min(va, vb), Math.Min(vc, vd)), maximum = Math.Max(Math.Max(va, vb), Math.Max(vc, vd)); int first = (int)Math.Floor(minimum / interval) + 1, last = (int)Math.Floor(maximum / interval), levels = Math.Min(16, Math.Max(0, last - first + 1));
-                for (int levelIndex = 0; levelIndex < levels; levelIndex++)
+                for (int column = 0; column < resolution - 1; column++)
                 {
-                    float level = (first + levelIndex) * interval; int pointCount = 0;
-                    AddCrossing(points, ref pointCount, column, row, column + 1, row, va, vb, level, resolution); AddCrossing(points, ref pointCount, column + 1, row, column + 1, row + 1, vb, vd, level, resolution); AddCrossing(points, ref pointCount, column + 1, row + 1, column, row + 1, vd, vc, level, resolution); AddCrossing(points, ref pointCount, column, row + 1, column, row, vc, va, level, resolution);
-                    if (pointCount >= 2) { output.Add(points[0]); output.Add(points[1]); output.Add(points[2]); output.Add(points[3]); }
-                    if (pointCount >= 4) { output.Add(points[4]); output.Add(points[5]); output.Add(points[6]); output.Add(points[7]); }
+                    // Candidate10 coastal contour integrity: a coarse parent cell that
+                    // contains a 129x129 land/water transition is owned by the HD coastal
+                    // correction. Suppress coarse contours only in that narrow parent cell
+                    // so they cannot cross the corrected shoreline.
+                    if (HighDensityBoundaryCrossesParentCell(tile, row, column)) continue;
+
+                    int a = row * resolution + column;
+                    int b = a + 1;
+                    int c = a + resolution;
+                    int d = c + 1;
+
+                    // Use the exact same two triangles as the terrain surface mesh. The old
+                    // square-cell marching path could produce four edge crossings in a saddle
+                    // cell and pair them arbitrarily, creating short parallel bars/hatching.
+                    // A linear triangle has at most one unambiguous contour segment per level.
+                    AppendTriangleContours(output, tile, interval,
+                        column, row, a, column, row + 1, c,
+                        column + 1, row, b);
+                    AppendTriangleContours(output, tile, interval,
+                        column + 1, row, b, column, row + 1, c,
+                        column + 1, row + 1, d);
                 }
             }
             return output.ToArray();
         }
+
+        static void AppendTriangleContours(List<float> output,
+            AERISTerrainHeightTile tile, float interval,
+            int x0, int y0, int i0, int x1, int y1, int i1,
+            int x2, int y2, int i2)
+        {
+            if (tile == null || output == null ||
+                i0 < 0 || i1 < 0 || i2 < 0 ||
+                i0 >= tile.Flags.Length || i1 >= tile.Flags.Length ||
+                i2 >= tile.Flags.Length ||
+                i0 >= tile.Elevation.Length || i1 >= tile.Elevation.Length ||
+                i2 >= tile.Elevation.Length) return;
+            // Contours are land-only. Triangle-level rejection lets the valid land half of
+            // a mixed coarse cell survive without drawing across a water vertex.
+            if (tile.Flags[i0] == 0 || tile.Flags[i1] == 0 || tile.Flags[i2] == 0 ||
+                tile.Flags[i0] == 2 || tile.Flags[i1] == 2 || tile.Flags[i2] == 2)
+                return;
+            float v0 = tile.Elevation[i0];
+            float v1 = tile.Elevation[i1];
+            float v2 = tile.Elevation[i2];
+            if (!Finite(v0) || !Finite(v1) || !Finite(v2)) return;
+
+            float minimum = Math.Min(v0, Math.Min(v1, v2));
+            float maximum = Math.Max(v0, Math.Max(v1, v2));
+            int first = (int)Math.Floor(minimum / interval) + 1;
+            int last = (int)Math.Floor(maximum / interval);
+            int levels = Math.Min(16, Math.Max(0, last - first + 1));
+            var points = new float[6];
+            for (int levelIndex = 0; levelIndex < levels; levelIndex++)
+            {
+                float level = (first + levelIndex) * interval;
+                int pointCount = 0;
+                AddCrossing(points, ref pointCount, x0, y0, x1, y1,
+                    v0, v1, level, tile.Resolution);
+                AddCrossing(points, ref pointCount, x1, y1, x2, y2,
+                    v1, v2, level, tile.Resolution);
+                AddCrossing(points, ref pointCount, x2, y2, x0, y0,
+                    v2, v0, level, tile.Resolution);
+                if (pointCount < 2) continue;
+                output.Add(points[0]); output.Add(points[1]);
+                output.Add(points[2]); output.Add(points[3]);
+            }
+        }
+
+        static bool HighDensityBoundaryCrossesParentCell(
+            AERISTerrainHeightTile tile, int parentRow, int parentColumn)
+        {
+            if (tile == null || tile.HighDensityCoastalFlags == null ||
+                tile.HighDensityCoastlineResolution !=
+                    AERISTerrainCoastlineExtractor.HighDensityResolution ||
+                tile.Resolution < 2) return false;
+            int hd = tile.HighDensityCoastlineResolution;
+            if ((hd - 1) % (tile.Resolution - 1) != 0) return false;
+            int factor = (hd - 1) / (tile.Resolution - 1);
+            if (factor <= 0 || tile.HighDensityCoastalFlags.Length != hd * hd)
+                return false;
+            int rowStart = parentRow * factor;
+            int columnStart = parentColumn * factor;
+            byte[] flags = tile.HighDensityCoastalFlags;
+            for (int sr = 0; sr < factor; sr++)
+            {
+                int row = rowStart + sr;
+                for (int sc = 0; sc < factor; sc++)
+                {
+                    int column = columnStart + sc;
+                    int a = row * hd + column;
+                    int b = a + 1;
+                    int c = a + hd;
+                    int d = c + 1;
+                    byte fa = flags[a], fb = flags[b], fc = flags[c], fd = flags[d];
+                    if (fa == 0 || fb == 0 || fc == 0 || fd == 0) continue;
+                    bool wa = fa == 2, wb = fb == 2, wc = fc == 2, wd = fd == 2;
+                    if (!(wa == wb && wa == wc && wa == wd)) return true;
+                }
+            }
+            return false;
+        }
+
 
         static void AddCrossing(float[] points, ref int pointCount, int x0, int y0, int x1, int y1, float v0, float v1, float level, int resolution)
         {
