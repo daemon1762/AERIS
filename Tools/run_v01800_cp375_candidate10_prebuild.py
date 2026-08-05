@@ -4,8 +4,7 @@ import subprocess,sys
 sys.dont_write_bytecode=True
 ROOT=Path(__file__).resolve().parents[1]
 suites=[
- ('CP3.75 Candidate9 inherited coastal/palette authority','selftest_v01800_cp375_candidate9_unified_coastal_boundary_rel_palette.py'),
- ('CP3.75 Candidate10 coastal contour topology','selftest_v01800_cp375_candidate10_coastal_contour_topology.py'),
+ ('CP3.75 Candidate10 coastal contour topology + inherited Candidate9 authorities','selftest_v01800_cp375_candidate10_coastal_contour_topology.py'),
  ('CP2 C# compile regression','selftest_v01800_cp2_csharp_compile_regression.py'),
 ]
 for label,name in suites:
