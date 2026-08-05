@@ -2128,7 +2128,8 @@ namespace AERISFlightControl.Terrain
                 if (!TryTileRectNormalized(tile, projection, out normalized))
                     continue;
                 Entry fallbackEntry, currentEntry;
-                ResolveRenderableEntries(tile, styleKey, out fallbackEntry,
+                string cacheKey = CacheKey(tile.Key, tile.CreatedUtcTicks, styleKey);
+                ResolveRenderableEntries(tile, cacheKey, styleKey, out fallbackEntry,
                     out currentEntry);
                 if (includeFallback && fallbackEntry != null)
                     coverageRects.Add(new CoverageRegion
