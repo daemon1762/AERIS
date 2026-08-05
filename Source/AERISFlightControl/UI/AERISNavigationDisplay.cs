@@ -54,6 +54,17 @@ namespace AERISFlightControl.UI
         AERISRunwayObservation cachedLandingObservation;
         AERISRunwayDirectionDefinition cachedLandingDirection;
         float cachedFallbackMapHeading;
+        // Operation Health Pass 1 Hotfix 1: moving-map ownship symbology is committed
+        // on the exact Terrain FRONT swap, not on every IMGUI repaint. Terrain and the
+        // aircraft mark/range fan/track prediction therefore share one presentation frame.
+        long terrainSymbologyFrontSwap = -1L;
+        bool terrainSymbologyValid;
+        uint terrainSymbologyVesselPersistentId;
+        string terrainSymbologyBodyName = string.Empty;
+        double terrainSymbologyLatitudeDeg;
+        double terrainSymbologyLongitudeDeg;
+        double terrainSymbologyGroundSpeedMps;
+        double terrainSymbologyGroundTrackDeg;
         string capturedBodyName = string.Empty;
         long capturedDatabaseRevision = -1L;
         long capturedSelectionRevision = -1L;
@@ -143,6 +154,7 @@ namespace AERISFlightControl.UI
             cachedTerrainTileTelemetry = null;
             pendingManualRangeMeters = float.NaN;
             pendingManualRangeApplyRealtime = 0f;
+            ResetTerrainSynchronizedSymbology();
         }
 
         internal void Dispose()
@@ -166,6 +178,7 @@ namespace AERISFlightControl.UI
             cachedTerrainTileTelemetry = null;
             pendingManualRangeMeters = float.NaN;
             pendingManualRangeApplyRealtime = 0f;
+            ResetTerrainSynchronizedSymbology();
         }
 
         internal void Draw(Rect rect)
@@ -385,28 +398,35 @@ namespace AERISFlightControl.UI
                 bool presentedTrackUp = effectiveTrackUp;
                 float presentedAnchorV = anchorV;
                 bool terrainPresentationActive = planMode || !landActive || overlay;
+                AERISTerrainPresentedProjection presentedProjection =
+                    new AERISTerrainPresentedProjection();
                 if (terrainPresentationActive && terrainTileRenderer != null)
                 {
-                    AERISTerrainPresentedProjection presented =
-                        terrainTileRenderer.PresentedProjection;
-                    if (presented.Valid)
+                    presentedProjection = terrainTileRenderer.PresentedProjection;
+                    if (presentedProjection.Valid)
                     {
-                        presentedCenterLatitudeDeg = presented.CenterLatitudeDeg;
-                        presentedCenterLongitudeDeg = presented.CenterLongitudeDeg;
-                        presentedRange = presented.RangeMeters;
-                        presentedHeading = presented.MapHeadingDeg;
-                        presentedTrackUp = presented.TrackUp;
-                        presentedAnchorV = presented.AnchorV;
+                        presentedCenterLatitudeDeg = presentedProjection.CenterLatitudeDeg;
+                        presentedCenterLongitudeDeg = presentedProjection.CenterLongitudeDeg;
+                        presentedRange = presentedProjection.RangeMeters;
+                        presentedHeading = presentedProjection.MapHeadingDeg;
+                        presentedTrackUp = presentedProjection.TrackUp;
+                        presentedAnchorV = presentedProjection.AnchorV;
                     }
                 }
+                UpdateTerrainSynchronizedSymbology(vessel,
+                    terrainPresentationActive && !planMode, presentedProjection);
+                double displayOwnLatitudeDeg = terrainSymbologyValid ?
+                    terrainSymbologyLatitudeDeg : (vessel == null ? 0.0 : vessel.latitude);
+                double displayOwnLongitudeDeg = terrainSymbologyValid ?
+                    terrainSymbologyLongitudeDeg : (vessel == null ? 0.0 : vessel.longitude);
 
                 double ownEast = 0.0, ownNorth = 0.0;
                 double centerEast = 0.0, centerNorth = 0.0;
                 if (hasFrame && vessel != null && vessel.mainBody != null)
                 {
                     ToLocalMeters(vessel.mainBody, frame.OriginLatitudeDeg,
-                        frame.OriginLongitudeDeg, vessel.latitude, vessel.longitude,
-                        out ownEast, out ownNorth);
+                        frame.OriginLongitudeDeg, displayOwnLatitudeDeg,
+                        displayOwnLongitudeDeg, out ownEast, out ownNorth);
                     ToLocalMeters(vessel.mainBody, frame.OriginLatitudeDeg,
                         frame.OriginLongitudeDeg, presentedCenterLatitudeDeg,
                         presentedCenterLongitudeDeg, out centerEast, out centerNorth);
@@ -487,6 +507,48 @@ namespace AERISFlightControl.UI
                             terrainTileRenderer.FrontBufferAgeMilliseconds);
                 }
             }
+        }
+
+        void ResetTerrainSynchronizedSymbology()
+        {
+            terrainSymbologyFrontSwap = -1L;
+            terrainSymbologyValid = false;
+            terrainSymbologyVesselPersistentId = 0u;
+            terrainSymbologyBodyName = string.Empty;
+            terrainSymbologyLatitudeDeg = 0.0;
+            terrainSymbologyLongitudeDeg = 0.0;
+            terrainSymbologyGroundSpeedMps = 0.0;
+            terrainSymbologyGroundTrackDeg = 0.0;
+        }
+
+        void UpdateTerrainSynchronizedSymbology(Vessel vessel, bool movingMapTerrainActive,
+            AERISTerrainPresentedProjection presented)
+        {
+            if (!movingMapTerrainActive || !presented.Valid || terrainTileRenderer == null ||
+                vessel == null || vessel.mainBody == null)
+            {
+                ResetTerrainSynchronizedSymbology();
+                return;
+            }
+            string bodyName = vessel.mainBody.name ?? string.Empty;
+            long frontSwap = terrainTileRenderer.FrontBufferSwaps;
+            if (terrainSymbologyValid && terrainSymbologyFrontSwap == frontSwap &&
+                terrainSymbologyVesselPersistentId == vessel.persistentId &&
+                string.Equals(terrainSymbologyBodyName, bodyName,
+                    StringComparison.OrdinalIgnoreCase)) return;
+
+            // In normal TERR moving-map mode the committed FRONT center is the ownship
+            // position used to build that terrain frame. Pin ownship to that exact committed
+            // geographic authority until the next FRONT swap; do not mix live vessel motion
+            // with an older terrain texture. Track and speed are captured on the same swap.
+            terrainSymbologyFrontSwap = frontSwap;
+            terrainSymbologyVesselPersistentId = vessel.persistentId;
+            terrainSymbologyBodyName = bodyName;
+            terrainSymbologyLatitudeDeg = presented.CenterLatitudeDeg;
+            terrainSymbologyLongitudeDeg = presented.CenterLongitudeDeg;
+            terrainSymbologyGroundSpeedMps = Math.Max(0.0, vessel.srfSpeed);
+            terrainSymbologyGroundTrackDeg = ResolveMapHeading(vessel);
+            terrainSymbologyValid = true;
         }
 
         void UpdateAuxiliarySnapshots(Vessel vessel)
@@ -1537,14 +1599,21 @@ namespace AERISFlightControl.UI
             // projected the vector endpoint as though ownship were always at the map center,
             // while the line start used the actual ownship point. A latched GPU FRONT therefore
             // made the vector breathe/collapse as ownship moved away from the committed center.
+            double ownLatitudeDeg = terrainSymbologyValid ?
+                terrainSymbologyLatitudeDeg : vessel.latitude;
+            double ownLongitudeDeg = terrainSymbologyValid ?
+                terrainSymbologyLongitudeDeg : vessel.longitude;
             double ownEast, ownNorth;
             ToLocalMeters(vessel.mainBody, centerLatitudeDeg, centerLongitudeDeg,
-                vessel.latitude, vessel.longitude, out ownEast, out ownNorth);
+                ownLatitudeDeg, ownLongitudeDeg, out ownEast, out ownNorth);
 
-            double speed = Math.Max(1.0, vessel.srfSpeed);
+            double speed = Math.Max(1.0, terrainSymbologyValid ?
+                terrainSymbologyGroundSpeedMps : vessel.srfSpeed);
             const double horizonSeconds = 60.0;
             double distance = Math.Min(range * 0.42, speed * horizonSeconds);
-            double trackRad = cachedFallbackMapHeading * Math.PI / 180.0;
+            double displayTrackDeg = terrainSymbologyValid ?
+                terrainSymbologyGroundTrackDeg : cachedFallbackMapHeading;
+            double trackRad = displayTrackDeg * Math.PI / 180.0;
             double east = ownEast + Math.Sin(trackRad) * distance;
             double north = ownNorth + Math.Cos(trackRad) * distance;
             Vector2 end;
