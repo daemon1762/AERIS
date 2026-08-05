@@ -1,0 +1,2 @@
+Trigger Candidate11 contour level and coastal clipping patch.
+Temporary evidence trigger; delete after workflow completion.
