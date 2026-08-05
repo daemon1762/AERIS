@@ -1,0 +1,52 @@
+name: Candidate10 one-shot contour integrity patch
+
+on:
+  push:
+    branches:
+      - cp3.75/nd-recovery
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cp3.75/nd-recovery
+          fetch-depth: 0
+      - name: Patch contour generation
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs')
+          text=p.read_text(encoding='utf-8')
+          start=text.index('        static float[] BuildContours(AERISTerrainHeightTile tile, float interval)')
+          end=text.index('        static void AddCrossing(', start)
+          new='''        static float[] BuildContours(AERISTerrainHeightTile tile, float interval)\n        {\n            var output = new List<float>(tile.Resolution * tile.Resolution);\n            int resolution = tile.Resolution;\n            for (int row = 0; row < resolution - 1; row++)\n            {\n                for (int column = 0; column < resolution - 1; column++)\n                {\n                    // Candidate10 coastal contour integrity: a coarse parent cell that\n                    // contains a 129x129 land/water transition is owned by the HD coastal\n                    // correction. Suppress coarse contours only in that narrow parent cell\n                    // so they cannot cross the corrected shoreline.\n                    if (HighDensityBoundaryCrossesParentCell(tile, row, column)) continue;\n\n                    int a = row * resolution + column;\n                    int b = a + 1;\n                    int c = a + resolution;\n                    int d = c + 1;\n\n                    // Use the exact same two triangles as the terrain surface mesh. The old\n                    // square-cell marching path could produce four edge crossings in a saddle\n                    // cell and pair them arbitrarily, creating short parallel bars/hatching.\n                    // A linear triangle has at most one unambiguous contour segment per level.\n                    AppendTriangleContours(output, tile, interval,\n                        column, row, a, column, row + 1, c,\n                        column + 1, row, b);\n                    AppendTriangleContours(output, tile, interval,\n                        column + 1, row, b, column, row + 1, c,\n                        column + 1, row + 1, d);\n                }\n            }\n            return output.ToArray();\n        }\n\n        static void AppendTriangleContours(List<float> output,\n            AERISTerrainHeightTile tile, float interval,\n            int x0, int y0, int i0, int x1, int y1, int i1,\n            int x2, int y2, int i2)\n        {\n            if (tile == null || output == null ||\n                i0 < 0 || i1 < 0 || i2 < 0 ||\n                i0 >= tile.Flags.Length || i1 >= tile.Flags.Length ||\n                i2 >= tile.Flags.Length ||\n                i0 >= tile.Elevation.Length || i1 >= tile.Elevation.Length ||\n                i2 >= tile.Elevation.Length) return;\n            // Contours are land-only. Triangle-level rejection lets the valid land half of\n            // a mixed coarse cell survive without drawing across a water vertex.\n            if (tile.Flags[i0] == 0 || tile.Flags[i1] == 0 || tile.Flags[i2] == 0 ||\n                tile.Flags[i0] == 2 || tile.Flags[i1] == 2 || tile.Flags[i2] == 2)\n                return;\n            float v0 = tile.Elevation[i0];\n            float v1 = tile.Elevation[i1];\n            float v2 = tile.Elevation[i2];\n            if (!Finite(v0) || !Finite(v1) || !Finite(v2)) return;\n\n            float minimum = Math.Min(v0, Math.Min(v1, v2));\n            float maximum = Math.Max(v0, Math.Max(v1, v2));\n            int first = (int)Math.Floor(minimum / interval) + 1;\n            int last = (int)Math.Floor(maximum / interval);\n            int levels = Math.Min(16, Math.Max(0, last - first + 1));\n            var points = new float[6];\n            for (int levelIndex = 0; levelIndex < levels; levelIndex++)\n            {\n                float level = (first + levelIndex) * interval;\n                int pointCount = 0;\n                AddCrossing(points, ref pointCount, x0, y0, x1, y1,\n                    v0, v1, level, tile.Resolution);\n                AddCrossing(points, ref pointCount, x1, y1, x2, y2,\n                    v1, v2, level, tile.Resolution);\n                AddCrossing(points, ref pointCount, x2, y2, x0, y0,\n                    v2, v0, level, tile.Resolution);\n                if (pointCount < 2) continue;\n                output.Add(points[0]); output.Add(points[1]);\n                output.Add(points[2]); output.Add(points[3]);\n            }\n        }\n\n        static bool HighDensityBoundaryCrossesParentCell(\n            AERISTerrainHeightTile tile, int parentRow, int parentColumn)\n        {\n            if (tile == null || tile.HighDensityCoastalFlags == null ||\n                tile.HighDensityCoastlineResolution !=\n                    AERISTerrainCoastlineExtractor.HighDensityResolution ||\n                tile.Resolution < 2) return false;\n            int hd = tile.HighDensityCoastlineResolution;\n            if ((hd - 1) % (tile.Resolution - 1) != 0) return false;\n            int factor = (hd - 1) / (tile.Resolution - 1);\n            if (factor <= 0 || tile.HighDensityCoastalFlags.Length != hd * hd)\n                return false;\n            int rowStart = parentRow * factor;\n            int columnStart = parentColumn * factor;\n            byte[] flags = tile.HighDensityCoastalFlags;\n            for (int sr = 0; sr < factor; sr++)\n            {\n                int row = rowStart + sr;\n                for (int sc = 0; sc < factor; sc++)\n                {\n                    int column = columnStart + sc;\n                    int a = row * hd + column;\n                    int b = a + 1;\n                    int c = a + hd;\n                    int d = c + 1;\n                    byte fa = flags[a], fb = flags[b], fc = flags[c], fd = flags[d];\n                    if (fa == 0 || fb == 0 || fc == 0 || fd == 0) continue;\n                    bool wa = fa == 2, wb = fb == 2, wc = fc == 2, wd = fd == 2;\n                    if (!(wa == wb && wa == wc && wa == wd)) return true;\n                }\n            }\n            return false;\n        }\n\n\n'''
+          text=text[:start]+new+text[end:]
+          p.write_text(text,encoding='utf-8')
+      - name: Verify source shape
+        shell: python
+        run: |
+          from pathlib import Path
+          t=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs').read_text()
+          checks=[
+            'AppendTriangleContours(output, tile, interval',
+            'HighDensityBoundaryCrossesParentCell(tile, row, column)',
+            'A linear triangle has at most one unambiguous contour segment per level.',
+          ]
+          for x in checks:
+            assert x in t, x
+          assert 'if (pointCount >= 4)' not in t[t.index('static float[] BuildContours'):t.index('static void AddCrossing')]
+      - name: Commit and self-remove
+        shell: bash
+        run: |
+          rm -f .github/workflows/candidate10-contour-patch.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs .github/workflows/candidate10-contour-patch.yml
+          git commit -m 'CP3.75 Candidate10 fix coastal contour topology'
+          git push origin HEAD:cp3.75/nd-recovery
