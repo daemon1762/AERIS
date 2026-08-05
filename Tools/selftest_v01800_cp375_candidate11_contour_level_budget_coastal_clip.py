@@ -29,7 +29,12 @@ ck('frontColourMode != effectiveMode' in RENDERER and
    'frontColourPreset != currentPreset' in RENDERER,'FRONT colour authority remains mode/preset aware')
 ck('new Color32(70, 235, 70, 255)' in RENDERER and
    'new Color32(12, 72, 24, 255)' in RENDERER,'High Contrast REL keeps green safety semantics')
-ck('Contour Level Budget Coastal Clip Candidate 11' in VERSION,'runtime package identifies Candidate11')
+# Candidate11 is now a frozen visual/contour baseline. Optimization descendants such as
+# Operation Health are allowed to carry a newer runtime identity as long as every contour
+# authority invariant above still passes.
+ck(('Contour Level Budget Coastal Clip Candidate 11' in VERSION) or
+   ('Operation Health' in VERSION),
+   'runtime package identifies Candidate11 lineage or approved Operation Health descendant')
 
 # Numerical regression: Candidate10 failed here because one steep triangle could only
 # emit the lowest 16 contour levels. Candidate11 must preserve all requested levels
