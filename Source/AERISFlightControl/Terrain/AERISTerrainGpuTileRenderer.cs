@@ -220,6 +220,11 @@ namespace AERISFlightControl.Terrain
         long renderReadyBytes;
         long gpuContentRevision;
         long frontContentRevision;
+        // Candidate9: a FRONT is authoritative only for the colour mode/preset
+        // with which it was rendered. Palette or AUTO REL/TOPO transitions
+        // must never present a stale texture under new annunciation state.
+        AERISTerrainDisplayMode frontColourMode = (AERISTerrainDisplayMode)(-1);
+        AERISTerrainColourPreset frontColourPreset = (AERISTerrainColourPreset)(-1);
         long lastBackAttemptViewGeneration = -1L;
         long lastBackAttemptContentRevision = -1L;
         float nextBackRefreshRealtime;
@@ -437,6 +442,8 @@ namespace AERISFlightControl.Terrain
 
             AERISTerrainDisplayMode effectiveMode = ResolveEffectiveMode(requestedMode,
                 vessel, rangeMeters);
+            AERISTerrainColourPreset currentPreset = settings == null ?
+                AERISTerrainColourPreset.Standard : settings.TerrainColourPreset;
             AERISTerrainVirtualDetailProfile virtualDetail =
                 ResolveVirtualDetailProfile(rangeMeters);
             lastVirtualDetailName = virtualDetail.Name;
@@ -489,9 +496,7 @@ namespace AERISFlightControl.Terrain
                 styleKey, out readyGlobal, out readyFar);
             lastCoverageFraction = lastBackFoundationCoverage;
 
-            EnsureResources(plot, effectiveMode,
-                settings == null ? AERISTerrainColourPreset.Standard :
-                settings.TerrainColourPreset, virtualDetail);
+            EnsureResources(plot, effectiveMode, currentPreset, virtualDetail);
             Prune(ResolveVramLimitBytes());
             PruneRenderReady(ResolveRenderReadyLimitBytes());
             if (backTarget == null || !backTarget.IsCreated() || frontTarget == null ||
@@ -504,11 +509,13 @@ namespace AERISFlightControl.Terrain
             bool projectionRefreshRequired = NeedsProjectionRefresh(visible, vessel,
                 centerLatitudeDeg, centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
                 anchorV, orientation);
+            bool colourRefreshRequired = frontColourMode != effectiveMode ||
+                frontColourPreset != currentPreset;
             bool refreshRequired = !frontBufferValid ||
                 frontTerrainGeneration != visible.TerrainGeneration ||
                 frontViewGeneration != visible.ViewGeneration ||
                 frontContentRevision != gpuContentRevision ||
-                projectionRefreshRequired;
+                colourRefreshRequired || projectionRefreshRequired;
             bool refreshAllowed = ShouldRefreshBackBuffer(visible, refreshRequired);
             bool rendered = false;
             bool foundationComplete = false;
@@ -530,6 +537,8 @@ namespace AERISFlightControl.Terrain
                     SwapFrontAndBack(visible, vessel, centerLatitudeDeg,
                         centerLongitudeDeg, rangeMeters, rangeMeters,
                         mapHeadingDeg, trackUp, anchorV, orientation);
+                    frontColourMode = effectiveMode;
+                    frontColourPreset = currentPreset;
                     MarkVisibleGpuReady(tiles);
                     swapped = true;
                 }
@@ -543,9 +552,12 @@ namespace AERISFlightControl.Terrain
                 skippedBackRenderFrames++;
             }
 
-            bool directCompatible = IsFrontBufferCompatible(visible, vessel,
-                centerLatitudeDeg, centerLongitudeDeg, rangeMeters, mapHeadingDeg,
-                trackUp, anchorV, orientation);
+            bool colourCompatible = frontColourMode == effectiveMode &&
+                frontColourPreset == currentPreset;
+            bool directCompatible = colourCompatible &&
+                IsFrontBufferCompatible(visible, vessel, centerLatitudeDeg,
+                    centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
+                    anchorV, orientation);
             lastHistoryReprojected = false;
             lastHistoryConfidence = 0f;
             bool present = false;
@@ -559,8 +571,7 @@ namespace AERISFlightControl.Terrain
                 lastVisualCoverageFraction = 1f;
                 present = true;
                 RecordPresentedFrontAlignmentDiagnostic(plot, tiles, vessel,
-                    effectiveMode, settings == null ? AERISTerrainColourPreset.Standard :
-                    settings.TerrainColourPreset, lockReference);
+                    effectiveMode, currentPreset, lockReference);
             }
             else
             {
@@ -573,7 +584,8 @@ namespace AERISFlightControl.Terrain
             // scheduled refresh path above owns normal map recentering. Until it commits, keep
             // the last complete FRONT visible and publish that FRONT projection so terrain,
             // ownship, runway, vector and LAND geometry share one coordinate authority.
-            if (!present && CanPresentLatchedFront(visible, vessel))
+            if (!present && colourCompatible &&
+                CanPresentLatchedFront(visible, vessel))
             {
                 if (frontTerrainGeneration != visible.TerrainGeneration)
                     generationBridgeFrames++;
@@ -584,8 +596,7 @@ namespace AERISFlightControl.Terrain
                 lastVisualCoverageFraction = 1f;
                 present = true;
                 RecordPresentedFrontAlignmentDiagnostic(plot, tiles, vessel,
-                    effectiveMode, settings == null ? AERISTerrainColourPreset.Standard :
-                    settings.TerrainColourPreset, lockReference);
+                    effectiveMode, currentPreset, lockReference);
             }
 
             // Last-resort recovery only. This path is no longer a normal high-speed update
@@ -609,6 +620,8 @@ namespace AERISFlightControl.Terrain
                     SwapFrontAndBack(visible, vessel, centerLatitudeDeg,
                         centerLongitudeDeg, rangeMeters, rangeMeters,
                         mapHeadingDeg, trackUp, anchorV, orientation);
+                    frontColourMode = effectiveMode;
+                    frontColourPreset = currentPreset;
                     MarkVisibleGpuReady(tiles);
                     swapped = true;
                     PresentFrontDirect(plot, frontOrientation);
@@ -1127,6 +1140,8 @@ namespace AERISFlightControl.Terrain
             frontOrientation = AERISTerrainRenderTargetOrientation.Direct;
             frontCommittedRealtime = 0f;
             frontContentRevision = -1L;
+            frontColourMode = (AERISTerrainDisplayMode)(-1);
+            frontColourPreset = (AERISTerrainColourPreset)(-1);
             lastBackAttemptViewGeneration = -1L;
             lastBackAttemptContentRevision = -1L;
             nextBackRefreshRealtime = 0f;
@@ -2493,13 +2508,13 @@ namespace AERISFlightControl.Terrain
                 if (preset == AERISTerrainColourPreset.RedGreenAssist)
                     return new Color32(35, 105, 210, 255);
                 if (preset == AERISTerrainColourPreset.HighContrast)
-                    return new Color32(0, 190, 255, 255);
+                    return new Color32(70, 235, 70, 255);
                 return new Color32(51, 122, 41, 255);
             }
             if (preset == AERISTerrainColourPreset.RedGreenAssist)
                 return new Color32(15, 35, 75, 255);
             if (preset == AERISTerrainColourPreset.HighContrast)
-                return new Color32(0, 20, 12, 255);
+                return new Color32(12, 72, 24, 255);
             return new Color32(26, 61, 31, 255);
         }
 
