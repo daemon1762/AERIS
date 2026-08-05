@@ -3,10 +3,16 @@ from pathlib import Path
 import math,sys
 sys.dont_write_bytecode=True
 ROOT=Path(__file__).resolve().parents[1]
-SRC=(ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs').read_text()
+TERRAIN=ROOT/'Source/AERISFlightControl/Terrain'
+SRC=(TERRAIN/'AERISTerrainGpuTileRasterizer.cs').read_text()
+POLICY=(TERRAIN/'AERISTerrainCoastlinePolicy.cs').read_text()
+RENDERER=(TERRAIN/'AERISTerrainGpuTileRenderer.cs').read_text()
+VERSION=(ROOT/'GameData/AERISFlightControl/AERISFlightControl.version').read_text()
 checks=[]
 def ck(v,n):
     checks.append((bool(v),n)); print(('[PASS] ' if v else '[FAIL] ')+n)
+
+# Candidate11 contour authority.
 ck('MaximumContourLevelsPerTile = 96' in SRC,'tile-wide contour budget is explicit')
 ck('ResolveContourLevelStride' in SRC,'tile-wide contour level stride exists')
 ck('Math.Min(16, Math.Max(0, last - first + 1))' not in SRC,'legacy per-triangle 16-level truncation removed')
@@ -14,6 +20,16 @@ ck('bool coastalParent = HighDensityBoundaryCrossesParentCell' in SRC,'HD coasta
 ck('if (HighDensityBoundaryCrossesParentCell(tile, row, column)) continue;' not in SRC,'coastal parent cell is not wholly suppressed')
 ck('AppendContourSegment' in SRC and 'HighDensityPointIsLand' in SRC,'coastal contour segment clipping uses HD class mask')
 ck('Math.Min(16,' in SRC and 'hdSpan * 2f' in SRC,'coastal clip subdivision remains bounded')
+ck('AppendTriangleContours(output, points, tile, interval' in SRC,'contours remain triangle-consistent with terrain surface topology')
+
+# Inherited Candidate8/9/10 hard invariants: do not regress the proven sparse base.
+ck('MaximumSparseCorrectionParentCells = 256' in SRC,'sparse coastal parent safety rail remains 256')
+ck('return CrossingFraction(water0, water1);' in POLICY,'coastline and sparse fill retain one crossing authority')
+ck('frontColourMode != effectiveMode' in RENDERER and
+   'frontColourPreset != currentPreset' in RENDERER,'FRONT colour authority remains mode/preset aware')
+ck('new Color32(70, 235, 70, 255)' in RENDERER and
+   'new Color32(12, 72, 24, 255)' in RENDERER,'High Contrast REL keeps green safety semantics')
+ck('Contour Level Budget Coastal Clip Candidate 11' in VERSION,'runtime package identifies Candidate11')
 
 # Numerical regression: Candidate10 failed here because one steep triangle could only
 # emit the lowest 16 contour levels. Candidate11 must preserve all requested levels
