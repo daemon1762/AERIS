@@ -1,0 +1,61 @@
+name: Operation Health Pass 1 Finalize
+on:
+  push:
+    branches: [cp3.75/nd-recovery]
+permissions:
+  contents: write
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cp3.75/nd-recovery
+          fetch-depth: 0
+      - name: Finalize build entrypoint
+        run: python3 Tools/_operation_health_pass1_finalize.py
+      - name: Run Operation Health prebuild
+        run: PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass1_prebuild.py
+      - name: Parse modified C# with tree-sitter
+        run: |
+          python3 -m pip install --quiet tree-sitter tree-sitter-c-sharp
+          python3 - <<'PY'
+          from pathlib import Path
+          from tree_sitter import Language, Parser
+          import tree_sitter_c_sharp
+          parser=Parser(Language(tree_sitter_c_sharp.language()))
+          paths=[
+            Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs'),
+            Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs'),
+            Path('Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs'),
+          ]
+          for p in paths:
+            tree=parser.parse(p.read_bytes())
+            if tree.root_node.has_error:
+              raise SystemExit('C# syntax parse failed: '+str(p))
+            print('PASS',p)
+          PY
+      - name: Write validation evidence
+        run: |
+          cat > Evidence/OPERATION_HEALTH_PASS1_GITHUB_STATIC_VALIDATION.txt <<'EOF'
+          Operation Health Pass 1 GitHub validation:
+          zero-visual-cost renderer selftest: PASS
+          Candidate11 contour authority inheritance: PASS
+          CP2 compile-regression static suite: PASS
+          tree-sitter C# syntax: PASS
+          EOF
+      - name: Remove one-shot files and triggers
+        run: |
+          rm -f Tools/_operation_health_pass1_finalize.py
+          rm -f .github/workflows/operation-health-pass1-finalize.yml
+          rm -f Evidence/OPERATION_HEALTH_PASS1_TRIGGER.txt
+          rm -f Evidence/OPERATION_HEALTH_PASS1_COMPILE_FIX_TRIGGER.txt
+      - name: Commit validated Pass 1
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Finalize Operation Health pass 1"
+          git push origin HEAD:cp3.75/nd-recovery
