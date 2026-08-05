@@ -1,0 +1,43 @@
+name: Candidate9 one-shot build entrypoint patch
+
+on:
+  push:
+    branches: [cp3.75/nd-recovery]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cp3.75/nd-recovery
+          fetch-depth: 0
+      - name: Patch build entrypoint
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('build_ubuntu.sh')
+          t=p.read_text(encoding='utf-8')
+          replacements=[
+            ('DEV CP3.75 SPARSE COASTAL CORRECTION CANDIDATE 8','DEV CP3.75 UNIFIED COASTAL BOUNDARY REL PALETTE AUTHORITY CANDIDATE 9'),
+            ('DEV CP3.75 — SPARSE COASTAL CORRECTION CANDIDATE 8','DEV CP3.75 — UNIFIED COASTAL BOUNDARY / REL PALETTE AUTHORITY CANDIDATE 9'),
+            ('run_v01800_cp375_candidate8_prebuild.py','run_v01800_cp375_candidate9_prebuild.py'),
+          ]
+          for old,new in replacements:
+              if old not in t: raise SystemExit('missing build marker: '+old)
+              t=t.replace(old,new)
+          p.write_text(t,encoding='utf-8')
+          Path('.github/workflows/candidate9-build-one-shot.yml').unlink()
+      - name: Run Candidate9 source selftest
+        run: python3 Tools/selftest_v01800_cp375_candidate9_unified_coastal_boundary_rel_palette.py
+      - name: Commit build entrypoint
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Wire CP3.75 Candidate9 build entrypoint"
+          git push origin HEAD:cp3.75/nd-recovery
