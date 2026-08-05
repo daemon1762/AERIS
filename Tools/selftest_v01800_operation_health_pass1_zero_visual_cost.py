@@ -34,7 +34,12 @@ ck('MeasureFoundationGpuReadiness(visible, tiles,\n                currentEntrie
    'foundation readiness consumes prepared current entries')
 ck('RenderBackBuffer(tiles, drawEntriesScratch, projection' in renderer,
    'back rendering consumes prepared draw entries')
-ck('scheduledThisFrame' in renderer and 'cacheKey + "|PENDING"' not in renderer,
+# Check only the live Schedule implementation. The renderer comment intentionally
+# mentions the retired cacheKey + "|PENDING" representation for traceability.
+schedule=renderer[renderer.index('void Schedule('):renderer.index('void DrainCompleted(')]
+ck('scheduledThisFrame.Add(cacheKey)' in schedule and
+   'requested.Contains(cacheKey + "|PENDING")' not in schedule and
+   'requested.Add(cacheKey + "|PENDING")' not in schedule,
    'pending schedule marker string allocation removed')
 ck('TryUploadRenderReadyField(tile, cacheKey, styleKey' in renderer and
    'Schedule(tile, cacheKey, styleKey' in renderer,
