@@ -1,0 +1,5 @@
+CP3.75 Candidate11 GitHub validation:
+contour level budget / coastal clipping selftest: PASS
+inherited Candidate8/9/10 ND invariants: PASS
+CP2 compile-regression static suite: PASS
+tree-sitter C# syntax: PASS

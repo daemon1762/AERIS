@@ -13,8 +13,8 @@ BASELINE_DISPLAY="AERIS Flight Control v0.18.0.0 DEV CP2 KK RUNWAY ABSOLUTE REGI
 # Historical Candidate 9 identity marker: UiCheckpoint = "DEV CP3 GATE 5 — INTEGRATED ACCEPTANCE CANDIDATE 9 — UI STABILITY / TELEMETRY HOTFIX 1"
 # Historical Candidate 8 identity marker: UiCheckpoint = "DEV CP3 GATE 5 — INTEGRATED ACCEPTANCE CANDIDATE 8 — ND PHANTOM RUNWAY / PERFORMANCE HOTFIX 1"
 # Historical Candidate 7 identity marker: UiCheckpoint = "DEV CP3 GATE 5 — INTEGRATED ACCEPTANCE CANDIDATE 7 — EXPANSION DETECTION / DLC RUNTIME STATUS HOTFIX 1"
-DISPLAY="AERIS Flight Control v$SEMVER DEV CP3.75 COASTAL CONTOUR TOPOLOGY CANDIDATE 10"
-printf 'using System.Reflection;\n[assembly: AssemblyVersion("%s")]\n[assembly: AssemblyFileVersion("%s")]\nnamespace AERISFlightControl { internal static class AERISBuildVersion { internal const string Semantic = "%s"; internal const string Display = "%s"; internal const string UiCheckpoint = "DEV CP3.75 — COASTAL CONTOUR TOPOLOGY CANDIDATE 10"; internal const string Cp2FrozenBaselineDisplay = "%s"; } }\n' "$SEMVER" "$SEMVER" "$SEMVER" "$DISPLAY" "$BASELINE_DISPLAY" > "$GEN"
+DISPLAY="AERIS Flight Control v$SEMVER DEV CP3.75 CONTOUR LEVEL BUDGET COASTAL CLIP CANDIDATE 11"
+printf 'using System.Reflection;\n[assembly: AssemblyVersion("%s")]\n[assembly: AssemblyFileVersion("%s")]\nnamespace AERISFlightControl { internal static class AERISBuildVersion { internal const string Semantic = "%s"; internal const string Display = "%s"; internal const string UiCheckpoint = "DEV CP3.75 — CONTOUR LEVEL BUDGET / COASTAL CLIP CANDIDATE 11"; internal const string Cp2FrozenBaselineDisplay = "%s"; } }\n' "$SEMVER" "$SEMVER" "$SEMVER" "$DISPLAY" "$BASELINE_DISPLAY" > "$GEN"
 echo "[AERIS] Building $DISPLAY..."
 command -v xbuild >/dev/null 2>&1 || { echo "[AERIS] ERROR: xbuild is not installed. Install mono-xbuild/mono-devel first." >&2; exit 1; }
 test -f "$KSP/KSP_x64_Data/Managed/Assembly-CSharp.dll" || { echo "[AERIS] ERROR: KSP reference not found: $KSP/KSP_x64_Data/Managed/Assembly-CSharp.dll" >&2; exit 1; }
@@ -50,7 +50,7 @@ PYTC
 # the normal compile/install path. Run the explicit full acceptance runner separately
 # when distribution-integrity verification is desired.
 # Gate 4 explicit distribution audit: Tools/run_v01800_cp35_gate4_cp3_golden_cartographic_quality_candidate2_full_acceptance.py
-PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/run_v01800_cp375_candidate10_prebuild.py"
+PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/run_v01800_cp375_candidate11_prebuild.py"
 cd "$SRC"
 xbuild /p:Configuration=Release /p:KSPDIR="$KSP" AERISFlightControl.csproj
 mkdir -p "$ROOT/GameData/AERISFlightControl/Plugins"
