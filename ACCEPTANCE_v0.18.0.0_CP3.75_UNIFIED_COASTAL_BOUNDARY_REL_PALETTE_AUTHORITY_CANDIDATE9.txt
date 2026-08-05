@@ -1,0 +1,31 @@
+AERIS Flight Control v0.18.0.0
+CP3.75 Unified Coastal Boundary / REL Palette Authority Candidate 9
+
+PURPOSE
+- Preserve Candidate8's accepted visual quality and practical frame-rate class.
+- Eliminate land/water fill protrusion caused by different coastline and sparse-fill crossing authorities.
+- Restore REL safety colour semantics for High Contrast.
+- Prevent a stale GPU FRONT from being presented after AUTO REL/TOPO or colour-preset transitions.
+- Reconcile Candidate8 documentation and implementation by restoring the 256-parent sparse safety rail.
+
+HARD ACCEPTANCE
+1. Main terrain surface remains the ordinary LOW tile resolution; no whole-tile 129x129 fill is allowed.
+2. HD coastline remains 129-derived when a complete HD payload exists.
+3. HD coastline line and sparse land/water fill use the same classified-edge crossing fraction.
+4. Sparse correction is bounded to at most 256 coarse parent cells per tile; above this, fall back rather than expand toward whole-tile HD fill.
+5. High Contrast REL preserves red danger, yellow caution, green near-safe and dark-green distant-safe semantics. Cyan is prohibited in normal High Contrast REL.
+6. FRONT commit records effective display mode and colour preset.
+7. A FRONT with a stale mode/preset cannot be presented directly or latched as current terrain.
+8. Candidate8 painter order remains base -> water correction -> land correction -> contours -> coastline.
+9. Candidate5 range/RG sea, Candidate2 runtime stabilization, Candidate7 preload percentage authority and protected non-ND code remain unchanged.
+
+RUNTIME GATE
+- First fixture: KSC ground, RANGE 20 km, same view used for Candidate8 bug reproduction.
+- Confirm High Contrast + AUTO resolves to REL and displays red/yellow/green/dark-green, with no cyan safe band.
+- Toggle Standard <-> High Contrast and AUTO/REL transitions; old-colour FRONT must not linger visibly.
+- Inspect coastlines at 20/40/80/160 km. Land/water fill must not cross the visible HD coastline beyond ordinary raster antialiasing tolerance.
+- Confirm coast_hd_entries > 0 and coast_sparse_entries > 0 on coastal views.
+- Candidate7-class ~2 FPS is immediate FAIL. Target is Candidate8 frame-rate class.
+
+FOUNDATION-COMPLETE GATE
+If Candidate9 passes the runtime gate with Candidate8-class performance and no new ND regression, CP3.75 ND base rendering structure may be declared complete. Subsequent work should be treated as refinement/features rather than another foundational rewrite.
