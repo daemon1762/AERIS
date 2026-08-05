@@ -1,12 +1,15 @@
 namespace AERISFlightControl.Terrain
 {
     // Shared land/water boundary policy. Terrain flags are sampled at grid vertices.
-    // Candidate 4 refines the crossing within the cell using the same 1 m ASL
-    // threshold used by terrain sampling. If reconstructed/legacy data does not
-    // bracket that threshold, retain the proven Golden fallback instead of inventing
-    // a shoreline outside the classified land/water edge.
+    // CP3.75 Candidate 9 establishes one boundary authority for both the coastline line
+    // and sparse land/water fill: the classified edge plus the proven Golden land inset.
+    // Elevation remains terrain/shading data, but must not independently move the
+    // coastline crossing because the persisted HD payload contains the 129x129 class mask
+    // while sparse fill heights are reconstructed from the low-resolution base tile.
     internal static class AERISTerrainCoastlinePolicy
     {
+        // Retained as the terrain sampling classification threshold for compatibility.
+        // Candidate 9 no longer uses it to derive a second presentation crossing.
         internal const float WaterElevationThresholdMeters = 1.0f;
         internal const float LandInsetFraction = 0.38f;
 
@@ -19,18 +22,10 @@ namespace AERISFlightControl.Terrain
         internal static float CrossingFraction(bool water0, bool water1,
             float elevation0Meters, float elevation1Meters)
         {
-            if (water0 == water1) return 0.5f;
-            if (Finite(elevation0Meters) && Finite(elevation1Meters))
-            {
-                float delta = elevation1Meters - elevation0Meters;
-                if (System.Math.Abs(delta) > 0.0001f)
-                {
-                    float t = (WaterElevationThresholdMeters - elevation0Meters) / delta;
-                    // Only accept interpolation that lies on this classified edge.
-                    // Inconsistent virtual/legacy samples fall back to Golden policy.
-                    if (t >= 0f && t <= 1f) return t;
-                }
-            }
+            // Candidate 9 unified coastal-boundary authority. The HD coastline extractor
+            // and sparse correction clipper must return bit-for-bit identical crossing
+            // coordinates for the same classified edge. Do not let independently sourced
+            // elevation fields shift the painter boundary away from the coastline vector.
             return CrossingFraction(water0, water1);
         }
 
@@ -48,11 +43,6 @@ namespace AERISFlightControl.Terrain
             float t = CrossingFraction(water0, water1, elevation0Meters,
                 elevation1Meters);
             return value0 + (value1 - value0) * t;
-        }
-
-        static bool Finite(float value)
-        {
-            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
     }
 }
