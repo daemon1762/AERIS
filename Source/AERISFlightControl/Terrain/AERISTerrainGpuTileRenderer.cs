@@ -163,15 +163,34 @@ namespace AERISFlightControl.Terrain
             new AERISTerrainGpuTileRasterizer();
         readonly Dictionary<string, Entry> entries =
             new Dictionary<string, Entry>(StringComparer.Ordinal);
+        // Operation Health Pass 1: entry selection is keyed by immutable TileKey.
+        // This preserves the exact Candidate11 current/fallback selection rules while
+        // eliminating repeated scans over unrelated GPU entries every repaint.
+        readonly Dictionary<AERISTerrainTileKey, List<Entry>> entriesByTile =
+            new Dictionary<AERISTerrainTileKey, List<Entry>>();
         readonly Dictionary<string, AERISTerrainRenderReadyHeightField>
             renderReadyFields =
             new Dictionary<string, AERISTerrainRenderReadyHeightField>(StringComparer.Ordinal);
         readonly List<AERISTerrainGpuTileRasterResult> completed =
             new List<AERISTerrainGpuTileRasterResult>(16);
         readonly HashSet<string> requested = new HashSet<string>(StringComparer.Ordinal);
+        // Pending markers used to be represented as cacheKey + "|PENDING", allocating a
+        // second string per scheduled tile. Keep scheduling identity in its own set.
+        readonly HashSet<string> scheduledThisFrame =
+            new HashSet<string>(StringComparer.Ordinal);
         readonly List<CoverageRegion> coverageRects =
             new List<CoverageRegion>(128);
         readonly List<Entry> supersededScratch = new List<Entry>(16);
+        // Reusable exact-length presentation scratch. No visual or ordering authority is
+        // changed; this only removes Clone()/temporary entry lookup churn on Repaint.
+        AERISTerrainHeightTile[] sortedTilesScratch = new AERISTerrainHeightTile[0];
+        Entry[] fallbackEntriesScratch = new Entry[0];
+        Entry[] currentEntriesScratch = new Entry[0];
+        Entry[] drawEntriesScratch = new Entry[0];
+        long operationHealthResolveCalls;
+        long operationHealthResolveCandidates;
+        long operationHealthTileScratchResizes;
+        long operationHealthPreparedEntryUses;
         long useSequence;
         long usedEntryBytes;
         long backTargetBytes;
@@ -451,26 +470,38 @@ namespace AERISFlightControl.Terrain
             string styleKey = BuildStyleKey(contourInterval, virtualDetail);
             DrainCompleted(system);
             requested.Clear();
+            scheduledThisFrame.Clear();
 
-            AERISTerrainHeightTile[] tiles = (AERISTerrainHeightTile[])visible.Tiles.Clone();
-            Array.Sort(tiles, CompareTilesCoarseFirst);
+            AERISTerrainHeightTile[] tiles = PrepareSortedTileScratch(visible.Tiles);
+            EnsureEntryScratch(tiles == null ? 0 : tiles.Length);
             for (int i = 0; i < tiles.Length; i++)
             {
                 AERISTerrainHeightTile tile = tiles[i];
-                if (tile == null) continue;
+                if (tile == null)
+                {
+                    fallbackEntriesScratch[i] = null;
+                    currentEntriesScratch[i] = null;
+                    drawEntriesScratch[i] = null;
+                    continue;
+                }
+                // CacheKey is intentionally created once for this tile/repaint and shared by
+                // exact lookup, render-ready upload and worker scheduling.
                 string cacheKey = CacheKey(tile.Key, tile.CreatedUtcTicks, styleKey);
                 requested.Add(cacheKey);
                 Entry fallbackEntry, currentEntry;
-                ResolveRenderableEntries(tile, styleKey, out fallbackEntry,
+                ResolveRenderableEntries(tile, cacheKey, styleKey, out fallbackEntry,
                     out currentEntry);
                 if (currentEntry == null)
                 {
-                    if (!TryUploadRenderReadyField(tile, styleKey, system,
+                    if (!TryUploadRenderReadyField(tile, cacheKey, styleKey, system,
                         out currentEntry))
-                        Schedule(tile, styleKey, contourInterval, virtualDetail);
+                        Schedule(tile, cacheKey, styleKey, contourInterval, virtualDetail);
                 }
                 if (fallbackEntry != null) fallbackEntry.LastUse = ++useSequence;
                 if (currentEntry != null) currentEntry.LastUse = ++useSequence;
+                fallbackEntriesScratch[i] = fallbackEntry;
+                currentEntriesScratch[i] = currentEntry;
+                drawEntriesScratch[i] = currentEntry != null ? currentEntry : fallbackEntry;
             }
 
             AERISNdMapProjection projection = AERISNdMapProjection.Create(
@@ -493,7 +524,7 @@ namespace AERISFlightControl.Terrain
 
             int readyGlobal, readyFar;
             lastBackFoundationCoverage = MeasureFoundationGpuReadiness(visible, tiles,
-                styleKey, out readyGlobal, out readyFar);
+                currentEntriesScratch, out readyGlobal, out readyFar);
             lastCoverageFraction = lastBackFoundationCoverage;
 
             EnsureResources(plot, effectiveMode, currentPreset, virtualDetail);
@@ -522,9 +553,8 @@ namespace AERISFlightControl.Terrain
             bool swapped = false;
             if (refreshAllowed)
             {
-                rendered = RenderBackBuffer(tiles, projection,
-                    mapRotation, styleKey, effectiveMode, vessel,
-                    rangeMeters);
+                rendered = RenderBackBuffer(tiles, drawEntriesScratch, projection,
+                    mapRotation, effectiveMode, vessel, rangeMeters);
                 backRenderFrames++;
                 lastBackAttemptViewGeneration = visible.ViewGeneration;
                 lastBackAttemptContentRevision = gpuContentRevision;
@@ -608,8 +638,8 @@ namespace AERISFlightControl.Terrain
                 readyFar >= visible.FarFoundationCount;
             if (!present && readyFoundationNow && !gpuFailed)
             {
-                bool recovered = RenderBackBuffer(tiles, projection, mapRotation, styleKey,
-                    effectiveMode, vessel, rangeMeters);
+                bool recovered = RenderBackBuffer(tiles, drawEntriesScratch, projection,
+                    mapRotation, effectiveMode, vessel, rangeMeters);
                 backRenderFrames++;
                 forcedRecoveryBackRenders++;
                 lastBackAttemptViewGeneration = visible.ViewGeneration;
@@ -651,8 +681,8 @@ namespace AERISFlightControl.Terrain
             return lastDrawState;
         }
 
-        bool RenderBackBuffer(AERISTerrainHeightTile[] tiles,
-            AERISNdMapProjection projection, Matrix4x4 mapRotation, string styleKey,
+        bool RenderBackBuffer(AERISTerrainHeightTile[] tiles, Entry[] drawEntries,
+            AERISNdMapProjection projection, Matrix4x4 mapRotation,
             AERISTerrainDisplayMode effectiveMode, Vessel vessel, float rangeMeters)
         {
             long frameStartTicks = Stopwatch.GetTimestamp();
@@ -670,17 +700,21 @@ namespace AERISFlightControl.Terrain
                 GL.Clear(true, true, Color.clear);
                 float projectionThresholdMeters = Math.Max(0.25f,
                     rangeMeters / Math.Max(128f, backTarget.height) * 0.25f);
+                double projectionCenterLatitudeDeg = UnitLatitude(
+                    projection.CenterX, projection.CenterY, projection.CenterZ);
+                double projectionCenterLongitudeDeg = UnitLongitude(
+                    projection.CenterX, projection.CenterY);
                 for (int i = 0; i < tiles.Length; i++)
                 {
                     AERISTerrainHeightTile tile = tiles[i];
                     if (tile == null) continue;
-                    Entry fallbackEntry, currentEntry;
-                    ResolveRenderableEntries(tile, styleKey, out fallbackEntry,
-                        out currentEntry);
-                    Entry drawEntry = currentEntry != null ? currentEntry : fallbackEntry;
+                    Entry drawEntry = drawEntries != null && i < drawEntries.Length ?
+                        drawEntries[i] : null;
                     if (drawEntry == null) continue;
+                    operationHealthPreparedEntryUses++;
                     EnsureProjectedGeometry(drawEntry, projection,
-                        projectionThresholdMeters);
+                        projectionThresholdMeters, projectionCenterLatitudeDeg,
+                        projectionCenterLongitudeDeg);
                     bool entryRendered = DrawEntry(drawEntry, mapRotation, true, effectiveMode,
                         settings == null ? AERISTerrainColourPreset.Standard :
                         settings.TerrainColourPreset, (float)vessel.altitude);
@@ -710,8 +744,8 @@ namespace AERISFlightControl.Terrain
         }
 
         float MeasureFoundationGpuReadiness(AERISTerrainVisibleTileSet visible,
-            AERISTerrainHeightTile[] tiles, string styleKey, out int readyGlobal,
-            out int readyFar)
+            AERISTerrainHeightTile[] tiles, Entry[] currentEntries,
+            out int readyGlobal, out int readyFar)
         {
             readyGlobal = 0;
             readyFar = 0;
@@ -721,9 +755,10 @@ namespace AERISFlightControl.Terrain
                 AERISTerrainHeightTile tile = tiles[i];
                 if (tile == null || tile.Key.Lod != AERISTerrainTileLod.Global &&
                     tile.Key.Lod != AERISTerrainTileLod.Far) continue;
-                Entry fallback, current;
-                ResolveRenderableEntries(tile, styleKey, out fallback, out current);
+                Entry current = currentEntries != null && i < currentEntries.Length ?
+                    currentEntries[i] : null;
                 if (current == null || current.CoverageFraction < 0.999f) continue;
+                operationHealthPreparedEntryUses++;
                 if (tile.Key.Lod == AERISTerrainTileLod.Global) readyGlobal++;
                 else readyFar++;
             }
@@ -1120,6 +1155,11 @@ namespace AERISFlightControl.Terrain
                 AERISTerrainCoastlineExtractor.HighDensityResolution +
                 "; coast_sparse_entries=" + sparseCoastalCorrectionEntries +
                 "; coast_sparse_parents=" + sparseCoastalCorrectionParentCells +
+                "; oh_resolve_calls=" + operationHealthResolveCalls +
+                "; oh_resolve_candidates=" + operationHealthResolveCandidates +
+                "; oh_entry_buckets=" + entriesByTile.Count +
+                "; oh_tile_scratch_resize=" + operationHealthTileScratchResizes +
+                "; oh_prepared_entry_uses=" + operationHealthPreparedEntryUses +
                 "; cpu_terrain_draw=0.");
         }
 
@@ -1155,12 +1195,11 @@ namespace AERISFlightControl.Terrain
             readyBuildingViolationLatched = false;
         }
 
-        void Schedule(AERISTerrainHeightTile tile, string styleKey,
+        void Schedule(AERISTerrainHeightTile tile, string cacheKey, string styleKey,
             float contourInterval, AERISTerrainVirtualDetailProfile virtualDetail)
         {
-            string cacheKey = CacheKey(tile.Key, tile.CreatedUtcTicks, styleKey);
-            if (requested.Contains(cacheKey + "|PENDING")) return;
-            requested.Add(cacheKey + "|PENDING");
+            if (tile == null || string.IsNullOrEmpty(cacheKey) ||
+                !scheduledThisFrame.Add(cacheKey)) return;
             rasterizer.Enqueue(new AERISTerrainGpuTileRasterRequest
             {
                 Generation = ++generation,
@@ -1206,7 +1245,7 @@ namespace AERISFlightControl.Terrain
                     // spans the complete tile, preventing visible regression to holes.
                     if (entry.CoverageFraction >= 0.999f)
                         RemoveSupersededEntries(result.Key, cacheKey);
-                    entries[cacheKey] = entry;
+                    AddEntry(entry);
                     usedEntryBytes += entry.Bytes;
                     if (entry.CoastlineResolution >=
                         AERISTerrainCoastlineExtractor.HighDensityResolution)
@@ -1271,12 +1310,11 @@ namespace AERISFlightControl.Terrain
             renderReadyBytes += field.EstimatedBytes;
         }
 
-        bool TryUploadRenderReadyField(AERISTerrainHeightTile tile, string styleKey,
-            AERISTerrainTileSystem system, out Entry entry)
+        bool TryUploadRenderReadyField(AERISTerrainHeightTile tile, string cacheKey,
+            string styleKey, AERISTerrainTileSystem system, out Entry entry)
         {
             entry = null;
-            if (tile == null) return false;
-            string cacheKey = CacheKey(tile.Key, tile.CreatedUtcTicks, styleKey);
+            if (tile == null || string.IsNullOrEmpty(cacheKey)) return false;
             AERISTerrainRenderReadyHeightField field;
             if (!renderReadyFields.TryGetValue(cacheKey, out field) || field == null)
                 return false;
@@ -1287,7 +1325,7 @@ namespace AERISFlightControl.Terrain
                 entry = BuildEntry(cacheKey, field);
                 Entry old;
                 if (entries.TryGetValue(cacheKey, out old)) Remove(old);
-                entries[cacheKey] = entry;
+                AddEntry(entry);
                 usedEntryBytes += entry.Bytes;
                 if (entry.CoastlineResolution >=
                     AERISTerrainCoastlineExtractor.HighDensityResolution)
@@ -1387,11 +1425,14 @@ namespace AERISFlightControl.Terrain
             string keepCacheKey)
         {
             supersededScratch.Clear();
-            foreach (Entry entry in entries.Values)
+            List<Entry> bucket;
+            if (!entriesByTile.TryGetValue(key, out bucket) || bucket == null) return;
+            for (int i = 0; i < bucket.Count; i++)
             {
+                Entry entry = bucket[i];
                 if (entry == null || string.Equals(entry.CacheKey, keepCacheKey,
                     StringComparison.Ordinal)) continue;
-                if (entry.TileKey.Equals(key)) supersededScratch.Add(entry);
+                supersededScratch.Add(entry);
             }
             for (int i = 0; i < supersededScratch.Count; i++)
                 Remove(supersededScratch[i]);
@@ -1717,7 +1758,8 @@ namespace AERISFlightControl.Terrain
         }
 
         static void EnsureProjectedGeometry(Entry entry,
-            AERISNdMapProjection context, float movementThresholdMeters)
+            AERISNdMapProjection context, float movementThresholdMeters,
+            double currentCenterLatitudeDeg, double currentCenterLongitudeDeg)
         {
             if (entry == null) return;
             bool projectionChanged = double.IsNaN(entry.LastProjectionCenterLatitudeDeg) ||
@@ -1731,8 +1773,7 @@ namespace AERISFlightControl.Terrain
                 ToLocalMeters(context.RadiusMeters,
                     entry.LastProjectionCenterLatitudeDeg,
                     entry.LastProjectionCenterLongitudeDeg,
-                    UnitLatitude(context.CenterX, context.CenterY, context.CenterZ),
-                    UnitLongitude(context.CenterX, context.CenterY),
+                    currentCenterLatitudeDeg, currentCenterLongitudeDeg,
                     out east, out north);
                 projectionChanged = east * east + north * north >=
                     movementThresholdMeters * movementThresholdMeters;
@@ -1753,10 +1794,8 @@ namespace AERISFlightControl.Terrain
                 entry.ContourProjectedVertices, context);
             ProjectMesh(entry.CoastlineMesh, entry.CoastlineGeographicPoints,
                 entry.CoastlineProjectedVertices, context);
-            entry.LastProjectionCenterLatitudeDeg =
-                UnitLatitude(context.CenterX, context.CenterY, context.CenterZ);
-            entry.LastProjectionCenterLongitudeDeg =
-                UnitLongitude(context.CenterX, context.CenterY);
+            entry.LastProjectionCenterLatitudeDeg = currentCenterLatitudeDeg;
+            entry.LastProjectionCenterLongitudeDeg = currentCenterLongitudeDeg;
             entry.LastProjectionBodyRadius = context.RadiusMeters;
             entry.LastProjectionRangeMeters = (float)context.VerticalMeters;
             entry.LastProjectionAnchorBottom = context.AnchorRenderV;
@@ -1905,19 +1944,28 @@ namespace AERISFlightControl.Terrain
             entry.RelativeAltitudeBucket = altitudeBucket;
         }
 
-        void ResolveRenderableEntries(AERISTerrainHeightTile tile,
+        void ResolveRenderableEntries(AERISTerrainHeightTile tile, string cacheKey,
             string styleKey, out Entry fallback, out Entry current)
         {
             fallback = null;
             current = null;
-            if (tile == null) return;
-            string cacheKey = CacheKey(tile.Key, tile.CreatedUtcTicks, styleKey);
+            if (tile == null || string.IsNullOrEmpty(cacheKey)) return;
+            operationHealthResolveCalls++;
             Entry exact;
             if (entries.TryGetValue(cacheKey, out exact) && exact != null &&
                 (exact.LandMesh != null || exact.WaterMesh != null)) current = exact;
 
-            foreach (Entry candidate in entries.Values)
+            List<Entry> bucket;
+            if (!entriesByTile.TryGetValue(tile.Key, out bucket) || bucket == null)
             {
+                if (current != null && current.CoverageFraction >= 0.999f)
+                    fallback = null;
+                return;
+            }
+            operationHealthResolveCandidates += bucket.Count;
+            for (int bucketIndex = 0; bucketIndex < bucket.Count; bucketIndex++)
+            {
+                Entry candidate = bucket[bucketIndex];
                 if (candidate == null || candidate.LandMesh == null && candidate.WaterMesh == null ||
                     ReferenceEquals(candidate, current) ||
                     !candidate.TileKey.Equals(tile.Key)) continue;
@@ -1940,6 +1988,43 @@ namespace AERISFlightControl.Terrain
             }
             if (current != null && current.CoverageFraction >= 0.999f)
                 fallback = null;
+        }
+
+        void AddEntry(Entry entry)
+        {
+            if (entry == null || string.IsNullOrEmpty(entry.CacheKey)) return;
+            entries[entry.CacheKey] = entry;
+            List<Entry> bucket;
+            if (!entriesByTile.TryGetValue(entry.TileKey, out bucket) || bucket == null)
+            {
+                bucket = new List<Entry>(4);
+                entriesByTile[entry.TileKey] = bucket;
+            }
+            if (!bucket.Contains(entry)) bucket.Add(entry);
+        }
+
+        AERISTerrainHeightTile[] PrepareSortedTileScratch(AERISTerrainHeightTile[] source)
+        {
+            if (source == null || source.Length == 0) return new AERISTerrainHeightTile[0];
+            if (sortedTilesScratch == null || sortedTilesScratch.Length != source.Length)
+            {
+                sortedTilesScratch = new AERISTerrainHeightTile[source.Length];
+                operationHealthTileScratchResizes++;
+            }
+            Array.Copy(source, sortedTilesScratch, source.Length);
+            Array.Sort(sortedTilesScratch, CompareTilesCoarseFirst);
+            return sortedTilesScratch;
+        }
+
+        void EnsureEntryScratch(int count)
+        {
+            count = Math.Max(0, count);
+            if (fallbackEntriesScratch != null && fallbackEntriesScratch.Length == count &&
+                currentEntriesScratch != null && currentEntriesScratch.Length == count &&
+                drawEntriesScratch != null && drawEntriesScratch.Length == count) return;
+            fallbackEntriesScratch = new Entry[count];
+            currentEntriesScratch = new Entry[count];
+            drawEntriesScratch = new Entry[count];
         }
 
         void EnsureResources(Rect plot, AERISTerrainDisplayMode mode,
@@ -2436,6 +2521,12 @@ namespace AERISFlightControl.Terrain
         {
             if (entry == null) return;
             entries.Remove(entry.CacheKey);
+            List<Entry> bucket;
+            if (entriesByTile.TryGetValue(entry.TileKey, out bucket) && bucket != null)
+            {
+                bucket.Remove(entry);
+                if (bucket.Count == 0) entriesByTile.Remove(entry.TileKey);
+            }
             if (entry.CoastlineResolution >=
                 AERISTerrainCoastlineExtractor.HighDensityResolution)
                 highDensityCoastlineEntries = Math.Max(0, highDensityCoastlineEntries - 1);
@@ -2658,8 +2749,10 @@ namespace AERISFlightControl.Terrain
             entries.Values.CopyTo(snapshot, 0);
             for (int i = 0; i < snapshot.Length; i++) Remove(snapshot[i]);
             entries.Clear();
+            entriesByTile.Clear();
             completed.Clear();
             requested.Clear();
+            scheduledThisFrame.Clear();
             DestroyRenderTargets();
             DestroyUnityObject(terrainMaterial);
             DestroyUnityObject(contourMaterial);
