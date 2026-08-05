@@ -1,0 +1,73 @@
+name: Candidate10 finalize and validate
+
+on:
+  push:
+    branches:
+      - cp3.75/nd-recovery
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cp3.75/nd-recovery
+          fetch-depth: 0
+      - name: Update Candidate10 build entrypoint
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('build_ubuntu.sh')
+          t=p.read_text(encoding='utf-8')
+          repl={
+            'DEV CP3.75 UNIFIED COASTAL BOUNDARY REL PALETTE AUTHORITY CANDIDATE 9':'DEV CP3.75 COASTAL CONTOUR TOPOLOGY CANDIDATE 10',
+            'DEV CP3.75 — UNIFIED COASTAL BOUNDARY / REL PALETTE AUTHORITY CANDIDATE 9':'DEV CP3.75 — COASTAL CONTOUR TOPOLOGY CANDIDATE 10',
+            'run_v01800_cp375_candidate9_prebuild.py':'run_v01800_cp375_candidate10_prebuild.py',
+          }
+          for old,new in repl.items():
+            if old not in t:
+              raise SystemExit('missing build marker: '+old)
+            t=t.replace(old,new,1)
+          p.write_text(t,encoding='utf-8')
+      - name: Run Candidate10 static prebuild
+        run: python3 Tools/run_v01800_cp375_candidate10_prebuild.py
+      - name: Parse touched C# with tree-sitter
+        shell: bash
+        run: |
+          python3 -m pip install --quiet tree-sitter tree-sitter-c-sharp
+          python3 - <<'PY'
+          from pathlib import Path
+          from tree_sitter import Language, Parser
+          import tree_sitter_c_sharp as csharp
+          parser=Parser(Language(csharp.language()))
+          paths=[
+            Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs'),
+            Path('Source/AERISFlightControl/Terrain/AERISTerrainCoastlinePolicy.cs'),
+            Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs'),
+          ]
+          for p in paths:
+            tree=parser.parse(p.read_bytes())
+            if tree.root_node.has_error:
+              raise SystemExit('C# syntax parse failed: '+str(p))
+            print('PASS',p)
+          PY
+      - name: Record validation and self-remove
+        shell: bash
+        run: |
+          cat > Evidence/CP3.75_CANDIDATE10_GITHUB_STATIC_VALIDATION.txt <<'EOF'
+          CP3.75 Candidate10 GitHub validation:
+          triangle-consistent contour topology selftest: PASS
+          inherited Candidate9 coastal/palette authority checks: PASS
+          CP2 compile-regression static suite: PASS
+          tree-sitter C# syntax: PASS
+          EOF
+          rm -f .github/workflows/candidate10-finalize.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add build_ubuntu.sh Evidence/CP3.75_CANDIDATE10_GITHUB_STATIC_VALIDATION.txt .github/workflows/candidate10-finalize.yml
+          git commit -m 'Finalize CP3.75 Candidate10 contour topology candidate'
+          git push origin HEAD:cp3.75/nd-recovery
