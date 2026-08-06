@@ -1,0 +1,5 @@
+Operation Health Pass 3 Compile Hotfix 1
+fixed_instance_methods=EnsureProjectedGeometry,ProjectMesh,EnsureWaterColour
+prebuild=PASS
+runtime_ksp=UNVERIFIED
+release_candidate=NO_UNTIL_RUNTIME_PASS

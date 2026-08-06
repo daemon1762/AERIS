@@ -1884,7 +1884,7 @@ namespace AERISFlightControl.Terrain
             return output;
         }
 
-        static void EnsureProjectedGeometry(Entry entry,
+        void EnsureProjectedGeometry(Entry entry,
             AERISNdMapProjection context, float movementThresholdMeters,
             double currentCenterLatitudeDeg, double currentCenterLongitudeDeg)
         {
@@ -1929,7 +1929,7 @@ namespace AERISFlightControl.Terrain
             entry.LastProjectionOrientation = context.Orientation;
         }
 
-        static void ProjectMesh(Mesh mesh, GeographicUnitPoint[] points,
+        void ProjectMesh(Mesh mesh, GeographicUnitPoint[] points,
             Vector3[] projectedVertices, AERISNdMapProjection context)
         {
             if (mesh == null || points == null || projectedVertices == null ||
@@ -2001,7 +2001,7 @@ namespace AERISFlightControl.Terrain
             return rendered;
         }
 
-        static void EnsureWaterColour(Entry entry,
+        void EnsureWaterColour(Entry entry,
             AERISTerrainColourPreset preset)
         {
             if (entry == null || entry.WaterColourPreset == preset) return;

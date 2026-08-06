@@ -9,6 +9,10 @@ def ck(v,n):
 
 ck('static readonly Bounds NdPresentationBounds' in R,
    'conservative fixed ND bounds authority exists')
+ck('static void EnsureProjectedGeometry' not in R and
+   'static void ProjectMesh' not in R and
+   'static void EnsureWaterColour' not in R,
+   'Pass 3 instance telemetry paths are not declared static')
 proj=R[R.index('void ProjectMesh('):R.index('static double UnitLatitude')]
 ck('RecalculateBounds()' not in proj and 'operationHealthBoundsSkips++' in proj,
    'projection updates no longer rescan mesh bounds')
