@@ -3,3 +3,4 @@ Synchronize event.
 Retry after Pass 3 cadence selftest compatibility update.
 Retry after Pass 2 cadence selftest compatibility update.
 Retry after Pass 1 cadence selftest compatibility update.
+Retry after symbology cadence selftest compatibility update.
