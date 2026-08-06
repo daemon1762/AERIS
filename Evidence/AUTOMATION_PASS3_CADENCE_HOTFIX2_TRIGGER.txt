@@ -1,3 +1,4 @@
 One-shot PR event trigger for Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing.
 Synchronize event.
 Retry after Pass 3 cadence selftest compatibility update.
+Retry after Pass 2 cadence selftest compatibility update.
