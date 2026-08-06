@@ -94,6 +94,9 @@ namespace AERISFlightControl.Terrain
         readonly object gate = new object();
         readonly Dictionary<string, PendingState> pending = new Dictionary<string, PendingState>(StringComparer.Ordinal);
         readonly Queue<AERISTerrainGpuTileRasterResult> completed = new Queue<AERISTerrainGpuTileRasterResult>();
+        // Operation Health Pass 2: lifecycle cancellation is uncommon but must not create
+        // a fresh scheduler-key List every time the ND viewport is reset.
+        readonly List<string> cancelSchedulerKeysScratch = new List<string>(32);
         bool disposed;
         int dropped;
         int failures;
@@ -152,15 +155,20 @@ namespace AERISFlightControl.Terrain
 
         internal void CancelAll()
         {
-            var schedulerKeys = new List<string>();
+            cancelSchedulerKeysScratch.Clear();
             lock (gate)
             {
-                foreach (PendingState state in pending.Values) if (state != null && !string.IsNullOrEmpty(state.SchedulerKey)) schedulerKeys.Add(state.SchedulerKey);
+                foreach (PendingState state in pending.Values)
+                    if (state != null && !string.IsNullOrEmpty(state.SchedulerKey))
+                        cancelSchedulerKeysScratch.Add(state.SchedulerKey);
                 pending.Clear(); completed.Clear();
             }
             AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
-            if (runtime == null) return;
-            for (int i = 0; i < schedulerKeys.Count; i++) runtime.Scheduler.CancelKey(AERISRuntimeLane.GeneralCompute, schedulerKeys[i]);
+            if (runtime != null)
+                for (int i = 0; i < cancelSchedulerKeysScratch.Count; i++)
+                    runtime.Scheduler.CancelKey(AERISRuntimeLane.GeneralCompute,
+                        cancelSchedulerKeysScratch[i]);
+            cancelSchedulerKeysScratch.Clear();
         }
 
         internal int Drain(List<AERISTerrainGpuTileRasterResult> destination, int maximum)
@@ -193,13 +201,10 @@ namespace AERISFlightControl.Terrain
                 valid[index] = isValid ? (byte)255 : (byte)0; water[index] = tile.Flags[index] == 2 ? (byte)1 : (byte)0; elevationMeters[index] = isValid ? value : 0f;
                 shade[index] = isValid && request.ShadingEnabled && water[index] == 0 ? ResolveShade(tile, row, column, value, cellMeters) : (byte)255;
             }
-            var triangles = new List<int>((resolution - 1) * (resolution - 1) * 6);
-            for (int row = 0; row < resolution - 1; row++) for (int column = 0; column < resolution - 1; column++)
-            {
-                int a = row * resolution + column, b = a + 1, c = a + resolution, d = c + 1;
-                if (valid[a] != 0 && valid[b] != 0 && valid[c] != 0) { triangles.Add(a); triangles.Add(c); triangles.Add(b); }
-                if (valid[b] != 0 && valid[c] != 0 && valid[d] != 0) { triangles.Add(b); triangles.Add(c); triangles.Add(d); }
-            }
+            // Operation Health Pass 2: topology is immutable once the worker result is
+            // published. Count first and allocate the exact index payload once instead of
+            // growing a List<int> and then allocating a second ToArray() copy.
+            int[] triangles = BuildTriangleIndices(valid, resolution);
             float[] correctionLandXY = new float[0], correctionLandElevation = new float[0], correctionWaterXY = new float[0]; byte[] correctionLandShade = new byte[0]; int correctionParents = 0;
             if (highDensityBoundary) BuildSparseCoastalCorrections(tile, request.ShadingEnabled, out correctionLandXY, out correctionLandElevation, out correctionLandShade, out correctionWaterXY, out correctionParents);
             float meshMilliseconds = (float)watch.Elapsed.TotalMilliseconds;
@@ -211,13 +216,55 @@ namespace AERISFlightControl.Terrain
             {
                 Generation = request.Generation, Key = tile.Key, TileCreatedUtcTicks = tile.CreatedUtcTicks, StyleKey = request.StyleKey, Resolution = resolution,
                 SouthLatitudeDeg = tile.SouthLatitudeDeg, NorthLatitudeDeg = tile.NorthLatitudeDeg, WestLongitudeDeg = tile.WestLongitudeDeg, EastLongitudeDeg = tile.EastLongitudeDeg,
-                VertexX = x, VertexY = y, ElevationMeters = elevationMeters, Water = water, Valid = valid, Shade = shade, Triangles = triangles.ToArray(), ContourSegments = contours,
+                VertexX = x, VertexY = y, ElevationMeters = elevationMeters, Water = water, Valid = valid, Shade = shade, Triangles = triangles, ContourSegments = contours,
                 CoastlineSegments = coastlines, CoastlineResolution = highDensityBoundary ? tile.HighDensityCoastlineResolution : tile.Resolution,
                 CoastalLandCorrectionVertices = correctionLandXY, CoastalLandCorrectionElevationMeters = correctionLandElevation, CoastalLandCorrectionShade = correctionLandShade,
                 CoastalWaterCorrectionVertices = correctionWaterXY, CoastalCorrectionParentCells = correctionParents, MeshMilliseconds = meshMilliseconds,
                 ContourMilliseconds = (float)contourWatch.Elapsed.TotalMilliseconds, WorkerMilliseconds = (float)watch.Elapsed.TotalMilliseconds,
                 VirtualDetailLevel = request.VirtualDetailProfile == null ? AERISTerrainVirtualDetailLevel.FarDirect : request.VirtualDetailProfile.Level
             };
+        }
+
+        static int[] BuildTriangleIndices(byte[] valid, int resolution)
+        {
+            if (valid == null || resolution < 2) return new int[0];
+            int indexCount = 0;
+            for (int row = 0; row < resolution - 1; row++)
+                for (int column = 0; column < resolution - 1; column++)
+                {
+                    int a = row * resolution + column;
+                    int b = a + 1;
+                    int c = a + resolution;
+                    int d = c + 1;
+                    if (valid[a] != 0 && valid[b] != 0 && valid[c] != 0)
+                        indexCount += 3;
+                    if (valid[b] != 0 && valid[c] != 0 && valid[d] != 0)
+                        indexCount += 3;
+                }
+            if (indexCount <= 0) return new int[0];
+            var triangles = new int[indexCount];
+            int write = 0;
+            for (int row = 0; row < resolution - 1; row++)
+                for (int column = 0; column < resolution - 1; column++)
+                {
+                    int a = row * resolution + column;
+                    int b = a + 1;
+                    int c = a + resolution;
+                    int d = c + 1;
+                    if (valid[a] != 0 && valid[b] != 0 && valid[c] != 0)
+                    {
+                        triangles[write++] = a;
+                        triangles[write++] = c;
+                        triangles[write++] = b;
+                    }
+                    if (valid[b] != 0 && valid[c] != 0 && valid[d] != 0)
+                    {
+                        triangles[write++] = b;
+                        triangles[write++] = c;
+                        triangles[write++] = d;
+                    }
+                }
+            return triangles;
         }
 
         struct CorrectionPoint { internal float X; internal float Y; internal byte ClassFlag; internal float Elevation; }
@@ -243,6 +290,11 @@ namespace AERISFlightControl.Terrain
             int detectedParents = 0; for (int i = 0; i < parents.Length; i++) if (parents[i]) detectedParents++;
             if (detectedParents <= 0 || detectedParents > MaximumSparseCorrectionParentCells) return;
             var land = new List<float>(4096); var water = new List<float>(4096); var landHeights = new List<float>(2048); var landShades = new List<byte>(2048);
+            // One pair of clip buffers serves every sub-triangle in this worker build.
+            // Candidate11 created two arrays per polygon, which produced heavy short-lived
+            // GC pressure on complex coastlines without contributing to the result.
+            var correctionInput = new CorrectionPoint[3];
+            var correctionClip = new CorrectionPoint[6];
             float baseCellMeters = (float)Math.Max(1.0, AERISTerrainTileFormat.NominalCellMeters(tile.Key.Lod));
             for (int pr = 0; pr < parentWidth; pr++) for (int pc = 0; pc < parentWidth; pc++)
             {
@@ -253,8 +305,12 @@ namespace AERISFlightControl.Terrain
                     int row = rowStart + sr, column = columnStart + sc;
                     CorrectionPoint a = CorrectionSample(tile, flags, hd, row, column), b = CorrectionSample(tile, flags, hd, row, column + 1), c = CorrectionSample(tile, flags, hd, row + 1, column), d = CorrectionSample(tile, flags, hd, row + 1, column + 1);
                     if (a.ClassFlag == 0 || b.ClassFlag == 0 || c.ClassFlag == 0 || d.ClassFlag == 0) continue;
-                    AppendCorrectionTriangle(tile, land, landHeights, landShades, water, a, c, b, shadingEnabled, baseCellMeters);
-                    AppendCorrectionTriangle(tile, land, landHeights, landShades, water, b, c, d, shadingEnabled, baseCellMeters);
+                    AppendCorrectionTriangle(tile, land, landHeights, landShades, water,
+                        correctionInput, correctionClip, a, c, b, shadingEnabled,
+                        baseCellMeters);
+                    AppendCorrectionTriangle(tile, land, landHeights, landShades, water,
+                        correctionInput, correctionClip, b, c, d, shadingEnabled,
+                        baseCellMeters);
                 }
             }
             landXY = land.ToArray(); landElevation = landHeights.ToArray(); landShade = landShades.ToArray(); waterXY = water.ToArray();
@@ -266,16 +322,25 @@ namespace AERISFlightControl.Terrain
             return new CorrectionPoint { X = x, Y = y, ClassFlag = classFlag, Elevation = classFlag == 0 ? 0f : SampleClassPreservingHeight(tile, x, y, classFlag) };
         }
 
-        static void AppendCorrectionTriangle(AERISTerrainHeightTile tile, List<float> land, List<float> landHeights, List<byte> landShades, List<float> water, CorrectionPoint a, CorrectionPoint b, CorrectionPoint c, bool shadingEnabled, float baseCellMeters)
+        static void AppendCorrectionTriangle(AERISTerrainHeightTile tile, List<float> land,
+            List<float> landHeights, List<byte> landShades, List<float> water,
+            CorrectionPoint[] input, CorrectionPoint[] clipped, CorrectionPoint a,
+            CorrectionPoint b, CorrectionPoint c, bool shadingEnabled,
+            float baseCellMeters)
         {
-            var input = new CorrectionPoint[] { a, b, c };
-            AppendCorrectionPolygon(tile, land, landHeights, landShades, input, false, shadingEnabled, baseCellMeters);
-            AppendCorrectionPolygon(tile, water, null, null, input, true, false, baseCellMeters);
+            input[0] = a; input[1] = b; input[2] = c;
+            AppendCorrectionPolygon(tile, land, landHeights, landShades, input, clipped,
+                false, shadingEnabled, baseCellMeters);
+            AppendCorrectionPolygon(tile, water, null, null, input, clipped, true, false,
+                baseCellMeters);
         }
 
-        static void AppendCorrectionPolygon(AERISTerrainHeightTile tile, List<float> output, List<float> elevations, List<byte> shades, CorrectionPoint[] input, bool targetWater, bool shadingEnabled, float baseCellMeters)
+        static void AppendCorrectionPolygon(AERISTerrainHeightTile tile, List<float> output,
+            List<float> elevations, List<byte> shades, CorrectionPoint[] input,
+            CorrectionPoint[] clipped, bool targetWater, bool shadingEnabled,
+            float baseCellMeters)
         {
-            var clipped = new CorrectionPoint[6]; int count = 0;
+            int count = 0;
             for (int i = 0; i < 3; i++)
             {
                 CorrectionPoint current = input[i], next = input[(i + 1) % 3];

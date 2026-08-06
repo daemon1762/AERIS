@@ -119,6 +119,14 @@ namespace AERISFlightControl.Terrain
             internal readonly List<byte> Shade = new List<byte>();
             internal readonly List<int> Triangles = new List<int>();
 
+            internal void Reset()
+            {
+                Vertices.Clear();
+                Elevation.Clear();
+                Shade.Clear();
+                Triangles.Clear();
+            }
+
             internal void AddPolygon(SurfacePoint[] points, int count)
             {
                 if (points == null || count < 3) return;
@@ -181,6 +189,23 @@ namespace AERISFlightControl.Terrain
         readonly List<CoverageRegion> coverageRects =
             new List<CoverageRegion>(128);
         readonly List<Entry> supersededScratch = new List<Entry>(16);
+        // Operation Health Pass 2: BuildEntry is main-thread serialized. Keep the large
+        // List backing arrays and clipping storage alive between tile uploads instead of
+        // re-growing and collecting them for every replacement tile.
+        readonly SurfaceBuilder landSurfaceScratch = new SurfaceBuilder();
+        readonly SurfaceBuilder waterSurfaceScratch = new SurfaceBuilder();
+        readonly SurfacePoint[] surfaceClipScratch = new SurfacePoint[6];
+        readonly List<Entry> releaseEntryScratch = new List<Entry>(128);
+        // Recycle native Unity Mesh objects across ordinary tile eviction/supersession.
+        // Terrain OFF / viewport suspension still destroys the pool, preserving the
+        // existing resource-release contract.
+        const int MaximumPooledMeshes = 96;
+        readonly Queue<Mesh> meshPool = new Queue<Mesh>(MaximumPooledMeshes);
+        long operationHealthMeshPoolHits;
+        long operationHealthMeshPoolMisses;
+        long operationHealthMeshPoolRecycles;
+        long operationHealthMeshPoolDestroys;
+        long operationHealthSurfaceBuilderReuses;
         // Reusable exact-length presentation scratch. No visual or ordering authority is
         // changed; this only removes Clone()/temporary entry lookup churn on Repaint.
         AERISTerrainHeightTile[] sortedTilesScratch = new AERISTerrainHeightTile[0];
@@ -1160,6 +1185,12 @@ namespace AERISFlightControl.Terrain
                 "; oh_entry_buckets=" + entriesByTile.Count +
                 "; oh_tile_scratch_resize=" + operationHealthTileScratchResizes +
                 "; oh_prepared_entry_uses=" + operationHealthPreparedEntryUses +
+                "; oh_mesh_pool=" + meshPool.Count +
+                "; oh_mesh_pool_hit=" + operationHealthMeshPoolHits +
+                "; oh_mesh_pool_miss=" + operationHealthMeshPoolMisses +
+                "; oh_mesh_recycle=" + operationHealthMeshPoolRecycles +
+                "; oh_mesh_destroy=" + operationHealthMeshPoolDestroys +
+                "; oh_surface_builder_reuse=" + operationHealthSurfaceBuilderReuses +
                 "; cpu_terrain_draw=0.");
         }
 
@@ -1456,12 +1487,15 @@ namespace AERISFlightControl.Terrain
             return true;
         }
 
-        static Entry BuildEntry(string cacheKey,
+        Entry BuildEntry(string cacheKey,
             AERISTerrainRenderReadyHeightField result)
         {
-            var land = new SurfaceBuilder();
-            var water = new SurfaceBuilder();
-            var clipped = new SurfacePoint[6];
+            SurfaceBuilder land = landSurfaceScratch;
+            SurfaceBuilder water = waterSurfaceScratch;
+            land.Reset();
+            water.Reset();
+            SurfacePoint[] clipped = surfaceClipScratch;
+            operationHealthSurfaceBuilderReuses++;
             for (int i = 0; i + 2 < result.Triangles.Length; i += 3)
             {
                 SurfacePoint a = Point(result, result.Triangles[i]);
@@ -1580,6 +1614,10 @@ namespace AERISFlightControl.Terrain
                 CoastlineResolution = result.CoastlineResolution,
                 CoastalCorrectionParentCells = result.CoastalCorrectionParentCells,
                 Valid = (byte[])result.Valid.Clone(),
+                // Water meshes are created with the frozen Standard water colour. Mark that
+                // fact so the first Standard draw does not allocate and upload an identical
+                // colour array. Non-Standard presets still update through the existing path.
+                WaterColourPreset = AERISTerrainColourPreset.Standard,
                 CoverageFraction = TriangleCoverage(result),
                 Bytes = Math.Max(1L, bytes),
                 LastUse = 0L
@@ -1619,22 +1657,24 @@ namespace AERISFlightControl.Terrain
             SurfacePoint[] output, SurfacePoint a, SurfacePoint b, SurfacePoint c,
             bool targetWater)
         {
-            SurfacePoint[] input = { a, b, c };
             int count = 0;
-            for (int i = 0; i < 3; i++)
-            {
-                SurfacePoint current = input[i];
-                SurfacePoint next = input[(i + 1) % 3];
-                bool currentInside = current.Water == targetWater;
-                bool nextInside = next.Water == targetWater;
-                if (currentInside) output[count++] = current;
-                if (currentInside != nextInside)
-                    output[count++] = CoastBoundaryPoint(current, next, targetWater);
-            }
+            AppendClippedEdge(output, ref count, a, b, targetWater);
+            AppendClippedEdge(output, ref count, b, c, targetWater);
+            AppendClippedEdge(output, ref count, c, a, targetWater);
             builder.AddPolygon(output, count);
         }
 
-        static Mesh BuildSurfaceMesh(string name, SurfaceBuilder builder, bool water,
+        static void AppendClippedEdge(SurfacePoint[] output, ref int count,
+            SurfacePoint current, SurfacePoint next, bool targetWater)
+        {
+            bool currentInside = current.Water == targetWater;
+            bool nextInside = next.Water == targetWater;
+            if (currentInside) output[count++] = current;
+            if (currentInside != nextInside)
+                output[count++] = CoastBoundaryPoint(current, next, targetWater);
+        }
+
+        Mesh BuildSurfaceMesh(string name, SurfaceBuilder builder, bool water,
             out Vector3[] sourceVertices)
         {
             sourceVertices = null;
@@ -1645,12 +1685,7 @@ namespace AERISFlightControl.Terrain
                 ResolveWaterColour(AERISTerrainColourPreset.Standard) :
                 new Color32(255, 255, 255, 255);
             for (int i = 0; i < colours.Length; i++) colours[i] = initial;
-            var mesh = new Mesh();
-            mesh.name = name;
-            mesh.hideFlags = HideFlags.HideAndDontSave;
-            if (builder.Vertices.Count > 65535)
-                mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-            mesh.MarkDynamic();
+            Mesh mesh = AcquireMesh(name, builder.Vertices.Count);
             sourceVertices = builder.Vertices.ToArray();
             mesh.vertices = sourceVertices;
             mesh.colors32 = colours;
@@ -1661,7 +1696,7 @@ namespace AERISFlightControl.Terrain
             return mesh;
         }
 
-        static Mesh BuildTriangleListMesh(string name, float[] xy,
+        Mesh BuildTriangleListMesh(string name, float[] xy,
             bool water, out Vector3[] sourceVertices)
         {
             sourceVertices = null;
@@ -1679,12 +1714,7 @@ namespace AERISFlightControl.Terrain
                 indices[i] = i;
                 colours[i] = initial;
             }
-            var mesh = new Mesh();
-            mesh.name = name;
-            mesh.hideFlags = HideFlags.HideAndDontSave;
-            if (vertexCount > 65535)
-                mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-            mesh.MarkDynamic();
+            Mesh mesh = AcquireMesh(name, vertexCount);
             mesh.vertices = sourceVertices;
             mesh.colors32 = colours;
             mesh.triangles = indices;
@@ -1693,7 +1723,7 @@ namespace AERISFlightControl.Terrain
             return mesh;
         }
 
-        static Mesh BuildLineMesh(string name, float[] segments, Color32 colour,
+        Mesh BuildLineMesh(string name, float[] segments, Color32 colour,
             out Vector3[] sourceVertices)
         {
             sourceVertices = null;
@@ -1709,12 +1739,7 @@ namespace AERISFlightControl.Terrain
                 indices[i] = i;
                 colours[i] = colour;
             }
-            var mesh = new Mesh();
-            mesh.name = name;
-            mesh.hideFlags = HideFlags.HideAndDontSave;
-            if (vertexCount > 65535)
-                mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-            mesh.MarkDynamic();
+            Mesh mesh = AcquireMesh(name, vertexCount);
             sourceVertices = vertices;
             mesh.vertices = sourceVertices;
             mesh.colors32 = colours;
@@ -1722,6 +1747,61 @@ namespace AERISFlightControl.Terrain
             mesh.RecalculateBounds();
             mesh.UploadMeshData(false);
             return mesh;
+        }
+
+        Mesh AcquireMesh(string name, int vertexCount)
+        {
+            Mesh mesh = null;
+            while (meshPool.Count > 0 && mesh == null)
+                mesh = meshPool.Dequeue();
+            if (mesh == null)
+            {
+                mesh = new Mesh();
+                operationHealthMeshPoolMisses++;
+            }
+            else
+            {
+                mesh.Clear();
+                operationHealthMeshPoolHits++;
+            }
+            mesh.name = name ?? "AERIS_TERRAIN_MESH";
+            mesh.hideFlags = HideFlags.HideAndDontSave;
+            mesh.indexFormat = vertexCount > 65535 ?
+                UnityEngine.Rendering.IndexFormat.UInt32 :
+                UnityEngine.Rendering.IndexFormat.UInt16;
+            mesh.MarkDynamic();
+            return mesh;
+        }
+
+        void RecycleMesh(ref Mesh mesh)
+        {
+            if (mesh == null) return;
+            Mesh value = mesh;
+            mesh = null;
+            if (!disposed && meshPool.Count < MaximumPooledMeshes)
+            {
+                try
+                {
+                    value.Clear();
+                    value.name = "AERIS_TERRAIN_MESH_POOL";
+                    meshPool.Enqueue(value);
+                    operationHealthMeshPoolRecycles++;
+                    return;
+                }
+                catch { }
+            }
+            DestroyUnityObject(value);
+            operationHealthMeshPoolDestroys++;
+        }
+
+        void DestroyMeshPool()
+        {
+            while (meshPool.Count > 0)
+            {
+                Mesh mesh = meshPool.Dequeue();
+                DestroyUnityObject(mesh);
+                operationHealthMeshPoolDestroys++;
+            }
         }
 
         static Vector3[] AllocateProjectedVertices(Vector3[] sourceVertices)
@@ -2541,18 +2621,12 @@ namespace AERISFlightControl.Terrain
             }
             usedEntryBytes = Math.Max(0L,
                 usedEntryBytes - Math.Max(0L, entry.Bytes));
-            DestroyUnityObject(entry.LandMesh);
-            DestroyUnityObject(entry.WaterMesh);
-            DestroyUnityObject(entry.CoastalLandCorrectionMesh);
-            DestroyUnityObject(entry.CoastalWaterCorrectionMesh);
-            DestroyUnityObject(entry.ContourMesh);
-            DestroyUnityObject(entry.CoastlineMesh);
-            entry.LandMesh = null;
-            entry.WaterMesh = null;
-            entry.CoastalLandCorrectionMesh = null;
-            entry.CoastalWaterCorrectionMesh = null;
-            entry.ContourMesh = null;
-            entry.CoastlineMesh = null;
+            RecycleMesh(ref entry.LandMesh);
+            RecycleMesh(ref entry.WaterMesh);
+            RecycleMesh(ref entry.CoastalLandCorrectionMesh);
+            RecycleMesh(ref entry.CoastalWaterCorrectionMesh);
+            RecycleMesh(ref entry.ContourMesh);
+            RecycleMesh(ref entry.CoastlineMesh);
             AERISTerrainRenderReadyHeightField field;
             if (renderReadyFields.TryGetValue(entry.CacheKey, out field) &&
                 field != null && field.ResidentTokenValid && residentCache != null)
@@ -2746,11 +2820,16 @@ namespace AERISFlightControl.Terrain
 
         void ReleaseGpuResources()
         {
-            Entry[] snapshot = new Entry[entries.Count];
-            entries.Values.CopyTo(snapshot, 0);
-            for (int i = 0; i < snapshot.Length; i++) Remove(snapshot[i]);
+            releaseEntryScratch.Clear();
+            foreach (Entry entry in entries.Values) releaseEntryScratch.Add(entry);
+            for (int i = 0; i < releaseEntryScratch.Count; i++)
+                Remove(releaseEntryScratch[i]);
+            releaseEntryScratch.Clear();
             entries.Clear();
             entriesByTile.Clear();
+            // Terrain OFF/suspension means release presentation GPU resources, including
+            // the bounded recycle pool. Ordinary eviction retains the pool for reuse.
+            DestroyMeshPool();
             completed.Clear();
             requested.Clear();
             scheduledThisFrame.Clear();
