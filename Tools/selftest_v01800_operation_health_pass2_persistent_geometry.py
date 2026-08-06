@@ -32,7 +32,10 @@ check('Candidate11 coastal contour clipping remains enabled', 'HighDensityBounda
 check('sparse coastal parent safety rail remains 256', 'const int MaximumSparseCorrectionParentCells = 256;' in raster)
 check('ARGB32 FRONT/BACK format unchanged', 'RenderTextureFormat.ARGB32' in renderer)
 check('Bilinear render-target filtering unchanged', 'filterMode = FilterMode.Bilinear' in renderer)
-check('terrain BACK cadence remains 0.10 seconds', 'nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f;' in renderer)
+check('terrain BACK cadence remains 0.10 seconds or approved shared 10 Hz authority',
+      ('nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f;' in renderer) or
+      ('nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime;' in renderer and
+       'nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f;' in renderer))
 check('projection geometry still updates only when dirty', 'if (!projectionChanged) return;' in renderer and 'EnsureProjectedGeometry' in renderer)
 check('Operation Health Hotfix 1 FRONT-synchronized symbology retained', 'terrainSymbologyFrontSwap' in nav and 'terrainTileRenderer.FrontBufferSwaps' in nav)
 check('Hotfix 1 prediction vector retains synchronized speed/track', 'terrainSymbologyGroundSpeedMps' in nav and 'terrainSymbologyGroundTrackDeg' in nav)
