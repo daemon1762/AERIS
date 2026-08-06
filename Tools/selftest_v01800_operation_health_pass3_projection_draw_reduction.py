@@ -44,8 +44,10 @@ ck('MaximumPooledMeshes = 24' in R,
    'Pass 2 bounded mesh pool remains 24')
 ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R,
    'render target quality authority remains ARGB32 Bilinear')
-ck('nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f' in R,
-   'terrain BACK cadence remains 0.10 seconds')
+ck(('nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f' in R) or
+   ('nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime' in R and
+    'nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in R),
+   'terrain BACK cadence remains 0.10 seconds or approved shared 10 Hz authority')
 ck('ProjectionRefreshAgeSeconds = 0.50f' in R and
    'ProjectionRefreshHeadingDeg = 8f' in R,
    'projection refresh thresholds remain unchanged')
