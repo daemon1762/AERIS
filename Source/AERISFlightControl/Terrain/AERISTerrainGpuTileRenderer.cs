@@ -201,6 +201,18 @@ namespace AERISFlightControl.Terrain
         // existing resource-release contract.
         const int MaximumPooledMeshes = 24;
         readonly Queue<Mesh> meshPool = new Queue<Mesh>(MaximumPooledMeshes);
+        // Operation Health Pass 3: immutable identity indices and uniform-colour upload
+        // buffers are keyed by vertex count. Unity copies these arrays on assignment, so
+        // the same managed buffers can safely serve later meshes without visual coupling.
+        readonly Dictionary<int, int[]> identityIndexCache = new Dictionary<int, int[]>();
+        readonly Dictionary<int, Color32[]> uniformColourScratch = new Dictionary<int, Color32[]>();
+        static readonly Bounds NdPresentationBounds = new Bounds(
+            new Vector3(0.5f, 0.5f, 0f), new Vector3(32f, 32f, 4f));
+        long operationHealthIdentityIndexHits;
+        long operationHealthIdentityIndexMisses;
+        long operationHealthUniformColourReuses;
+        long operationHealthBoundsSkips;
+        long operationHealthTerrainSetPassSaved;
         long operationHealthMeshPoolHits;
         long operationHealthMeshPoolMisses;
         long operationHealthMeshPoolRecycles;
@@ -1191,6 +1203,11 @@ namespace AERISFlightControl.Terrain
                 "; oh_mesh_recycle=" + operationHealthMeshPoolRecycles +
                 "; oh_mesh_destroy=" + operationHealthMeshPoolDestroys +
                 "; oh_surface_builder_reuse=" + operationHealthSurfaceBuilderReuses +
+                "; oh_identity_index_hit=" + operationHealthIdentityIndexHits +
+                "; oh_identity_index_miss=" + operationHealthIdentityIndexMisses +
+                "; oh_uniform_colour_reuse=" + operationHealthUniformColourReuses +
+                "; oh_bounds_skip=" + operationHealthBoundsSkips +
+                "; oh_setpass_saved=" + operationHealthTerrainSetPassSaved +
                 "; cpu_terrain_draw=0.");
         }
 
@@ -1690,7 +1707,9 @@ namespace AERISFlightControl.Terrain
             mesh.vertices = sourceVertices;
             mesh.colors32 = colours;
             mesh.triangles = builder.Triangles.ToArray();
-            mesh.RecalculateBounds();
+            // ND geometry is rendered in normalized presentation space. Use one conservative
+            // bound instead of rescanning every projected vertex on each map recenter.
+            mesh.bounds = NdPresentationBounds;
             // Colours and geographic projection are updated in flight; retain CPU access.
             mesh.UploadMeshData(false);
             return mesh;
@@ -1704,21 +1723,20 @@ namespace AERISFlightControl.Terrain
             int vertexCount = xy.Length / 2;
             if (vertexCount % 3 != 0) return null;
             sourceVertices = new Vector3[vertexCount];
-            var indices = new int[vertexCount];
+            int[] indices = GetIdentityIndices(vertexCount);
             var colours = new Color32[vertexCount];
             Color32 initial = water ? ResolveWaterColour(AERISTerrainColourPreset.Standard) :
                 new Color32(255, 255, 255, 255);
             for (int i = 0; i < vertexCount; i++)
             {
                 sourceVertices[i] = new Vector3(xy[i * 2], xy[i * 2 + 1], 0f);
-                indices[i] = i;
                 colours[i] = initial;
             }
             Mesh mesh = AcquireMesh(name, vertexCount);
             mesh.vertices = sourceVertices;
             mesh.colors32 = colours;
             mesh.triangles = indices;
-            mesh.RecalculateBounds();
+            mesh.bounds = NdPresentationBounds;
             mesh.UploadMeshData(false);
             return mesh;
         }
@@ -1731,12 +1749,11 @@ namespace AERISFlightControl.Terrain
                 return null;
             int vertexCount = segments.Length / 2;
             var vertices = new Vector3[vertexCount];
-            var indices = new int[vertexCount];
+            int[] indices = GetIdentityIndices(vertexCount);
             var colours = new Color32[vertexCount];
             for (int i = 0; i < vertexCount; i++)
             {
                 vertices[i] = new Vector3(segments[i * 2], segments[i * 2 + 1], 0f);
-                indices[i] = i;
                 colours[i] = colour;
             }
             Mesh mesh = AcquireMesh(name, vertexCount);
@@ -1744,9 +1761,39 @@ namespace AERISFlightControl.Terrain
             mesh.vertices = sourceVertices;
             mesh.colors32 = colours;
             mesh.SetIndices(indices, MeshTopology.Lines, 0);
-            mesh.RecalculateBounds();
+            mesh.bounds = NdPresentationBounds;
             mesh.UploadMeshData(false);
             return mesh;
+        }
+
+        int[] GetIdentityIndices(int vertexCount)
+        {
+            vertexCount = Math.Max(0, vertexCount);
+            int[] indices;
+            if (identityIndexCache.TryGetValue(vertexCount, out indices))
+            {
+                operationHealthIdentityIndexHits++;
+                return indices;
+            }
+            indices = new int[vertexCount];
+            for (int i = 0; i < vertexCount; i++) indices[i] = i;
+            identityIndexCache[vertexCount] = indices;
+            operationHealthIdentityIndexMisses++;
+            return indices;
+        }
+
+        Color32[] GetUniformColourScratch(int vertexCount, Color32 colour)
+        {
+            vertexCount = Math.Max(0, vertexCount);
+            Color32[] colours;
+            if (!uniformColourScratch.TryGetValue(vertexCount, out colours))
+            {
+                colours = new Color32[vertexCount];
+                uniformColourScratch[vertexCount] = colours;
+            }
+            else operationHealthUniformColourReuses++;
+            for (int i = 0; i < colours.Length; i++) colours[i] = colour;
+            return colours;
         }
 
         Mesh AcquireMesh(string name, int vertexCount)
@@ -1896,7 +1943,7 @@ namespace AERISFlightControl.Terrain
                 projectedVertices[i] = new Vector3(u, v, 0f);
             }
             mesh.vertices = projectedVertices;
-            mesh.RecalculateBounds();
+            operationHealthBoundsSkips++;
         }
 
         static double UnitLatitude(double x, double y, double z)
@@ -1928,28 +1975,23 @@ namespace AERISFlightControl.Terrain
             EnsureLandColours(entry, mode, preset, aircraftAltitudeAslMeters);
             EnsureWaterColour(entry, preset);
             bool rendered = false;
-            if (entry.WaterMesh != null && terrainMaterial.SetPass(0))
+            int terrainMeshCount = (entry.WaterMesh == null ? 0 : 1) +
+                (entry.LandMesh == null ? 0 : 1) +
+                (entry.CoastalWaterCorrectionMesh == null ? 0 : 1) +
+                (entry.CoastalLandCorrectionMesh == null ? 0 : 1);
+            if (terrainMeshCount > 0 && terrainMaterial.SetPass(0))
             {
-                Graphics.DrawMeshNow(entry.WaterMesh, mapMatrix);
+                // Candidate8 painter order is unchanged: base water, base land, sparse
+                // coastal water, sparse coastal land. Pass 3 only removes redundant
+                // Material.SetPass calls between meshes using the identical material.
+                if (entry.WaterMesh != null) Graphics.DrawMeshNow(entry.WaterMesh, mapMatrix);
+                if (entry.LandMesh != null) Graphics.DrawMeshNow(entry.LandMesh, mapMatrix);
+                if (entry.CoastalWaterCorrectionMesh != null)
+                    Graphics.DrawMeshNow(entry.CoastalWaterCorrectionMesh, mapMatrix);
+                if (entry.CoastalLandCorrectionMesh != null)
+                    Graphics.DrawMeshNow(entry.CoastalLandCorrectionMesh, mapMatrix);
                 rendered = true;
-            }
-            if (entry.LandMesh != null && terrainMaterial.SetPass(0))
-            {
-                Graphics.DrawMeshNow(entry.LandMesh, mapMatrix);
-                rendered = true;
-            }
-            // Candidate8 painter-order correction: the sparse 129-derived coastal band
-            // overwrites only coarse shoreline parent cells. Water is applied first, then
-            // land, matching the normal surface ordering while avoiding a full-HD tile.
-            if (entry.CoastalWaterCorrectionMesh != null && terrainMaterial.SetPass(0))
-            {
-                Graphics.DrawMeshNow(entry.CoastalWaterCorrectionMesh, mapMatrix);
-                rendered = true;
-            }
-            if (entry.CoastalLandCorrectionMesh != null && terrainMaterial.SetPass(0))
-            {
-                Graphics.DrawMeshNow(entry.CoastalLandCorrectionMesh, mapMatrix);
-                rendered = true;
+                operationHealthTerrainSetPassSaved += Math.Max(0, terrainMeshCount - 1);
             }
             if (drawContours && entry.ContourMesh != null &&
                 contourMaterial.SetPass(0))
@@ -1969,12 +2011,10 @@ namespace AERISFlightControl.Terrain
             entry.WaterColourPreset = preset;
         }
 
-        static void ApplyUniformMeshColour(Mesh mesh, Color32 colour)
+        void ApplyUniformMeshColour(Mesh mesh, Color32 colour)
         {
             if (mesh == null || mesh.vertexCount <= 0) return;
-            var colours = new Color32[mesh.vertexCount];
-            for (int i = 0; i < colours.Length; i++) colours[i] = colour;
-            mesh.colors32 = colours;
+            mesh.colors32 = GetUniformColourScratch(mesh.vertexCount, colour);
         }
 
         static void EnsureLandColours(Entry entry, AERISTerrainDisplayMode mode,
@@ -2830,6 +2870,8 @@ namespace AERISFlightControl.Terrain
             // Terrain OFF/suspension means release presentation GPU resources, including
             // the bounded recycle pool. Ordinary eviction retains the pool for reuse.
             DestroyMeshPool();
+            identityIndexCache.Clear();
+            uniformColourScratch.Clear();
             completed.Clear();
             requested.Clear();
             scheduledThisFrame.Clear();

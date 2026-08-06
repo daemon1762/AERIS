@@ -1,0 +1,5 @@
+Operation Health Pass 3 static validation
+prebuild=PASS
+visual_authority_changed=NO
+runtime_ksp=UNVERIFIED
+release_candidate=NO_UNTIL_RUNTIME_PASS
