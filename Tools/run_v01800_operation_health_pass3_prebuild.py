@@ -4,6 +4,7 @@ import subprocess,sys
 sys.dont_write_bytecode=True
 ROOT=Path(__file__).resolve().parents[1]
 suites=[
+ ('Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing','selftest_v01800_operation_health_pass3_cadence_hotfix2_refresh_coalescing.py'),
  ('Operation Health Pass 3 Cadence Hotfix 1','selftest_v01800_operation_health_pass3_cadence_hotfix1.py'),
  ('Operation Health Pass 3 projection/draw reduction','selftest_v01800_operation_health_pass3_projection_draw_reduction.py'),
  ('Operation Health Pass 2 persistent geometry','selftest_v01800_operation_health_pass2_persistent_geometry.py'),

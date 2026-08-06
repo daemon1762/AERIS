@@ -218,6 +218,18 @@ namespace AERISFlightControl.Terrain
         // normal-path immediate exception when no FRONT has ever been attempted.
         long operationHealthCadenceDeferrals;
         long operationHealthCadenceBootstrapBypasses;
+        // Cadence Hotfix 2 / Refresh Coalescing: only the fixed 10 Hz authoritative
+        // tick may capture/resolve/upload/render terrain. Intervening KSP Repaints
+        // only re-present the already committed FRONT texture.
+        long operationHealthAuthoritativeTicks;
+        long operationHealthCoalescedPresentFrames;
+        long operationHealthCoalescedBlankPolls;
+        long operationHealthAuthoritativeSafetyBypasses;
+        long operationHealthDirtyBatches;
+        long operationHealthDirtySignalsCoalesced;
+        long operationHealthDirtyCommits;
+        long operationHealthObsoleteJobsCancelled;
+        long operationHealthViewInvalidations;
         long operationHealthMeshPoolHits;
         long operationHealthMeshPoolMisses;
         long operationHealthMeshPoolRecycles;
@@ -281,6 +293,7 @@ namespace AERISFlightControl.Terrain
         long renderReadyBytes;
         long gpuContentRevision;
         long frontContentRevision;
+        bool gpuContentDirty;
         // Candidate9: a FRONT is authoritative only for the colour mode/preset
         // with which it was rendered. Palette or AUTO REL/TOPO transitions
         // must never present a stale texture under new annunciation state.
@@ -289,6 +302,7 @@ namespace AERISFlightControl.Terrain
         long lastBackAttemptViewGeneration = -1L;
         long lastBackAttemptContentRevision = -1L;
         float nextBackRefreshRealtime;
+        float nextAuthoritativePresentationTickRealtime;
         long historyReprojectFrames;
         long historyRejectedFrames;
         long directFrontFrames;
@@ -386,9 +400,17 @@ namespace AERISFlightControl.Terrain
 
         internal void InvalidatePendingForViewChange()
         {
+            int obsoletePending = rasterizer.PendingCount;
+            if (obsoletePending > 0)
+                operationHealthObsoleteJobsCancelled += obsoletePending;
+            operationHealthViewInvalidations++;
             generation++;
             rasterizer.CancelAll();
             requested.Clear();
+            scheduledThisFrame.Clear();
+            // Do not reset nextAuthoritativePresentationTickRealtime here. Range/view
+            // changes are consumed by the next regular 10 Hz tick instead of creating
+            // an extra immediate presentation frame.
         }
 
         internal void SuspendViewport()
@@ -486,6 +508,27 @@ namespace AERISFlightControl.Terrain
             AERISTerrainRenderTargetOrientation orientation = settings == null ?
                 AERISTerrainRenderTargetOrientation.Direct :
                 settings.TerrainRenderTargetOrientation;
+
+            float presentationNow = Time.realtimeSinceStartup;
+            bool authoritativeTickDue = nextAuthoritativePresentationTickRealtime <= 0f ||
+                presentationNow >= nextAuthoritativePresentationTickRealtime;
+            if (!authoritativeTickDue)
+            {
+                if (TryPresentCoalescedFront(plot, vessel))
+                    return lastDrawState;
+                if (!frontBufferValid)
+                {
+                    operationHealthCoalescedBlankPolls++;
+                    return lastDrawState;
+                }
+                // A committed FRONT that cannot be safely re-presented (body/resource
+                // mismatch) is a lifecycle safety case. Consume one new authoritative
+                // tick immediately, but reset the clock so it cannot burst repeatedly.
+                operationHealthAuthoritativeSafetyBypasses++;
+            }
+            nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f;
+            operationHealthAuthoritativeTicks++;
+
             float historySurfaceRangeMeters = rangeMeters;
             // Geometry Integrity Hotfix 2: the rejected overscan/GUI-matrix history surface
             // is non-authoritative. Capture exactly the visible projection so the texture
@@ -600,7 +643,7 @@ namespace AERISFlightControl.Terrain
                 backRenderFrames++;
                 lastBackAttemptViewGeneration = visible.ViewGeneration;
                 lastBackAttemptContentRevision = gpuContentRevision;
-                nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f;
+                nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime;
                 foundationComplete = rendered && visible.FoundationComplete &&
                     lastBackFoundationCoverage >= 0.999f &&
                     readyFar >= visible.FarFoundationCount;
@@ -686,7 +729,7 @@ namespace AERISFlightControl.Terrain
                 forcedRecoveryBackRenders++;
                 lastBackAttemptViewGeneration = visible.ViewGeneration;
                 lastBackAttemptContentRevision = gpuContentRevision;
-                nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f;
+                nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime;
                 if (recovered)
                 {
                     SwapFrontAndBack(visible, vessel, centerLatitudeDeg,
@@ -836,6 +879,8 @@ namespace AERISFlightControl.Terrain
             frontOrientation = orientation;
             frontCommittedRealtime = Time.realtimeSinceStartup;
             frontContentRevision = gpuContentRevision;
+            if (gpuContentDirty) operationHealthDirtyCommits++;
+            gpuContentDirty = false;
             frontBufferSwaps++;
         }
 
@@ -863,6 +908,36 @@ namespace AERISFlightControl.Terrain
                 centerLongitudeDeg);
             return !double.IsNaN(displacement) && !double.IsInfinity(displacement) &&
                 displacement <= ProjectionRefreshDistanceMeters(rangeMeters);
+        }
+
+        bool TryPresentCoalescedFront(Rect plot, Vessel vessel)
+        {
+            if (!frontBufferValid || frontTarget == null || !frontTarget.IsCreated() ||
+                vessel == null || vessel.mainBody == null) return false;
+            if (!string.Equals(frontBodyName, vessel.mainBody.name,
+                    StringComparison.OrdinalIgnoreCase)) return false;
+            long bodyRadiusMillimetres = (long)Math.Round(
+                Math.Max(0.0, vessel.mainBody.Radius) * 1000.0);
+            if (bodyRadiusMillimetres != frontBodyRadiusMillimetres) return false;
+            PresentFrontDirect(plot, frontOrientation);
+            lastFrontBufferPresented = true;
+            lastFrontBufferLatched = true;
+            CapturePresentedProjection(true);
+            lastVisualCoverageFraction = 1f;
+            operationHealthCoalescedPresentFrames++;
+            return true;
+        }
+
+        void MarkGpuContentDirty()
+        {
+            if (gpuContentDirty)
+            {
+                operationHealthDirtySignalsCoalesced++;
+                return;
+            }
+            gpuContentDirty = true;
+            gpuContentRevision++;
+            operationHealthDirtyBatches++;
         }
 
         bool ShouldRefreshBackBuffer(AERISTerrainVisibleTileSet visible,
@@ -1225,6 +1300,15 @@ namespace AERISFlightControl.Terrain
                 "; oh_setpass_saved=" + operationHealthTerrainSetPassSaved +
                 "; oh_cadence_defer=" + operationHealthCadenceDeferrals +
                 "; oh_cadence_bootstrap=" + operationHealthCadenceBootstrapBypasses +
+                "; oh_auth_tick=" + operationHealthAuthoritativeTicks +
+                "; oh_coalesced_present=" + operationHealthCoalescedPresentFrames +
+                "; oh_coalesced_blank=" + operationHealthCoalescedBlankPolls +
+                "; oh_tick_safety=" + operationHealthAuthoritativeSafetyBypasses +
+                "; oh_dirty_batch=" + operationHealthDirtyBatches +
+                "; oh_dirty_coalesced=" + operationHealthDirtySignalsCoalesced +
+                "; oh_dirty_commit=" + operationHealthDirtyCommits +
+                "; oh_obsolete_cancel=" + operationHealthObsoleteJobsCancelled +
+                "; oh_view_invalidate=" + operationHealthViewInvalidations +
                 "; cpu_terrain_draw=0.");
         }
 
@@ -1250,6 +1334,8 @@ namespace AERISFlightControl.Terrain
             lastBackAttemptViewGeneration = -1L;
             lastBackAttemptContentRevision = -1L;
             nextBackRefreshRealtime = 0f;
+            nextAuthoritativePresentationTickRealtime = 0f;
+            gpuContentDirty = false;
             lastFrontBufferPresented = false;
             lastFrontBufferLatched = false;
             presentedProjection.Valid = false;
@@ -1322,7 +1408,7 @@ namespace AERISFlightControl.Terrain
                             entry.CoastalCorrectionParentCells;
                     }
                     uploaded++;
-                    gpuContentRevision++;
+                    MarkGpuContentDirty();
                     MarkGpuReady(result);
                     if (performance != null)
                         performance.RecordGpuMeshPreparation(
@@ -1402,7 +1488,7 @@ namespace AERISFlightControl.Terrain
                         entry.CoastalCorrectionParentCells;
                 }
                 uploaded++;
-                gpuContentRevision++;
+                MarkGpuContentDirty();
                 MarkGpuReady(field);
                 return true;
             }

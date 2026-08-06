@@ -19,12 +19,12 @@ ck('lastBackAttemptViewGeneration != visible.ViewGeneration) return true' not in
 ck('lastBackAttemptContentRevision != gpuContentRevision) return true' not in m, 'content revision cannot bypass cadence gate')
 ck('operationHealthCadenceDeferrals++' in m, 'cadence deferrals are observable')
 ck('!frontBufferValid && lastBackAttemptViewGeneration < 0L' in m and 'operationHealthCadenceBootstrapBypasses++' in m, 'first FRONT bootstrap remains immediate and observable')
-ck(R.count('nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f') >= 2, 'normal and forced recovery renders preserve 0.10 second scheduling authority')
+ck(R.count('nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime') >= 2, 'normal and forced recovery renders preserve the shared 0.10 second scheduling authority')
 ck('forcedRecoveryBackRenders++' in R, 'blank-recovery exception remains separate and observable')
 ck('oh_cadence_defer=' in R and 'oh_cadence_bootstrap=' in R, 'runtime cadence telemetry is published')
 ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R, 'render-target visual quality authority unchanged')
-ck(V.get('NAME') == 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 1', 'runtime package identity is Cadence Hotfix 1')
-ck('OPERATION HEALTH PASS 3 CADENCE HOTFIX 1' in B, 'Ubuntu build entrypoint identifies Cadence Hotfix 1')
+ck(V.get('NAME') in ('AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 1', 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing'), 'runtime package identity is Cadence Hotfix 1 or approved successor')
+ck('OPERATION HEALTH PASS 3 CADENCE HOTFIX' in B, 'Ubuntu build entrypoint identifies Cadence Hotfix lineage')
 failed=[n for ok,n in checks if not ok]
 print('\n[Operation Health Pass 3 Cadence Hotfix 1] %d/%d PASS' % (len(checks)-len(failed),len(checks)))
 if failed:

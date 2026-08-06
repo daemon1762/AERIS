@@ -1,0 +1,13 @@
+Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing static validation
+authoritative_pipeline_hz=10
+non_tick_capture_visible=NO
+non_tick_worker_drain=NO
+non_tick_tile_resolve=NO
+non_tick_back_render=NO
+non_tick_front_present=CHEAP_REUSE_ONLY
+tile_content_revision=COALESCED_DIRTY_BATCH
+obsolete_range_jobs=CANCELLED_AND_COUNTED
+visual_authority_changed=NO
+prebuild=PASS
+runtime_ksp=UNVERIFIED
+release_candidate=NO_UNTIL_RUNTIME_PASS
