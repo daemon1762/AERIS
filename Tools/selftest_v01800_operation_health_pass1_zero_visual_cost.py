@@ -67,8 +67,10 @@ ck('new RenderTexture(width, height, 0,\n                RenderTextureFormat.ARG
 ck('backTarget.filterMode = FilterMode.Bilinear' in renderer and
    'frontTarget.filterMode = FilterMode.Bilinear' in renderer,
    'render-target filtering unchanged')
-ck('nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f' in renderer,
-   'Candidate11 back refresh cadence unchanged')
+ck(('nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f' in renderer) or
+   ('nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime' in renderer and
+    'nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in renderer),
+   'Candidate11 back refresh cadence remains 0.10 seconds under approved shared authority')
 ck('ProjectionRefreshAgeSeconds = 0.50f' in renderer and
    'ProjectionRefreshHeadingDeg = 8f' in renderer,
    'Candidate11 projection refresh thresholds unchanged')
