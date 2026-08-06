@@ -1,0 +1,189 @@
+name: Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing
+on:
+  pull_request:
+    branches: [cp3.75/nd-recovery]
+    types: [opened, reopened, synchronize]
+permissions:
+  contents: write
+  pull-requests: read
+jobs:
+  hotfix:
+    if: github.head_ref == 'automation/operation-health-pass3-cadence-hotfix2-trigger'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cp3.75/nd-recovery
+          fetch-depth: 0
+      - name: Apply authoritative 10 Hz tick and refresh coalescing
+        shell: bash
+        run: |
+          set +e
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          root=Path('.')
+          renderer=root/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs'
+          r=renderer.read_text()
+
+          def replace_once(text, old, new, label):
+              if new in text:
+                  return text
+              if old not in text:
+                  raise SystemExit('anchor missing: '+label)
+              return text.replace(old,new,1)
+
+          # Runtime counters: distinguish cheap repeated presentation from authoritative work.
+          old='''        long operationHealthCadenceDeferrals;\n        long operationHealthCadenceBootstrapBypasses;\n        long operationHealthMeshPoolHits;'''
+          new='''        long operationHealthCadenceDeferrals;\n        long operationHealthCadenceBootstrapBypasses;\n        // Cadence Hotfix 2 / Refresh Coalescing: only the fixed 10 Hz authoritative\n        // tick may capture/resolve/upload/render terrain. Intervening KSP Repaints\n        // only re-present the already committed FRONT texture.\n        long operationHealthAuthoritativeTicks;\n        long operationHealthCoalescedPresentFrames;\n        long operationHealthCoalescedBlankPolls;\n        long operationHealthAuthoritativeSafetyBypasses;\n        long operationHealthDirtyBatches;\n        long operationHealthDirtySignalsCoalesced;\n        long operationHealthDirtyCommits;\n        long operationHealthObsoleteJobsCancelled;\n        long operationHealthViewInvalidations;\n        long operationHealthMeshPoolHits;'''
+          r=replace_once(r,old,new,'operation health counters')
+
+          old='''        long gpuContentRevision;\n        long frontContentRevision;'''
+          new='''        long gpuContentRevision;\n        long frontContentRevision;\n        bool gpuContentDirty;'''
+          r=replace_once(r,old,new,'gpu dirty state')
+
+          old='''        long lastBackAttemptViewGeneration = -1L;\n        long lastBackAttemptContentRevision = -1L;\n        float nextBackRefreshRealtime;'''
+          new='''        long lastBackAttemptViewGeneration = -1L;\n        long lastBackAttemptContentRevision = -1L;\n        float nextBackRefreshRealtime;\n        float nextAuthoritativePresentationTickRealtime;'''
+          r=replace_once(r,old,new,'authoritative tick state')
+
+          # Range/view invalidation already cancelled worker jobs. Make that cancellation explicit,
+          # clear per-frame scheduling markers, and keep the 10 Hz clock phase untouched.
+          old='''        internal void InvalidatePendingForViewChange()\n        {\n            generation++;\n            rasterizer.CancelAll();\n            requested.Clear();\n        }'''
+          new='''        internal void InvalidatePendingForViewChange()\n        {\n            int obsoletePending = rasterizer.PendingCount;\n            if (obsoletePending > 0)\n                operationHealthObsoleteJobsCancelled += obsoletePending;\n            operationHealthViewInvalidations++;\n            generation++;\n            rasterizer.CancelAll();\n            requested.Clear();\n            scheduledThisFrame.Clear();\n            // Do not reset nextAuthoritativePresentationTickRealtime here. Range/view\n            // changes are consumed by the next regular 10 Hz tick instead of creating\n            // an extra immediate presentation frame.\n        }'''
+          r=replace_once(r,old,new,'view invalidation coalescing')
+
+          # Gate the entire heavy terrain pipeline, not only BACK rendering. This is the
+          # primary lightweighting change: CaptureVisible, DrainCompleted, cache-key work,
+          # readiness scans and projection decisions now happen at <=10 Hz.
+          old='''            AERISTerrainRenderTargetOrientation orientation = settings == null ?\n                AERISTerrainRenderTargetOrientation.Direct :\n                settings.TerrainRenderTargetOrientation;\n            float historySurfaceRangeMeters = rangeMeters;'''
+          new='''            AERISTerrainRenderTargetOrientation orientation = settings == null ?\n                AERISTerrainRenderTargetOrientation.Direct :\n                settings.TerrainRenderTargetOrientation;\n\n            float presentationNow = Time.realtimeSinceStartup;\n            bool authoritativeTickDue = nextAuthoritativePresentationTickRealtime <= 0f ||\n                presentationNow >= nextAuthoritativePresentationTickRealtime;\n            if (!authoritativeTickDue)\n            {\n                if (TryPresentCoalescedFront(plot, vessel))\n                    return lastDrawState;\n                if (!frontBufferValid)\n                {\n                    operationHealthCoalescedBlankPolls++;\n                    return lastDrawState;\n                }\n                // A committed FRONT that cannot be safely re-presented (body/resource\n                // mismatch) is a lifecycle safety case. Consume one new authoritative\n                // tick immediately, but reset the clock so it cannot burst repeatedly.\n                operationHealthAuthoritativeSafetyBypasses++;\n            }\n            nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f;\n            operationHealthAuthoritativeTicks++;\n\n            float historySurfaceRangeMeters = rangeMeters;'''
+          r=replace_once(r,old,new,'authoritative tick gate')
+
+          # Align BACK gate to the authoritative clock. The heavy path itself is already
+          # entered at <=10 Hz, so using one shared deadline avoids a few-ms phase skew that
+          # could accidentally turn normal rendering into ~5 Hz.
+          old='nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f;'
+          if r.count(old) < 2:
+              raise SystemExit('expected two BACK cadence assignments')
+          r=r.replace(old,'nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime;')
+
+          # Coalesce many tile uploads into one content revision until the next successful
+          # authoritative FRONT commit.
+          if r.count('gpuContentRevision++;') != 2:
+              raise SystemExit('expected exactly two gpuContentRevision increment sites')
+          r=r.replace('gpuContentRevision++;','MarkGpuContentDirty();')
+
+          # Insert coalesced FRONT fast path and dirty-batch helper before the existing hard cap.
+          anchor='''        bool ShouldRefreshBackBuffer(AERISTerrainVisibleTileSet visible,\n            bool refreshRequired)'''
+          helper='''        bool TryPresentCoalescedFront(Rect plot, Vessel vessel)\n        {\n            if (!frontBufferValid || frontTarget == null || !frontTarget.IsCreated() ||\n                vessel == null || vessel.mainBody == null) return false;\n            if (!string.Equals(frontBodyName, vessel.mainBody.name,\n                    StringComparison.OrdinalIgnoreCase)) return false;\n            long bodyRadiusMillimetres = (long)Math.Round(\n                Math.Max(0.0, vessel.mainBody.Radius) * 1000.0);\n            if (bodyRadiusMillimetres != frontBodyRadiusMillimetres) return false;\n            PresentFrontDirect(plot, frontOrientation);\n            lastFrontBufferPresented = true;\n            lastFrontBufferLatched = true;\n            CapturePresentedProjection(true);\n            lastVisualCoverageFraction = 1f;\n            operationHealthCoalescedPresentFrames++;\n            return true;\n        }\n\n        void MarkGpuContentDirty()\n        {\n            if (gpuContentDirty)\n            {\n                operationHealthDirtySignalsCoalesced++;\n                return;\n            }\n            gpuContentDirty = true;\n            gpuContentRevision++;\n            operationHealthDirtyBatches++;\n        }\n\n'''+anchor
+          if 'bool TryPresentCoalescedFront(Rect plot, Vessel vessel)' not in r:
+              if anchor not in r: raise SystemExit('ShouldRefreshBackBuffer insertion anchor missing')
+              r=r.replace(anchor,helper,1)
+
+          # Successful FRONT commit consumes the pending content batch atomically.
+          old='''            frontCommittedRealtime = Time.realtimeSinceStartup;\n            frontContentRevision = gpuContentRevision;\n            frontBufferSwaps++;'''
+          new='''            frontCommittedRealtime = Time.realtimeSinceStartup;\n            frontContentRevision = gpuContentRevision;\n            if (gpuContentDirty) operationHealthDirtyCommits++;\n            gpuContentDirty = false;\n            frontBufferSwaps++;'''
+          r=replace_once(r,old,new,'dirty commit consume')
+
+          # Reset cadence/dirty state only on true FRONT lifecycle reset, not ordinary range change.
+          old='''            lastBackAttemptContentRevision = -1L;\n            nextBackRefreshRealtime = 0f;\n            lastFrontBufferPresented = false;'''
+          new='''            lastBackAttemptContentRevision = -1L;\n            nextBackRefreshRealtime = 0f;\n            nextAuthoritativePresentationTickRealtime = 0f;\n            gpuContentDirty = false;\n            lastFrontBufferPresented = false;'''
+          r=replace_once(r,old,new,'front reset cadence state')
+
+          # Publish Hotfix 2 telemetry next to Hotfix 1 counters.
+          old='''                "; oh_cadence_defer=" + operationHealthCadenceDeferrals +\n                "; oh_cadence_bootstrap=" + operationHealthCadenceBootstrapBypasses +\n                "; cpu_terrain_draw=0.");'''
+          new='''                "; oh_cadence_defer=" + operationHealthCadenceDeferrals +\n                "; oh_cadence_bootstrap=" + operationHealthCadenceBootstrapBypasses +\n                "; oh_auth_tick=" + operationHealthAuthoritativeTicks +\n                "; oh_coalesced_present=" + operationHealthCoalescedPresentFrames +\n                "; oh_coalesced_blank=" + operationHealthCoalescedBlankPolls +\n                "; oh_tick_safety=" + operationHealthAuthoritativeSafetyBypasses +\n                "; oh_dirty_batch=" + operationHealthDirtyBatches +\n                "; oh_dirty_coalesced=" + operationHealthDirtySignalsCoalesced +\n                "; oh_dirty_commit=" + operationHealthDirtyCommits +\n                "; oh_obsolete_cancel=" + operationHealthObsoleteJobsCancelled +\n                "; oh_view_invalidate=" + operationHealthViewInvalidations +\n                "; cpu_terrain_draw=0.");'''
+          r=replace_once(r,old,new,'hotfix2 telemetry')
+          renderer.write_text(r)
+
+          # Hotfix 1 regression remains valid under a shared authoritative deadline and successor identity.
+          h1=root/'Tools/selftest_v01800_operation_health_pass3_cadence_hotfix1.py'
+          q=h1.read_text()
+          q=q.replace("ck(R.count('nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f') >= 2, 'normal and forced recovery renders preserve 0.10 second scheduling authority')",
+                      "ck(R.count('nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime') >= 2, 'normal and forced recovery renders preserve the shared 0.10 second scheduling authority')")
+          q=q.replace("ck(V.get('NAME') == 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 1', 'runtime package identity is Cadence Hotfix 1')",
+                      "ck(V.get('NAME') in ('AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 1', 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing'), 'runtime package identity is Cadence Hotfix 1 or approved successor')")
+          q=q.replace("ck('OPERATION HEALTH PASS 3 CADENCE HOTFIX 1' in B, 'Ubuntu build entrypoint identifies Cadence Hotfix 1')",
+                      "ck('OPERATION HEALTH PASS 3 CADENCE HOTFIX' in B, 'Ubuntu build entrypoint identifies Cadence Hotfix lineage')")
+          h1.write_text(q)
+
+          # Dedicated Hotfix 2 static contract.
+          test=root/'Tools/selftest_v01800_operation_health_pass3_cadence_hotfix2_refresh_coalescing.py'
+          test.write_text('''#!/usr/bin/env python3\nfrom pathlib import Path\nimport json,sys\nsys.dont_write_bytecode=True\nROOT=Path(__file__).resolve().parents[1]\nR=(ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()\nS=(ROOT/'Source/AERISFlightControl/Settings/AERISSettings.cs').read_text()\nB=(ROOT/'build_ubuntu.sh').read_text()\nV=json.loads((ROOT/'GameData/AERISFlightControl/AERISFlightControl.version').read_text())\nchecks=[]\ndef ck(v,n):\n checks.append((bool(v),n)); print(('[PASS] ' if v else '[FAIL] ')+n)\nstart=R.index('internal AERISTerrainGpuDrawState Draw(')\ncapture=R.index('AERISTerrainVisibleTileSet visible = system.CaptureVisible',start)\nprefix=R[start:capture]\nck('internal const float FixedNavigationDisplayUpdateHz = 10f' in S, 'fixed ND authority remains 10 Hz')\nck('nextAuthoritativePresentationTickRealtime' in R, 'independent authoritative presentation tick exists')\nck('presentationNow >= nextAuthoritativePresentationTickRealtime' in prefix, 'authoritative tick gate precedes visible-tile capture')\nck('TryPresentCoalescedFront(plot, vessel)' in prefix, 'intervening Repaints use committed FRONT fast path')\nck('operationHealthCoalescedBlankPolls++' in prefix, 'bootstrap blank polling is also cadence-limited')\nck('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in prefix, 'authoritative tick advances by 0.10 seconds without catch-up burst')\nck('CaptureVisible' not in prefix[prefix.index('if (!authoritativeTickDue)'):], 'non-tick fast path performs no visible-tile capture before return')\nck(R.count('nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime') >= 2, 'BACK render shares authoritative tick deadline')\nck(R.count('gpuContentRevision++;') == 1 and 'void MarkGpuContentDirty()' in R, 'tile completion revisions are coalesced through one dirty helper')\nck('operationHealthDirtySignalsCoalesced++' in R and 'gpuContentDirty = false' in R[R.index('void SwapFrontAndBack'):], 'multiple tile completions collapse into one commit batch')\nck('rasterizer.PendingCount' in R[R.index('internal void InvalidatePendingForViewChange'):R.index('internal void SuspendViewport')], 'obsolete range/view worker count is captured before cancellation')\nck('scheduledThisFrame.Clear()' in R[R.index('internal void InvalidatePendingForViewChange'):R.index('internal void SuspendViewport')], 'view invalidation clears transient scheduler suppression state')\nck('nextAuthoritativePresentationTickRealtime = 0f' in R[R.index('void ResetFrontBufferState'):], 'true FRONT lifecycle reset re-arms immediate bootstrap')\nck('oh_auth_tick=' in R and 'oh_coalesced_present=' in R and 'oh_dirty_coalesced=' in R and 'oh_obsolete_cancel=' in R, 'runtime coalescing telemetry is published')\nck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R, 'visual RenderTexture authority is unchanged')\nck('MaximumContourLevelsPerTile = 96' in (ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs').read_text(), 'Candidate11 contour authority remains 96 levels')\nck(V.get('NAME') == 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing', 'runtime identity is Hotfix 2 Refresh Coalescing')\nck('OPERATION HEALTH PASS 3 CADENCE HOTFIX 2 REFRESH COALESCING' in B, 'Ubuntu build entrypoint identifies Hotfix 2')\nfailed=[n for ok,n in checks if not ok]\nprint('\\n[Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing] %d/%d PASS' % (len(checks)-len(failed),len(checks)))\nif failed:\n print('FAILED: '+', '.join(failed)); raise SystemExit(1)\n''')
+
+          runner=root/'Tools/run_v01800_operation_health_pass3_prebuild.py'
+          q=runner.read_text()
+          anchor="suites=[\n ('Operation Health Pass 3 Cadence Hotfix 1','selftest_v01800_operation_health_pass3_cadence_hotfix1.py'),"
+          replacement="suites=[\n ('Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing','selftest_v01800_operation_health_pass3_cadence_hotfix2_refresh_coalescing.py'),\n ('Operation Health Pass 3 Cadence Hotfix 1','selftest_v01800_operation_health_pass3_cadence_hotfix1.py'),"
+          if replacement not in q:
+              if anchor not in q: raise SystemExit('prebuild runner anchor missing')
+              q=q.replace(anchor,replacement,1)
+          runner.write_text(q)
+
+          version=root/'GameData/AERISFlightControl/AERISFlightControl.version'
+          v=json.loads(version.read_text())
+          v['NAME']='AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing'
+          version.write_text(json.dumps(v,indent=2)+'\n')
+
+          gen=root/'Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs'
+          g=gen.read_text()
+          g=g.replace('AERIS Flight Control v0.18.0.0 DEV CP3.75 OPERATION HEALTH PASS 3 CADENCE HOTFIX 1"','AERIS Flight Control v0.18.0.0 DEV CP3.75 OPERATION HEALTH PASS 3 CADENCE HOTFIX 2 REFRESH COALESCING"')
+          g=g.replace('DEV CP3.75 — OPERATION HEALTH PASS 3 CADENCE HOTFIX 1"','DEV CP3.75 — OPERATION HEALTH PASS 3 CADENCE HOTFIX 2 REFRESH COALESCING"')
+          gen.write_text(g)
+
+          build=root/'build_ubuntu.sh'
+          b=build.read_text()
+          b=b.replace('DEV CP3.75 OPERATION HEALTH PASS 3 CADENCE HOTFIX 1"','DEV CP3.75 OPERATION HEALTH PASS 3 CADENCE HOTFIX 2 REFRESH COALESCING"')
+          b=b.replace('DEV CP3.75 — OPERATION HEALTH PASS 3 CADENCE HOTFIX 1"','DEV CP3.75 — OPERATION HEALTH PASS 3 CADENCE HOTFIX 2 REFRESH COALESCING"')
+          build.write_text(b)
+
+          doc=root/'Docs/OPERATION_HEALTH_PASS3_CADENCE_HOTFIX2_REFRESH_COALESCING_ja.md'
+          doc.write_text('''# Operation Health Pass 3 Cadence Hotfix 2 / Refresh Coalescing\n\n## 目的\nHotfix 1の10 Hz BACK/FRONT上限を、terrain presentation pipeline全体の10 Hz authoritative clockへ拡張する。KSP側Repaintが高FPSでも、CaptureVisible、worker completion drain、tile resolve/upload/schedule、foundation scan、projection判断、BACK renderは最大10回/秒だけ実行する。\n\n## 構造\n- authoritative tick間は既存FRONT textureを再提示するだけ。\n- world-fixed symbologyは既存のFRONT swap同期を維持する。\n- worker完了はqueueに蓄積し、次のauthoritative tickでbounded drainする。\n- 同tick内の複数tile uploadは1つのgpuContentRevision dirty batchへcoalesceする。\n- range/view invalidateは既存CancelAllを維持し、obsolete pending jobsを計測する。\n- range/view変更はauthoritative clockをリセットせず、余計な即時frameを作らない。\n\n## 非変更\nCandidate11 cartographic visual authority、33x33 FAR基底、129x129 coastline authority、Sparse Coastal Correction、96-level contour budget、ARGB32/Bilinear、Pass 2 mesh pool、Pass 3 bounds/SetPass/index/colour optimization、FRONT-synchronized ownship/vector/fanは変更しない。\n\n## 将来\nこの10 Hz exact-authority層を、GPU frame generation / temporal map reprojectionの入力基盤とする。\n''')
+          PY
+          PATCH_RC=$?
+          if [ "$PATCH_RC" -ne 0 ]; then
+            echo "HOTFIX2_SAFE_STOP_PATCH_FAILED rc=$PATCH_RC"
+            exit 0
+          fi
+
+          python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+          TEST_RC=$?
+          if [ "$TEST_RC" -ne 0 ]; then
+            echo "HOTFIX2_SAFE_STOP_PREBUILD_FAILED rc=$TEST_RC"
+            git reset --hard HEAD
+            exit 0
+          fi
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/operation-health-pass3-cadence-hotfix2-refresh-coalescing.yml
+          cat > Evidence/OPERATION_HEALTH_PASS3_CADENCE_HOTFIX2_REFRESH_COALESCING_STATIC_VALIDATION.txt <<'EOF'
+          Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing static validation
+          authoritative_pipeline_hz=10
+          non_tick_capture_visible=NO
+          non_tick_worker_drain=NO
+          non_tick_tile_resolve=NO
+          non_tick_back_render=NO
+          non_tick_front_present=CHEAP_REUSE_ONLY
+          tile_content_revision=COALESCED_DIRTY_BATCH
+          obsolete_range_jobs=CANCELLED_AND_COUNTED
+          visual_authority_changed=NO
+          prebuild=PASS
+          runtime_ksp=UNVERIFIED
+          release_candidate=NO_UNTIL_RUNTIME_PASS
+          EOF
+          git add -A
+          git commit -m 'Coalesce Operation Health Pass 3 ND refresh work at 10 Hz'
+          COMMIT_RC=$?
+          if [ "$COMMIT_RC" -ne 0 ]; then
+            echo "HOTFIX2_SAFE_STOP_NO_COMMIT rc=$COMMIT_RC"
+            exit 0
+          fi
+          git push origin HEAD:cp3.75/nd-recovery
+          PUSH_RC=$?
+          if [ "$PUSH_RC" -ne 0 ]; then
+            echo "HOTFIX2_PUSH_FAILED rc=$PUSH_RC"
+            exit 0
+          fi
+          echo "HOTFIX2_APPLIED=YES"
