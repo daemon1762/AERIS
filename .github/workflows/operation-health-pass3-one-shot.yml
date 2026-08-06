@@ -1,0 +1,30 @@
+name: Operation Health Pass 3 One Shot
+on:
+  push:
+    branches: [cp3.75/nd-recovery]
+    paths:
+      - Evidence/OPERATION_HEALTH_PASS3_TRIGGER.txt
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cp3.75/nd-recovery
+          fetch-depth: 0
+      - name: Apply Pass 3 patch
+        run: python3 Tools/_operation_health_pass3_projection_draw_patch.py
+      - name: Commit Pass 3 implementation
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+          if git diff --cached --quiet; then
+            echo 'Pass 3 source already applied.'
+          else
+            git commit -m 'Implement Operation Health Pass 3 projection draw reduction'
+            git push origin HEAD:cp3.75/nd-recovery
+          fi
