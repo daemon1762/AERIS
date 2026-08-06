@@ -1,0 +1,59 @@
+name: Operation Health Pass 3 Compile Hotfix
+on:
+  pull_request:
+    branches: [cp3.75/nd-recovery]
+    types: [reopened, synchronize]
+permissions:
+  contents: write
+  pull-requests: read
+jobs:
+  hotfix:
+    if: github.head_ref == 'automation/operation-health-pass3-trigger'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cp3.75/nd-recovery
+          fetch-depth: 0
+      - name: Fix static-instance compile regression and validate
+        shell: bash
+        run: |
+          set -u
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs')
+          s=p.read_text()
+          replacements=[
+            ('        static void EnsureProjectedGeometry(Entry entry,','        void EnsureProjectedGeometry(Entry entry,'),
+            ('        static void ProjectMesh(Mesh mesh, GeographicUnitPoint[] points,','        void ProjectMesh(Mesh mesh, GeographicUnitPoint[] points,'),
+            ('        static void EnsureWaterColour(Entry entry,','        void EnsureWaterColour(Entry entry,'),
+          ]
+          for old,new in replacements:
+              if new in s: continue
+              if old not in s: raise SystemExit('compile hotfix anchor missing: '+old.strip())
+              s=s.replace(old,new,1)
+          p.write_text(s)
+
+          t=Path('Tools/selftest_v01800_operation_health_pass3_projection_draw_reduction.py')
+          q=t.read_text()
+          anchor="ck('static readonly Bounds NdPresentationBounds' in R,\n   'conservative fixed ND bounds authority exists')\n"
+          extra="""ck('static void EnsureProjectedGeometry' not in R and\n   'static void ProjectMesh' not in R and\n   'static void EnsureWaterColour' not in R,\n   'Pass 3 instance telemetry paths are not declared static')\n"""
+          if 'Pass 3 instance telemetry paths are not declared static' not in q:
+              if anchor not in q: raise SystemExit('selftest insertion anchor missing')
+              q=q.replace(anchor,anchor+extra,1)
+          t.write_text(q)
+          PY
+          python3 Tools/run_v01800_operation_health_pass3_prebuild.py || { echo 'PASS3_COMPILE_HOTFIX_PREBUILD_FAILED'; git reset --hard HEAD; exit 0; }
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/operation-health-pass3-compile-hotfix.yml
+          cat > Evidence/OPERATION_HEALTH_PASS3_COMPILE_HOTFIX1.txt <<'EOF'
+          Operation Health Pass 3 Compile Hotfix 1
+          fixed_instance_methods=EnsureProjectedGeometry,ProjectMesh,EnsureWaterColour
+          prebuild=PASS
+          runtime_ksp=UNVERIFIED
+          release_candidate=NO_UNTIL_RUNTIME_PASS
+          EOF
+          git add -A
+          git commit -m 'Fix Operation Health Pass 3 static instance compile regression' || exit 0
+          git push origin HEAD:cp3.75/nd-recovery || true
