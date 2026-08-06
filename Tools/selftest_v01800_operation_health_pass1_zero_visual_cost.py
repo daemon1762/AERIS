@@ -46,8 +46,8 @@ ck('TryUploadRenderReadyField(tile, cacheKey, styleKey' in renderer and
    'one per-tile cache key is shared with upload and schedule')
 ck('double currentCenterLatitudeDeg, double currentCenterLongitudeDeg' in renderer,
    'projection center is passed into per-entry projection test')
-ck('UnitLatitude(context.CenterX, context.CenterY, context.CenterZ)' not in
-   renderer[renderer.index('static void EnsureProjectedGeometry'):renderer.index('static void ProjectMesh')],
+projection_block=renderer[renderer.index('void EnsureProjectedGeometry'):renderer.index('void ProjectMesh')]
+ck('UnitLatitude(context.CenterX, context.CenterY, context.CenterZ)' not in projection_block,
    'per-entry projection center trig recomputation removed')
 ck('oh_resolve_calls=' in renderer and 'oh_resolve_candidates=' in renderer and
    'oh_tile_scratch_resize=' in renderer,
