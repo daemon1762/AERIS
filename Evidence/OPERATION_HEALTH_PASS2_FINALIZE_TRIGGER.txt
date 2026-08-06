@@ -1,0 +1,1 @@
+Trigger Operation Health Pass 2 finalization and static validation.
