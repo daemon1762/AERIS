@@ -1,0 +1,5 @@
+Operation Health Pass 2 GitHub static validation
+prebuild=PASS
+csharp_tree_sitter=PASS
+visual_authority_changed=NO
+runtime_ksp=UNVERIFIED

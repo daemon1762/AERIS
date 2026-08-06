@@ -199,7 +199,7 @@ namespace AERISFlightControl.Terrain
         // Recycle native Unity Mesh objects across ordinary tile eviction/supersession.
         // Terrain OFF / viewport suspension still destroys the pool, preserving the
         // existing resource-release contract.
-        const int MaximumPooledMeshes = 96;
+        const int MaximumPooledMeshes = 24;
         readonly Queue<Mesh> meshPool = new Queue<Mesh>(MaximumPooledMeshes);
         long operationHealthMeshPoolHits;
         long operationHealthMeshPoolMisses;
