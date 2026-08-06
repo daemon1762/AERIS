@@ -29,8 +29,8 @@ ck('nextAuthoritativePresentationTickRealtime = 0f' in R[R.index('void ResetFron
 ck('oh_auth_tick=' in R and 'oh_coalesced_present=' in R and 'oh_dirty_coalesced=' in R and 'oh_obsolete_cancel=' in R, 'runtime coalescing telemetry is published')
 ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R, 'visual RenderTexture authority is unchanged')
 ck('MaximumContourLevelsPerTile = 96' in (ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs').read_text(), 'Candidate11 contour authority remains 96 levels')
-ck(V.get('NAME') == 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing', 'runtime identity is Hotfix 2 Refresh Coalescing')
-ck('OPERATION HEALTH PASS 3 CADENCE HOTFIX 2 REFRESH COALESCING' in B, 'Ubuntu build entrypoint identifies Hotfix 2')
+ck(V.get('NAME') in ('AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing', 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 3 Motion Commit'), 'runtime identity is Hotfix 2 or approved successor')
+ck('OPERATION HEALTH PASS 3 CADENCE HOTFIX' in B, 'Ubuntu build entrypoint identifies Cadence Hotfix lineage')
 failed=[n for ok,n in checks if not ok]
 print('\n[Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing] %d/%d PASS' % (len(checks)-len(failed),len(checks)))
 if failed:

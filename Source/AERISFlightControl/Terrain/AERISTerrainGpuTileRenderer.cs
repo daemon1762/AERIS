@@ -163,6 +163,14 @@ namespace AERISFlightControl.Terrain
         const float MaximumHistorySurfaceRangeMeters = 250000f;
         const float ProjectionRefreshAgeSeconds = 0.50f;
         const float ProjectionRefreshHeadingDeg = 8f;
+        // Cadence Hotfix 3: the 0.50s/large-distance rules remain safety/fallback
+        // authorities, but a genuinely moving map commits on every fixed 10 Hz
+        // authoritative tick. The speed guard prevents parked floating-origin noise
+        // from turning into needless BACK renders.
+        const float AuthoritativeMotionSpeedMetersPerSecond = 0.5f;
+        const double AuthoritativeMotionDistanceMeters = 0.01;
+        const double AuthoritativeMotionFallbackDistanceMeters = 0.25;
+        const float AuthoritativeMotionHeadingDeg = 0.05f;
         const float ReadyBuildingViolationSeconds = 1.0f;
 
         readonly AERISSettings settings;
@@ -228,6 +236,8 @@ namespace AERISFlightControl.Terrain
         long operationHealthDirtyBatches;
         long operationHealthDirtySignalsCoalesced;
         long operationHealthDirtyCommits;
+        long operationHealthMotionRefreshes;
+        long operationHealthForcedProjectionRefreshes;
         long operationHealthObsoleteJobsCancelled;
         long operationHealthViewInvalidations;
         long operationHealthMeshPoolHits;
@@ -622,9 +632,15 @@ namespace AERISFlightControl.Terrain
                 return lastDrawState;
             }
 
-            bool projectionRefreshRequired = NeedsProjectionRefresh(visible, vessel,
-                centerLatitudeDeg, centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
-                anchorV, orientation);
+            bool forceCenterProjectionRefresh;
+            bool authoritativeMotionRefreshRequired = NeedsAuthoritativeMotionRefresh(
+                vessel, centerLatitudeDeg, centerLongitudeDeg, mapHeadingDeg, trackUp,
+                out forceCenterProjectionRefresh);
+            if (authoritativeMotionRefreshRequired) operationHealthMotionRefreshes++;
+            bool projectionRefreshRequired = authoritativeMotionRefreshRequired ||
+                NeedsProjectionRefresh(visible, vessel, centerLatitudeDeg,
+                    centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
+                    anchorV, orientation);
             bool colourRefreshRequired = frontColourMode != effectiveMode ||
                 frontColourPreset != currentPreset;
             bool refreshRequired = !frontBufferValid ||
@@ -639,7 +655,8 @@ namespace AERISFlightControl.Terrain
             if (refreshAllowed)
             {
                 rendered = RenderBackBuffer(tiles, drawEntriesScratch, projection,
-                    mapRotation, effectiveMode, vessel, rangeMeters);
+                    mapRotation, effectiveMode, vessel, rangeMeters,
+                    forceCenterProjectionRefresh);
                 backRenderFrames++;
                 lastBackAttemptViewGeneration = visible.ViewGeneration;
                 lastBackAttemptContentRevision = gpuContentRevision;
@@ -724,7 +741,8 @@ namespace AERISFlightControl.Terrain
             if (!present && readyFoundationNow && !gpuFailed)
             {
                 bool recovered = RenderBackBuffer(tiles, drawEntriesScratch, projection,
-                    mapRotation, effectiveMode, vessel, rangeMeters);
+                    mapRotation, effectiveMode, vessel, rangeMeters,
+                    forceCenterProjectionRefresh);
                 backRenderFrames++;
                 forcedRecoveryBackRenders++;
                 lastBackAttemptViewGeneration = visible.ViewGeneration;
@@ -768,8 +786,11 @@ namespace AERISFlightControl.Terrain
 
         bool RenderBackBuffer(AERISTerrainHeightTile[] tiles, Entry[] drawEntries,
             AERISNdMapProjection projection, Matrix4x4 mapRotation,
-            AERISTerrainDisplayMode effectiveMode, Vessel vessel, float rangeMeters)
+            AERISTerrainDisplayMode effectiveMode, Vessel vessel, float rangeMeters,
+            bool forceCenterProjectionRefresh)
         {
+            if (forceCenterProjectionRefresh)
+                operationHealthForcedProjectionRefreshes++;
             long frameStartTicks = Stopwatch.GetTimestamp();
             RenderTexture previous = RenderTexture.active;
             bool matrixPushed = false;
@@ -799,7 +820,7 @@ namespace AERISFlightControl.Terrain
                     operationHealthPreparedEntryUses++;
                     EnsureProjectedGeometry(drawEntry, projection,
                         projectionThresholdMeters, projectionCenterLatitudeDeg,
-                        projectionCenterLongitudeDeg);
+                        projectionCenterLongitudeDeg, forceCenterProjectionRefresh);
                     bool entryRendered = DrawEntry(drawEntry, mapRotation, true, effectiveMode,
                         settings == null ? AERISTerrainColourPreset.Standard :
                         settings.TerrainColourPreset, (float)vessel.altitude);
@@ -965,6 +986,28 @@ namespace AERISFlightControl.Terrain
             float visible = Math.Max(1f, visibleRangeMeters);
             return Mathf.Clamp(visible * HistoryOverscanScale, visible,
                 MaximumHistorySurfaceRangeMeters);
+        }
+
+        bool NeedsAuthoritativeMotionRefresh(Vessel vessel,
+            double centerLatitudeDeg, double centerLongitudeDeg, float mapHeadingDeg,
+            bool trackUp, out bool forceCenterProjectionRefresh)
+        {
+            forceCenterProjectionRefresh = false;
+            if (!frontBufferValid || vessel == null || vessel.mainBody == null) return false;
+            double displacement = GreatCircleDistanceMeters(vessel.mainBody,
+                frontCenterLatitudeDeg, frontCenterLongitudeDeg, centerLatitudeDeg,
+                centerLongitudeDeg);
+            if (double.IsNaN(displacement) || double.IsInfinity(displacement)) return true;
+            bool speedConfirmedMotion = vessel.srfSpeed >=
+                AuthoritativeMotionSpeedMetersPerSecond &&
+                displacement >= AuthoritativeMotionDistanceMeters;
+            bool displacementConfirmedMotion = displacement >=
+                AuthoritativeMotionFallbackDistanceMeters;
+            forceCenterProjectionRefresh = speedConfirmedMotion ||
+                displacementConfirmedMotion;
+            bool headingMotion = trackUp && Mathf.Abs(Mathf.DeltaAngle(
+                frontMapHeadingDeg, mapHeadingDeg)) >= AuthoritativeMotionHeadingDeg;
+            return forceCenterProjectionRefresh || headingMotion;
         }
 
         bool NeedsProjectionRefresh(AERISTerrainVisibleTileSet visible, Vessel vessel,
@@ -1307,6 +1350,8 @@ namespace AERISFlightControl.Terrain
                 "; oh_dirty_batch=" + operationHealthDirtyBatches +
                 "; oh_dirty_coalesced=" + operationHealthDirtySignalsCoalesced +
                 "; oh_dirty_commit=" + operationHealthDirtyCommits +
+                "; oh_motion_refresh=" + operationHealthMotionRefreshes +
+                "; oh_forced_project=" + operationHealthForcedProjectionRefreshes +
                 "; oh_obsolete_cancel=" + operationHealthObsoleteJobsCancelled +
                 "; oh_view_invalidate=" + operationHealthViewInvalidations +
                 "; cpu_terrain_draw=0.");
@@ -1989,10 +2034,12 @@ namespace AERISFlightControl.Terrain
 
         void EnsureProjectedGeometry(Entry entry,
             AERISNdMapProjection context, float movementThresholdMeters,
-            double currentCenterLatitudeDeg, double currentCenterLongitudeDeg)
+            double currentCenterLatitudeDeg, double currentCenterLongitudeDeg,
+            bool forceCenterProjectionRefresh)
         {
             if (entry == null) return;
-            bool projectionChanged = double.IsNaN(entry.LastProjectionCenterLatitudeDeg) ||
+            bool projectionChanged = forceCenterProjectionRefresh ||
+                double.IsNaN(entry.LastProjectionCenterLatitudeDeg) ||
                 Math.Abs(entry.LastProjectionBodyRadius - context.RadiusMeters) > 0.01 ||
                 Math.Abs(entry.LastProjectionRangeMeters - context.VerticalMeters) > 0.01 ||
                 Math.Abs(entry.LastProjectionAnchorBottom - context.AnchorRenderV) > 0.000001f ||

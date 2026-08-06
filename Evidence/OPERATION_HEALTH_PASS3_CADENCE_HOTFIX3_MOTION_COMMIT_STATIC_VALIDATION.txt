@@ -1,0 +1,10 @@
+Operation Health Pass 3 Cadence Hotfix 3 Motion Commit static validation
+authoritative_pipeline_hz=10
+moving_front_commit_target_hz=10
+parked_forced_back_render=NO
+subpixel_projection_hold_bypassed_when_moving=YES
+projection_age_fallback_seconds=0.50
+visual_authority_changed=NO
+prebuild=PASS
+runtime_ksp=UNVERIFIED
+release_candidate=NO_UNTIL_RUNTIME_PASS
