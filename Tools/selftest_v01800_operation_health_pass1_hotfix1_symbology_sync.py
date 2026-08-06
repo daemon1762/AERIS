@@ -53,8 +53,10 @@ ck('terrainPresentationActive && !planMode' in draw,
 ck('FrontBufferSwaps' in RENDERER,
    'renderer publishes Terrain FRONT swap authority')
 ck('ProjectionRefreshAgeSeconds = 0.50f' in RENDERER and
-   'nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f' in RENDERER,
-   'terrain presentation cadence policy remains unchanged')
+   (('nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f' in RENDERER) or
+    ('nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime' in RENDERER and
+     'nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in RENDERER)),
+   'terrain presentation cadence policy remains fixed at 10 Hz under approved shared authority')
 
 failed=[n for ok,n in checks if not ok]
 print('\n[Operation Health Pass 1 Hotfix 1 symbology sync] %d/%d PASS' %
