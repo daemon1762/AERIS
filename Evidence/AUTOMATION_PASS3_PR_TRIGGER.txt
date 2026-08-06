@@ -1,3 +1,4 @@
 One-shot PR event used to execute the Operation Health Pass 3 orchestrator.
 Retry after cleanup-anchor fix.
 Retry after painter-order selftest correction.
+Retry after Pass 1 selftest compatibility update.
