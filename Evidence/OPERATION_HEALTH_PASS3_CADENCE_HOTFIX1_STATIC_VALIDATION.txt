@@ -1,0 +1,9 @@
+Operation Health Pass 3 Cadence Hotfix 1 static validation
+cause=ViewGeneration/ContentRevision bypassed nextBackRefreshRealtime
+normal_front_cadence_hard_cap=10Hz
+bootstrap_exception=YES
+forced_recovery_exception=UNCHANGED
+prebuild=PASS
+visual_authority_changed=NO
+runtime_ksp=UNVERIFIED
+release_candidate=NO_UNTIL_RUNTIME_PASS

@@ -213,6 +213,11 @@ namespace AERISFlightControl.Terrain
         long operationHealthUniformColourReuses;
         long operationHealthBoundsSkips;
         long operationHealthTerrainSetPassSaved;
+        // Cadence Hotfix 1: content/view revisions may request a refresh, but they may
+        // not bypass the fixed 10 Hz presentation gate. Bootstrap remains the only
+        // normal-path immediate exception when no FRONT has ever been attempted.
+        long operationHealthCadenceDeferrals;
+        long operationHealthCadenceBootstrapBypasses;
         long operationHealthMeshPoolHits;
         long operationHealthMeshPoolMisses;
         long operationHealthMeshPoolRecycles;
@@ -864,10 +869,20 @@ namespace AERISFlightControl.Terrain
             bool refreshRequired)
         {
             if (!refreshRequired || visible == null) return false;
-            if (!frontBufferValid && lastBackAttemptViewGeneration < 0L) return true;
-            if (lastBackAttemptViewGeneration != visible.ViewGeneration) return true;
-            if (lastBackAttemptContentRevision != gpuContentRevision) return true;
-            return Time.realtimeSinceStartup >= nextBackRefreshRealtime;
+            // First ever FRONT construction must not wait on a stale/default timer.
+            // After that, every ordinary BACK render request shares one absolute
+            // 0.10 s gate, including ViewGeneration and gpuContentRevision changes.
+            if (!frontBufferValid && lastBackAttemptViewGeneration < 0L)
+            {
+                operationHealthCadenceBootstrapBypasses++;
+                return true;
+            }
+            if (Time.realtimeSinceStartup < nextBackRefreshRealtime)
+            {
+                operationHealthCadenceDeferrals++;
+                return false;
+            }
+            return true;
         }
 
         static float ResolveHistorySurfaceRange(float visibleRangeMeters)
@@ -1208,6 +1223,8 @@ namespace AERISFlightControl.Terrain
                 "; oh_uniform_colour_reuse=" + operationHealthUniformColourReuses +
                 "; oh_bounds_skip=" + operationHealthBoundsSkips +
                 "; oh_setpass_saved=" + operationHealthTerrainSetPassSaved +
+                "; oh_cadence_defer=" + operationHealthCadenceDeferrals +
+                "; oh_cadence_bootstrap=" + operationHealthCadenceBootstrapBypasses +
                 "; cpu_terrain_draw=0.");
         }
 
