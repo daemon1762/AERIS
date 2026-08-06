@@ -23,7 +23,13 @@ ck('Dictionary<int, Color32[]> uniformColourScratch' in R and
 draw=R[R.index('bool DrawEntry('):R.index('void EnsureWaterColour',R.index('bool DrawEntry('))]
 ck(draw.count('terrainMaterial.SetPass(0)') == 1,
    'terrain meshes share one material SetPass per entry')
-order=['entry.WaterMesh','entry.LandMesh','entry.CoastalWaterCorrectionMesh','entry.CoastalLandCorrectionMesh']
+# Inspect actual draw submissions, not earlier null/count references to the same fields.
+order=[
+ 'Graphics.DrawMeshNow(entry.WaterMesh, mapMatrix)',
+ 'Graphics.DrawMeshNow(entry.LandMesh, mapMatrix)',
+ 'Graphics.DrawMeshNow(entry.CoastalWaterCorrectionMesh, mapMatrix)',
+ 'Graphics.DrawMeshNow(entry.CoastalLandCorrectionMesh, mapMatrix)'
+]
 pos=[draw.find(x) for x in order]
 ck(all(x>=0 for x in pos) and pos==sorted(pos),
    'Candidate8 terrain painter order remains unchanged')
