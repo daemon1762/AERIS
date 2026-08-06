@@ -1,0 +1,72 @@
+name: Register Stable Dev Releases
+on:
+  push:
+    branches: [cp3.75/nd-recovery]
+    paths:
+      - Evidence/REGISTER_STABLE_DEV_RELEASES_TRIGGER.txt
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Register Candidate11 foundation baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG='v0.18.0.0-dev-cp3.75-candidate11-foundation'
+          SHA='6de1bb6a7098dabbdf70aa257eddc5e0f42edfe7'
+          TITLE='AERIS v0.18.0.0 DEV CP3.75 Candidate11 — Foundation Baseline'
+          ASSET='AERISFlightControl-v0.18.0.0_DEV_CP3.75_Candidate11_FoundationBaseline_Source.zip'
+          NOTES='candidate11-release-notes.md'
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "$TAG already exists; leaving it unchanged."
+            exit 0
+          fi
+          cat > "$NOTES" <<'EOF'
+          ## Foundation baseline
+          Known-good CP3.75 ND foundation checkpoint before Operation Health optimization.
+
+          **Commit:** `6de1bb6a7098dabbdf70aa257eddc5e0f42edfe7`
+
+          Validated foundation features include the Candidate11 contour-level budget, 129x129 coastal authority, sparse coastal correction, unified coastline/fill boundary authority, REL palette authority, and the CP3.75 visual-quality floor.
+
+          This release is a **development pre-release source snapshot**. The repository does not contain the locally built KSP DLL, so the attached ZIP is intentionally source/package metadata only and must be built against a legitimate KSP 1.12.5 installation.
+          EOF
+          git archive --format=zip --output="$ASSET" --prefix="AERIS-Candidate11-Foundation/" "$SHA"
+          sha256sum "$ASSET" > "$ASSET.sha256"
+          gh release create "$TAG" "$ASSET" "$ASSET.sha256" --repo "$REPO" --target "$SHA" --title "$TITLE" --notes-file "$NOTES" --prerelease
+      - name: Register Operation Health Pass 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG='v0.18.0.0-dev-cp3.75-operation-health-pass2'
+          SHA='9a9645a210cf979b016afb197230acff81796c4d'
+          TITLE='AERIS v0.18.0.0 DEV CP3.75 — Operation Health Pass 2'
+          ASSET='AERISFlightControl-v0.18.0.0_DEV_CP3.75_OperationHealthPass2_Source.zip'
+          NOTES='operation-health-pass2-release-notes.md'
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "$TAG already exists; leaving it unchanged."
+            exit 0
+          fi
+          cat > "$NOTES" <<'EOF'
+          ## Operation Health Pass 2
+          Runtime-validated performance checkpoint preserving the Candidate11 visual foundation.
+
+          **Commit:** `9a9645a210cf979b016afb197230acff81796c4d`
+
+          Runtime results confirmed persistent/recycled GPU Mesh operation, high mesh-pool reuse, no detected visual-quality regression, no return of the ownship/prediction/range-fan jump, and no terrain GPU failure during the validation session.
+
+          Known remaining quality work: localized high-magnification coastal fill gaps and contour refinement on very small, steep islands.
+
+          This release is a **development pre-release source snapshot**. The repository does not contain the locally built KSP DLL, so the attached ZIP is intentionally source/package metadata only and must be built against a legitimate KSP 1.12.5 installation.
+          EOF
+          git archive --format=zip --output="$ASSET" --prefix="AERIS-OperationHealthPass2/" "$SHA"
+          sha256sum "$ASSET" > "$ASSET.sha256"
+          gh release create "$TAG" "$ASSET" "$ASSET.sha256" --repo "$REPO" --target "$SHA" --title "$TITLE" --notes-file "$NOTES" --prerelease
