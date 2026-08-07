@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -16,6 +17,7 @@ namespace AERISFlightControl.Terrain
     {
         const string ProjectionWorkerJobKey = "nd-terrain-exact-projection";
         const float ProjectionWorkerMinimumCommitIntervalSeconds = 0.10f;
+        const float ProjectionWorkerTimeoutSeconds = 0.095f;
 
         sealed class ProjectionPlaneBuffer
         {
@@ -89,7 +91,12 @@ namespace AERISFlightControl.Terrain
             new ProjectionWorkerBuffers[0];
         ProjectionSourceSet[] projectionWorkerSourceSnapshot =
             new ProjectionSourceSet[0];
+        readonly HashSet<long> projectionWorkerTimeoutCancelledSerials =
+            new HashSet<long>();
         bool projectionWorkerPending;
+        long projectionWorkerPendingSerial = -1L;
+        float projectionWorkerSubmittedRealtime = -1f;
+        long projectionWorkerLastDeferredSerial = -1L;
         ProjectionWorkerResult projectionWorkerCompleted;
         long projectionWorkerSerial;
         long operationHealthProjectionWorkerSubmits;
@@ -99,6 +106,8 @@ namespace AERISFlightControl.Terrain
         long operationHealthProjectionWorkerFailures;
         long operationHealthProjectionWorkerVertices;
         long operationHealthProjectionWorkerCommitDeferrals;
+        long operationHealthProjectionWorkerWaitHolds;
+        long operationHealthProjectionWorkerTimeoutFallbacks;
         long operationHealthProjectionWorkerBufferBytes;
         double lastProjectionWorkerMilliseconds;
 
@@ -125,11 +134,52 @@ namespace AERISFlightControl.Terrain
             float mapHeadingDeg, bool trackUp, float anchorV,
             AERISTerrainRenderTargetOrientation orientation)
         {
-            if (projectionWorkerPending || projectionWorkerCompleted != null ||
-                visible == null || vessel == null || vessel.mainBody == null ||
+            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
+
+            // A healthy in-flight/completed worker owns this authoritative refresh.
+            // Returning true here means "worker path accepted/holds the refresh", not
+            // necessarily "a new job was submitted". This prevents the caller from
+            // performing the old exact main-thread projection at the same time.
+            if (projectionWorkerCompleted != null)
+            {
+                operationHealthProjectionWorkerWaitHolds++;
+                return true;
+            }
+            if (projectionWorkerPending)
+            {
+                float now = Time.realtimeSinceStartup;
+                float pendingAge = projectionWorkerSubmittedRealtime < 0f ? 0f :
+                    Math.Max(0f, now - projectionWorkerSubmittedRealtime);
+                bool frontCommitGateOpen = !frontBufferValid ||
+                    now - frontCommittedRealtime >=
+                        ProjectionWorkerMinimumCommitIntervalSeconds;
+
+                // Do not duplicate healthy worker work. A timeout may fall back only
+                // after the previous FRONT has satisfied the same 0.10 s authority, so
+                // Worker -> main-thread recovery can never create a >10 Hz FRONT burst.
+                if (pendingAge < ProjectionWorkerTimeoutSeconds ||
+                    !frontCommitGateOpen || runtime == null || runtime.Scheduler == null)
+                {
+                    operationHealthProjectionWorkerWaitHolds++;
+                    return true;
+                }
+
+                long cancelledSerial = projectionWorkerPendingSerial;
+                if (cancelledSerial >= 0L)
+                    projectionWorkerTimeoutCancelledSerials.Add(cancelledSerial);
+                runtime.Scheduler.CancelKey(AERISRuntimeLane.GeneralCompute,
+                    ProjectionWorkerJobKey);
+                projectionWorkerPending = false;
+                projectionWorkerPendingSerial = -1L;
+                projectionWorkerSubmittedRealtime = -1f;
+                projectionWorkerCompleted = null;
+                operationHealthProjectionWorkerTimeoutFallbacks++;
+                return false;
+            }
+
+            if (visible == null || vessel == null || vessel.mainBody == null ||
                 drawEntriesScratch == null || drawEntriesScratch.Length == 0)
                 return false;
-            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
             if (runtime == null || runtime.Scheduler == null) return false;
 
             EnsureProjectionWorkerSnapshotCapacity(drawEntriesScratch.Length);
@@ -178,6 +228,7 @@ namespace AERISFlightControl.Terrain
             };
 
             projectionWorkerPending = true;
+            projectionWorkerPendingSerial = request.Serial;
             bool accepted = runtime.Scheduler.SubmitRequired(
                 AERISRuntimeLane.GeneralCompute, ProjectionWorkerJobKey,
                 runtime.CaptureStamp(), context =>
@@ -191,8 +242,11 @@ namespace AERISFlightControl.Terrain
             if (!accepted)
             {
                 projectionWorkerPending = false;
+                projectionWorkerPendingSerial = -1L;
+                projectionWorkerSubmittedRealtime = -1f;
                 return false;
             }
+            projectionWorkerSubmittedRealtime = Time.realtimeSinceStartup;
             operationHealthProjectionWorkerSubmits++;
             return true;
         }
@@ -255,11 +309,31 @@ namespace AERISFlightControl.Terrain
         void CompleteProjectionWorker(ProjectionWorkerRequest request, object value)
         {
             // Scheduler drains this on the main thread under its own commit lock. Do not
-            // render or touch native Unity state here.
-            projectionWorkerPending = false;
+            // render or touch native Unity state here. Serial ownership prevents an old
+            // timeout-cancelled callback from clearing a newer worker request.
+            long requestSerial = request == null ? -1L : request.Serial;
+            bool timeoutCancelled = requestSerial >= 0L &&
+                projectionWorkerTimeoutCancelledSerials.Remove(requestSerial);
+            if (projectionWorkerPendingSerial == requestSerial)
+            {
+                projectionWorkerPending = false;
+                projectionWorkerPendingSerial = -1L;
+                projectionWorkerSubmittedRealtime = -1f;
+            }
             if (disposed)
             {
                 projectionWorkerCompleted = null;
+                return;
+            }
+            if (timeoutCancelled)
+            {
+                // CancelKey intentionally terminates this request; it is not a worker
+                // failure and must not overwrite a newer completed result.
+                return;
+            }
+            if (requestSerial != projectionWorkerSerial)
+            {
+                operationHealthProjectionWorkerStale++;
                 return;
             }
             ProjectionWorkerResult result = value as ProjectionWorkerResult;
@@ -283,10 +357,16 @@ namespace AERISFlightControl.Terrain
             if (frontBufferValid && Time.realtimeSinceStartup - frontCommittedRealtime <
                 ProjectionWorkerMinimumCommitIntervalSeconds)
             {
-                operationHealthProjectionWorkerCommitDeferrals++;
+                long serial = result.Request == null ? -1L : result.Request.Serial;
+                if (projectionWorkerLastDeferredSerial != serial)
+                {
+                    projectionWorkerLastDeferredSerial = serial;
+                    operationHealthProjectionWorkerCommitDeferrals++;
+                }
                 return false;
             }
 
+            projectionWorkerLastDeferredSerial = -1L;
             projectionWorkerCompleted = null;
             ProjectionWorkerRequest request = result.Request;
             if (!ProjectionWorkerResultStillCurrent(request, vessel) ||
@@ -584,11 +664,19 @@ namespace AERISFlightControl.Terrain
                 "; oh_project_worker_fail=" + operationHealthProjectionWorkerFailures +
                 "; oh_project_worker_vertices=" + operationHealthProjectionWorkerVertices +
                 "; oh_project_worker_defer=" + operationHealthProjectionWorkerCommitDeferrals +
+                "; oh_project_worker_wait_hold=" + operationHealthProjectionWorkerWaitHolds +
+                "; oh_project_worker_timeout=" + operationHealthProjectionWorkerTimeoutFallbacks +
                 "; project_worker_buffer_bytes=" + operationHealthProjectionWorkerBufferBytes +
                 "; project_worker_ms=" + lastProjectionWorkerMilliseconds.ToString("F3",
                     CultureInfo.InvariantCulture) +
                 "; project_worker_pending=" +
-                    (projectionWorkerPending ? "1" : "0");
+                    (projectionWorkerPending ? "1" : "0") +
+                "; project_worker_pending_age_ms=" +
+                    (projectionWorkerPending && projectionWorkerSubmittedRealtime >= 0f ?
+                        Math.Max(0f, (Time.realtimeSinceStartup -
+                            projectionWorkerSubmittedRealtime) * 1000f).ToString("F1",
+                            CultureInfo.InvariantCulture) : "0.0") +
+                "; project_worker_handoff_hf=1";
         }
     }
 }
