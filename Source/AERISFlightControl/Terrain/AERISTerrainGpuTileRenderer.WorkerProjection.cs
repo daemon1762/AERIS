@@ -269,7 +269,8 @@ namespace AERISFlightControl.Terrain
             if (result == null) return false;
             projectionWorkerCompleted = null;
             ProjectionWorkerRequest request = result.Request;
-            if (!ProjectionWorkerResultStillCurrent(request, vessel))
+            if (!ProjectionWorkerResultStillCurrent(request, vessel) ||
+                !ProjectionWorkerBuffersMatchCurrentEntries(request))
             {
                 operationHealthProjectionWorkerStale++;
                 return false;
@@ -284,6 +285,20 @@ namespace AERISFlightControl.Terrain
                 return false;
             }
             lastRunwayMapLockErrorPixels = runwayError;
+
+            // Validate every mesh/buffer pair before changing any native Mesh. This makes
+            // worker presentation atomic with respect to content replacement.
+            for (int i = 0; i < request.EntryCount; i++)
+            {
+                Entry entry = request.Entries[i];
+                ProjectionWorkerBuffers buffers = request.Buffers[i];
+                if (entry == null) continue;
+                if (!ProjectionWorkerBuffersMatch(entry, buffers))
+                {
+                    operationHealthProjectionWorkerStale++;
+                    return false;
+                }
+            }
 
             for (int i = 0; i < request.EntryCount; i++)
             {
@@ -384,16 +399,51 @@ namespace AERISFlightControl.Terrain
                 vessel, request.RangeMeters);
             if (currentPreset != request.ColourPreset ||
                 effectiveNow != request.EffectiveMode) return false;
+            return true;
+        }
+
+        bool ProjectionWorkerBuffersMatchCurrentEntries(ProjectionWorkerRequest request)
+        {
+            if (request == null || request.Entries == null ||
+                request.EntryCount != drawEntriesScratch.Length) return false;
             for (int i = 0; i < request.EntryCount; i++)
                 if (!ReferenceEquals(request.Entries[i], drawEntriesScratch[i]))
                     return false;
             return true;
         }
 
+        static bool ProjectionWorkerBuffersMatch(Entry entry,
+            ProjectionWorkerBuffers buffers)
+        {
+            if (entry == null) return true;
+            if (buffers == null) return false;
+            return ProjectionWorkerMeshMatches(entry.LandMesh,
+                       entry.LandGeographicPoints, buffers.Land) &&
+                ProjectionWorkerMeshMatches(entry.WaterMesh,
+                    entry.WaterGeographicPoints, buffers.Water) &&
+                ProjectionWorkerMeshMatches(entry.CoastalLandCorrectionMesh,
+                    entry.CoastalLandCorrectionGeographicPoints,
+                    buffers.CoastalLand) &&
+                ProjectionWorkerMeshMatches(entry.CoastalWaterCorrectionMesh,
+                    entry.CoastalWaterCorrectionGeographicPoints,
+                    buffers.CoastalWater) &&
+                ProjectionWorkerMeshMatches(entry.ContourMesh,
+                    entry.ContourGeographicPoints, buffers.Contour) &&
+                ProjectionWorkerMeshMatches(entry.CoastlineMesh,
+                    entry.CoastlineGeographicPoints, buffers.Coastline);
+        }
+
+        static bool ProjectionWorkerMeshMatches(Mesh mesh,
+            GeographicUnitPoint[] source, Vector3[] buffer)
+        {
+            if (mesh == null) return source == null || source.Length == 0;
+            return source != null && buffer != null &&
+                mesh.vertexCount == source.Length && source.Length == buffer.Length;
+        }
+
         void ApplyProjectionWorkerMesh(Mesh mesh, Vector3[] vertices)
         {
-            if (mesh == null || vertices == null ||
-                mesh.vertexCount != vertices.Length) return;
+            if (mesh == null) return;
             mesh.vertices = vertices;
             operationHealthBoundsSkips++;
         }
@@ -413,7 +463,8 @@ namespace AERISFlightControl.Terrain
 
         ProjectionWorkerBuffers EnsureProjectionWorkerBuffers(Entry entry)
         {
-            ProjectionWorkerBuffers buffers = projectionWorkerBuffers.GetOrCreateValue(entry);
+            ProjectionWorkerBuffers buffers = projectionWorkerBuffers.GetValue(entry,
+                key => new ProjectionWorkerBuffers());
             buffers.Land = EnsureProjectionWorkerArray(buffers.Land,
                 entry.LandGeographicPoints);
             buffers.Water = EnsureProjectionWorkerArray(buffers.Water,
