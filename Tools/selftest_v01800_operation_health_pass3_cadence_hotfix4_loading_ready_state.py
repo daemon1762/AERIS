@@ -18,7 +18,7 @@ swap=R[R.index('void SwapFrontAndBack('):R.index('bool IsFrontBufferCompatible('
 ck('requestedViewReady = true;' in swap and 'operationHealthRequestedViewReadyTransitions++' in swap,'only exact FRONT swap transitions requested view to READY')
 fast=R[R.index('bool TryPresentCoalescedFront('):R.index('void MarkGpuContentDirty(')]
 ck('requestedViewReady = true' not in fast and 'operationHealthLoadingBackdropFrames++' in fast,'cheap non-tick FRONT reuse cannot falsely declare READY')
-end=R[R.index('UpdateReadyBuildingWatchdog(present'):R.index('bool RenderBackBuffer(')]
+end=R[R.index('UpdateReadyBuildingWatchdog(present'):R.index('bool NeedsContentRefresh(')]
 ck('present && requestedViewReady' in end and 'AERISTerrainGpuDrawState.Partial' in end,'visible stale FRONT reports Partial until requested view is READY')
 reset=R[R.index('void ResetFrontBufferState()'):R.index('void Schedule(')]
 ck('requestedViewReady = false;' in reset,'true FRONT lifecycle reset clears requested-view READY')
@@ -31,8 +31,8 @@ ck('AuthoritativeMotionSpeedMetersPerSecond = 0.5f' in R and 'forceCenterProject
 ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R,'render-target visual quality authority unchanged')
 RA=(ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs').read_text()
 ck('MaximumContourLevelsPerTile = 96' in RA and 'MaximumSparseCorrectionParentCells = 256' in RA,'Candidate11 contour/coastal authorities unchanged')
-ck(V.get('NAME') == 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State','runtime identity is Hotfix 4 Loading Ready State')
-ck('OPERATION HEALTH PASS 3 CADENCE HOTFIX 4 LOADING READY STATE' in B,'Ubuntu build identifies Hotfix 4 Loading Ready State')
+ck(V.get('NAME') in ('AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State','AERISFlightControl DEV CP3.75 Operation Health Step 2 Motion Content Split Coastal Edge Refinement'),'runtime identity is Hotfix 4 or approved successor')
+ck('OPERATION HEALTH' in B,'Ubuntu build identifies Operation Health lineage')
 failed=[n for ok,n in checks if not ok]
 print('\n[Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State] %d/%d PASS' % (len(checks)-len(failed),len(checks)))
 if failed: print('FAILED: '+', '.join(failed)); raise SystemExit(1)

@@ -102,6 +102,7 @@ namespace AERISFlightControl.Terrain
         int failures;
 
         internal int PendingCount { get { lock (gate) return pending.Count; } }
+        internal int CompletedCount { get { lock (gate) return completed.Count; } }
         internal int DroppedCount { get { lock (gate) return dropped; } }
         internal int FailureCount { get { lock (gate) return failures; } }
 
@@ -188,6 +189,13 @@ namespace AERISFlightControl.Terrain
             int count = resolution * resolution;
             if (tile.Elevation.Length < count || tile.Flags.Length < count) return null;
             bool highDensityBoundary = AERISTerrainCoastlineExtractor.HasCurrentHighDensityPayload(tile);
+            // Step 2 derives one topology-preserving presentation field from the existing
+            // 129x129 classification payload. The same field is consumed by both coastline
+            // vectors and sparse land/water correction, so the painter boundary stays exact.
+            float[] coastalBoundaryField = highDensityBoundary ?
+                AERISTerrainCoastlinePolicy.BuildPresentationBoundaryField(
+                    tile.HighDensityCoastalFlags,
+                    tile.HighDensityCoastlineResolution) : new float[0];
             Stopwatch watch = Stopwatch.StartNew();
             var x = new float[count]; var y = new float[count]; var elevationMeters = new float[count]; var water = new byte[count]; var valid = new byte[count]; var shade = new byte[count];
             double finalIntervals = Math.Max(1, AERISTerrainTileFormat.Resolution(tile.Key.Lod) - 1);
@@ -206,11 +214,23 @@ namespace AERISFlightControl.Terrain
             // growing a List<int> and then allocating a second ToArray() copy.
             int[] triangles = BuildTriangleIndices(valid, resolution);
             float[] correctionLandXY = new float[0], correctionLandElevation = new float[0], correctionWaterXY = new float[0]; byte[] correctionLandShade = new byte[0]; int correctionParents = 0;
-            if (highDensityBoundary) BuildSparseCoastalCorrections(tile, request.ShadingEnabled, out correctionLandXY, out correctionLandElevation, out correctionLandShade, out correctionWaterXY, out correctionParents);
+            if (highDensityBoundary) BuildSparseCoastalCorrections(tile,
+                request.ShadingEnabled, coastalBoundaryField, out correctionLandXY,
+                out correctionLandElevation, out correctionLandShade,
+                out correctionWaterXY, out correctionParents);
             float meshMilliseconds = (float)watch.Elapsed.TotalMilliseconds;
             Stopwatch contourWatch = Stopwatch.StartNew();
             float[] contours = request.ContoursEnabled ? BuildContours(tile, Math.Max(25f, request.ContourIntervalMeters)) : new float[0];
-            float[] coastlines = highDensityBoundary ? (float[])tile.HighDensityCoastlineSegments.Clone() : AERISTerrainCoastlineExtractor.Build(tile);
+            float[] coastlines = highDensityBoundary ?
+                AERISTerrainCoastlineExtractor.BuildFromClassMask(
+                    tile.HighDensityCoastalFlags,
+                    tile.HighDensityCoastlineResolution,
+                    coastalBoundaryField) : AERISTerrainCoastlineExtractor.Build(tile);
+            // Persisted Candidate11 segments remain the no-blank fallback if an invalid
+            // presentation field ever reaches this worker.
+            if (highDensityBoundary && (coastlines == null || coastlines.Length == 0) &&
+                tile.HighDensityCoastlineSegments != null)
+                coastlines = (float[])tile.HighDensityCoastlineSegments.Clone();
             contourWatch.Stop(); watch.Stop();
             return new AERISTerrainGpuTileRasterResult
             {
@@ -267,16 +287,28 @@ namespace AERISFlightControl.Terrain
             return triangles;
         }
 
-        struct CorrectionPoint { internal float X; internal float Y; internal byte ClassFlag; internal float Elevation; }
+        struct CorrectionPoint
+        {
+            internal float X;
+            internal float Y;
+            internal byte ClassFlag;
+            internal float Elevation;
+            internal float BoundaryScalar;
+        }
 
-        static void BuildSparseCoastalCorrections(AERISTerrainHeightTile tile, bool shadingEnabled, out float[] landXY, out float[] landElevation, out byte[] landShade, out float[] waterXY, out int parentCellCount)
+        static void BuildSparseCoastalCorrections(AERISTerrainHeightTile tile,
+            bool shadingEnabled, float[] boundaryField, out float[] landXY,
+            out float[] landElevation, out byte[] landShade, out float[] waterXY,
+            out int parentCellCount)
         {
             landXY = new float[0]; landElevation = new float[0]; landShade = new byte[0]; waterXY = new float[0]; parentCellCount = 0;
             if (tile == null || tile.HighDensityCoastalFlags == null || tile.HighDensityCoastlineResolution != AERISTerrainCoastlineExtractor.HighDensityResolution) return;
             int hd = tile.HighDensityCoastlineResolution, baseResolution = tile.Resolution;
             if (baseResolution < 2 || hd < 2 || (hd - 1) % (baseResolution - 1) != 0) return;
             int factor = (hd - 1) / (baseResolution - 1); if (factor <= 0) return;
-            byte[] flags = tile.HighDensityCoastalFlags; if (flags.Length != hd * hd) return;
+            byte[] flags = tile.HighDensityCoastalFlags;
+            if (flags.Length != hd * hd || boundaryField == null ||
+                boundaryField.Length != flags.Length) return;
             int parentWidth = baseResolution - 1; var parents = new bool[parentWidth * parentWidth];
             for (int row = 0; row < hd - 1; row++) for (int column = 0; column < hd - 1; column++)
             {
@@ -303,7 +335,14 @@ namespace AERISFlightControl.Terrain
                 for (int sr = 0; sr < factor; sr++) for (int sc = 0; sc < factor; sc++)
                 {
                     int row = rowStart + sr, column = columnStart + sc;
-                    CorrectionPoint a = CorrectionSample(tile, flags, hd, row, column), b = CorrectionSample(tile, flags, hd, row, column + 1), c = CorrectionSample(tile, flags, hd, row + 1, column), d = CorrectionSample(tile, flags, hd, row + 1, column + 1);
+                    CorrectionPoint a = CorrectionSample(tile, flags, boundaryField,
+                        hd, row, column),
+                        b = CorrectionSample(tile, flags, boundaryField,
+                            hd, row, column + 1),
+                        c = CorrectionSample(tile, flags, boundaryField,
+                            hd, row + 1, column),
+                        d = CorrectionSample(tile, flags, boundaryField,
+                            hd, row + 1, column + 1);
                     if (a.ClassFlag == 0 || b.ClassFlag == 0 || c.ClassFlag == 0 || d.ClassFlag == 0) continue;
                     AppendCorrectionTriangle(tile, land, landHeights, landShades, water,
                         correctionInput, correctionClip, a, c, b, shadingEnabled,
@@ -316,10 +355,23 @@ namespace AERISFlightControl.Terrain
             landXY = land.ToArray(); landElevation = landHeights.ToArray(); landShade = landShades.ToArray(); waterXY = water.ToArray();
         }
 
-        static CorrectionPoint CorrectionSample(AERISTerrainHeightTile tile, byte[] flags, int resolution, int row, int column)
+        static CorrectionPoint CorrectionSample(AERISTerrainHeightTile tile,
+            byte[] flags, float[] boundaryField, int resolution, int row, int column)
         {
-            int index = row * resolution + column; byte classFlag = flags[index]; float x = column / (float)(resolution - 1), y = row / (float)(resolution - 1);
-            return new CorrectionPoint { X = x, Y = y, ClassFlag = classFlag, Elevation = classFlag == 0 ? 0f : SampleClassPreservingHeight(tile, x, y, classFlag) };
+            int index = row * resolution + column;
+            byte classFlag = flags[index];
+            float x = column / (float)(resolution - 1),
+                y = row / (float)(resolution - 1);
+            return new CorrectionPoint
+            {
+                X = x,
+                Y = y,
+                ClassFlag = classFlag,
+                Elevation = classFlag == 0 ? 0f :
+                    SampleClassPreservingHeight(tile, x, y, classFlag),
+                BoundaryScalar = boundaryField == null ||
+                    index >= boundaryField.Length ? 0f : boundaryField[index]
+            };
         }
 
         static void AppendCorrectionTriangle(AERISTerrainHeightTile tile, List<float> land,
@@ -357,10 +409,20 @@ namespace AERISFlightControl.Terrain
             }
         }
 
-        static CorrectionPoint CorrectionCrossing(CorrectionPoint a, CorrectionPoint b, byte targetClass)
+        static CorrectionPoint CorrectionCrossing(CorrectionPoint a,
+            CorrectionPoint b, byte targetClass)
         {
-            float t = AERISTerrainCoastlinePolicy.CrossingFraction(a.ClassFlag == 2, b.ClassFlag == 2, a.Elevation, b.Elevation);
-            return new CorrectionPoint { X = a.X + (b.X - a.X) * t, Y = a.Y + (b.Y - a.Y) * t, ClassFlag = targetClass, Elevation = a.Elevation + (b.Elevation - a.Elevation) * t };
+            float t = AERISTerrainCoastlinePolicy.PresentationCrossingFraction(
+                a.ClassFlag == 2, b.ClassFlag == 2,
+                a.BoundaryScalar, b.BoundaryScalar);
+            return new CorrectionPoint
+            {
+                X = a.X + (b.X - a.X) * t,
+                Y = a.Y + (b.Y - a.Y) * t,
+                ClassFlag = targetClass,
+                Elevation = a.Elevation + (b.Elevation - a.Elevation) * t,
+                BoundaryScalar = 0f
+            };
         }
 
         static void AppendCorrectionVertex(AERISTerrainHeightTile tile, List<float> output, List<float> elevations, List<byte> shades, CorrectionPoint point, bool targetWater, bool shadingEnabled, float baseCellMeters)
@@ -601,7 +663,6 @@ namespace AERISFlightControl.Terrain
             }
             return false;
         }
-
 
         static void AddCrossing(float[] points, ref int pointCount, int x0, int y0, int x1, int y1, float v0, float v1, float level, int resolution)
         {

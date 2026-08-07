@@ -71,6 +71,71 @@ namespace AERISFlightControl.Terrain
             return output.ToArray();
         }
 
+        // Operation Health Step 2: rebuild only the presentation line from the existing
+        // persisted 129x129 class mask. The class topology and payload format are untouched;
+        // this field merely moves crossings within already-crossing edges.
+        internal static float[] BuildFromClassMask(byte[] flags, int resolution,
+            float[] boundaryField)
+        {
+            if (flags == null || boundaryField == null || resolution < 2 ||
+                flags.Length != resolution * resolution ||
+                boundaryField.Length != flags.Length) return new float[0];
+            var output = new List<float>(resolution * resolution * 2);
+            for (int row = 0; row < resolution - 1; row++)
+            {
+                for (int column = 0; column < resolution - 1; column++)
+                {
+                    int a = row * resolution + column;
+                    int b = a + 1;
+                    int c = a + resolution;
+                    int d = c + 1;
+                    if (flags[a] == 0 || flags[b] == 0 || flags[c] == 0 ||
+                        flags[d] == 0) continue;
+                    AddClassTriangle(output, column, row, flags[a] == 2,
+                        boundaryField[a], column, row + 1, flags[c] == 2,
+                        boundaryField[c], column + 1, row, flags[b] == 2,
+                        boundaryField[b], resolution);
+                    AddClassTriangle(output, column + 1, row, flags[b] == 2,
+                        boundaryField[b], column, row + 1, flags[c] == 2,
+                        boundaryField[c], column + 1, row + 1, flags[d] == 2,
+                        boundaryField[d], resolution);
+                }
+            }
+            return output.ToArray();
+        }
+
+        static void AddClassTriangle(List<float> output,
+            int x0, int y0, bool water0, float scalar0,
+            int x1, int y1, bool water1, float scalar1,
+            int x2, int y2, bool water2, float scalar2, int resolution)
+        {
+            var points = new float[6];
+            int pointCount = 0;
+            AddClassCrossing(points, ref pointCount, x0, y0, x1, y1,
+                water0, water1, scalar0, scalar1, resolution);
+            AddClassCrossing(points, ref pointCount, x1, y1, x2, y2,
+                water1, water2, scalar1, scalar2, resolution);
+            AddClassCrossing(points, ref pointCount, x2, y2, x0, y0,
+                water2, water0, scalar2, scalar0, resolution);
+            if (pointCount != 2) return;
+            output.Add(points[0]); output.Add(points[1]);
+            output.Add(points[2]); output.Add(points[3]);
+        }
+
+        static void AddClassCrossing(float[] points, ref int pointCount,
+            int x0, int y0, int x1, int y1, bool water0, bool water1,
+            float scalar0, float scalar1, int resolution)
+        {
+            if (pointCount >= 3 || water0 == water1) return;
+            float t = AERISTerrainCoastlinePolicy.PresentationCrossingFraction(
+                water0, water1, scalar0, scalar1);
+            points[pointCount * 2] =
+                (x0 + (x1 - x0) * t) / (resolution - 1f);
+            points[pointCount * 2 + 1] =
+                (y0 + (y1 - y0) * t) / (resolution - 1f);
+            pointCount++;
+        }
+
         static void AddTriangle(List<float> output,
             int x0, int y0, bool water0, float elevation0,
             int x1, int y1, bool water1, float elevation1,

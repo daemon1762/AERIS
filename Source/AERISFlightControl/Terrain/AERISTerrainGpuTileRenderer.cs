@@ -172,6 +172,10 @@ namespace AERISFlightControl.Terrain
         const double AuthoritativeMotionFallbackDistanceMeters = 0.25;
         const float AuthoritativeMotionHeadingDeg = 0.05f;
         const float ReadyBuildingViolationSeconds = 1.0f;
+        // Operation Health Step 2: while current content is still being assembled,
+        // content maintenance may run at most 5 Hz. Once READY, it becomes generation /
+        // movement driven while exact projection/presentation remains 10 Hz.
+        const float ContentMaintenanceRetrySeconds = 0.20f;
 
         readonly AERISSettings settings;
         readonly AERISTerrainPerformanceController performance;
@@ -240,6 +244,12 @@ namespace AERISFlightControl.Terrain
         long operationHealthForcedProjectionRefreshes;
         long operationHealthLoadingBackdropFrames;
         long operationHealthRequestedViewReadyTransitions;
+        // Step 2 splits expensive content maintenance from the fixed motion clock.
+        long operationHealthContentTicks;
+        long operationHealthMotionOnlyTicks;
+        long operationHealthContentCaptures;
+        long operationHealthContentWorkerDrains;
+        long operationHealthContentRetries;
         long operationHealthObsoleteJobsCancelled;
         long operationHealthViewInvalidations;
         long operationHealthMeshPoolHits;
@@ -253,6 +263,24 @@ namespace AERISFlightControl.Terrain
         Entry[] fallbackEntriesScratch = new Entry[0];
         Entry[] currentEntriesScratch = new Entry[0];
         Entry[] drawEntriesScratch = new Entry[0];
+        // Step 2 content snapshot. These arrays/entries remain immutable between content
+        // maintenance ticks and are only reprojected by the 10 Hz motion path.
+        AERISTerrainVisibleTileSet contentVisible;
+        long contentTerrainGeneration = -1L;
+        string contentStyleKey = string.Empty;
+        double contentCenterLatitudeDeg;
+        double contentCenterLongitudeDeg;
+        float contentRangeMeters;
+        float contentHeadingDeg;
+        bool contentTrackUp;
+        float contentAnchorV;
+        AERISTerrainRenderTargetOrientation contentOrientation;
+        int contentReadyGlobal;
+        int contentReadyFar;
+        float contentFoundationCoverage;
+        bool contentSnapshotValid;
+        bool contentGpuReadyPending;
+        float nextContentMaintenanceRealtime;
         long operationHealthResolveCalls;
         long operationHealthResolveCandidates;
         long operationHealthTileScratchResizes;
@@ -425,6 +453,7 @@ namespace AERISFlightControl.Terrain
             rasterizer.CancelAll();
             requested.Clear();
             scheduledThisFrame.Clear();
+            ResetContentSnapshot();
             // The previous FRONT is intentionally retained as a continuity backdrop, but
             // it no longer satisfies the newly requested range/view. Reset only the new
             // view progress/readiness authority so UI shows BUILDING immediately.
@@ -554,20 +583,6 @@ namespace AERISFlightControl.Terrain
             operationHealthAuthoritativeTicks++;
 
             float historySurfaceRangeMeters = rangeMeters;
-            // Geometry Integrity Hotfix 2: the rejected overscan/GUI-matrix history surface
-            // is non-authoritative. Capture exactly the visible projection so the texture
-            // presented to the ND cannot contain a differently-scaled map authority.
-            AERISTerrainVisibleTileSet visible = system.CaptureVisible(centerLatitudeDeg,
-                centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
-                anchorV, orientation);
-            if (visible == null || visible.Tiles == null || visible.Tiles.Length == 0)
-            {
-                lastCoverageFraction = 0f;
-                lastVisualCoverageFraction = 0f;
-                lastDrawState = AERISTerrainGpuDrawState.Partial;
-                return lastDrawState;
-            }
-
             AERISTerrainDisplayMode effectiveMode = ResolveEffectiveMode(requestedMode,
                 vessel, rangeMeters);
             AERISTerrainColourPreset currentPreset = settings == null ?
@@ -577,40 +592,114 @@ namespace AERISFlightControl.Terrain
             lastVirtualDetailName = virtualDetail.Name;
             float contourInterval = ResolveContourInterval(rangeMeters);
             string styleKey = BuildStyleKey(contourInterval, virtualDetail);
-            DrainCompleted(system);
-            requested.Clear();
-            scheduledThisFrame.Clear();
 
-            AERISTerrainHeightTile[] tiles = PrepareSortedTileScratch(visible.Tiles);
-            EnsureEntryScratch(tiles == null ? 0 : tiles.Length);
-            for (int i = 0; i < tiles.Length; i++)
+            bool workerResultReady = rasterizer.CompletedCount > 0;
+            bool contentGeometryChanged = NeedsContentRefresh(system, vessel,
+                centerLatitudeDeg, centerLongitudeDeg, rangeMeters, mapHeadingDeg,
+                trackUp, anchorV, orientation, styleKey);
+            bool contentRetryDue = (rasterizer.PendingCount > 0 ||
+                !requestedViewReady) &&
+                presentationNow >= nextContentMaintenanceRealtime;
+            bool contentTickRequired = contentGeometryChanged || workerResultReady ||
+                contentRetryDue;
+            if (contentRetryDue && !contentGeometryChanged && !workerResultReady)
+                operationHealthContentRetries++;
+
+            AERISTerrainVisibleTileSet visible = contentVisible;
+            AERISTerrainHeightTile[] tiles = sortedTilesScratch;
+            int readyGlobal = contentReadyGlobal;
+            int readyFar = contentReadyFar;
+
+            if (contentTickRequired)
             {
-                AERISTerrainHeightTile tile = tiles[i];
-                if (tile == null)
+                operationHealthContentTicks++;
+                if (workerResultReady) operationHealthContentWorkerDrains++;
+                DrainCompleted(system);
+                // CaptureVisible owns planner-generation updates and RAM tile selection.
+                // Step 2 simply stops invoking this allocation/resolve path for pure motion.
+                visible = system.CaptureVisible(centerLatitudeDeg,
+                    centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
+                    anchorV, orientation);
+                operationHealthContentCaptures++;
+                if (visible == null || visible.Tiles == null ||
+                    visible.Tiles.Length == 0)
                 {
-                    fallbackEntriesScratch[i] = null;
-                    currentEntriesScratch[i] = null;
-                    drawEntriesScratch[i] = null;
-                    continue;
+                    ResetContentSnapshot();
+                    nextContentMaintenanceRealtime = presentationNow +
+                        ContentMaintenanceRetrySeconds;
+                    lastCoverageFraction = 0f;
+                    lastDrawState = AERISTerrainGpuDrawState.Partial;
+                    TryPresentCoalescedFront(plot, vessel);
+                    return lastDrawState;
                 }
-                // CacheKey is intentionally created once for this tile/repaint and shared by
-                // exact lookup, render-ready upload and worker scheduling.
-                string cacheKey = CacheKey(tile.Key, tile.CreatedUtcTicks, styleKey);
-                requested.Add(cacheKey);
-                Entry fallbackEntry, currentEntry;
-                ResolveRenderableEntries(tile, cacheKey, styleKey, out fallbackEntry,
-                    out currentEntry);
-                if (currentEntry == null)
+
+                requested.Clear();
+                scheduledThisFrame.Clear();
+                tiles = PrepareSortedTileScratch(visible.Tiles);
+                EnsureEntryScratch(tiles == null ? 0 : tiles.Length);
+                for (int i = 0; i < tiles.Length; i++)
                 {
-                    if (!TryUploadRenderReadyField(tile, cacheKey, styleKey, system,
-                        out currentEntry))
-                        Schedule(tile, cacheKey, styleKey, contourInterval, virtualDetail);
+                    AERISTerrainHeightTile tile = tiles[i];
+                    if (tile == null)
+                    {
+                        fallbackEntriesScratch[i] = null;
+                        currentEntriesScratch[i] = null;
+                        drawEntriesScratch[i] = null;
+                        continue;
+                    }
+                    string cacheKey = CacheKey(tile.Key, tile.CreatedUtcTicks, styleKey);
+                    requested.Add(cacheKey);
+                    Entry fallbackEntry, currentEntry;
+                    ResolveRenderableEntries(tile, cacheKey, styleKey,
+                        out fallbackEntry, out currentEntry);
+                    if (currentEntry == null)
+                    {
+                        if (!TryUploadRenderReadyField(tile, cacheKey, styleKey, system,
+                            out currentEntry))
+                            Schedule(tile, cacheKey, styleKey, contourInterval,
+                                virtualDetail);
+                    }
+                    if (fallbackEntry != null) fallbackEntry.LastUse = ++useSequence;
+                    if (currentEntry != null) currentEntry.LastUse = ++useSequence;
+                    fallbackEntriesScratch[i] = fallbackEntry;
+                    currentEntriesScratch[i] = currentEntry;
+                    drawEntriesScratch[i] = currentEntry != null ?
+                        currentEntry : fallbackEntry;
                 }
-                if (fallbackEntry != null) fallbackEntry.LastUse = ++useSequence;
-                if (currentEntry != null) currentEntry.LastUse = ++useSequence;
-                fallbackEntriesScratch[i] = fallbackEntry;
-                currentEntriesScratch[i] = currentEntry;
-                drawEntriesScratch[i] = currentEntry != null ? currentEntry : fallbackEntry;
+
+                contentFoundationCoverage = MeasureFoundationGpuReadiness(visible,
+                    tiles, currentEntriesScratch, out readyGlobal, out readyFar);
+                contentVisible = visible;
+                contentTerrainGeneration = visible.TerrainGeneration;
+                contentStyleKey = styleKey;
+                contentCenterLatitudeDeg = centerLatitudeDeg;
+                contentCenterLongitudeDeg = centerLongitudeDeg;
+                contentRangeMeters = rangeMeters;
+                contentHeadingDeg = mapHeadingDeg;
+                contentTrackUp = trackUp;
+                contentAnchorV = anchorV;
+                contentOrientation = orientation;
+                contentReadyGlobal = readyGlobal;
+                contentReadyFar = readyFar;
+                contentSnapshotValid = true;
+                contentGpuReadyPending = true;
+                nextContentMaintenanceRealtime = presentationNow +
+                    ContentMaintenanceRetrySeconds;
+                lastBackFoundationCoverage = contentFoundationCoverage;
+                lastCoverageFraction = contentFoundationCoverage;
+            }
+            else
+            {
+                operationHealthMotionOnlyTicks++;
+                if (!contentSnapshotValid || visible == null || tiles == null ||
+                    tiles.Length == 0)
+                {
+                    lastDrawState = AERISTerrainGpuDrawState.Partial;
+                    TryPresentCoalescedFront(plot, vessel);
+                    return lastDrawState;
+                }
+                lastBackFoundationCoverage = contentFoundationCoverage;
+                lastCoverageFraction = contentFoundationCoverage;
             }
 
             AERISNdMapProjection projection = AERISNdMapProjection.Create(
@@ -631,14 +720,12 @@ namespace AERISFlightControl.Terrain
                 return lastDrawState;
             }
 
-            int readyGlobal, readyFar;
-            lastBackFoundationCoverage = MeasureFoundationGpuReadiness(visible, tiles,
-                currentEntriesScratch, out readyGlobal, out readyFar);
-            lastCoverageFraction = lastBackFoundationCoverage;
-
             EnsureResources(plot, effectiveMode, currentPreset, virtualDetail);
-            Prune(ResolveVramLimitBytes());
-            PruneRenderReady(ResolveRenderReadyLimitBytes());
+            if (contentTickRequired)
+            {
+                Prune(ResolveVramLimitBytes());
+                PruneRenderReady(ResolveRenderReadyLimitBytes());
+            }
             if (backTarget == null || !backTarget.IsCreated() || frontTarget == null ||
                 !frontTarget.IsCreated())
             {
@@ -685,7 +772,11 @@ namespace AERISFlightControl.Terrain
                         mapHeadingDeg, trackUp, anchorV, orientation);
                     frontColourMode = effectiveMode;
                     frontColourPreset = currentPreset;
-                    MarkVisibleGpuReady(tiles);
+                    if (contentGpuReadyPending)
+                    {
+                        MarkVisibleGpuReady(tiles);
+                        contentGpuReadyPending = false;
+                    }
                     swapped = true;
                 }
                 else
@@ -769,7 +860,11 @@ namespace AERISFlightControl.Terrain
                         mapHeadingDeg, trackUp, anchorV, orientation);
                     frontColourMode = effectiveMode;
                     frontColourPreset = currentPreset;
-                    MarkVisibleGpuReady(tiles);
+                    if (contentGpuReadyPending)
+                    {
+                        MarkVisibleGpuReady(tiles);
+                        contentGpuReadyPending = false;
+                    }
                     swapped = true;
                     PresentFrontDirect(plot, frontOrientation);
                     directFrontFrames++;
@@ -799,6 +894,48 @@ namespace AERISFlightControl.Terrain
             lastDrawState = present && requestedViewReady ?
                 AERISTerrainGpuDrawState.Complete : AERISTerrainGpuDrawState.Partial;
             return lastDrawState;
+        }
+
+        bool NeedsContentRefresh(AERISTerrainTileSystem system, Vessel vessel,
+            double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
+            float mapHeadingDeg, bool trackUp, float anchorV,
+            AERISTerrainRenderTargetOrientation orientation, string styleKey)
+        {
+            if (!contentSnapshotValid || contentVisible == null || system == null ||
+                vessel == null || vessel.mainBody == null) return true;
+            if (contentTerrainGeneration != system.TerrainGeneration ||
+                !string.Equals(contentStyleKey, styleKey, StringComparison.Ordinal) ||
+                contentTrackUp != trackUp || contentOrientation != orientation ||
+                Math.Abs(contentAnchorV - anchorV) > 0.001f ||
+                Math.Abs(contentRangeMeters - rangeMeters) > 0.5f) return true;
+            if (trackUp && Mathf.Abs(Mathf.DeltaAngle(contentHeadingDeg,
+                mapHeadingDeg)) >= 3f) return true;
+            double displacement = GreatCircleDistanceMeters(vessel.mainBody,
+                contentCenterLatitudeDeg, contentCenterLongitudeDeg,
+                centerLatitudeDeg, centerLongitudeDeg);
+            if (double.IsNaN(displacement) || double.IsInfinity(displacement))
+                return true;
+            return displacement >= Math.Max(100.0, Math.Max(1f, rangeMeters) * 0.02);
+        }
+
+        void ResetContentSnapshot()
+        {
+            contentVisible = null;
+            contentTerrainGeneration = -1L;
+            contentStyleKey = string.Empty;
+            contentCenterLatitudeDeg = 0.0;
+            contentCenterLongitudeDeg = 0.0;
+            contentRangeMeters = 0f;
+            contentHeadingDeg = 0f;
+            contentTrackUp = false;
+            contentAnchorV = 0.5f;
+            contentOrientation = AERISTerrainRenderTargetOrientation.Direct;
+            contentReadyGlobal = 0;
+            contentReadyFar = 0;
+            contentFoundationCoverage = 0f;
+            contentSnapshotValid = false;
+            contentGpuReadyPending = false;
+            nextContentMaintenanceRealtime = 0f;
         }
 
         bool RenderBackBuffer(AERISTerrainHeightTile[] tiles, Entry[] drawEntries,
@@ -1375,6 +1512,12 @@ namespace AERISFlightControl.Terrain
                 "; oh_loading_backdrop=" + operationHealthLoadingBackdropFrames +
                 "; oh_ready_transition=" + operationHealthRequestedViewReadyTransitions +
                 "; requested_view_ready=" + (requestedViewReady ? "1" : "0") +
+                "; oh_content_tick=" + operationHealthContentTicks +
+                "; oh_motion_only=" + operationHealthMotionOnlyTicks +
+                "; oh_content_capture=" + operationHealthContentCaptures +
+                "; oh_content_drain=" + operationHealthContentWorkerDrains +
+                "; oh_content_retry=" + operationHealthContentRetries +
+                "; content_snapshot=" + (contentSnapshotValid ? "1" : "0") +
                 "; oh_obsolete_cancel=" + operationHealthObsoleteJobsCancelled +
                 "; oh_view_invalidate=" + operationHealthViewInvalidations +
                 "; cpu_terrain_draw=0.");
@@ -1405,6 +1548,7 @@ namespace AERISFlightControl.Terrain
             nextAuthoritativePresentationTickRealtime = 0f;
             gpuContentDirty = false;
             requestedViewReady = false;
+            ResetContentSnapshot();
             lastFrontBufferPresented = false;
             lastFrontBufferLatched = false;
             presentedProjection.Valid = false;
@@ -3049,6 +3193,7 @@ namespace AERISFlightControl.Terrain
             completed.Clear();
             requested.Clear();
             scheduledThisFrame.Clear();
+            ResetContentSnapshot();
             DestroyRenderTargets();
             DestroyUnityObject(terrainMaterial);
             DestroyUnityObject(contourMaterial);
