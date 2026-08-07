@@ -21,7 +21,7 @@ ck('TryPresentCoalescedFront(plot,vessel)' in ''.join(non_tick.split()),'interve
 ck('operationHealthCoalescedBlankPolls++' in non_tick,'bootstrap blank polling is cadence-limited')
 ck('nextAuthoritativePresentationTickRealtime=presentationNow+0.10f' in F,'authoritative tick advances by 0.10 seconds without catch-up burst')
 ck('CaptureVisible' not in non_tick and 'DrainCompleted' not in non_tick,'non-tick fast path performs no visible capture or tile-worker drain')
-ck(R.count('nextBackRefreshRealtime=nextAuthoritativePresentationTickRealtime') >= 2 if False else F.count('nextBackRefreshRealtime=nextAuthoritativePresentationTickRealtime') >= 2,'BACK render shares authoritative tick deadline')
+ck(F.count('nextBackRefreshRealtime=nextAuthoritativePresentationTickRealtime') >= 2,'BACK render shares authoritative tick deadline')
 ck(F.count('gpuContentRevision++;') == 1 and 'voidMarkGpuContentDirty()' in F,'tile completion revisions are coalesced through one dirty helper')
 swap=R[R.index('void SwapFrontAndBack'):]
 ck('operationHealthDirtySignalsCoalesced++' in R and 'gpuContentDirty=false' in ''.join(swap.split()),'multiple tile completions collapse into one commit batch')
@@ -32,7 +32,6 @@ reset=R[R.index('void ResetFrontBufferState'):]
 ck('nextAuthoritativePresentationTickRealtime=0f' in ''.join(reset.split()),'true FRONT lifecycle reset re-arms immediate bootstrap')
 ck('oh_auth_tick=' in R and 'oh_coalesced_present=' in R and 'oh_dirty_coalesced=' in R and 'oh_obsolete_cancel=' in R,'runtime coalescing telemetry is published')
 ck('ProjectionWorkerMinimumCommitIntervalSeconds = 0.10f' in W and
-   'frontCommittedRealtime <' not in W and
    'Time.realtimeSinceStartup - frontCommittedRealtime <' in W,
    'async Worker FRONT commit retains absolute 0.10 second minimum cadence')
 ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R,'visual RenderTexture authority is unchanged')
