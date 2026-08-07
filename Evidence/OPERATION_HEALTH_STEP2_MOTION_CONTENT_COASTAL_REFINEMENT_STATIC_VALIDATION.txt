@@ -1,0 +1,21 @@
+Operation Health Step 2 Motion Content Split + Coastal Edge Refinement validation
+candidate_static_source_audit=PASS
+coastal_numeric_topology_probe=PASS
+coastal_straight_boundary_crossing=0.458
+coastal_single_cell_island_sign_preserved=YES
+coastal_single_cell_island_crossing_about=0.270
+coast_hd_payload_resolution=129
+coast_hd_format_version=2
+coast_class_topology_changed=NO
+coast_line_fill_shared_crossing_authority=YES
+candidate11_contour_levels=96
+sparse_coastal_parent_cap=256
+render_target=ARGB32_BILINEAR
+authoritative_motion_hz=10
+content_maintenance=PERSISTENT_SNAPSHOT_EVENT_AND_CORRIDOR_DRIVEN
+content_loading_retry_seconds=0.20
+prebuild_runner_suites=11
+prebuild_runner_execution=UNVERIFIED_ACTIONS_TRIGGER_UNAVAILABLE
+local_xbuild=UNVERIFIED
+runtime_ksp=UNVERIFIED
+release_candidate=NO_UNTIL_BUILD_AND_RUNTIME_PASS
