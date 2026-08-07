@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import json,sys
-sys.dont_writebytecode=True
+sys.dont_write_bytecode=True
 ROOT=Path(__file__).resolve().parents[1]
 R=(ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
 F=''.join(R.split())
