@@ -8,40 +8,45 @@ using AERISFlightControl.Settings;
 
 namespace AERISFlightControl.Terrain
 {
-    // Operation Health Step 3. This partial owns only pure projection work and the
-    // main-thread handoff around it. Worker execution never calls Unity/KSP objects:
-    // no Mesh, Material, RenderTexture, Transform, Vessel, CelestialBody, Graphics or GL.
-    // UnityEngine.Vector3 is used only as a value-array payload; native Mesh upload remains
-    // exclusively on the renderer main thread.
+    // Operation Health Step 3. Worker execution receives only immutable projection
+    // snapshots, geographic unit-point arrays and plain float output arrays. All native
+    // Unity/KSP work (Mesh upload, render, FRONT swap and Vessel/body validation) stays on
+    // the main thread.
     internal sealed partial class AERISTerrainGpuTileRenderer
     {
         const string ProjectionWorkerJobKey = "nd-terrain-exact-projection";
         const float ProjectionWorkerMinimumCommitIntervalSeconds = 0.10f;
 
+        sealed class ProjectionPlaneBuffer
+        {
+            internal float[] U;
+            internal float[] V;
+        }
+
         sealed class ProjectionWorkerBuffers
         {
-            internal Vector3[] Land;
-            internal Vector3[] Water;
-            internal Vector3[] CoastalLand;
-            internal Vector3[] CoastalWater;
-            internal Vector3[] Contour;
-            internal Vector3[] Coastline;
+            internal ProjectionPlaneBuffer Land;
+            internal ProjectionPlaneBuffer Water;
+            internal ProjectionPlaneBuffer CoastalLand;
+            internal ProjectionPlaneBuffer CoastalWater;
+            internal ProjectionPlaneBuffer Contour;
+            internal ProjectionPlaneBuffer Coastline;
         }
 
         sealed class ProjectionSourceSet
         {
             internal GeographicUnitPoint[] LandSource;
-            internal Vector3[] LandDestination;
+            internal ProjectionPlaneBuffer LandDestination;
             internal GeographicUnitPoint[] WaterSource;
-            internal Vector3[] WaterDestination;
+            internal ProjectionPlaneBuffer WaterDestination;
             internal GeographicUnitPoint[] CoastalLandSource;
-            internal Vector3[] CoastalLandDestination;
+            internal ProjectionPlaneBuffer CoastalLandDestination;
             internal GeographicUnitPoint[] CoastalWaterSource;
-            internal Vector3[] CoastalWaterDestination;
+            internal ProjectionPlaneBuffer CoastalWaterDestination;
             internal GeographicUnitPoint[] ContourSource;
-            internal Vector3[] ContourDestination;
+            internal ProjectionPlaneBuffer ContourDestination;
             internal GeographicUnitPoint[] CoastlineSource;
-            internal Vector3[] CoastlineDestination;
+            internal ProjectionPlaneBuffer CoastlineDestination;
         }
 
         sealed class ProjectionWorkerRequest
@@ -94,6 +99,7 @@ namespace AERISFlightControl.Terrain
         long operationHealthProjectionWorkerFailures;
         long operationHealthProjectionWorkerVertices;
         long operationHealthProjectionWorkerCommitDeferrals;
+        long operationHealthProjectionWorkerBufferBytes;
         double lastProjectionWorkerMilliseconds;
 
         bool ProjectionWorkerEligible(bool contentTickRequired,
@@ -127,6 +133,7 @@ namespace AERISFlightControl.Terrain
             if (runtime == null || runtime.Scheduler == null) return false;
 
             EnsureProjectionWorkerSnapshotCapacity(drawEntriesScratch.Length);
+            long bufferBytes = 0L;
             for (int i = 0; i < drawEntriesScratch.Length; i++)
             {
                 Entry entry = drawEntriesScratch[i];
@@ -140,7 +147,9 @@ namespace AERISFlightControl.Terrain
                 ProjectionWorkerBuffers buffers = EnsureProjectionWorkerBuffers(entry);
                 projectionWorkerBufferSnapshot[i] = buffers;
                 BindProjectionSourceSet(projectionWorkerSourceSnapshot[i], entry, buffers);
+                bufferBytes += ProjectionWorkerBufferBytes(buffers);
             }
+            operationHealthProjectionWorkerBufferBytes = bufferBytes;
 
             var request = new ProjectionWorkerRequest
             {
@@ -188,6 +197,7 @@ namespace AERISFlightControl.Terrain
             return true;
         }
 
+        // Pure worker section. No UnityEngine or KSP object is read or written here.
         static ProjectionWorkerResult BuildProjectionWorkerResult(
             ProjectionWorkerRequest request, AERISRuntimeJobContext context)
         {
@@ -224,29 +234,28 @@ namespace AERISFlightControl.Terrain
             };
         }
 
-        // Pure worker math only. ProjectUnitToRenderNUp itself is pure double/float math;
-        // Vector3 construction is a value write and does not enter the Unity native API.
         static long ProjectWorkerPoints(GeographicUnitPoint[] points,
-            Vector3[] destination, AERISNdMapProjection projection)
+            ProjectionPlaneBuffer destination, AERISNdMapProjection projection)
         {
-            if (points == null || destination == null ||
-                points.Length != destination.Length) return 0L;
+            if (points == null || destination == null || destination.U == null ||
+                destination.V == null || points.Length != destination.U.Length ||
+                points.Length != destination.V.Length) return 0L;
             for (int i = 0; i < points.Length; i++)
             {
                 GeographicUnitPoint point = points[i];
                 float u, v;
                 projection.ProjectUnitToRenderNUp(point.X, point.Y, point.Z,
                     out u, out v);
-                destination[i] = new Vector3(u, v, 0f);
+                destination.U[i] = u;
+                destination.V[i] = v;
             }
             return points.LongLength;
         }
 
         void CompleteProjectionWorker(ProjectionWorkerRequest request, object value)
         {
-            // Called by the central scheduler's main-thread commit drain. Keep this tiny:
-            // native Mesh upload/rendering happens later inside Draw(), never under the
-            // scheduler commit lock.
+            // Scheduler drains this on the main thread under its own commit lock. Do not
+            // render or touch native Unity state here.
             projectionWorkerPending = false;
             if (disposed)
             {
@@ -269,9 +278,8 @@ namespace AERISFlightControl.Terrain
         {
             ProjectionWorkerResult result = projectionWorkerCompleted;
             if (result == null) return false;
-            // Worker completion latency may vary. Never allow that jitter to turn the
-            // fixed 10 Hz authoritative source into two closely-spaced FRONT commits.
-            // Keep the completed result intact until the absolute 0.10 s FRONT gate opens.
+            // Completion latency is asynchronous, but FRONT authority is not. Keep a
+            // completed result until at least 0.10 s has elapsed since the prior FRONT.
             if (frontBufferValid && Time.realtimeSinceStartup - frontCommittedRealtime <
                 ProjectionWorkerMinimumCommitIntervalSeconds)
             {
@@ -298,8 +306,7 @@ namespace AERISFlightControl.Terrain
             }
             lastRunwayMapLockErrorPixels = runwayError;
 
-            // Validate every mesh/buffer pair before changing any native Mesh. This makes
-            // worker presentation atomic with respect to content replacement.
+            // Validate the whole presentation set before changing a single native Mesh.
             for (int i = 0; i < request.EntryCount; i++)
             {
                 Entry entry = request.Entries[i];
@@ -312,19 +319,24 @@ namespace AERISFlightControl.Terrain
                 }
             }
 
+            // Main thread performs only float -> Vector3 packing and native Mesh upload.
             for (int i = 0; i < request.EntryCount; i++)
             {
                 Entry entry = request.Entries[i];
                 ProjectionWorkerBuffers buffers = request.Buffers[i];
                 if (entry == null || buffers == null) continue;
-                ApplyProjectionWorkerMesh(entry.LandMesh, buffers.Land);
-                ApplyProjectionWorkerMesh(entry.WaterMesh, buffers.Water);
+                ApplyProjectionWorkerMesh(entry.LandMesh,
+                    entry.LandProjectedVertices, buffers.Land);
+                ApplyProjectionWorkerMesh(entry.WaterMesh,
+                    entry.WaterProjectedVertices, buffers.Water);
                 ApplyProjectionWorkerMesh(entry.CoastalLandCorrectionMesh,
-                    buffers.CoastalLand);
+                    entry.CoastalLandCorrectionProjectedVertices, buffers.CoastalLand);
                 ApplyProjectionWorkerMesh(entry.CoastalWaterCorrectionMesh,
-                    buffers.CoastalWater);
-                ApplyProjectionWorkerMesh(entry.ContourMesh, buffers.Contour);
-                ApplyProjectionWorkerMesh(entry.CoastlineMesh, buffers.Coastline);
+                    entry.CoastalWaterCorrectionProjectedVertices, buffers.CoastalWater);
+                ApplyProjectionWorkerMesh(entry.ContourMesh,
+                    entry.ContourProjectedVertices, buffers.Contour);
+                ApplyProjectionWorkerMesh(entry.CoastlineMesh,
+                    entry.CoastlineProjectedVertices, buffers.Coastline);
                 entry.LastProjectionCenterLatitudeDeg = request.CenterLatitudeDeg;
                 entry.LastProjectionCenterLongitudeDeg = request.CenterLongitudeDeg;
                 entry.LastProjectionBodyRadius = request.Projection.RadiusMeters;
@@ -334,8 +346,6 @@ namespace AERISFlightControl.Terrain
                 entry.LastProjectionOrientation = request.Projection.Orientation;
             }
 
-            // Preserve Hotfix 3 telemetry semantics: this frame performed the exact
-            // moving-center projection, but the arithmetic happened on the worker.
             operationHealthForcedProjectionRefreshes++;
             bool rendered = RenderBackBuffer(sortedTilesScratch, drawEntriesScratch,
                 request.Projection, mapRotation, request.EffectiveMode, vessel,
@@ -430,33 +440,47 @@ namespace AERISFlightControl.Terrain
             if (entry == null) return true;
             if (buffers == null) return false;
             return ProjectionWorkerMeshMatches(entry.LandMesh,
-                       entry.LandGeographicPoints, buffers.Land) &&
+                       entry.LandGeographicPoints, entry.LandProjectedVertices,
+                       buffers.Land) &&
                 ProjectionWorkerMeshMatches(entry.WaterMesh,
-                    entry.WaterGeographicPoints, buffers.Water) &&
+                    entry.WaterGeographicPoints, entry.WaterProjectedVertices,
+                    buffers.Water) &&
                 ProjectionWorkerMeshMatches(entry.CoastalLandCorrectionMesh,
                     entry.CoastalLandCorrectionGeographicPoints,
+                    entry.CoastalLandCorrectionProjectedVertices,
                     buffers.CoastalLand) &&
                 ProjectionWorkerMeshMatches(entry.CoastalWaterCorrectionMesh,
                     entry.CoastalWaterCorrectionGeographicPoints,
+                    entry.CoastalWaterCorrectionProjectedVertices,
                     buffers.CoastalWater) &&
                 ProjectionWorkerMeshMatches(entry.ContourMesh,
-                    entry.ContourGeographicPoints, buffers.Contour) &&
+                    entry.ContourGeographicPoints, entry.ContourProjectedVertices,
+                    buffers.Contour) &&
                 ProjectionWorkerMeshMatches(entry.CoastlineMesh,
-                    entry.CoastlineGeographicPoints, buffers.Coastline);
+                    entry.CoastlineGeographicPoints, entry.CoastlineProjectedVertices,
+                    buffers.Coastline);
         }
 
         static bool ProjectionWorkerMeshMatches(Mesh mesh,
-            GeographicUnitPoint[] source, Vector3[] buffer)
+            GeographicUnitPoint[] source, Vector3[] mainThreadVertices,
+            ProjectionPlaneBuffer buffer)
         {
-            if (mesh == null) return source == null || source.Length == 0;
-            return source != null && buffer != null &&
-                mesh.vertexCount == source.Length && source.Length == buffer.Length;
+            if (mesh == null)
+                return source == null || source.Length == 0;
+            return source != null && mainThreadVertices != null && buffer != null &&
+                buffer.U != null && buffer.V != null &&
+                mesh.vertexCount == source.Length &&
+                mainThreadVertices.Length == source.Length &&
+                buffer.U.Length == source.Length && buffer.V.Length == source.Length;
         }
 
-        void ApplyProjectionWorkerMesh(Mesh mesh, Vector3[] vertices)
+        void ApplyProjectionWorkerMesh(Mesh mesh, Vector3[] mainThreadVertices,
+            ProjectionPlaneBuffer buffer)
         {
-            if (mesh == null) return;
-            mesh.vertices = vertices;
+            if (mesh == null || mainThreadVertices == null || buffer == null) return;
+            for (int i = 0; i < mainThreadVertices.Length; i++)
+                mainThreadVertices[i] = new Vector3(buffer.U[i], buffer.V[i], 0f);
+            mesh.vertices = mainThreadVertices;
             operationHealthBoundsSkips++;
         }
 
@@ -477,27 +501,49 @@ namespace AERISFlightControl.Terrain
         {
             ProjectionWorkerBuffers buffers = projectionWorkerBuffers.GetValue(entry,
                 key => new ProjectionWorkerBuffers());
-            buffers.Land = EnsureProjectionWorkerArray(buffers.Land,
+            buffers.Land = EnsureProjectionWorkerPlane(buffers.Land,
                 entry.LandGeographicPoints);
-            buffers.Water = EnsureProjectionWorkerArray(buffers.Water,
+            buffers.Water = EnsureProjectionWorkerPlane(buffers.Water,
                 entry.WaterGeographicPoints);
-            buffers.CoastalLand = EnsureProjectionWorkerArray(buffers.CoastalLand,
+            buffers.CoastalLand = EnsureProjectionWorkerPlane(buffers.CoastalLand,
                 entry.CoastalLandCorrectionGeographicPoints);
-            buffers.CoastalWater = EnsureProjectionWorkerArray(buffers.CoastalWater,
+            buffers.CoastalWater = EnsureProjectionWorkerPlane(buffers.CoastalWater,
                 entry.CoastalWaterCorrectionGeographicPoints);
-            buffers.Contour = EnsureProjectionWorkerArray(buffers.Contour,
+            buffers.Contour = EnsureProjectionWorkerPlane(buffers.Contour,
                 entry.ContourGeographicPoints);
-            buffers.Coastline = EnsureProjectionWorkerArray(buffers.Coastline,
+            buffers.Coastline = EnsureProjectionWorkerPlane(buffers.Coastline,
                 entry.CoastlineGeographicPoints);
             return buffers;
         }
 
-        static Vector3[] EnsureProjectionWorkerArray(Vector3[] existing,
-            GeographicUnitPoint[] source)
+        static ProjectionPlaneBuffer EnsureProjectionWorkerPlane(
+            ProjectionPlaneBuffer existing, GeographicUnitPoint[] source)
         {
             if (source == null || source.Length == 0) return null;
-            return existing != null && existing.Length == source.Length ? existing :
-                new Vector3[source.Length];
+            ProjectionPlaneBuffer output = existing ?? new ProjectionPlaneBuffer();
+            if (output.U == null || output.U.Length != source.Length)
+                output.U = new float[source.Length];
+            if (output.V == null || output.V.Length != source.Length)
+                output.V = new float[source.Length];
+            return output;
+        }
+
+        static long ProjectionWorkerBufferBytes(ProjectionWorkerBuffers buffers)
+        {
+            if (buffers == null) return 0L;
+            return ProjectionPlaneBytes(buffers.Land) +
+                ProjectionPlaneBytes(buffers.Water) +
+                ProjectionPlaneBytes(buffers.CoastalLand) +
+                ProjectionPlaneBytes(buffers.CoastalWater) +
+                ProjectionPlaneBytes(buffers.Contour) +
+                ProjectionPlaneBytes(buffers.Coastline);
+        }
+
+        static long ProjectionPlaneBytes(ProjectionPlaneBuffer buffer)
+        {
+            if (buffer == null) return 0L;
+            return ((buffer.U == null ? 0L : buffer.U.LongLength) +
+                (buffer.V == null ? 0L : buffer.V.LongLength)) * sizeof(float);
         }
 
         static void BindProjectionSourceSet(ProjectionSourceSet set, Entry entry,
@@ -538,6 +584,7 @@ namespace AERISFlightControl.Terrain
                 "; oh_project_worker_fail=" + operationHealthProjectionWorkerFailures +
                 "; oh_project_worker_vertices=" + operationHealthProjectionWorkerVertices +
                 "; oh_project_worker_defer=" + operationHealthProjectionWorkerCommitDeferrals +
+                "; project_worker_buffer_bytes=" + operationHealthProjectionWorkerBufferBytes +
                 "; project_worker_ms=" + lastProjectionWorkerMilliseconds.ToString("F3",
                     CultureInfo.InvariantCulture) +
                 "; project_worker_pending=" +
