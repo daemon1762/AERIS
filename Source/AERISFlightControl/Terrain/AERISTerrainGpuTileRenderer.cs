@@ -238,6 +238,8 @@ namespace AERISFlightControl.Terrain
         long operationHealthDirtyCommits;
         long operationHealthMotionRefreshes;
         long operationHealthForcedProjectionRefreshes;
+        long operationHealthLoadingBackdropFrames;
+        long operationHealthRequestedViewReadyTransitions;
         long operationHealthObsoleteJobsCancelled;
         long operationHealthViewInvalidations;
         long operationHealthMeshPoolHits;
@@ -304,6 +306,10 @@ namespace AERISFlightControl.Terrain
         long gpuContentRevision;
         long frontContentRevision;
         bool gpuContentDirty;
+        // Cadence Hotfix 4: presentation continuity and requested-view readiness are
+        // different states. A stale/latched FRONT may remain visible as a backdrop while
+        // the newly requested range/view is still BUILDING.
+        bool requestedViewReady;
         // Candidate9: a FRONT is authoritative only for the colour mode/preset
         // with which it was rendered. Palette or AUTO REL/TOPO transitions
         // must never present a stale texture under new annunciation state.
@@ -368,6 +374,7 @@ namespace AERISFlightControl.Terrain
         internal float LastCoverageFraction { get { return lastCoverageFraction; } }
         internal float LastVisualCoverageFraction { get { return lastVisualCoverageFraction; } }
         internal AERISTerrainGpuDrawState LastDrawState { get { return lastDrawState; } }
+        internal bool RequestedViewReady { get { return requestedViewReady; } }
         internal float LastRunwayMapLockErrorPixels
         {
             get { return lastRunwayMapLockErrorPixels; }
@@ -418,6 +425,13 @@ namespace AERISFlightControl.Terrain
             rasterizer.CancelAll();
             requested.Clear();
             scheduledThisFrame.Clear();
+            // The previous FRONT is intentionally retained as a continuity backdrop, but
+            // it no longer satisfies the newly requested range/view. Reset only the new
+            // view progress/readiness authority so UI shows BUILDING immediately.
+            requestedViewReady = false;
+            lastBackFoundationCoverage = 0f;
+            lastCoverageFraction = 0f;
+            lastDrawState = AERISTerrainGpuDrawState.Partial;
             // Do not reset nextAuthoritativePresentationTickRealtime here. Range/view
             // changes are consumed by the next regular 10 Hz tick instead of creating
             // an extra immediate presentation frame.
@@ -778,9 +792,12 @@ namespace AERISFlightControl.Terrain
             UpdateReadyBuildingWatchdog(present, readyFoundationNow, visible,
                 readyGlobal, readyFar);
 
+            if (present && !requestedViewReady) operationHealthLoadingBackdropFrames++;
             LogGpuOnlyPresentation(visible, readyGlobal, readyFar, swapped);
-            lastDrawState = present ? AERISTerrainGpuDrawState.Complete :
-                AERISTerrainGpuDrawState.Partial;
+            // A continuity FRONT is allowed to remain visible, but only an exact FRONT
+            // committed for the currently requested view may report Complete.
+            lastDrawState = present && requestedViewReady ?
+                AERISTerrainGpuDrawState.Complete : AERISTerrainGpuDrawState.Partial;
             return lastDrawState;
         }
 
@@ -900,6 +917,8 @@ namespace AERISFlightControl.Terrain
             frontOrientation = orientation;
             frontCommittedRealtime = Time.realtimeSinceStartup;
             frontContentRevision = gpuContentRevision;
+            if (!requestedViewReady) operationHealthRequestedViewReadyTransitions++;
+            requestedViewReady = true;
             if (gpuContentDirty) operationHealthDirtyCommits++;
             gpuContentDirty = false;
             frontBufferSwaps++;
@@ -946,6 +965,7 @@ namespace AERISFlightControl.Terrain
             CapturePresentedProjection(true);
             lastVisualCoverageFraction = 1f;
             operationHealthCoalescedPresentFrames++;
+            if (!requestedViewReady) operationHealthLoadingBackdropFrames++;
             return true;
         }
 
@@ -1352,6 +1372,9 @@ namespace AERISFlightControl.Terrain
                 "; oh_dirty_commit=" + operationHealthDirtyCommits +
                 "; oh_motion_refresh=" + operationHealthMotionRefreshes +
                 "; oh_forced_project=" + operationHealthForcedProjectionRefreshes +
+                "; oh_loading_backdrop=" + operationHealthLoadingBackdropFrames +
+                "; oh_ready_transition=" + operationHealthRequestedViewReadyTransitions +
+                "; requested_view_ready=" + (requestedViewReady ? "1" : "0") +
                 "; oh_obsolete_cancel=" + operationHealthObsoleteJobsCancelled +
                 "; oh_view_invalidate=" + operationHealthViewInvalidations +
                 "; cpu_terrain_draw=0.");
@@ -1381,6 +1404,7 @@ namespace AERISFlightControl.Terrain
             nextBackRefreshRealtime = 0f;
             nextAuthoritativePresentationTickRealtime = 0f;
             gpuContentDirty = false;
+            requestedViewReady = false;
             lastFrontBufferPresented = false;
             lastFrontBufferLatched = false;
             presentedProjection.Valid = false;

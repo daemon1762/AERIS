@@ -23,7 +23,7 @@ ck(R.count('nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime'
 ck('forcedRecoveryBackRenders++' in R, 'blank-recovery exception remains separate and observable')
 ck('oh_cadence_defer=' in R and 'oh_cadence_bootstrap=' in R, 'runtime cadence telemetry is published')
 ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R, 'render-target visual quality authority unchanged')
-ck(V.get('NAME') in ('AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 1', 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing', 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 3 Motion Commit'), 'runtime package identity is Cadence Hotfix 1 or approved successor')
+ck(V.get('NAME') in ('AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 1', 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing', 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 3 Motion Commit', 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State'), 'runtime package identity is Cadence Hotfix 1 or approved successor')
 ck('OPERATION HEALTH PASS 3 CADENCE HOTFIX' in B, 'Ubuntu build entrypoint identifies Cadence Hotfix lineage')
 failed=[n for ok,n in checks if not ok]
 print('\n[Operation Health Pass 3 Cadence Hotfix 1] %d/%d PASS' % (len(checks)-len(failed),len(checks)))

@@ -1,0 +1,13 @@
+Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State static validation
+requested_view_ready_state=SEPARATE_FROM_PRESENTATION
+stale_front_continuity_backdrop=RETAINED
+range_invalidation_immediate_building=YES
+stale_progress_inheritance=NO
+non_tick_front_reuse_can_declare_ready=NO
+exact_front_swap_declares_ready=YES
+authoritative_pipeline_hz=10
+hotfix3_motion_commit=RETAINED
+visual_authority_changed=NO
+prebuild=PASS
+runtime_ksp=UNVERIFIED
+release_candidate=NO_UNTIL_RUNTIME_PASS

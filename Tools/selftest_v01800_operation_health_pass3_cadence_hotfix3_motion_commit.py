@@ -30,8 +30,8 @@ ck('oh_motion_refresh=' in R and 'oh_forced_project=' in R,'motion-commit teleme
 ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R,'render-target quality authority unchanged')
 RA=(ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs').read_text()
 ck('MaximumContourLevelsPerTile = 96' in RA and 'MaximumSparseCorrectionParentCells = 256' in RA,'Candidate11 contour/coastal safety authorities unchanged')
-ck(V.get('NAME') == 'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 3 Motion Commit','runtime identity is Hotfix 3 Motion Commit')
-ck('OPERATION HEALTH PASS 3 CADENCE HOTFIX 3 MOTION COMMIT' in B,'Ubuntu build identifies Hotfix 3 Motion Commit')
+ck(V.get('NAME') in ('AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 3 Motion Commit','AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State'),'runtime identity is Hotfix 3 or approved successor')
+ck('OPERATION HEALTH PASS 3 CADENCE HOTFIX' in B,'Ubuntu build identifies Cadence Hotfix lineage')
 failed=[n for ok,n in checks if not ok]
 print('\n[Operation Health Pass 3 Cadence Hotfix 3 Motion Commit] %d/%d PASS' % (len(checks)-len(failed),len(checks)))
 if failed: print('FAILED: '+', '.join(failed)); raise SystemExit(1)
