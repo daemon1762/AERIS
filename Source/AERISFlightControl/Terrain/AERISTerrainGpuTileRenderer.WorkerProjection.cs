@@ -16,6 +16,7 @@ namespace AERISFlightControl.Terrain
     internal sealed partial class AERISTerrainGpuTileRenderer
     {
         const string ProjectionWorkerJobKey = "nd-terrain-exact-projection";
+        const float ProjectionWorkerMinimumCommitIntervalSeconds = 0.10f;
 
         sealed class ProjectionWorkerBuffers
         {
@@ -92,6 +93,7 @@ namespace AERISFlightControl.Terrain
         long operationHealthProjectionWorkerStale;
         long operationHealthProjectionWorkerFailures;
         long operationHealthProjectionWorkerVertices;
+        long operationHealthProjectionWorkerCommitDeferrals;
         double lastProjectionWorkerMilliseconds;
 
         bool ProjectionWorkerEligible(bool contentTickRequired,
@@ -267,6 +269,16 @@ namespace AERISFlightControl.Terrain
         {
             ProjectionWorkerResult result = projectionWorkerCompleted;
             if (result == null) return false;
+            // Worker completion latency may vary. Never allow that jitter to turn the
+            // fixed 10 Hz authoritative source into two closely-spaced FRONT commits.
+            // Keep the completed result intact until the absolute 0.10 s FRONT gate opens.
+            if (frontBufferValid && Time.realtimeSinceStartup - frontCommittedRealtime <
+                ProjectionWorkerMinimumCommitIntervalSeconds)
+            {
+                operationHealthProjectionWorkerCommitDeferrals++;
+                return false;
+            }
+
             projectionWorkerCompleted = null;
             ProjectionWorkerRequest request = result.Request;
             if (!ProjectionWorkerResultStillCurrent(request, vessel) ||
@@ -525,6 +537,7 @@ namespace AERISFlightControl.Terrain
                 "; oh_project_worker_stale=" + operationHealthProjectionWorkerStale +
                 "; oh_project_worker_fail=" + operationHealthProjectionWorkerFailures +
                 "; oh_project_worker_vertices=" + operationHealthProjectionWorkerVertices +
+                "; oh_project_worker_defer=" + operationHealthProjectionWorkerCommitDeferrals +
                 "; project_worker_ms=" + lastProjectionWorkerMilliseconds.ToString("F3",
                     CultureInfo.InvariantCulture) +
                 "; project_worker_pending=" +
