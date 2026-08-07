@@ -30,7 +30,11 @@ ck('PrepareSortedTileScratch(visible.Tiles)' in renderer,
    'reusable sorted tile scratch is used')
 ck('Entry[] currentEntriesScratch' in renderer and 'Entry[] drawEntriesScratch' in renderer,
    'resolved entries are cached for the repaint')
-ck('MeasureFoundationGpuReadiness(visible, tiles,\n                currentEntriesScratch' in renderer,
+# Step 2 moved the readiness result into the persistent content snapshot, but the
+# Pass 1 invariant is unchanged: readiness must consume the already prepared
+# currentEntriesScratch rather than resolving entries again.
+ck('MeasureFoundationGpuReadiness(visible,' in renderer and
+   'tiles, currentEntriesScratch, out readyGlobal, out readyFar)' in renderer,
    'foundation readiness consumes prepared current entries')
 ck('RenderBackBuffer(tiles, drawEntriesScratch, projection' in renderer,
    'back rendering consumes prepared draw entries')
