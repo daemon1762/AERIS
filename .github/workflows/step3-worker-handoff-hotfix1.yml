@@ -1,0 +1,32 @@
+name: Step 3 Worker Handoff Hotfix 1
+on:
+  pull_request:
+    branches:
+      - cp3.75/nd-recovery
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: write
+jobs:
+  apply-validate:
+    if: github.head_ref == 'automation/step3-worker-handoff-hotfix1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Apply handoff hotfix
+        run: PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_step3_worker_handoff_hotfix1.py
+      - name: Run Operation Health prebuild
+        run: PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+      - name: Validate diff
+        run: git diff --check
+      - name: Commit validated hotfix and remove one-shot automation
+        run: |
+          rm -f Tools/apply_step3_worker_handoff_hotfix1.py
+          rm -f .github/workflows/step3-worker-handoff-hotfix1.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Fix Step 3 worker handoff fallback contention'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
