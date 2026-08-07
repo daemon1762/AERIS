@@ -1,0 +1,270 @@
+name: Operation Health Step 2 Motion Content Split Coastal Edge Refinement
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [cp3.75/nd-recovery]
+permissions:
+  contents: write
+  pull-requests: read
+jobs:
+  step2:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cp3.75/nd-recovery
+          fetch-depth: 0
+      - name: Apply Motion Content split and topology-safe coastal edge refinement
+        shell: bash
+        run: |
+          set +e
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('.')
+          def replace_once(path, old, new, label):
+              p=root/path
+              s=p.read_text()
+              if new in s:
+                  return
+              if old not in s:
+                  raise SystemExit('anchor missing: '+label)
+              p.write_text(s.replace(old,new,1))
+
+          # ------------------------------------------------------------------
+          # Tile-system lightweight planning update. Motion ticks may update the
+          # view-generation authority without allocating/enumerating a full visible set.
+          # ------------------------------------------------------------------
+          replace_once(Path('Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs'),
+          '''        internal AERISTerrainVisibleTileSet CaptureVisible(double centerLatitudeDeg,\n            double centerLongitudeDeg, double rangeMeters, double headingDeg,\n            bool trackUp, float anchorGuiV,\n            AERISTerrainRenderTargetOrientation orientation)\n        {''',
+          '''        // Operation Health Step 2: motion presentation still informs the terrain\n        // planner at the fixed 10 Hz authority, but does not enumerate visible keys or\n        // allocate a Tiles array unless the planner/content generation actually changes.\n        internal void UpdateDisplayViewPlanning(double centerLatitudeDeg,\n            double centerLongitudeDeg, double rangeMeters, double headingDeg,\n            bool trackUp, float anchorGuiV,\n            AERISTerrainRenderTargetOrientation orientation)\n        {\n            if (!flightViewportActive) return;\n            UpdateDisplayView(centerLatitudeDeg, centerLongitudeDeg, rangeMeters,\n                headingDeg, trackUp, anchorGuiV, orientation);\n        }\n\n        internal AERISTerrainVisibleTileSet CaptureVisible(double centerLatitudeDeg,\n            double centerLongitudeDeg, double rangeMeters, double headingDeg,\n            bool trackUp, float anchorGuiV,\n            AERISTerrainRenderTargetOrientation orientation)\n        {''', 'tile lightweight planning method')
+
+          # ------------------------------------------------------------------
+          # Raster worker result observability.
+          # ------------------------------------------------------------------
+          replace_once(Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs'),
+          '''        internal int PendingCount { get { lock (gate) return pending.Count; } }\n        internal int DroppedCount''',
+          '''        internal int PendingCount { get { lock (gate) return pending.Count; } }\n        internal int CompletedCount { get { lock (gate) return completed.Count; } }\n        internal int DroppedCount''', 'completed worker count')
+
+          # ------------------------------------------------------------------
+          # Topology-safe coastal presentation field.  The original HD land/water
+          # classification sign is immutable.  A weighted local confidence only moves
+          # the crossing position along already-crossing edges, so islands/connectivity
+          # cannot disappear.  Golden Candidate9 inset remains the fallback/bias.
+          # ------------------------------------------------------------------
+          policy=Path('Source/AERISFlightControl/Terrain/AERISTerrainCoastlinePolicy.cs')
+          replace_once(policy,
+          '''        internal const float WaterElevationThresholdMeters = 1.0f;\n        internal const float LandInsetFraction = 0.38f;''',
+          '''        internal const float WaterElevationThresholdMeters = 1.0f;\n        internal const float LandInsetFraction = 0.38f;\n        // Step 2 coastal edge refinement.  This is presentation-only and derives from\n        // the persisted 129x129 class mask; it never requests denser PQS terrain.\n        internal const float PresentationSmoothingBlend = 0.65f;\n        internal const float PresentationMinimumBoundaryMagnitude = 0.20f;''',
+          'coastal smoothing constants')
+          replace_once(policy,
+          '''        internal static float Interpolate(float value0, float value1,\n            bool water0, bool water1)\n        {''',
+          '''        internal static float[] BuildPresentationBoundaryField(byte[] flags,\n            int resolution)\n        {\n            if (flags == null || resolution < 2 || flags.Length != resolution * resolution)\n                return new float[0];\n            var field = new float[flags.Length];\n            for (int row = 0; row < resolution; row++)\n            {\n                for (int column = 0; column < resolution; column++)\n                {\n                    int index = row * resolution + column;\n                    byte own = flags[index];\n                    if (own == 0) { field[index] = 0f; continue; }\n                    float rawSign = own == 2 ? -1f : 1f;\n                    float weighted = 0f;\n                    float weight = 0f;\n                    for (int dy = -1; dy <= 1; dy++)\n                    {\n                        int py = row + dy;\n                        if (py < 0 || py >= resolution) continue;\n                        for (int dx = -1; dx <= 1; dx++)\n                        {\n                            int px = column + dx;\n                            if (px < 0 || px >= resolution) continue;\n                            byte neighbour = flags[py * resolution + px];\n                            if (neighbour == 0) continue;\n                            float sign = neighbour == 2 ? -1f : 1f;\n                            int kernel = dx == 0 && dy == 0 ? 4 :\n                                (dx == 0 || dy == 0 ? 2 : 1);\n                            weighted += sign * kernel;\n                            weight += kernel;\n                        }\n                    }\n                    float filtered = weight <= 0f ? rawSign : weighted / weight;\n                    // Preserve the source class sign unconditionally.  Smoothing changes\n                    // edge position only; it cannot change land/water topology.\n                    float aligned = rawSign * filtered;\n                    float magnitude = (float)System.Math.Max(\n                        PresentationMinimumBoundaryMagnitude,\n                        System.Math.Min(1.0, aligned));\n                    field[index] = rawSign * magnitude;\n                }\n            }\n            return field;\n        }\n\n        internal static float PresentationCrossingFraction(bool water0, bool water1,\n            float scalar0, float scalar1)\n        {\n            float golden = CrossingFraction(water0, water1);\n            if (water0 == water1 || float.IsNaN(scalar0) || float.IsNaN(scalar1) ||\n                float.IsInfinity(scalar0) || float.IsInfinity(scalar1) ||\n                scalar0 * scalar1 >= 0f) return golden;\n            float denominator = scalar0 - scalar1;\n            if (System.Math.Abs(denominator) <= 0.000001f) return golden;\n            float zero = scalar0 / denominator;\n            if (float.IsNaN(zero) || float.IsInfinity(zero)) return golden;\n            zero = (float)System.Math.Max(0.18, System.Math.Min(0.82, zero));\n            float blended = golden + (zero - golden) * PresentationSmoothingBlend;\n            return (float)System.Math.Max(0.24, System.Math.Min(0.76, blended));\n        }\n\n        internal static float Interpolate(float value0, float value1,\n            bool water0, bool water1)\n        {''', 'presentation boundary helpers')
+
+          # ------------------------------------------------------------------
+          # Coastline extractor overload that consumes the exact same class field as
+          # sparse fill.  Persisted HD segments remain a safety fallback only.
+          # ------------------------------------------------------------------
+          extractor=Path('Source/AERISFlightControl/Terrain/AERISTerrainCoastlineExtractor.cs')
+          replace_once(extractor,
+          '''        static void AddTriangle(List<float> output,\n            int x0, int y0, bool water0, float elevation0,''',
+          '''        internal static float[] BuildFromClassMask(byte[] flags, int resolution,\n            float[] boundaryField)\n        {\n            if (flags == null || boundaryField == null || resolution < 2 ||\n                flags.Length != resolution * resolution ||\n                boundaryField.Length != flags.Length) return new float[0];\n            var output = new List<float>(resolution * resolution * 2);\n            for (int row = 0; row < resolution - 1; row++)\n            {\n                for (int column = 0; column < resolution - 1; column++)\n                {\n                    int a = row * resolution + column;\n                    int b = a + 1;\n                    int c = a + resolution;\n                    int d = c + 1;\n                    if (flags[a] == 0 || flags[b] == 0 || flags[c] == 0 ||\n                        flags[d] == 0) continue;\n                    AddClassTriangle(output, column, row, flags[a] == 2,\n                        boundaryField[a], column, row + 1, flags[c] == 2,\n                        boundaryField[c], column + 1, row, flags[b] == 2,\n                        boundaryField[b], resolution);\n                    AddClassTriangle(output, column + 1, row, flags[b] == 2,\n                        boundaryField[b], column, row + 1, flags[c] == 2,\n                        boundaryField[c], column + 1, row + 1, flags[d] == 2,\n                        boundaryField[d], resolution);\n                }\n            }\n            return output.ToArray();\n        }\n\n        static void AddClassTriangle(List<float> output,\n            int x0, int y0, bool water0, float scalar0,\n            int x1, int y1, bool water1, float scalar1,\n            int x2, int y2, bool water2, float scalar2, int resolution)\n        {\n            var points = new float[6];\n            int pointCount = 0;\n            AddClassCrossing(points, ref pointCount, x0, y0, x1, y1,\n                water0, water1, scalar0, scalar1, resolution);\n            AddClassCrossing(points, ref pointCount, x1, y1, x2, y2,\n                water1, water2, scalar1, scalar2, resolution);\n            AddClassCrossing(points, ref pointCount, x2, y2, x0, y0,\n                water2, water0, scalar2, scalar0, resolution);\n            if (pointCount != 2) return;\n            output.Add(points[0]); output.Add(points[1]);\n            output.Add(points[2]); output.Add(points[3]);\n        }\n\n        static void AddClassCrossing(float[] points, ref int pointCount,\n            int x0, int y0, int x1, int y1, bool water0, bool water1,\n            float scalar0, float scalar1, int resolution)\n        {\n            if (pointCount >= 3 || water0 == water1) return;\n            float t = AERISTerrainCoastlinePolicy.PresentationCrossingFraction(\n                water0, water1, scalar0, scalar1);\n            points[pointCount * 2] = (x0 + (x1 - x0) * t) / (resolution - 1f);\n            points[pointCount * 2 + 1] = (y0 + (y1 - y0) * t) /\n                (resolution - 1f);\n            pointCount++;\n        }\n\n        static void AddTriangle(List<float> output,\n            int x0, int y0, bool water0, float elevation0,''',
+          'class-mask coastline extractor')
+
+          # ------------------------------------------------------------------
+          # Rasterizer: one boundary field per HD coastal tile, reused by coastline and
+          # sparse land/water correction. No denser terrain payload and no runtime PQS.
+          # ------------------------------------------------------------------
+          raster=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs')
+          replace_once(raster,
+          '''            bool highDensityBoundary = AERISTerrainCoastlineExtractor.HasCurrentHighDensityPayload(tile);\n            Stopwatch watch = Stopwatch.StartNew();''',
+          '''            bool highDensityBoundary = AERISTerrainCoastlineExtractor.HasCurrentHighDensityPayload(tile);\n            float[] coastalBoundaryField = highDensityBoundary ?\n                AERISTerrainCoastlinePolicy.BuildPresentationBoundaryField(\n                    tile.HighDensityCoastalFlags, tile.HighDensityCoastlineResolution) :\n                new float[0];\n            Stopwatch watch = Stopwatch.StartNew();''', 'build coastal boundary field')
+          replace_once(raster,
+          '''            if (highDensityBoundary) BuildSparseCoastalCorrections(tile, request.ShadingEnabled, out correctionLandXY, out correctionLandElevation, out correctionLandShade, out correctionWaterXY, out correctionParents);''',
+          '''            if (highDensityBoundary) BuildSparseCoastalCorrections(tile,\n                request.ShadingEnabled, coastalBoundaryField, out correctionLandXY,\n                out correctionLandElevation, out correctionLandShade,\n                out correctionWaterXY, out correctionParents);''', 'correction shared field call')
+          replace_once(raster,
+          '''            float[] coastlines = highDensityBoundary ? (float[])tile.HighDensityCoastlineSegments.Clone() : AERISTerrainCoastlineExtractor.Build(tile);''',
+          '''            float[] coastlines = highDensityBoundary ?\n                AERISTerrainCoastlineExtractor.BuildFromClassMask(\n                    tile.HighDensityCoastalFlags, tile.HighDensityCoastlineResolution,\n                    coastalBoundaryField) : AERISTerrainCoastlineExtractor.Build(tile);\n            if (highDensityBoundary && (coastlines == null || coastlines.Length == 0) &&\n                tile.HighDensityCoastlineSegments != null)\n                coastlines = (float[])tile.HighDensityCoastlineSegments.Clone();''',
+          'runtime refined coastline')
+          replace_once(raster,
+          '''        struct CorrectionPoint { internal float X; internal float Y; internal byte ClassFlag; internal float Elevation; }''',
+          '''        struct CorrectionPoint\n        {\n            internal float X;\n            internal float Y;\n            internal byte ClassFlag;\n            internal float Elevation;\n            internal float BoundaryScalar;\n        }''', 'correction boundary scalar')
+          replace_once(raster,
+          '''        static void BuildSparseCoastalCorrections(AERISTerrainHeightTile tile, bool shadingEnabled, out float[] landXY, out float[] landElevation, out byte[] landShade, out float[] waterXY, out int parentCellCount)''',
+          '''        static void BuildSparseCoastalCorrections(AERISTerrainHeightTile tile,\n            bool shadingEnabled, float[] boundaryField, out float[] landXY,\n            out float[] landElevation, out byte[] landShade, out float[] waterXY,\n            out int parentCellCount)''', 'correction signature')
+          replace_once(raster,
+          '''            byte[] flags = tile.HighDensityCoastalFlags; if (flags.Length != hd * hd) return;''',
+          '''            byte[] flags = tile.HighDensityCoastalFlags;\n            if (flags.Length != hd * hd || boundaryField == null ||\n                boundaryField.Length != flags.Length) return;''', 'correction boundary validation')
+          replace_once(raster,
+          '''                    CorrectionPoint a = CorrectionSample(tile, flags, hd, row, column), b = CorrectionSample(tile, flags, hd, row, column + 1), c = CorrectionSample(tile, flags, hd, row + 1, column), d = CorrectionSample(tile, flags, hd, row + 1, column + 1);''',
+          '''                    CorrectionPoint a = CorrectionSample(tile, flags,\n                        boundaryField, hd, row, column),\n                        b = CorrectionSample(tile, flags, boundaryField, hd, row, column + 1),\n                        c = CorrectionSample(tile, flags, boundaryField, hd, row + 1, column),\n                        d = CorrectionSample(tile, flags, boundaryField, hd, row + 1, column + 1);''',
+          'correction samples use field')
+          replace_once(raster,
+          '''        static CorrectionPoint CorrectionSample(AERISTerrainHeightTile tile, byte[] flags, int resolution, int row, int column)\n        {\n            int index = row * resolution + column; byte classFlag = flags[index]; float x = column / (float)(resolution - 1), y = row / (float)(resolution - 1);\n            return new CorrectionPoint { X = x, Y = y, ClassFlag = classFlag, Elevation = classFlag == 0 ? 0f : SampleClassPreservingHeight(tile, x, y, classFlag) };\n        }''',
+          '''        static CorrectionPoint CorrectionSample(AERISTerrainHeightTile tile,\n            byte[] flags, float[] boundaryField, int resolution, int row, int column)\n        {\n            int index = row * resolution + column;\n            byte classFlag = flags[index];\n            float x = column / (float)(resolution - 1);\n            float y = row / (float)(resolution - 1);\n            return new CorrectionPoint\n            {\n                X = x, Y = y, ClassFlag = classFlag,\n                Elevation = classFlag == 0 ? 0f :\n                    SampleClassPreservingHeight(tile, x, y, classFlag),\n                BoundaryScalar = boundaryField == null || index >= boundaryField.Length ?\n                    0f : boundaryField[index]\n            };\n        }''', 'correction sample body')
+          replace_once(raster,
+          '''        static CorrectionPoint CorrectionCrossing(CorrectionPoint a, CorrectionPoint b, byte targetClass)\n        {\n            float t = AERISTerrainCoastlinePolicy.CrossingFraction(a.ClassFlag == 2, b.ClassFlag == 2, a.Elevation, b.Elevation);\n            return new CorrectionPoint { X = a.X + (b.X - a.X) * t, Y = a.Y + (b.Y - a.Y) * t, ClassFlag = targetClass, Elevation = a.Elevation + (b.Elevation - a.Elevation) * t };\n        }''',
+          '''        static CorrectionPoint CorrectionCrossing(CorrectionPoint a,\n            CorrectionPoint b, byte targetClass)\n        {\n            float t = AERISTerrainCoastlinePolicy.PresentationCrossingFraction(\n                a.ClassFlag == 2, b.ClassFlag == 2,\n                a.BoundaryScalar, b.BoundaryScalar);\n            return new CorrectionPoint\n            {\n                X = a.X + (b.X - a.X) * t,\n                Y = a.Y + (b.Y - a.Y) * t,\n                ClassFlag = targetClass,\n                Elevation = a.Elevation + (b.Elevation - a.Elevation) * t,\n                BoundaryScalar = 0f\n            };\n        }''', 'shared refined correction crossing')
+
+          # ------------------------------------------------------------------
+          # Renderer content snapshot and telemetry.
+          # ------------------------------------------------------------------
+          renderer=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs')
+          replace_once(renderer,
+          '''        long operationHealthLoadingBackdropFrames;\n        long operationHealthRequestedViewReadyTransitions;\n        long operationHealthObsoleteJobsCancelled;''',
+          '''        long operationHealthLoadingBackdropFrames;\n        long operationHealthRequestedViewReadyTransitions;\n        // Operation Health Step 2: content work is event/generation driven while\n        // exact motion projection/presentation remains fixed at 10 Hz.\n        long operationHealthContentTicks;\n        long operationHealthMotionOnlyTicks;\n        long operationHealthContentCaptures;\n        long operationHealthContentWorkerDrains;\n        long operationHealthContentRetries;\n        long operationHealthObsoleteJobsCancelled;''', 'step2 telemetry fields')
+          replace_once(renderer,
+          '''        Entry[] currentEntriesScratch = new Entry[0];\n        Entry[] drawEntriesScratch = new Entry[0];\n        long operationHealthResolveCalls;''',
+          '''        Entry[] currentEntriesScratch = new Entry[0];\n        Entry[] drawEntriesScratch = new Entry[0];\n        AERISTerrainVisibleTileSet contentVisible;\n        long contentViewGeneration = -1L;\n        long contentTerrainGeneration = -1L;\n        string contentStyleKey = string.Empty;\n        int contentReadyGlobal;\n        int contentReadyFar;\n        float contentFoundationCoverage;\n        bool contentSnapshotValid;\n        bool contentGpuReadyPending;\n        float nextContentRetryRealtime;\n        long operationHealthResolveCalls;''', 'content snapshot fields')
+          replace_once(renderer,
+          '''            scheduledThisFrame.Clear();\n            // The previous FRONT is intentionally retained as a continuity backdrop, but''',
+          '''            scheduledThisFrame.Clear();\n            contentVisible = null;\n            contentViewGeneration = -1L;\n            contentTerrainGeneration = -1L;\n            contentStyleKey = string.Empty;\n            contentReadyGlobal = 0;\n            contentReadyFar = 0;\n            contentFoundationCoverage = 0f;\n            contentSnapshotValid = false;\n            contentGpuReadyPending = false;\n            nextContentRetryRealtime = 0f;\n            // The previous FRONT is intentionally retained as a continuity backdrop, but''',
+          'view invalidates content snapshot')
+
+          old_block='''            float historySurfaceRangeMeters = rangeMeters;\n            // Geometry Integrity Hotfix 2: the rejected overscan/GUI-matrix history surface\n            // is non-authoritative. Capture exactly the visible projection so the texture\n            // presented to the ND cannot contain a differently-scaled map authority.\n            AERISTerrainVisibleTileSet visible = system.CaptureVisible(centerLatitudeDeg,\n                centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,\n                anchorV, orientation);\n            if (visible == null || visible.Tiles == null || visible.Tiles.Length == 0)\n            {\n                lastCoverageFraction = 0f;\n                lastVisualCoverageFraction = 0f;\n                lastDrawState = AERISTerrainGpuDrawState.Partial;\n                return lastDrawState;\n            }\n\n            AERISTerrainDisplayMode effectiveMode = ResolveEffectiveMode(requestedMode,\n                vessel, rangeMeters);\n            AERISTerrainColourPreset currentPreset = settings == null ?\n                AERISTerrainColourPreset.Standard : settings.TerrainColourPreset;\n            AERISTerrainVirtualDetailProfile virtualDetail =\n                ResolveVirtualDetailProfile(rangeMeters);\n            lastVirtualDetailName = virtualDetail.Name;\n            float contourInterval = ResolveContourInterval(rangeMeters);\n            string styleKey = BuildStyleKey(contourInterval, virtualDetail);\n            DrainCompleted(system);\n            requested.Clear();\n            scheduledThisFrame.Clear();\n\n            AERISTerrainHeightTile[] tiles = PrepareSortedTileScratch(visible.Tiles);\n            EnsureEntryScratch(tiles == null ? 0 : tiles.Length);\n            for (int i = 0; i < tiles.Length; i++)\n            {\n                AERISTerrainHeightTile tile = tiles[i];\n                if (tile == null)\n                {\n                    fallbackEntriesScratch[i] = null;\n                    currentEntriesScratch[i] = null;\n                    drawEntriesScratch[i] = null;\n                    continue;\n                }\n                // CacheKey is intentionally created once for this tile/repaint and shared by\n                // exact lookup, render-ready upload and worker scheduling.\n                string cacheKey = CacheKey(tile.Key, tile.CreatedUtcTicks, styleKey);\n                requested.Add(cacheKey);\n                Entry fallbackEntry, currentEntry;\n                ResolveRenderableEntries(tile, cacheKey, styleKey, out fallbackEntry,\n                    out currentEntry);\n                if (currentEntry == null)\n                {\n                    if (!TryUploadRenderReadyField(tile, cacheKey, styleKey, system,\n                        out currentEntry))\n                        Schedule(tile, cacheKey, styleKey, contourInterval, virtualDetail);\n                }\n                if (fallbackEntry != null) fallbackEntry.LastUse = ++useSequence;\n                if (currentEntry != null) currentEntry.LastUse = ++useSequence;\n                fallbackEntriesScratch[i] = fallbackEntry;\n                currentEntriesScratch[i] = currentEntry;\n                drawEntriesScratch[i] = currentEntry != null ? currentEntry : fallbackEntry;\n            }\n\n            AERISNdMapProjection projection = AERISNdMapProjection.Create('''
+          new_block='''            float historySurfaceRangeMeters = rangeMeters;\n            AERISTerrainDisplayMode effectiveMode = ResolveEffectiveMode(requestedMode,\n                vessel, rangeMeters);\n            AERISTerrainColourPreset currentPreset = settings == null ?\n                AERISTerrainColourPreset.Standard : settings.TerrainColourPreset;\n            AERISTerrainVirtualDetailProfile virtualDetail =\n                ResolveVirtualDetailProfile(rangeMeters);\n            lastVirtualDetailName = virtualDetail.Name;\n            float contourInterval = ResolveContourInterval(rangeMeters);\n            string styleKey = BuildStyleKey(contourInterval, virtualDetail);\n\n            // Step 2: always advance the cheap planner authority at 10 Hz. A full\n            // visible-set capture/resolve/upload pass is required only when view/content\n            // generation changes, a worker result is ready, or an unresolved view needs\n            // a bounded retry after all workers became idle.\n            system.UpdateDisplayViewPlanning(centerLatitudeDeg, centerLongitudeDeg,\n                rangeMeters, mapHeadingDeg, trackUp, anchorV, orientation);\n            bool contentGenerationChanged = !contentSnapshotValid ||\n                contentViewGeneration != system.ViewGeneration ||\n                contentTerrainGeneration != system.TerrainGeneration ||\n                !string.Equals(contentStyleKey, styleKey, StringComparison.Ordinal);\n            bool workerResultReady = rasterizer.CompletedCount > 0;\n            bool contentRetryDue = !requestedViewReady && rasterizer.PendingCount == 0 &&\n                presentationNow >= nextContentRetryRealtime;\n            if (contentRetryDue && !contentGenerationChanged && !workerResultReady)\n                operationHealthContentRetries++;\n            bool contentTickRequired = contentGenerationChanged || workerResultReady ||\n                contentRetryDue;\n\n            AERISTerrainVisibleTileSet visible = contentVisible;\n            AERISTerrainHeightTile[] tiles = sortedTilesScratch;\n            int readyGlobal = contentReadyGlobal;\n            int readyFar = contentReadyFar;\n            if (contentTickRequired)\n            {\n                operationHealthContentTicks++;\n                if (workerResultReady) operationHealthContentWorkerDrains++;\n                DrainCompleted(system);\n                visible = system.CaptureVisible(centerLatitudeDeg, centerLongitudeDeg,\n                    rangeMeters, mapHeadingDeg, trackUp, anchorV, orientation);\n                operationHealthContentCaptures++;\n                if (visible == null || visible.Tiles == null || visible.Tiles.Length == 0)\n                {\n                    contentVisible = null;\n                    contentSnapshotValid = false;\n                    contentReadyGlobal = 0;\n                    contentReadyFar = 0;\n                    contentFoundationCoverage = 0f;\n                    nextContentRetryRealtime = presentationNow + 0.50f;\n                    lastCoverageFraction = 0f;\n                    lastDrawState = AERISTerrainGpuDrawState.Partial;\n                    TryPresentCoalescedFront(plot, vessel);\n                    return lastDrawState;\n                }\n\n                requested.Clear();\n                scheduledThisFrame.Clear();\n                tiles = PrepareSortedTileScratch(visible.Tiles);\n                EnsureEntryScratch(tiles == null ? 0 : tiles.Length);\n                for (int i = 0; i < tiles.Length; i++)\n                {\n                    AERISTerrainHeightTile tile = tiles[i];\n                    if (tile == null)\n                    {\n                        fallbackEntriesScratch[i] = null;\n                        currentEntriesScratch[i] = null;\n                        drawEntriesScratch[i] = null;\n                        continue;\n                    }\n                    string cacheKey = CacheKey(tile.Key, tile.CreatedUtcTicks, styleKey);\n                    requested.Add(cacheKey);\n                    Entry fallbackEntry, currentEntry;\n                    ResolveRenderableEntries(tile, cacheKey, styleKey, out fallbackEntry,\n                        out currentEntry);\n                    if (currentEntry == null)\n                    {\n                        if (!TryUploadRenderReadyField(tile, cacheKey, styleKey, system,\n                            out currentEntry))\n                            Schedule(tile, cacheKey, styleKey, contourInterval, virtualDetail);\n                    }\n                    if (fallbackEntry != null) fallbackEntry.LastUse = ++useSequence;\n                    if (currentEntry != null) currentEntry.LastUse = ++useSequence;\n                    fallbackEntriesScratch[i] = fallbackEntry;\n                    currentEntriesScratch[i] = currentEntry;\n                    drawEntriesScratch[i] = currentEntry != null ? currentEntry : fallbackEntry;\n                }\n                contentFoundationCoverage = MeasureFoundationGpuReadiness(visible, tiles,\n                    currentEntriesScratch, out readyGlobal, out readyFar);\n                contentVisible = visible;\n                contentViewGeneration = visible.ViewGeneration;\n                contentTerrainGeneration = visible.TerrainGeneration;\n                contentStyleKey = styleKey;\n                contentReadyGlobal = readyGlobal;\n                contentReadyFar = readyFar;\n                contentSnapshotValid = true;\n                contentGpuReadyPending = true;\n                nextContentRetryRealtime = presentationNow + 0.50f;\n                lastBackFoundationCoverage = contentFoundationCoverage;\n                lastCoverageFraction = contentFoundationCoverage;\n            }\n            else\n            {\n                operationHealthMotionOnlyTicks++;\n                if (!contentSnapshotValid || visible == null || tiles == null ||\n                    tiles.Length == 0)\n                {\n                    lastDrawState = AERISTerrainGpuDrawState.Partial;\n                    TryPresentCoalescedFront(plot, vessel);\n                    return lastDrawState;\n                }\n                lastBackFoundationCoverage = contentFoundationCoverage;\n                lastCoverageFraction = contentFoundationCoverage;\n            }\n\n            AERISNdMapProjection projection = AERISNdMapProjection.Create('''
+          replace_once(renderer, old_block, new_block, 'motion/content draw split')
+          replace_once(renderer,
+          '''            int readyGlobal, readyFar;\n            lastBackFoundationCoverage = MeasureFoundationGpuReadiness(visible, tiles,\n                currentEntriesScratch, out readyGlobal, out readyFar);\n            lastCoverageFraction = lastBackFoundationCoverage;\n\n            EnsureResources(plot, effectiveMode, currentPreset, virtualDetail);\n            Prune(ResolveVramLimitBytes());\n            PruneRenderReady(ResolveRenderReadyLimitBytes());''',
+          '''            EnsureResources(plot, effectiveMode, currentPreset, virtualDetail);\n            if (contentTickRequired)\n            {\n                Prune(ResolveVramLimitBytes());\n                PruneRenderReady(ResolveRenderReadyLimitBytes());\n            }''', 'content-only readiness/prune')
+          replace_once(renderer,
+          '''                    MarkVisibleGpuReady(tiles);\n                    swapped = true;''',
+          '''                    if (contentGpuReadyPending)\n                    {\n                        MarkVisibleGpuReady(tiles);\n                        contentGpuReadyPending = false;\n                    }\n                    swapped = true;''', 'normal gpu-ready content commit')
+          # Second occurrence is forced recovery.
+          s=(root/renderer).read_text()
+          old='''                    MarkVisibleGpuReady(tiles);\n                    swapped = true;'''
+          new='''                    if (contentGpuReadyPending)\n                    {\n                        MarkVisibleGpuReady(tiles);\n                        contentGpuReadyPending = false;\n                    }\n                    swapped = true;'''
+          if old in s:
+              (root/renderer).write_text(s.replace(old,new,1))
+
+          replace_once(renderer,
+          '''                "; requested_view_ready=" + (requestedViewReady ? "1" : "0") +\n                "; oh_obsolete_cancel=" + operationHealthObsoleteJobsCancelled +''',
+          '''                "; requested_view_ready=" + (requestedViewReady ? "1" : "0") +\n                "; oh_content_tick=" + operationHealthContentTicks +\n                "; oh_motion_only=" + operationHealthMotionOnlyTicks +\n                "; oh_content_capture=" + operationHealthContentCaptures +\n                "; oh_content_drain=" + operationHealthContentWorkerDrains +\n                "; oh_content_retry=" + operationHealthContentRetries +\n                "; content_snapshot=" + (contentSnapshotValid ? "1" : "0") +\n                "; oh_obsolete_cancel=" + operationHealthObsoleteJobsCancelled +''',
+          'step2 telemetry log')
+          replace_once(renderer,
+          '''            gpuContentDirty = false;\n            requestedViewReady = false;\n            lastFrontBufferPresented = false;''',
+          '''            gpuContentDirty = false;\n            requestedViewReady = false;\n            contentVisible = null;\n            contentViewGeneration = -1L;\n            contentTerrainGeneration = -1L;\n            contentStyleKey = string.Empty;\n            contentReadyGlobal = 0;\n            contentReadyFar = 0;\n            contentFoundationCoverage = 0f;\n            contentSnapshotValid = false;\n            contentGpuReadyPending = false;\n            nextContentRetryRealtime = 0f;\n            lastFrontBufferPresented = false;''',
+          'content lifecycle reset')
+
+          # ------------------------------------------------------------------
+          # New static acceptance suite.
+          # ------------------------------------------------------------------
+          test=root/'Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py'
+          test.write_text(r'''#!/usr/bin/env python3
+from pathlib import Path
+import json,sys
+sys.dont_write_bytecode=True
+ROOT=Path(__file__).resolve().parents[1]
+T=ROOT/'Source/AERISFlightControl/Terrain'
+R=(T/'AERISTerrainGpuTileRenderer.cs').read_text()
+S=(T/'AERISTerrainTileSystem.cs').read_text()
+RA=(T/'AERISTerrainGpuTileRasterizer.cs').read_text()
+C=(T/'AERISTerrainCoastlineExtractor.cs').read_text()
+P=(T/'AERISTerrainCoastlinePolicy.cs').read_text()
+B=(ROOT/'build_ubuntu.sh').read_text()
+V=json.loads((ROOT/'GameData/AERISFlightControl/AERISFlightControl.version').read_text())
+checks=[]
+def ck(v,n): checks.append((bool(v),n)); print(('[PASS] ' if v else '[FAIL] ')+n)
+ck('UpdateDisplayViewPlanning' in S,'tile system exposes lightweight display-view planning')
+ck('system.UpdateDisplayViewPlanning(' in R,'10 Hz renderer advances planner without full capture')
+ck('internal int CompletedCount' in RA,'worker completion queue is observable without draining')
+ck('AERISTerrainVisibleTileSet contentVisible;' in R and 'bool contentSnapshotValid;' in R,'persistent content snapshot exists')
+ck('contentViewGeneration != system.ViewGeneration' in R and 'contentTerrainGeneration != system.TerrainGeneration' in R,'content work follows view/terrain generations')
+ck('bool workerResultReady = rasterizer.CompletedCount > 0;' in R,'completed worker result triggers content work')
+ck('bool contentRetryDue = !requestedViewReady && rasterizer.PendingCount == 0' in R,'unresolved idle content has bounded retry')
+draw=R[R.index('system.UpdateDisplayViewPlanning('):R.index('AERISNdMapProjection projection = AERISNdMapProjection.Create(')]
+ck('if (contentTickRequired)' in draw and 'system.CaptureVisible(' in draw,'full visible capture is inside content branch')
+ck('DrainCompleted(system);' in draw and 'ResolveRenderableEntries' in draw,'worker drain and entry resolve are content work')
+ck('operationHealthMotionOnlyTicks++;' in draw,'unchanged content uses motion-only path')
+ck('contentFoundationCoverage = MeasureFoundationGpuReadiness' in draw,'foundation readiness is cached on content tick')
+post=R[R.index('EnsureResources(plot'):R.index('bool forceCenterProjectionRefresh;')]
+ck('if (contentTickRequired)' in post and 'Prune(' in post and 'PruneRenderReady(' in post,'prune work is content-only')
+ck('if (contentGpuReadyPending)' in R and R.count('MarkVisibleGpuReady(tiles);') == 2,'GPU READY scan occurs only for changed content commits')
+ck('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in R,'exact presentation remains fixed 10 Hz')
+ck('present && requestedViewReady' in R and 'TERRAIN GPU BUILDING' in (ROOT/'Source/AERISFlightControl/UI/AERISNavigationDisplay.cs').read_text(),'Hotfix 4 loading/READY contract remains intact')
+ck('HighDensityResolution = 129' in C and 'HighDensityFormatVersion = 2' in C,'persisted HD payload remains 129/version2; no preload rebuild')
+ck('BuildPresentationBoundaryField' in P and 'rawSign * magnitude' in P,'coastal refinement preserves source class sign')
+ck('PresentationCrossingFraction' in P and 'PresentationSmoothingBlend = 0.65f' in P,'topology-safe sub-cell crossing refinement exists')
+ck('BuildFromClassMask' in C and 'PresentationCrossingFraction' in C,'runtime coastline consumes refined class field')
+ck('coastalBoundaryField' in RA and 'BuildSparseCoastalCorrections(tile' in RA,'sparse fill consumes the same refined field')
+ck('BuildFromClassMask(' in RA and 'HighDensityCoastlineSegments.Clone()' in RA,'persisted coastline remains safety fallback')
+ck('MaximumSparseCorrectionParentCells = 256' in RA,'sparse coastal safety rail remains 256')
+ck('MaximumContourLevelsPerTile = 96' in RA,'Candidate11 contour authority remains 96 levels')
+ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R,'render-target quality authority unchanged')
+ck('oh_content_tick=' in R and 'oh_motion_only=' in R and 'content_snapshot=' in R,'runtime content-split telemetry is published')
+name='AERISFlightControl DEV CP3.75 Operation Health Step 2 Motion Content Split Coastal Edge Refinement'
+ck(V.get('NAME') == name,'runtime identity is Operation Health Step 2')
+ck('OPERATION HEALTH STEP 2 MOTION CONTENT SPLIT COASTAL EDGE REFINEMENT' in B,'Ubuntu build identifies Step 2')
+failed=[n for ok,n in checks if not ok]
+print('\n[Operation Health Step 2 Motion Content Split + Coastal Edge Refinement] %d/%d PASS' % (len(checks)-len(failed),len(checks)))
+if failed: print('FAILED: '+', '.join(failed)); raise SystemExit(1)
+''')
+
+          # Add Step 2 suite first.
+          runner=root/'Tools/run_v01800_operation_health_pass3_prebuild.py'
+          q=runner.read_text()
+          old="suites=[\n ('Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State','selftest_v01800_operation_health_pass3_cadence_hotfix4_loading_ready_state.py'),"
+          new="suites=[\n ('Operation Health Step 2 Motion Content Split + Coastal Edge Refinement','selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py'),\n ('Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State','selftest_v01800_operation_health_pass3_cadence_hotfix4_loading_ready_state.py'),"
+          if new not in q:
+              if old not in q: raise SystemExit('runner anchor missing')
+              runner.write_text(q.replace(old,new,1))
+
+          new_name='AERISFlightControl DEV CP3.75 Operation Health Step 2 Motion Content Split Coastal Edge Refinement'
+          old_name='AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State'
+          version=root/'GameData/AERISFlightControl/AERISFlightControl.version'
+          v=json.loads(version.read_text()); v['NAME']=new_name; version.write_text(json.dumps(v,indent=2)+'\n')
+          gen=root/'Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs'
+          gen.write_text(gen.read_text().replace('OPERATION HEALTH PASS 3 CADENCE HOTFIX 4 LOADING READY STATE','OPERATION HEALTH STEP 2 MOTION CONTENT SPLIT COASTAL EDGE REFINEMENT'))
+          build=root/'build_ubuntu.sh'
+          build.write_text(build.read_text().replace('OPERATION HEALTH PASS 3 CADENCE HOTFIX 4 LOADING READY STATE','OPERATION HEALTH STEP 2 MOTION CONTENT SPLIT COASTAL EDGE REFINEMENT'))
+
+          # Approved-successor compatibility for inherited Hotfix suites.
+          for name in [
+              'selftest_v01800_operation_health_pass3_cadence_hotfix1.py',
+              'selftest_v01800_operation_health_pass3_cadence_hotfix2_refresh_coalescing.py',
+              'selftest_v01800_operation_health_pass3_cadence_hotfix3_motion_commit.py']:
+              p=root/'Tools'/name
+              q=p.read_text()
+              if new_name not in q:
+                  q=q.replace("'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State')", "'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State', '"+new_name+"')")
+                  q=q.replace("'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State'),", "'AERISFlightControl DEV CP3.75 Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State', '"+new_name+"'),")
+              p.write_text(q)
+          h4=root/'Tools/selftest_v01800_operation_health_pass3_cadence_hotfix4_loading_ready_state.py'
+          q=h4.read_text()
+          q=q.replace("ck(V.get('NAME') == '"+old_name+"','runtime identity is Hotfix 4 Loading Ready State')", "ck(V.get('NAME') in ('"+old_name+"','"+new_name+"'),'runtime identity is Hotfix 4 or approved successor')")
+          q=q.replace("ck('OPERATION HEALTH PASS 3 CADENCE HOTFIX 4 LOADING READY STATE' in B,'Ubuntu build identifies Hotfix 4 Loading Ready State')", "ck('OPERATION HEALTH' in B,'Ubuntu build identifies Operation Health lineage')")
+          h4.write_text(q)
+
+          doc=root/'Docs/OPERATION_HEALTH_STEP2_MOTION_CONTENT_SPLIT_COASTAL_EDGE_REFINEMENT_ja.md'
+          doc.write_text('''# Operation Health Step 2 / Motion-Content Split + Coastal Edge Refinement\n\n- authoritative motion/projection/presentation: fixed 10 Hz\n- content maintenance: ViewGeneration / TerrainGeneration / worker completion / bounded retry only\n- motion-only tick: cached visible tiles + prepared entriesを再利用\n- CaptureVisible / Drain / resolve / schedule / readiness / prune を通常motion tickから除外\n- GPU READY full-visible scanもcontent変更後のcommit時のみ\n- coastline: persisted 129x129 class topologyを維持したままsub-cell crossingを局所平滑化\n- coastline line / sparse land-water fillは同一boundary fieldを共有\n- 129 payload / format v2 / Candidate11 contour 96 / ARGB32 Bilinearは変更なし\n''')
+          PY
+          PATCH_RC=$?
+          if [ "$PATCH_RC" -ne 0 ]; then echo "STEP2_SAFE_STOP_PATCH_FAILED rc=$PATCH_RC"; exit 1; fi
+          python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+          TEST_RC=$?
+          if [ "$TEST_RC" -ne 0 ]; then echo "STEP2_SAFE_STOP_PREBUILD_FAILED rc=$TEST_RC"; exit 1; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          rm -f .github/workflows/operation-health-step2-motion-content-coastal-refinement.yml
+          cat > Evidence/OPERATION_HEALTH_STEP2_MOTION_CONTENT_COASTAL_REFINEMENT_STATIC_VALIDATION.txt <<'EOF'
+Operation Health Step 2 Motion Content Split + Coastal Edge Refinement static validation
+authoritative_motion_hz=10
+full_content_capture=GENERATION_OR_COMPLETION_DRIVEN
+motion_only_reuses_content_snapshot=YES
+worker_completion_triggers_content=YES
+idle_unresolved_retry=BOUNDED_0.50S
+visible_gpu_ready_scan=CONTENT_COMMIT_ONLY
+coast_hd_payload_resolution=129
+coast_hd_format_version=2
+coast_topology_changed=NO
+coast_crossing_subcell_refinement=YES
+coast_line_fill_shared_authority=YES
+candidate11_contour_authority_changed=NO
+render_target_quality_changed=NO
+prebuild=PASS
+runtime_ksp=UNVERIFIED
+release_candidate=NO_UNTIL_RUNTIME_PASS
+EOF
+          git add -A
+          git commit -m 'Split ND motion and content ticks and refine coastal edges'
+          git push origin HEAD:cp3.75/nd-recovery
