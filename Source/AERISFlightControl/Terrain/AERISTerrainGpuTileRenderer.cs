@@ -299,6 +299,7 @@ namespace AERISFlightControl.Terrain
         long operationHealthCullTests;
         long operationHealthCulledEntries;
         long operationHealthVisibleEntries;
+        long operationHealthWideRangeCullBypassFrames;
         long useSequence;
         long usedEntryBytes;
         long backTargetBytes;
@@ -989,6 +990,12 @@ namespace AERISFlightControl.Terrain
                     projection.CenterX, projection.CenterY, projection.CenterZ);
                 double projectionCenterLongitudeDeg = UnitLongitude(
                     projection.CenterX, projection.CenterY);
+                // Runtime A/B on 160 km showed ~1000 spherical cull tests/sec while only
+                // rejecting ~7-10% of entries. The great-circle test itself became more
+                // expensive than the work it saved. Keep culling for narrower views where
+                // rejection measured ~60%+, but bypass it entirely for the 160 km preset.
+                bool entryCullingEnabled = rangeMeters < 120000f;
+                if (!entryCullingEnabled) operationHealthWideRangeCullBypassFrames++;
                 for (int i = 0; i < tiles.Length; i++)
                 {
                     AERISTerrainHeightTile tile = tiles[i];
@@ -996,9 +1003,10 @@ namespace AERISFlightControl.Terrain
                     Entry drawEntry = drawEntries != null && i < drawEntries.Length ?
                         drawEntries[i] : null;
                     if (drawEntry == null) continue;
-                    if (ShouldCullEntryOutsidePresentation(drawEntry, vessel.mainBody,
-                        projectionCenterLatitudeDeg, projectionCenterLongitudeDeg,
-                        rangeMeters, anchorV)) continue;
+                    if (entryCullingEnabled &&
+                        ShouldCullEntryOutsidePresentation(drawEntry, vessel.mainBody,
+                            projectionCenterLatitudeDeg, projectionCenterLongitudeDeg,
+                            rangeMeters, anchorV)) continue;
                     operationHealthPreparedEntryUses++;
                     EnsureProjectedGeometry(drawEntry, projection,
                         projectionThresholdMeters, projectionCenterLatitudeDeg,
@@ -1627,6 +1635,7 @@ namespace AERISFlightControl.Terrain
                 "; oh_cull_test=" + operationHealthCullTests +
                 "; oh_culled_entry=" + operationHealthCulledEntries +
                 "; oh_visible_entry=" + operationHealthVisibleEntries +
+                "; oh_cull_wide_bypass=" + operationHealthWideRangeCullBypassFrames +
                 "; oh_mesh_pool=" + meshPool.Count +
                 "; oh_mesh_pool_hit=" + operationHealthMeshPoolHits +
                 "; oh_mesh_pool_miss=" + operationHealthMeshPoolMisses +
