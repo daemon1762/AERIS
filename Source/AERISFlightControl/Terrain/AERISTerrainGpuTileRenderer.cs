@@ -220,6 +220,8 @@ namespace AERISFlightControl.Terrain
         readonly Dictionary<int, Color32[]> uniformColourScratch = new Dictionary<int, Color32[]>();
         static readonly Bounds NdPresentationBounds = new Bounds(
             new Vector3(0.5f, 0.5f, 0f), new Vector3(32f, 32f, 4f));
+        static readonly Rect FrontUvDirect = new Rect(0f, 0f, 1f, 1f);
+        static readonly Rect FrontUvFlipped = new Rect(0f, 1f, 1f, -1f);
         long operationHealthIdentityIndexHits;
         long operationHealthIdentityIndexMisses;
         long operationHealthUniformColourReuses;
@@ -314,6 +316,10 @@ namespace AERISFlightControl.Terrain
         long frontTerrainGeneration = -1L;
         string frontBodyName = string.Empty;
         long frontBodyRadiusMillimetres;
+        // AERIS23 FRONT presentation fast path: exact body object identity is captured
+        // only on authoritative FRONT swap. Non-authoritative IMGUI Repaints can then
+        // validate the committed surface without repeated string/radius work.
+        CelestialBody frontBodyReference;
         double frontCenterLatitudeDeg;
         double frontCenterLongitudeDeg;
         float frontRangeMeters;
@@ -1042,6 +1048,7 @@ namespace AERISFlightControl.Terrain
             frontViewGeneration = visible.ViewGeneration;
             frontTerrainGeneration = visible.TerrainGeneration;
             frontBodyName = visible.BodyName ?? string.Empty;
+            frontBodyReference = vessel == null ? null : vessel.mainBody;
             frontBodyRadiusMillimetres = vessel == null || vessel.mainBody == null ? 0L :
                 (long)Math.Round(Math.Max(0.0, vessel.mainBody.Radius) * 1000.0);
             frontCenterLatitudeDeg = centerLatitudeDeg;
@@ -1090,16 +1097,18 @@ namespace AERISFlightControl.Terrain
         bool TryPresentCoalescedFront(Rect plot, Vessel vessel)
         {
             if (!frontBufferValid || frontTarget == null || !frontTarget.IsCreated() ||
-                vessel == null || vessel.mainBody == null) return false;
-            if (!string.Equals(frontBodyName, vessel.mainBody.name,
-                    StringComparison.OrdinalIgnoreCase)) return false;
-            long bodyRadiusMillimetres = (long)Math.Round(
-                Math.Max(0.0, vessel.mainBody.Radius) * 1000.0);
-            if (bodyRadiusMillimetres != frontBodyRadiusMillimetres) return false;
+                vessel == null || vessel.mainBody == null ||
+                !ReferenceEquals(frontBodyReference, vessel.mainBody)) return false;
+            // Non-authoritative Repaint must still place the retained texture once because
+            // Unity IMGUI rebuilds the framebuffer every rendered frame. Everything else
+            // reuses state established by the 10 Hz authoritative FRONT commit.
             PresentFrontDirect(plot, frontOrientation);
             lastFrontBufferPresented = true;
             lastFrontBufferLatched = true;
-            CapturePresentedProjection(true);
+            presentedProjection.Valid = true;
+            presentedProjection.Latched = true;
+            presentedProjection.AgeSeconds = Math.Max(0f,
+                Time.realtimeSinceStartup - frontCommittedRealtime);
             lastVisualCoverageFraction = 1f;
             operationHealthCoalescedPresentFrames++;
             if (!requestedViewReady) operationHealthLoadingBackdropFrames++;
@@ -1260,10 +1269,8 @@ namespace AERISFlightControl.Terrain
         void PresentFrontDirect(Rect plot,
             AERISTerrainRenderTargetOrientation orientation)
         {
-            bool flipVertically = orientation ==
-                AERISTerrainRenderTargetOrientation.Flipped;
-            Rect uv = flipVertically ? new Rect(0f, 1f, 1f, -1f) :
-                new Rect(0f, 0f, 1f, 1f);
+            Rect uv = orientation == AERISTerrainRenderTargetOrientation.Flipped ?
+                FrontUvFlipped : FrontUvDirect;
             GUI.DrawTextureWithTexCoords(plot, frontTarget, uv, true);
         }
 
@@ -1530,6 +1537,7 @@ namespace AERISFlightControl.Terrain
             frontTerrainGeneration = -1L;
             frontBodyName = string.Empty;
             frontBodyRadiusMillimetres = 0L;
+            frontBodyReference = null;
             frontCenterLatitudeDeg = 0.0;
             frontCenterLongitudeDeg = 0.0;
             frontRangeMeters = 0f;
