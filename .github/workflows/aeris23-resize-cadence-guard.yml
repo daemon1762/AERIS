@@ -1,0 +1,103 @@
+name: AERIS23 Resize Cadence Guard Patch
+
+on:
+  push:
+    branches:
+      - agent/aeris23-resize-cadence-guard
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: ${{ !contains(github.event.head_commit.message, '[resize-guard-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/aeris23-resize-cadence-guard
+          fetch-depth: 0
+
+      - name: Apply minimal resize cadence guard
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          renderer = Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs')
+          text = renderer.read_text()
+
+          def replace_once(source, old, new, label):
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {count}')
+              return source.replace(old, new, 1)
+
+          text = replace_once(
+              text,
+              '        void ResetFrontBufferState()\n',
+              '        void ResetFrontBufferState(bool preserveCadenceAndContent = false)\n',
+              'ResetFrontBufferState signature')
+
+          text = replace_once(
+              text,
+              '''            lastBackAttemptViewGeneration = -1L;\n            lastBackAttemptContentRevision = -1L;\n            nextBackRefreshRealtime = 0f;\n            nextAuthoritativePresentationTickRealtime = 0f;\n            gpuContentDirty = false;\n            requestedViewReady = false;\n            ResetContentSnapshot();\n''',
+              '''            if (!preserveCadenceAndContent)\n            {\n                lastBackAttemptViewGeneration = -1L;\n                lastBackAttemptContentRevision = -1L;\n                nextBackRefreshRealtime = 0f;\n                nextAuthoritativePresentationTickRealtime = 0f;\n                gpuContentDirty = false;\n                ResetContentSnapshot();\n            }\n            requestedViewReady = false;\n''',
+              'cadence/content reset block')
+
+          text = replace_once(
+              text,
+              '''            lastHistoryReprojected = false;\n            lastHistoryConfidence = 0f;\n            lastBackFoundationCoverage = 0f;\n            readyBuildingSinceRealtime = -1f;\n''',
+              '''            lastHistoryReprojected = false;\n            lastHistoryConfidence = 0f;\n            if (!preserveCadenceAndContent)\n                lastBackFoundationCoverage = 0f;\n            readyBuildingSinceRealtime = -1f;\n''',
+              'foundation reset block')
+
+          text = replace_once(
+              text,
+              '''        void DestroyRenderTargets()\n        {\n            DestroyRenderTexture(ref backTarget);\n            DestroyRenderTexture(ref frontTarget);\n            backTargetBytes = 0L;\n            frontTargetBytes = 0L;\n            ResetFrontBufferState();\n        }\n''',
+              '''        void DestroyRenderTargets(bool preserveCadenceAndContent = false)\n        {\n            DestroyRenderTexture(ref backTarget);\n            DestroyRenderTexture(ref frontTarget);\n            backTargetBytes = 0L;\n            frontTargetBytes = 0L;\n            ResetFrontBufferState(preserveCadenceAndContent);\n        }\n''',
+              'DestroyRenderTargets lifecycle forwarding')
+
+          start = text.index('        void EnsureRenderTarget(')
+          end = text.index('        float MeasureViewportCoverage(', start)
+          block = text[start:end]
+          block = replace_once(
+              block,
+              '            DestroyRenderTargets();\n',
+              '''            // AERIS23 Resize Cadence Guard: render-target reallocation is a\n            // presentation-resource event, not a new authoritative-clock bootstrap.\n            // Preserve the fixed 10 Hz deadlines and Step 2 content snapshot while\n            // invalidating only the destroyed FRONT/BACK presentation resources.\n            DestroyRenderTargets(true);\n''',
+              'EnsureRenderTarget destroy')
+          block = replace_once(
+              block,
+              '            ResetFrontBufferState();\n',
+              '            ResetFrontBufferState(true);\n',
+              'EnsureRenderTarget final reset')
+          text = text[:start] + block + text[end:]
+          renderer.write_text(text)
+
+          selftest = Path('Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py')
+          st = selftest.read_text()
+          marker = "ck('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in R,'exact projection/presentation remains fixed 10 Hz')\n"
+          addition = '''reset=R[R.index('void ResetFrontBufferState('):R.index('void Schedule(')]\nck('bool preserveCadenceAndContent = false' in reset,'front reset exposes explicit resize preservation mode')\nck('if (!preserveCadenceAndContent)' in reset and 'nextAuthoritativePresentationTickRealtime = 0f;' in reset and 'nextBackRefreshRealtime = 0f;' in reset and 'ResetContentSnapshot();' in reset,'full lifecycle reset still clears cadence and content')\nensure_rt=R[R.index('void EnsureRenderTarget('):R.index('float MeasureViewportCoverage(')]\nck('DestroyRenderTargets(true);' in ensure_rt and 'ResetFrontBufferState(true);' in ensure_rt,'render-target resize preserves 10 Hz clock and Step 2 content snapshot')\ndestroy_rt=R[R.index('void DestroyRenderTargets('):R.index('static void DestroyRenderTexture(')]\nck('bool preserveCadenceAndContent = false' in destroy_rt and 'ResetFrontBufferState(preserveCadenceAndContent);' in destroy_rt,'render-target destruction forwards lifecycle preservation authority')\nck('if (!preserveCadenceAndContent)\\n                lastBackFoundationCoverage = 0f;' in reset,'resize retains current foundation readiness while full reset clears it')\n'''
+          if addition not in st:
+              if marker not in st:
+                  raise SystemExit('selftest insertion marker not found')
+              st = st.replace(marker, marker + addition, 1)
+          selftest.write_text(st)
+          PY
+
+      - name: Static regression tests
+        shell: bash
+        run: |
+          python3 -m py_compile Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py
+          python3 Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py
+          git diff --check
+
+      - name: Commit verified source change
+        shell: bash
+        run: |
+          git config user.name 'AERIS Patch Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git rm .github/workflows/aeris23-resize-cadence-guard.yml
+          git add Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs \
+                  Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py
+          git commit -m 'Fix ND resize cadence guard [resize-guard-applied]'
+          git push origin HEAD:agent/aeris23-resize-cadence-guard
