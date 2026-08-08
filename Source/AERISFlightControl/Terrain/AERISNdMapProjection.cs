@@ -5,10 +5,9 @@ using AERISFlightControl.Settings;
 namespace AERISFlightControl.Terrain
 {
     // One immutable ND map transform shared by GPU terrain and GUI symbology.
-    // Horizontal ND scale is intentionally 1.30 times vertical scale; therefore a
-    // plain normalized-space rotation is geometrically wrong. This snapshot applies
-    // heading rotation in metres before the unequal axis scales, or emits the exact
-    // scale-corrected matrix for cached N-UP terrain meshes.
+    // X/Y metres-per-pixel are identical. Window aspect changes geographic coverage,
+    // never cartographic shape. Heading rotation is applied in metres before mapping
+    // into the independently sized horizontal/vertical viewport extents.
     internal struct AERISNdMapProjection
     {
         internal double RadiusMeters;
@@ -29,9 +28,56 @@ namespace AERISFlightControl.Terrain
         internal bool TrackUp;
         internal AERISTerrainRenderTargetOrientation Orientation;
 
+        // Aspect-correct cartographic authority. The range selector defines the
+        // metres-per-pixel scale at the stock/default ND plot height. Resizing the
+        // window changes geographic coverage instead of stretching the map.
+        internal const float ReferencePlotWidthPixels = 366f;
+        internal const float ReferencePlotHeightPixels = 188f;
+
+        internal static double ResolveMetersPerPixel(float rangeMeters)
+        {
+            return Math.Max(1.0, rangeMeters) / ReferencePlotHeightPixels;
+        }
+
+        internal static void ResolveAspectCorrectExtents(float rangeMeters,
+            float plotWidthPixels, float plotHeightPixels, out double horizontalMeters,
+            out double verticalMeters)
+        {
+            double metresPerPixel = ResolveMetersPerPixel(rangeMeters);
+            horizontalMeters = Math.Max(1.0, Math.Max(1f, plotWidthPixels) *
+                metresPerPixel);
+            verticalMeters = Math.Max(1.0, Math.Max(1f, plotHeightPixels) *
+                metresPerPixel);
+        }
+
+        // Compatibility overload for non-viewport callers. Production ND terrain,
+        // foundation planning and UI symbology use explicit plot/extents overloads.
         internal static AERISNdMapProjection Create(CelestialBody body,
             double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
             float headingDeg, bool trackUp, float anchorGuiV,
+            AERISTerrainRenderTargetOrientation orientation)
+        {
+            return Create(body, centerLatitudeDeg, centerLongitudeDeg, rangeMeters,
+                ReferencePlotWidthPixels, ReferencePlotHeightPixels, headingDeg,
+                trackUp, anchorGuiV, orientation);
+        }
+
+        internal static AERISNdMapProjection Create(CelestialBody body,
+            double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
+            float plotWidthPixels, float plotHeightPixels, float headingDeg, bool trackUp,
+            float anchorGuiV, AERISTerrainRenderTargetOrientation orientation)
+        {
+            double horizontalMeters, verticalMeters;
+            ResolveAspectCorrectExtents(rangeMeters, plotWidthPixels, plotHeightPixels,
+                out horizontalMeters, out verticalMeters);
+            return CreateWithExtents(body, centerLatitudeDeg, centerLongitudeDeg,
+                horizontalMeters, verticalMeters, headingDeg, trackUp, anchorGuiV,
+                orientation);
+        }
+
+        internal static AERISNdMapProjection CreateWithExtents(CelestialBody body,
+            double centerLatitudeDeg, double centerLongitudeDeg, double horizontalMeters,
+            double verticalMeters, float headingDeg, bool trackUp, float anchorGuiV,
             AERISTerrainRenderTargetOrientation orientation)
         {
             double latitudeRad = centerLatitudeDeg * Math.PI / 180.0;
@@ -49,8 +95,8 @@ namespace AERISFlightControl.Terrain
                 NorthX = -Math.Sin(latitudeRad) * Math.Cos(longitudeRad),
                 NorthY = -Math.Sin(latitudeRad) * Math.Sin(longitudeRad),
                 NorthZ = Math.Cos(latitudeRad),
-                HorizontalMeters = Math.Max(1.0, rangeMeters * 1.30),
-                VerticalMeters = Math.Max(1.0, rangeMeters),
+                HorizontalMeters = Math.Max(1.0, horizontalMeters),
+                VerticalMeters = Math.Max(1.0, verticalMeters),
                 AnchorGuiV = Mathf.Clamp01(anchorGuiV),
                 AnchorRenderV = orientation == AERISTerrainRenderTargetOrientation.Flipped ?
                     Mathf.Clamp01(anchorGuiV) : 1f - Mathf.Clamp01(anchorGuiV),

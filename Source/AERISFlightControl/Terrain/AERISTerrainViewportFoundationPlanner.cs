@@ -8,8 +8,8 @@ namespace AERISFlightControl.Terrain
     // CP3 Gate 3.1: derives the coarse terrain foundation from the actual ND projection
     // instead of a centre-radius square. The returned set is deliberately conservative:
     // every sampled viewport tile receives a one-tile guard ring so TRACK UP rotation,
-    // the 1.30 horizontal scale and the lower aircraft anchor cannot expose an unplanned
-    // wedge between replans.
+    // aspect-correct window coverage and the lower aircraft anchor cannot expose an
+    // unplanned wedge between replans.
     internal sealed class AERISTerrainViewportFoundationPlan
     {
         internal AERISTerrainTileKey[] GlobalKeys = new AERISTerrainTileKey[0];
@@ -30,14 +30,16 @@ namespace AERISFlightControl.Terrain
     internal static class AERISTerrainViewportFoundationPlanner
     {
         internal const int GuardRingTiles = 1;
-        internal const int MaximumGlobalKeys = 32;
-        internal const int MaximumFarKeys = 192;
+        // Enlarged windows now expose genuinely more geography. These bounds remain
+        // finite, but are high enough for the maximum AERIS window at the 160 km scale.
+        internal const int MaximumGlobalKeys = 128;
+        internal const int MaximumFarKeys = 1024;
         const double SampleSpacingTileFraction = 0.42;
 
         internal static AERISTerrainViewportFoundationPlan Build(CelestialBody body,
             string environmentHash, double centerLatitudeDeg,
-            double centerLongitudeDeg, double rangeMeters, double headingDeg,
-            bool trackUp, float anchorGuiV,
+            double centerLongitudeDeg, double rangeMeters, double horizontalMeters,
+            double verticalMeters, double headingDeg, bool trackUp, float anchorGuiV,
             AERISTerrainRenderTargetOrientation orientation)
         {
             var output = new AERISTerrainViewportFoundationPlan
@@ -50,8 +52,8 @@ namespace AERISFlightControl.Terrain
             if (body == null || body.Radius <= 0.0 ||
                 string.IsNullOrEmpty(environmentHash)) return output;
 
-            AERISNdMapProjection projection = AERISNdMapProjection.Create(body,
-                centerLatitudeDeg, centerLongitudeDeg, (float)output.RangeMeters,
+            AERISNdMapProjection projection = AERISNdMapProjection.CreateWithExtents(body,
+                centerLatitudeDeg, centerLongitudeDeg, horizontalMeters, verticalMeters,
                 (float)output.HeadingDeg, trackUp, anchorGuiV, orientation);
 
             int farColumns, farRows;
@@ -77,9 +79,9 @@ namespace AERISFlightControl.Terrain
             double spacingMeters = Math.Max(250.0,
                 tileMeters * SampleSpacingTileFraction);
             sampleColumns = Clamp((int)Math.Ceiling(
-                projection.HorizontalMeters / spacingMeters), 4, 32);
+                projection.HorizontalMeters / spacingMeters), 4, 96);
             sampleRows = Clamp((int)Math.Ceiling(
-                projection.VerticalMeters / spacingMeters), 4, 32);
+                projection.VerticalMeters / spacingMeters), 4, 96);
 
             var sampled = new Dictionary<string, AERISTerrainTileKey>(
                 StringComparer.Ordinal);

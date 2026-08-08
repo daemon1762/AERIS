@@ -928,13 +928,13 @@ namespace AERISFlightControl.UI
             }
             AERISNdMapProjection runwayProjection = AERISNdMapProjection.Create(
                 vessel.mainBody, centerLatitudeDeg, centerLongitudeDeg, range,
-                heading, trackUp, anchorV, orientation);
+                plot.width, plot.height, heading, trackUp, anchorV, orientation);
             for (int i = runways.Length - 1; i >= 0; i--)
             {
                 AERISPreparedRunwaySymbol runway = runways[i];
                 if (runway == null) continue;
                 if (!runway.SelectedRunway && !RunwayMayIntersectVisibleMap(runway,
-                    centerEast, centerNorth, range, anchorV)) continue;
+                    centerEast, centerNorth, range, anchorV, plot)) continue;
                 DrawPreparedRunway(plot, runway, vessel, range, anchorV,
                     centerLatitudeDeg, centerLongitudeDeg, runwayProjection, scale);
             }
@@ -1091,7 +1091,7 @@ namespace AERISFlightControl.UI
 
         static bool RunwayMayIntersectVisibleMap(AERISPreparedRunwaySymbol runway,
             double centerEastMeters, double centerNorthMeters, float rangeMeters,
-            float anchorV)
+            float anchorV, Rect plot)
         {
             if (runway == null) return false;
             double east = runway.CenterEastMeters - centerEastMeters;
@@ -1099,12 +1099,14 @@ namespace AERISFlightControl.UI
             if (double.IsNaN(east) || double.IsInfinity(east) ||
                 double.IsNaN(north) || double.IsInfinity(north)) return true;
 
-            // AERISNdMapProjection uses +/-0.65*range horizontally and an anchor-dependent
-            // vertical extent. Use a conservative circumscribed radius plus runway length
-            // so this is only a cheap rejection test; anything that could touch the ND
-            // viewport still reaches the exact spherical projection below.
-            double horizontal = Math.Max(1.0, rangeMeters * 0.65);
-            double vertical = Math.Max(1.0, rangeMeters *
+            // Use the exact aspect-correct viewport extents. This remains only a cheap
+            // rejection test; anything that could touch the ND reaches exact spherical
+            // projection below.
+            double horizontalMeters, verticalMeters;
+            AERISNdMapProjection.ResolveAspectCorrectExtents(rangeMeters, plot.width,
+                plot.height, out horizontalMeters, out verticalMeters);
+            double horizontal = Math.Max(1.0, horizontalMeters * 0.5);
+            double vertical = Math.Max(1.0, verticalMeters *
                 Math.Max(Mathf.Clamp01(anchorV), 1f - Mathf.Clamp01(anchorV)));
             double visibleRadius = Math.Sqrt(horizontal * horizontal +
                 vertical * vertical);
@@ -1163,9 +1165,14 @@ namespace AERISFlightControl.UI
                 if (mapDragging)
                 {
                     Vector2 delta = e.mousePosition - mapPointerLast;
-                    // Exact inverse of TryMapPoint's horizontal/vertical map scales.
-                    double east = -delta.x / Math.Max(1.0, plot.width) * range * 1.30;
-                    double north = delta.y / Math.Max(1.0, plot.height) * range;
+                    // Exact inverse of the aspect-correct map scale. Window size
+                    // changes geographic coverage, so a pixel drag always represents the
+                    // same metres at a given range preset in both axes.
+                    double horizontalMeters, verticalMeters;
+                    AERISNdMapProjection.ResolveAspectCorrectExtents(range, plot.width,
+                        plot.height, out horizontalMeters, out verticalMeters);
+                    double east = -delta.x / Math.Max(1.0, plot.width) * horizontalMeters;
+                    double north = delta.y / Math.Max(1.0, plot.height) * verticalMeters;
                     OffsetLatLon(vessel.mainBody, planCenterLatitudeDeg,
                         planCenterLongitudeDeg, east, north,
                         out planCenterLatitudeDeg, out planCenterLongitudeDeg);
@@ -1232,7 +1239,7 @@ namespace AERISFlightControl.UI
 
             AERISNdMapProjection projection = AERISNdMapProjection.Create(
                 vessel.mainBody, centerLatitudeDeg, centerLongitudeDeg, range,
-                heading, trackUp, anchorV, orientation);
+                plot.width, plot.height, heading, trackUp, anchorV, orientation);
             double centerEast = 0.0, centerNorth = 0.0;
             ToLocalMeters(vessel.mainBody, frame.OriginLatitudeDeg,
                 frame.OriginLongitudeDeg, centerLatitudeDeg, centerLongitudeDeg,
@@ -1247,7 +1254,7 @@ namespace AERISFlightControl.UI
             {
                 AERISPreparedRunwaySymbol runway = runways[i];
                 if (runway == null || !RunwayMayIntersectVisibleMap(runway,
-                    centerEast, centerNorth, range, anchorV)) continue;
+                    centerEast, centerNorth, range, anchorV, plot)) continue;
                 Vector2 a, b, center;
                 bool aInside = TryProjectGeographicPoint(projection,
                     runway.LatitudeADeg, runway.LongitudeADeg, plot, out a);
@@ -2604,8 +2611,12 @@ namespace AERISFlightControl.UI
                 forward = eastMeters * Math.Sin(h) + northMeters * Math.Cos(h);
             }
             else { right = eastMeters; forward = northMeters; }
-            double u = 0.5 + right / Math.Max(1.0, rangeMeters * 1.30);
-            double v = anchorV - forward / Math.Max(1.0, rangeMeters);
+            double horizontalMeters, verticalMeters;
+            AERISNdMapProjection.ResolveAspectCorrectExtents((float)Math.Max(1.0,
+                rangeMeters), plot.width, plot.height, out horizontalMeters,
+                out verticalMeters);
+            double u = 0.5 + right / horizontalMeters;
+            double v = anchorV - forward / verticalMeters;
             point = new Vector2(plot.x + (float)u * plot.width,
                 plot.y + (float)v * plot.height);
             return u >= 0.0 && u <= 1.0 && v >= 0.0 && v <= 1.0;
