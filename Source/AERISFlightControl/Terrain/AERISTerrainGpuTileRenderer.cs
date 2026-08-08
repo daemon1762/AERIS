@@ -69,6 +69,11 @@ namespace AERISFlightControl.Terrain
             internal double NorthLatitudeDeg;
             internal double WestLongitudeDeg;
             internal double EastLongitudeDeg;
+            // Conservative spherical bound for whole-entry rejection before any exact
+            // per-vertex projection/upload. Invalid or very large bounds disable culling.
+            internal double BoundCenterLatitudeDeg;
+            internal double BoundCenterLongitudeDeg;
+            internal double BoundAngularRadiusRad = Math.PI;
             internal double LastProjectionCenterLatitudeDeg = double.NaN;
             internal double LastProjectionCenterLongitudeDeg = double.NaN;
             internal double LastProjectionBodyRadius = double.NaN;
@@ -291,6 +296,9 @@ namespace AERISFlightControl.Terrain
         long operationHealthResolveCandidates;
         long operationHealthTileScratchResizes;
         long operationHealthPreparedEntryUses;
+        long operationHealthCullTests;
+        long operationHealthCulledEntries;
+        long operationHealthVisibleEntries;
         long useSequence;
         long usedEntryBytes;
         long backTargetBytes;
@@ -772,7 +780,7 @@ namespace AERISFlightControl.Terrain
             if (refreshAllowed)
             {
                 rendered = RenderBackBuffer(tiles, drawEntriesScratch, projection,
-                    mapRotation, effectiveMode, vessel, rangeMeters,
+                    mapRotation, effectiveMode, vessel, rangeMeters, anchorV,
                     forceCenterProjectionRefresh);
                 backRenderFrames++;
                 lastBackAttemptViewGeneration = visible.ViewGeneration;
@@ -862,7 +870,7 @@ namespace AERISFlightControl.Terrain
             if (!present && readyFoundationNow && !gpuFailed)
             {
                 bool recovered = RenderBackBuffer(tiles, drawEntriesScratch, projection,
-                    mapRotation, effectiveMode, vessel, rangeMeters,
+                    mapRotation, effectiveMode, vessel, rangeMeters, anchorV,
                     forceCenterProjectionRefresh);
                 backRenderFrames++;
                 forcedRecoveryBackRenders++;
@@ -958,7 +966,7 @@ namespace AERISFlightControl.Terrain
         bool RenderBackBuffer(AERISTerrainHeightTile[] tiles, Entry[] drawEntries,
             AERISNdMapProjection projection, Matrix4x4 mapRotation,
             AERISTerrainDisplayMode effectiveMode, Vessel vessel, float rangeMeters,
-            bool forceCenterProjectionRefresh)
+            float anchorV, bool forceCenterProjectionRefresh)
         {
             if (forceCenterProjectionRefresh)
                 operationHealthForcedProjectionRefreshes++;
@@ -988,6 +996,9 @@ namespace AERISFlightControl.Terrain
                     Entry drawEntry = drawEntries != null && i < drawEntries.Length ?
                         drawEntries[i] : null;
                     if (drawEntry == null) continue;
+                    if (ShouldCullEntryOutsidePresentation(drawEntry, vessel.mainBody,
+                        projectionCenterLatitudeDeg, projectionCenterLongitudeDeg,
+                        rangeMeters, anchorV)) continue;
                     operationHealthPreparedEntryUses++;
                     EnsureProjectedGeometry(drawEntry, projection,
                         projectionThresholdMeters, projectionCenterLatitudeDeg,
@@ -1432,6 +1443,111 @@ namespace AERISFlightControl.Terrain
             return true;
         }
 
+        bool ShouldCullEntryOutsidePresentation(Entry entry, CelestialBody body,
+            double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
+            float anchorV)
+        {
+            operationHealthCullTests++;
+            if (entry == null || body == null || body.Radius <= 0.0 ||
+                double.IsNaN(entry.BoundAngularRadiusRad) ||
+                double.IsInfinity(entry.BoundAngularRadiusRad) ||
+                entry.BoundAngularRadiusRad >= Math.PI * 0.50)
+            {
+                operationHealthVisibleEntries++;
+                return false;
+            }
+            double centerDistance = GreatCircleDistanceMeters(body,
+                centerLatitudeDeg, centerLongitudeDeg, entry.BoundCenterLatitudeDeg,
+                entry.BoundCenterLongitudeDeg);
+            if (double.IsNaN(centerDistance) || double.IsInfinity(centerDistance))
+            {
+                operationHealthVisibleEntries++;
+                return false;
+            }
+
+            // AERISNdMapProjection uses +/-0.65*range horizontally. Vertically the
+            // ownship anchor divides one full range; use the farther edge. The resulting
+            // circumscribed radius contains the complete rectangular ND viewport for any
+            // heading. Extra multiplicative and absolute margins deliberately bias toward
+            // false negatives (extra work), never false positives (missing terrain).
+            double horizontal = Math.Max(1.0, rangeMeters * 0.65);
+            double vertical = Math.Max(1.0, rangeMeters * Math.Max(
+                Mathf.Clamp01(anchorV), 1f - Mathf.Clamp01(anchorV)));
+            double viewportRadius = Math.Sqrt(horizontal * horizontal +
+                vertical * vertical);
+            double viewportSafetyRadius = viewportRadius * 1.08 +
+                Math.Max(2500.0, Math.Max(1f, rangeMeters) * 0.03);
+            double entryRadiusMeters = Math.Max(0.0, body.Radius *
+                entry.BoundAngularRadiusRad);
+            bool culled = centerDistance - entryRadiusMeters > viewportSafetyRadius;
+            if (culled) operationHealthCulledEntries++;
+            else operationHealthVisibleEntries++;
+            return culled;
+        }
+
+        static void ResolveConservativeEntryBounds(double southLatitudeDeg,
+            double northLatitudeDeg, double westLongitudeDeg, double eastLongitudeDeg,
+            out double centerLatitudeDeg, out double centerLongitudeDeg,
+            out double angularRadiusRad)
+        {
+            centerLatitudeDeg = 0.0;
+            centerLongitudeDeg = 0.0;
+            angularRadiusRad = Math.PI;
+            if (double.IsNaN(southLatitudeDeg) || double.IsInfinity(southLatitudeDeg) ||
+                double.IsNaN(northLatitudeDeg) || double.IsInfinity(northLatitudeDeg) ||
+                double.IsNaN(westLongitudeDeg) || double.IsInfinity(westLongitudeDeg) ||
+                double.IsNaN(eastLongitudeDeg) || double.IsInfinity(eastLongitudeDeg))
+                return;
+            double latitudeSpan = Math.Abs(northLatitudeDeg - southLatitudeDeg);
+            double rawLongitudeSpan = Math.Abs(eastLongitudeDeg - westLongitudeDeg);
+            // Global/hemispheric entries are deliberately never culled. Their broad
+            // geographic authority is more valuable than a marginal projection saving.
+            if (latitudeSpan >= 120.0 || rawLongitudeSpan >= 180.0) return;
+            centerLatitudeDeg = Math.Max(-90.0, Math.Min(90.0,
+                (southLatitudeDeg + northLatitudeDeg) * 0.5));
+            double longitudeSpan = NormalizeLongitudeDelta(
+                eastLongitudeDeg - westLongitudeDeg);
+            centerLongitudeDeg = NormalizeLongitudeDegrees(
+                westLongitudeDeg + longitudeSpan * 0.5);
+            double radius = 0.0;
+            radius = Math.Max(radius, AngularDistanceRadians(centerLatitudeDeg,
+                centerLongitudeDeg, southLatitudeDeg, westLongitudeDeg));
+            radius = Math.Max(radius, AngularDistanceRadians(centerLatitudeDeg,
+                centerLongitudeDeg, southLatitudeDeg, eastLongitudeDeg));
+            radius = Math.Max(radius, AngularDistanceRadians(centerLatitudeDeg,
+                centerLongitudeDeg, northLatitudeDeg, westLongitudeDeg));
+            radius = Math.Max(radius, AngularDistanceRadians(centerLatitudeDeg,
+                centerLongitudeDeg, northLatitudeDeg, eastLongitudeDeg));
+            // 10% spherical-bound growth plus a fixed angular pad protects against
+            // interpolation/coast correction points lying infinitesimally outside nominal
+            // source bounds due to floating-point conversion.
+            angularRadiusRad = Math.Min(Math.PI, radius * 1.10 + 0.0005);
+        }
+
+        static double AngularDistanceRadians(double latitudeA, double longitudeA,
+            double latitudeB, double longitudeB)
+        {
+            double latA = latitudeA * Math.PI / 180.0;
+            double latB = latitudeB * Math.PI / 180.0;
+            double dLat = (latitudeB - latitudeA) * Math.PI / 180.0;
+            double dLon = NormalizeLongitudeDelta(longitudeB - longitudeA) *
+                Math.PI / 180.0;
+            double sinLat = Math.Sin(dLat * 0.5);
+            double sinLon = Math.Sin(dLon * 0.5);
+            double value = sinLat * sinLat + Math.Cos(latA) * Math.Cos(latB) *
+                sinLon * sinLon;
+            value = Math.Max(0.0, Math.Min(1.0, value));
+            return 2.0 * Math.Atan2(Math.Sqrt(value),
+                Math.Sqrt(Math.Max(0.0, 1.0 - value)));
+        }
+
+        static double NormalizeLongitudeDegrees(double value)
+        {
+            while (value > 180.0) value -= 360.0;
+            while (value < -180.0) value += 360.0;
+            return value;
+        }
+
         static double GreatCircleDistanceMeters(CelestialBody body, double latitudeA,
             double longitudeA, double latitudeB, double longitudeB)
         {
@@ -1508,6 +1624,9 @@ namespace AERISFlightControl.Terrain
                 "; oh_entry_buckets=" + entriesByTile.Count +
                 "; oh_tile_scratch_resize=" + operationHealthTileScratchResizes +
                 "; oh_prepared_entry_uses=" + operationHealthPreparedEntryUses +
+                "; oh_cull_test=" + operationHealthCullTests +
+                "; oh_culled_entry=" + operationHealthCulledEntries +
+                "; oh_visible_entry=" + operationHealthVisibleEntries +
                 "; oh_mesh_pool=" + meshPool.Count +
                 "; oh_mesh_pool_hit=" + operationHealthMeshPoolHits +
                 "; oh_mesh_pool_miss=" + operationHealthMeshPoolMisses +
@@ -1916,6 +2035,12 @@ namespace AERISFlightControl.Terrain
                 // account the immutable float segment payload once, not the retired
                 // four-vertex quad expansion from pre-Candidate3 presentation.
                 bytes += result.CoastlineSegments.Length * 4L;
+            double boundCenterLatitudeDeg, boundCenterLongitudeDeg,
+                boundAngularRadiusRad;
+            ResolveConservativeEntryBounds(result.SouthLatitudeDeg,
+                result.NorthLatitudeDeg, result.WestLongitudeDeg,
+                result.EastLongitudeDeg, out boundCenterLatitudeDeg,
+                out boundCenterLongitudeDeg, out boundAngularRadiusRad);
             return new Entry
             {
                 CacheKey = cacheKey,
@@ -1960,6 +2085,9 @@ namespace AERISFlightControl.Terrain
                 NorthLatitudeDeg = result.NorthLatitudeDeg,
                 WestLongitudeDeg = result.WestLongitudeDeg,
                 EastLongitudeDeg = result.EastLongitudeDeg,
+                BoundCenterLatitudeDeg = boundCenterLatitudeDeg,
+                BoundCenterLongitudeDeg = boundCenterLongitudeDeg,
+                BoundAngularRadiusRad = boundAngularRadiusRad,
                 LandElevationMeters = land.Elevation.ToArray(),
                 LandShade = land.Shade.ToArray(),
                 LandColours = new Color32[land.Vertices.Count],
