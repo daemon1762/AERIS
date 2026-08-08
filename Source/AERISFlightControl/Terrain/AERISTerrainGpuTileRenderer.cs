@@ -237,6 +237,10 @@ namespace AERISFlightControl.Terrain
         // only re-present the already committed FRONT texture.
         long operationHealthAuthoritativeTicks;
         long operationHealthCoalescedPresentFrames;
+        // AERIS23 retained-surface path. Authoritative presentation state advances at
+        // fixed 10 Hz; intervening IMGUI Repaints perform only the unavoidable final blit.
+        long operationHealthAuthoritativePresents;
+        long operationHealthRetainedSurfaceBlits;
         long operationHealthCoalescedBlankPolls;
         long operationHealthAuthoritativeSafetyBypasses;
         long operationHealthDirtyBatches;
@@ -500,9 +504,6 @@ namespace AERISFlightControl.Terrain
             double centerLongitudeDeg, float rangeMeters, float mapHeadingDeg,
             bool trackUp, float anchorV, AERISNdMapLockReference lockReference)
         {
-            lastFrontBufferPresented = false;
-            lastFrontBufferLatched = false;
-            presentedProjection.Valid = false;
             if (disposed || system == null || vessel == null || vessel.mainBody == null ||
                 plot.width < 8f || plot.height < 8f)
             {
@@ -511,6 +512,31 @@ namespace AERISFlightControl.Terrain
                 lastDrawState = AERISTerrainGpuDrawState.None;
                 return lastDrawState;
             }
+
+            Event currentEvent = Event.current;
+            bool repaint = currentEvent == null || currentEvent.type == EventType.Repaint;
+            if (!repaint) return lastDrawState;
+
+            // Retained FRONT gate: this executes before resident-cache, settings, GPU-mode,
+            // projection or content work. Unity IMGUI still needs one final texture blit on
+            // each rendered frame to reconstruct the framebuffer, but AERIS performs no
+            // additional presentation work until the next fixed 10 Hz authoritative tick.
+            float presentationNow = Time.realtimeSinceStartup;
+            bool authoritativeTickDue = nextAuthoritativePresentationTickRealtime <= 0f ||
+                presentationNow >= nextAuthoritativePresentationTickRealtime;
+            if (!authoritativeTickDue)
+            {
+                if (TryPresentCoalescedFront(plot, vessel))
+                    return lastDrawState;
+                if (!frontBufferValid)
+                {
+                    operationHealthCoalescedBlankPolls++;
+                    return lastDrawState;
+                }
+                operationHealthAuthoritativeSafetyBypasses++;
+                authoritativeTickDue = true;
+            }
+
             residentCache = system.CurrentBodyResidentCache;
 
             AERISTerrainGpuMode currentGpuMode = settings == null ?
@@ -560,31 +586,15 @@ namespace AERISFlightControl.Terrain
                 return lastDrawState;
             }
 
-            Event currentEvent = Event.current;
-            bool repaint = currentEvent == null || currentEvent.type == EventType.Repaint;
-            if (!repaint) return lastDrawState;
-
             AERISTerrainRenderTargetOrientation orientation = settings == null ?
                 AERISTerrainRenderTargetOrientation.Direct :
                 settings.TerrainRenderTargetOrientation;
 
-            float presentationNow = Time.realtimeSinceStartup;
-            bool authoritativeTickDue = nextAuthoritativePresentationTickRealtime <= 0f ||
-                presentationNow >= nextAuthoritativePresentationTickRealtime;
-            if (!authoritativeTickDue)
-            {
-                if (TryPresentCoalescedFront(plot, vessel))
-                    return lastDrawState;
-                if (!frontBufferValid)
-                {
-                    operationHealthCoalescedBlankPolls++;
-                    return lastDrawState;
-                }
-                // A committed FRONT that cannot be safely re-presented (body/resource
-                // mismatch) is a lifecycle safety case. Consume one new authoritative
-                // tick immediately, but reset the clock so it cannot burst repeatedly.
-                operationHealthAuthoritativeSafetyBypasses++;
-            }
+            // Only the authoritative tick may invalidate/rebuild the published presentation
+            // state. Retained Repaints returned above without touching these fields.
+            lastFrontBufferPresented = false;
+            lastFrontBufferLatched = false;
+            presentedProjection.Valid = false;
             nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f;
             operationHealthAuthoritativeTicks++;
 
@@ -894,6 +904,7 @@ namespace AERISFlightControl.Terrain
                 readyGlobal, readyFar);
 
             if (present && !requestedViewReady) operationHealthLoadingBackdropFrames++;
+            if (present) operationHealthAuthoritativePresents++;
             LogGpuOnlyPresentation(visible, readyGlobal, readyFar, swapped);
             // A continuity FRONT is allowed to remain visible, but only an exact FRONT
             // committed for the currently requested view may report Complete.
@@ -1103,6 +1114,9 @@ namespace AERISFlightControl.Terrain
             // Unity IMGUI rebuilds the framebuffer every rendered frame. Everything else
             // reuses state established by the 10 Hz authoritative FRONT commit.
             PresentFrontDirect(plot, frontOrientation);
+            // Keep only the tiny retained-state refresh needed by consumers that read
+            // PresentedProjection between authoritative commits. Geometry/content/lifecycle
+            // state is untouched on this path.
             lastFrontBufferPresented = true;
             lastFrontBufferLatched = true;
             presentedProjection.Valid = true;
@@ -1110,7 +1124,7 @@ namespace AERISFlightControl.Terrain
             presentedProjection.AgeSeconds = Math.Max(0f,
                 Time.realtimeSinceStartup - frontCommittedRealtime);
             lastVisualCoverageFraction = 1f;
-            operationHealthCoalescedPresentFrames++;
+            operationHealthRetainedSurfaceBlits++;
             if (!requestedViewReady) operationHealthLoadingBackdropFrames++;
             return true;
         }
@@ -1508,6 +1522,8 @@ namespace AERISFlightControl.Terrain
                 "; oh_cadence_defer=" + operationHealthCadenceDeferrals +
                 "; oh_cadence_bootstrap=" + operationHealthCadenceBootstrapBypasses +
                 "; oh_auth_tick=" + operationHealthAuthoritativeTicks +
+                "; oh_auth_present=" + operationHealthAuthoritativePresents +
+                "; oh_retained_blit=" + operationHealthRetainedSurfaceBlits +
                 "; oh_coalesced_present=" + operationHealthCoalescedPresentFrames +
                 "; oh_coalesced_blank=" + operationHealthCoalescedBlankPolls +
                 "; oh_tick_safety=" + operationHealthAuthoritativeSafetyBypasses +
