@@ -1,0 +1,41 @@
+name: AERIS23 Phase A Measurement PR
+
+on:
+  pull_request:
+    branches:
+      - cp3.75/nd-recovery
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: ${{ github.head_ref == 'agent/aeris23-phase-a-measurement' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/aeris23-phase-a-measurement
+          fetch-depth: 0
+
+      - name: Apply Phase A measurement patch
+        run: python3 Tools/aeris23_phase_a_measurement_patch.py
+
+      - name: Static regression tests
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+          git diff --check
+
+      - name: Commit verified Phase A source change
+        run: |
+          git config user.name 'AERIS Patch Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git rm -f .github/workflows/aeris23-phase-a-measurement.yml \
+                    .github/workflows/aeris23-phase-a-measurement-pr.yml \
+                    .github/aeris23-phase-a-trigger.txt \
+                    Tools/aeris23_phase_a_measurement_patch.py
+          git add Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs \
+                  Tools/selftest_v01800_operation_health_phase_a_measurement.py \
+                  Tools/run_v01800_operation_health_pass3_prebuild.py
+          git commit -m 'Add Phase A ND measurement telemetry [phase-a-measure-applied]'
+          git push origin HEAD:agent/aeris23-phase-a-measurement
