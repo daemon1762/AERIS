@@ -1523,7 +1523,7 @@ namespace AERISFlightControl.Terrain
                 "; cpu_terrain_draw=0.");
         }
 
-        void ResetFrontBufferState()
+        void ResetFrontBufferState(bool preserveCadenceAndContent = false)
         {
             frontBufferValid = false;
             frontViewGeneration = -1L;
@@ -1542,19 +1542,23 @@ namespace AERISFlightControl.Terrain
             frontContentRevision = -1L;
             frontColourMode = (AERISTerrainDisplayMode)(-1);
             frontColourPreset = (AERISTerrainColourPreset)(-1);
-            lastBackAttemptViewGeneration = -1L;
-            lastBackAttemptContentRevision = -1L;
-            nextBackRefreshRealtime = 0f;
-            nextAuthoritativePresentationTickRealtime = 0f;
-            gpuContentDirty = false;
+            if (!preserveCadenceAndContent)
+            {
+                lastBackAttemptViewGeneration = -1L;
+                lastBackAttemptContentRevision = -1L;
+                nextBackRefreshRealtime = 0f;
+                nextAuthoritativePresentationTickRealtime = 0f;
+                gpuContentDirty = false;
+                ResetContentSnapshot();
+            }
             requestedViewReady = false;
-            ResetContentSnapshot();
             lastFrontBufferPresented = false;
             lastFrontBufferLatched = false;
             presentedProjection.Valid = false;
             lastHistoryReprojected = false;
             lastHistoryConfidence = 0f;
-            lastBackFoundationCoverage = 0f;
+            if (!preserveCadenceAndContent)
+                lastBackFoundationCoverage = 0f;
             readyBuildingSinceRealtime = -1f;
             readyBuildingViolationLatched = false;
         }
@@ -2521,7 +2525,11 @@ namespace AERISFlightControl.Terrain
                 frontTarget.width == width && frontTarget.height == height &&
                 backTarget.IsCreated() && frontTarget.IsCreated()) return;
 
-            DestroyRenderTargets();
+            // AERIS23 Resize Cadence Guard: render-target reallocation is a
+            // presentation-resource event, not a new authoritative-clock bootstrap.
+            // Preserve the fixed 10 Hz deadlines and Step 2 content snapshot while
+            // invalidating only the destroyed FRONT/BACK presentation resources.
+            DestroyRenderTargets(true);
             if (!SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.ARGB32))
                 throw new InvalidOperationException("ARGB32 RenderTexture unsupported");
             backTarget = new RenderTexture(width, height, 0,
@@ -2547,7 +2555,7 @@ namespace AERISFlightControl.Terrain
                     "Terrain front RenderTexture.Create failed");
             backTargetBytes = (long)width * height * 4L;
             frontTargetBytes = (long)width * height * 4L;
-            ResetFrontBufferState();
+            ResetFrontBufferState(true);
         }
 
 
@@ -3143,13 +3151,13 @@ namespace AERISFlightControl.Terrain
                 (byte)Mathf.RoundToInt(a.a + (b.a - a.a) * t));
         }
 
-        void DestroyRenderTargets()
+        void DestroyRenderTargets(bool preserveCadenceAndContent = false)
         {
             DestroyRenderTexture(ref backTarget);
             DestroyRenderTexture(ref frontTarget);
             backTargetBytes = 0L;
             frontTargetBytes = 0L;
-            ResetFrontBufferState();
+            ResetFrontBufferState(preserveCadenceAndContent);
         }
 
         static void DestroyRenderTexture(ref RenderTexture target)
