@@ -285,6 +285,16 @@ namespace AERISFlightControl.Terrain
         long operationHealthResolveCandidates;
         long operationHealthTileScratchResizes;
         long operationHealthPreparedEntryUses;
+        // AERIS23 Operation Health Phase A: low-overhead measurement only. These
+        // counters do not alter presentation authority, geometry, painter order or cadence.
+        double phaseAMeasureProjectionCpuMs;
+        double phaseAMeasureMeshUploadMs;
+        double phaseAMeasureBackRenderMs;
+        long phaseAMeasureBackRenderSamples;
+        long phaseAMeasureProjectedVertices;
+        long phaseAMeasureUploadedVertices;
+        long phaseAMeasureDrawnVertices;
+        long phaseAMeasureVisibleEntries;
         long useSequence;
         long usedEntryBytes;
         long backTargetBytes;
@@ -971,6 +981,7 @@ namespace AERISFlightControl.Terrain
                     Entry drawEntry = drawEntries != null && i < drawEntries.Length ?
                         drawEntries[i] : null;
                     if (drawEntry == null) continue;
+                    phaseAMeasureVisibleEntries++;
                     operationHealthPreparedEntryUses++;
                     EnsureProjectedGeometry(drawEntry, projection,
                         projectionThresholdMeters, projectionCenterLatitudeDeg,
@@ -996,10 +1007,13 @@ namespace AERISFlightControl.Terrain
                 }
                 RenderTexture.active = previous;
             }
+            double backRenderMilliseconds = (Stopwatch.GetTimestamp() -
+                frameStartTicks) * 1000.0 / Stopwatch.Frequency;
+            phaseAMeasureBackRenderMs += backRenderMilliseconds;
+            phaseAMeasureBackRenderSamples++;
             AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
             if (runtime != null)
-                runtime.Gpu.RecordFrameCost((Stopwatch.GetTimestamp() - frameStartTicks) *
-                    1000.0 / Stopwatch.Frequency);
+                runtime.Gpu.RecordFrameCost(backRenderMilliseconds);
             return rendered;
         }
 
@@ -1520,7 +1534,47 @@ namespace AERISFlightControl.Terrain
                 "; content_snapshot=" + (contentSnapshotValid ? "1" : "0") +
                 "; oh_obsolete_cancel=" + operationHealthObsoleteJobsCancelled +
                 "; oh_view_invalidate=" + operationHealthViewInvalidations +
+                "; phase_a_measure=1" +
+                "; measure_samples=" + phaseAMeasureBackRenderSamples +
+                "; projection_cpu_ms=" + PhaseAAverageMilliseconds(
+                    phaseAMeasureProjectionCpuMs).ToString("F3", CultureInfo.InvariantCulture) +
+                "; mesh_pack_ms=0.000; mesh_pack_inline=1" +
+                "; mesh_upload_ms=" + PhaseAAverageMilliseconds(
+                    phaseAMeasureMeshUploadMs).ToString("F3", CultureInfo.InvariantCulture) +
+                "; back_render_ms=" + PhaseAAverageMilliseconds(
+                    phaseAMeasureBackRenderMs).ToString("F3", CultureInfo.InvariantCulture) +
+                "; projected_vertices=" + PhaseAAverageCount(phaseAMeasureProjectedVertices) +
+                "; uploaded_vertices=" + PhaseAAverageCount(phaseAMeasureUploadedVertices) +
+                "; drawn_vertices=" + PhaseAAverageCount(phaseAMeasureDrawnVertices) +
+                "; visible_entries=" + PhaseAAverageCount(phaseAMeasureVisibleEntries) +
+                "; culled_entries=0" +
                 "; cpu_terrain_draw=0.");
+            ResetPhaseAMeasurementWindow();
+        }
+
+        double PhaseAAverageMilliseconds(double totalMilliseconds)
+        {
+            return phaseAMeasureBackRenderSamples <= 0 ? 0.0 :
+                totalMilliseconds / phaseAMeasureBackRenderSamples;
+        }
+
+        long PhaseAAverageCount(long totalCount)
+        {
+            if (phaseAMeasureBackRenderSamples <= 0) return 0L;
+            return (long)Math.Round(totalCount /
+                (double)phaseAMeasureBackRenderSamples);
+        }
+
+        void ResetPhaseAMeasurementWindow()
+        {
+            phaseAMeasureProjectionCpuMs = 0.0;
+            phaseAMeasureMeshUploadMs = 0.0;
+            phaseAMeasureBackRenderMs = 0.0;
+            phaseAMeasureBackRenderSamples = 0L;
+            phaseAMeasureProjectedVertices = 0L;
+            phaseAMeasureUploadedVertices = 0L;
+            phaseAMeasureDrawnVertices = 0L;
+            phaseAMeasureVisibleEntries = 0L;
         }
 
         void ResetFrontBufferState(bool preserveCadenceAndContent = false)
@@ -2256,6 +2310,10 @@ namespace AERISFlightControl.Terrain
         {
             if (mesh == null || points == null || projectedVertices == null ||
                 points.Length != projectedVertices.Length) return;
+            // Phase A deliberately times at mesh granularity rather than per vertex.
+            // Vector3 packing remains inline with exact projection to avoid adding a
+            // measurement-only second pass over every vertex.
+            long projectionStartTicks = Stopwatch.GetTimestamp();
             for (int i = 0; i < points.Length; i++)
             {
                 GeographicUnitPoint point = points[i];
@@ -2264,7 +2322,15 @@ namespace AERISFlightControl.Terrain
                     out u, out v);
                 projectedVertices[i] = new Vector3(u, v, 0f);
             }
+            long uploadStartTicks = Stopwatch.GetTimestamp();
             mesh.vertices = projectedVertices;
+            long uploadEndTicks = Stopwatch.GetTimestamp();
+            phaseAMeasureProjectionCpuMs += (uploadStartTicks - projectionStartTicks) *
+                1000.0 / Stopwatch.Frequency;
+            phaseAMeasureMeshUploadMs += (uploadEndTicks - uploadStartTicks) *
+                1000.0 / Stopwatch.Frequency;
+            phaseAMeasureProjectedVertices += points.LongLength;
+            phaseAMeasureUploadedVertices += projectedVertices.LongLength;
             operationHealthBoundsSkips++;
         }
 
@@ -2306,20 +2372,42 @@ namespace AERISFlightControl.Terrain
                 // Candidate8 painter order is unchanged: base water, base land, sparse
                 // coastal water, sparse coastal land. Pass 3 only removes redundant
                 // Material.SetPass calls between meshes using the identical material.
-                if (entry.WaterMesh != null) Graphics.DrawMeshNow(entry.WaterMesh, mapMatrix);
-                if (entry.LandMesh != null) Graphics.DrawMeshNow(entry.LandMesh, mapMatrix);
+                if (entry.WaterMesh != null)
+                {
+                    phaseAMeasureDrawnVertices += entry.WaterMesh.vertexCount;
+                    Graphics.DrawMeshNow(entry.WaterMesh, mapMatrix);
+                }
+                if (entry.LandMesh != null)
+                {
+                    phaseAMeasureDrawnVertices += entry.LandMesh.vertexCount;
+                    Graphics.DrawMeshNow(entry.LandMesh, mapMatrix);
+                }
                 if (entry.CoastalWaterCorrectionMesh != null)
+                {
+                    phaseAMeasureDrawnVertices +=
+                        entry.CoastalWaterCorrectionMesh.vertexCount;
                     Graphics.DrawMeshNow(entry.CoastalWaterCorrectionMesh, mapMatrix);
+                }
                 if (entry.CoastalLandCorrectionMesh != null)
+                {
+                    phaseAMeasureDrawnVertices +=
+                        entry.CoastalLandCorrectionMesh.vertexCount;
                     Graphics.DrawMeshNow(entry.CoastalLandCorrectionMesh, mapMatrix);
+                }
                 rendered = true;
                 operationHealthTerrainSetPassSaved += Math.Max(0, terrainMeshCount - 1);
             }
             if (drawContours && entry.ContourMesh != null &&
                 contourMaterial.SetPass(0))
+            {
+                phaseAMeasureDrawnVertices += entry.ContourMesh.vertexCount;
                 Graphics.DrawMeshNow(entry.ContourMesh, mapMatrix);
+            }
             if (entry.CoastlineMesh != null && coastlineMaterial.SetPass(0))
+            {
+                phaseAMeasureDrawnVertices += entry.CoastlineMesh.vertexCount;
                 Graphics.DrawMeshNow(entry.CoastlineMesh, mapMatrix);
+            }
             return rendered;
         }
 
