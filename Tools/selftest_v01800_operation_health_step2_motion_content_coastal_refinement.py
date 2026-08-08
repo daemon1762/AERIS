@@ -37,6 +37,14 @@ post=R[R.index('EnsureResources(plot'):R.index('bool forceCenterProjectionRefres
 ck('if (contentTickRequired)' in post and 'Prune(' in post and 'PruneRenderReady(' in post,'pruning is content-only work')
 ck(R.count('if (contentGpuReadyPending)') >= 2 and R.count('MarkVisibleGpuReady(tiles);') == 2,'visible GPU READY scan occurs only after changed-content commit')
 ck('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in R,'exact projection/presentation remains fixed 10 Hz')
+reset=R[R.index('void ResetFrontBufferState('):R.index('void Schedule(')]
+ck('bool preserveCadenceAndContent = false' in reset,'front reset exposes explicit resize preservation mode')
+ck('if (!preserveCadenceAndContent)' in reset and 'nextAuthoritativePresentationTickRealtime = 0f;' in reset and 'nextBackRefreshRealtime = 0f;' in reset and 'ResetContentSnapshot();' in reset,'full lifecycle reset still clears cadence and content')
+ensure_rt=R[R.index('void EnsureRenderTarget('):R.index('float MeasureViewportCoverage(')]
+ck('DestroyRenderTargets(true);' in ensure_rt and 'ResetFrontBufferState(true);' in ensure_rt,'render-target resize preserves 10 Hz clock and Step 2 content snapshot')
+destroy_rt=R[R.index('void DestroyRenderTargets('):R.index('static void DestroyRenderTexture(')]
+ck('bool preserveCadenceAndContent = false' in destroy_rt and 'ResetFrontBufferState(preserveCadenceAndContent);' in destroy_rt,'render-target destruction forwards lifecycle preservation authority')
+ck('if (!preserveCadenceAndContent)\n                lastBackFoundationCoverage = 0f;' in reset,'resize retains current foundation readiness while full reset clears it')
 ck('present && requestedViewReady' in R and 'TERRAIN GPU BUILDING ' in N,'Hotfix4 stale-FRONT loading contract remains intact')
 ck('internal int CompletedCount' in RA,'worker completed queue can be observed without draining')
 ck('HighDensityResolution = 129' in C and 'HighDensityFormatVersion = 2' in C,'HD coastline payload remains 129x129 format v2')
