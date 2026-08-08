@@ -20,7 +20,7 @@ fast=R[R.index('bool TryPresentCoalescedFront('):R.index('void MarkGpuContentDir
 ck('requestedViewReady = true' not in fast and 'operationHealthLoadingBackdropFrames++' in fast,'cheap non-tick FRONT reuse cannot falsely declare READY')
 end=R[R.index('UpdateReadyBuildingWatchdog(present'):R.index('bool NeedsContentRefresh(')]
 ck('present && requestedViewReady' in end and 'AERISTerrainGpuDrawState.Partial' in end,'visible stale FRONT reports Partial until requested view is READY')
-reset=R[R.index('void ResetFrontBufferState()'):R.index('void Schedule(')]
+reset=R[R.index('void ResetFrontBufferState('):R.index('void Schedule(')]
 ck('requestedViewReady = false;' in reset,'true FRONT lifecycle reset clears requested-view READY')
 ck('oh_loading_backdrop=' in R and 'oh_ready_transition=' in R and 'requested_view_ready=' in R,'runtime loading/readiness telemetry is published')
 ck('if (gpuState == AERISTerrainGpuDrawState.Partial)' in N and 'TERRAIN GPU BUILDING ' in N,'ND UI renders BUILDING for renderer Partial state')
