@@ -39,14 +39,6 @@ namespace AERISFlightControl.Terrain
         static readonly AERISTerrainVirtualDetailProfile FarDirect =
             new AERISTerrainVirtualDetailProfile(AERISTerrainVirtualDetailLevel.FarDirect,
                 "FAR DIRECT", 1, 33, 1.0f);
-        // CP3.75 Golden LOW keeps the authoritative FAR payload at 33x33 samples,
-        // but must never expose its 32x32 parent-cell surface directly as the visible
-        // cartographic base. Reconstruct only the presentation mesh to 65x65. The
-        // RenderTexture scale stays 1.0 so this quality-floor repair does not also
-        // multiply fill-rate/RT memory while Aspect-Correct Map is being stabilized.
-        static readonly AERISTerrainVirtualDetailProfile GoldenLow =
-            new AERISTerrainVirtualDetailProfile(AERISTerrainVirtualDetailLevel.VirtualRoute,
-                "GOLDEN LOW 65", 2, 65, 1.0f);
         static readonly AERISTerrainVirtualDetailProfile VirtualRoute =
             new AERISTerrainVirtualDetailProfile(AERISTerrainVirtualDetailLevel.VirtualRoute,
                 "VIRTUAL ROUTE", 2, 65, 1.25f);
@@ -58,19 +50,12 @@ namespace AERISFlightControl.Terrain
             float rangeMeters)
         {
             float range = Math.Max(1000f, rangeMeters);
-            bool low = string.Equals(qualityName, "LOW",
-                StringComparison.OrdinalIgnoreCase);
             bool land = string.Equals(qualityName, "LAND",
                 StringComparison.OrdinalIgnoreCase);
             bool high = string.Equals(qualityName, "HIGH",
                 StringComparison.OrdinalIgnoreCase);
             bool medium = string.Equals(qualityName, "MEDIUM",
                 StringComparison.OrdinalIgnoreCase);
-            // Candidate 2 fixes runtime authority to Golden LOW. LOW therefore has a
-            // presentation-quality floor at every supported ND range: keep 33x33 FAR
-            // sampling/storage, but render a topology-preserving 65x65 reconstructed
-            // surface so the 32x32 cell lattice cannot become the visible map again.
-            if (low) return GoldenLow;
             // Do not spend local-class reconstruction where one FAR cell projects to
             // only a few screen pixels. Detail rises as the pilot zooms in.
             if ((land && range <= 40000f) || (high && range <= 20000f))
