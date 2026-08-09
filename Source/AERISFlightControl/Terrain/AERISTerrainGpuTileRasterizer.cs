@@ -188,14 +188,41 @@ namespace AERISFlightControl.Terrain
             if (resolution < 2 || resolution > 257) return null;
             int count = resolution * resolution;
             if (tile.Elevation.Length < count || tile.Flags.Length < count) return null;
-            bool highDensityBoundary = AERISTerrainCoastlineExtractor.HasCurrentHighDensityPayload(tile);
-            // Step 2 derives one topology-preserving presentation field from the existing
-            // 129x129 classification payload. The same field is consumed by both coastline
-            // vectors and sparse land/water correction, so the painter boundary stays exact.
-            float[] coastalBoundaryField = highDensityBoundary ?
+            bool highDensityBoundary =
+                AERISTerrainCoastlineExtractor.HasCurrentHighDensityPayload(tile);
+            byte[] presentationCoastalFlags = highDensityBoundary ?
+                tile.HighDensityCoastalFlags : null;
+            int presentationCoastalResolution = highDensityBoundary ?
+                tile.HighDensityCoastlineResolution : 0;
+            AERISTerrainHeightTile coastalPresentationTile = tile;
+            if (!highDensityBoundary && tile.Key.Lod == AERISTerrainTileLod.Far &&
+                AERISTerrainCoastlineExtractor.ContainsLandWaterBoundary(tile))
+            {
+                byte[] syntheticFlags = AERISTerrainCoastlinePolicy.
+                    BuildTopologyPreservingCoastalPresentationMask(tile,
+                        AERISTerrainCoastlineExtractor.HighDensityResolution);
+                if (syntheticFlags != null && syntheticFlags.Length ==
+                    AERISTerrainCoastlineExtractor.HighDensityResolution *
+                    AERISTerrainCoastlineExtractor.HighDensityResolution)
+                {
+                    presentationCoastalFlags = syntheticFlags;
+                    presentationCoastalResolution =
+                        AERISTerrainCoastlineExtractor.HighDensityResolution;
+                    coastalPresentationTile = tile.CloneImmutable();
+                    coastalPresentationTile.HighDensityCoastlineResolution =
+                        presentationCoastalResolution;
+                    coastalPresentationTile.HighDensityCoastalFlags = syntheticFlags;
+                    coastalPresentationTile.HighDensityCoastlineSegments = new float[0];
+                }
+            }
+            bool presentationBoundary = presentationCoastalFlags != null &&
+                presentationCoastalResolution >= 2;
+            // Persisted Candidate11 data remains first authority. If it is absent, only
+            // a transient coastal parent-cell fallback enters this same line/fill path.
+            float[] coastalBoundaryField = presentationBoundary ?
                 AERISTerrainCoastlinePolicy.BuildPresentationBoundaryField(
-                    tile.HighDensityCoastalFlags,
-                    tile.HighDensityCoastlineResolution) : new float[0];
+                    presentationCoastalFlags, presentationCoastalResolution) :
+                new float[0];
             Stopwatch watch = Stopwatch.StartNew();
             var x = new float[count]; var y = new float[count]; var elevationMeters = new float[count]; var water = new byte[count]; var valid = new byte[count]; var shade = new byte[count];
             double finalIntervals = Math.Max(1, AERISTerrainTileFormat.Resolution(tile.Key.Lod) - 1);
@@ -214,17 +241,17 @@ namespace AERISFlightControl.Terrain
             // growing a List<int> and then allocating a second ToArray() copy.
             int[] triangles = BuildTriangleIndices(valid, resolution);
             float[] correctionLandXY = new float[0], correctionLandElevation = new float[0], correctionWaterXY = new float[0]; byte[] correctionLandShade = new byte[0]; int correctionParents = 0;
-            if (highDensityBoundary) BuildSparseCoastalCorrections(tile,
-                request.ShadingEnabled, coastalBoundaryField, out correctionLandXY,
-                out correctionLandElevation, out correctionLandShade,
-                out correctionWaterXY, out correctionParents);
+            if (presentationBoundary) BuildSparseCoastalCorrections(
+                coastalPresentationTile, request.ShadingEnabled, coastalBoundaryField,
+                out correctionLandXY, out correctionLandElevation,
+                out correctionLandShade, out correctionWaterXY,
+                out correctionParents);
             float meshMilliseconds = (float)watch.Elapsed.TotalMilliseconds;
             Stopwatch contourWatch = Stopwatch.StartNew();
             float[] contours = request.ContoursEnabled ? BuildContours(tile, Math.Max(25f, request.ContourIntervalMeters)) : new float[0];
-            float[] coastlines = highDensityBoundary ?
+            float[] coastlines = presentationBoundary ?
                 AERISTerrainCoastlineExtractor.BuildFromClassMask(
-                    tile.HighDensityCoastalFlags,
-                    tile.HighDensityCoastlineResolution,
+                    presentationCoastalFlags, presentationCoastalResolution,
                     coastalBoundaryField) : AERISTerrainCoastlineExtractor.Build(tile);
             // Persisted Candidate11 segments remain the no-blank fallback if an invalid
             // presentation field ever reaches this worker.

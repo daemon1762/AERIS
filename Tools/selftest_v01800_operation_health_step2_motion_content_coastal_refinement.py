@@ -52,7 +52,7 @@ ck('PresentationSmoothingBlend = 0.65f' in P and 'PresentationMinimumBoundaryMag
 field=P[P.index('BuildPresentationBoundaryField'):P.index('PresentationCrossingFraction')]
 ck('field[index] = rawSign * magnitude;' in field,'coastal smoothing preserves source land/water sign topology')
 ck('BuildFromClassMask' in C and 'PresentationCrossingFraction' in C,'coastline vector consumes refined crossing authority')
-ck('BuildSparseCoastalCorrections(tile' in RA and 'coastalBoundaryField' in RA,'sparse land/water correction consumes same boundary field')
+ck('BuildSparseCoastalCorrections' in RA and 'coastalBoundaryField' in RA and 'presentationBoundary' in RA,'sparse land/water correction consumes selected coastal boundary field')
 ck('PresentationCrossingFraction(' in RA[RA.index('static CorrectionPoint CorrectionCrossing'):],'fill crossing consumes the same presentation crossing function')
 ck('HighDensityCoastlineSegments.Clone()' in RA,'persisted Candidate11 coastline remains safety fallback')
 ck('MaximumSparseCorrectionParentCells = 256' in RA,'Candidate11 sparse correction safety rail remains 256')
