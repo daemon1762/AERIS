@@ -198,13 +198,10 @@ namespace AERISFlightControl.UI
             bool sampleGc = repaint && now >= nextNdGcSampleRealtime;
             long gcBefore = sampleGc ? GC.GetTotalMemory(false) : 0L;
             long drawStartTicks = measure ? Stopwatch.GetTimestamp() : 0L;
-            // ND panel resizing is fixed-aspect. Keep every internal furniture dimension
-            // on that same scale as well; the old 1.25 ceiling made larger panels drift
-            // away from the accepted 366:188 map-plot geometry even when the outer panel
-            // itself remained 380:244. Screen bounds in AERISFlightInstrument own the
-            // upper size limit.
-            float scale = Mathf.Max(0.80f,
-                Mathf.Min(rect.width / 380f, rect.height / 244f));
+            // ND furniture stays at instrument size. User resize authority belongs to the
+            // map surface only; buttons, bezel, margins and information typography do not
+            // grow with the terrain viewport.
+            const float scale = 1f;
             EnsureStyles(scale);
             Color previousColor = GUI.color;
             Color previousBackground = GUI.backgroundColor;
@@ -282,9 +279,9 @@ namespace AERISFlightControl.UI
 
         void DrawLocal(Rect rect, float scale)
         {
-            float margin = Mathf.Max(4f, 6f * scale);
-            float header = Mathf.Max(18f, 23f * scale);
-            float controls = Mathf.Max(19f, 25f * scale);
+            // Fixed furniture. The resizable map surface is the area inside these rails.
+            const float margin = 6f;
+            const float controls = 25f;
             AERISLandingFoundation land = core.Landing;
             AERISAirfieldRegistry registry = core.Airfields;
             AERISTerrainAwareness terrain = core.Terrain;
@@ -329,18 +326,12 @@ namespace AERISFlightControl.UI
                 planCenterLongitudeDeg = vessel.longitude;
             }
 
-            string mode = planMode ? "PLAN" : (landActive ? "LAND" : "TERR");
-            string orientation = planMode ? "N" : (effectiveTrackUp ? "TRK" : "N");
-            DrawLabel(new Rect(margin, 0f, rect.width * 0.42f, header),
-                mode + "  " + orientation, titleStyle,
-                landActive ? ArmedColor : new Color(0.80f, 0.94f, 1f, 1f));
-            string rightHeader = landActive && direction != null ? direction.DisplayName :
-                (hasFrame ? frame.Runways.Length + " RWY" : "NAV DATA");
-            DrawLabel(new Rect(rect.width * 0.42f, 0f, rect.width * 0.56f - margin, header),
-                rightHeader, rightTitleStyle, RunwayColor);
+            // Top-bezel status text intentionally removed. Orientation, terrain mode and
+            // range remain available through the dedicated control buttons.
 
-            Rect viewport = new Rect(margin, header, Mathf.Max(20f, rect.width - margin * 2f),
-                Mathf.Max(20f, rect.height - header - controls - margin));
+            Rect viewport = new Rect(margin, margin,
+                Mathf.Max(20f, rect.width - margin * 2f),
+                Mathf.Max(20f, rect.height - controls - margin * 2f));
             GUI.Box(viewport, GUIContent.none);
             HandleMouseWheel(viewport, requestedRange);
 
@@ -2231,17 +2222,17 @@ namespace AERISFlightControl.UI
             bool overlay, bool isPlan, float scale)
         {
             float height = Mathf.Max(17f, rect.height - 2f);
-            float button = Mathf.Max(23f, 31f * scale);
-            float rangeButton = Mathf.Max(35f, 48f * scale);
-            float wideButton = Mathf.Max(44f, 58f * scale);
-            float resizeReserve = Mathf.Max(22f, 24f * scale);
+            const float button = 31f;
+            const float rangeButton = 48f;
+            const float wideButton = 58f;
+            const float resizeReserve = 24f;
             float right = rect.xMax - resizeReserve;
             Rect plus = new Rect(right - button, rect.y, button, height);
             Rect minus = new Rect(plus.x - button - 2f, rect.y, button, height);
             Rect rangeRect = new Rect(minus.x - rangeButton - 2f, rect.y, rangeButton, height);
             Rect recenter = new Rect(rangeRect.x - wideButton - 2f, rect.y, wideButton, height);
             Rect orient = new Rect(recenter.x - wideButton - 2f, rect.y, wideButton, height);
-            float menuWidth = Mathf.Max(38f, 50f * scale);
+            const float menuWidth = 50f;
             Rect view = new Rect(orient.x - menuWidth - 2f, rect.y, menuWidth, height);
             Rect terrainMode = new Rect(view.x - wideButton - 2f, rect.y, wideButton, height);
 
@@ -2295,20 +2286,7 @@ namespace AERISFlightControl.UI
             if (auxiliaryMenuOpen)
                 DrawAuxiliaryMenu(rect, landActive, overlay, scale);
 
-            string compact = isPlan ? "DRAG MAP  PLAN" : "CLICK RWY  PREVIEW";
-            if (landActive)
-            {
-                AERISLandingFoundation land = core.Landing;
-                compact = "PILOT  ARM";
-                if (land != null && land.Observation != null)
-                {
-                    compact += land.Observation.LocalizerGeometryEligible ? "  LOC" : string.Empty;
-                    compact += land.Observation.GlidePathGeometryEligible ? "  GS" : string.Empty;
-                }
-            }
-            DrawLabel(new Rect(rect.x + 2f, rect.y,
-                Mathf.Max(10f, view.x - rect.x - 4f), height), compact,
-                titleStyle, landActive ? ArmedColor : new Color(0.68f, 0.82f, 0.88f, 1f));
+            // No lower-left advisory text: the control strip contains buttons only.
         }
 
         static Rect ResolveAuxiliaryMenuRect(Rect controlsRect, bool landActive,

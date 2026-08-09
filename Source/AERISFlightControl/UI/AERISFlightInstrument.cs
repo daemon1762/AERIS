@@ -55,10 +55,14 @@ namespace AERISFlightControl.UI
         const float BackgroundAlpha = 0.72f;
         const float BasePanelWidth = 380f;
         const float BasePanelHeight = 244f;
-        // AERIS23 rollback recovery: the ND may scale, but its panel geometry may not
-        // change aspect ratio. 380:244 keeps the accepted Golden internal map geometry
-        // (approximately 366:188 after furniture/margins) invariant at every size.
-        const float NavigationPanelAspect = BasePanelWidth / BasePanelHeight;
+        // ND resize authority belongs to the cartographic surface, not to the furniture.
+        // At stock geometry the plan map is exactly 366x188 inside fixed 14px horizontal
+        // and 39px vertical furniture. Resizing preserves only the 366:188 map ratio.
+        const float NavigationBaseMapWidth = 366f;
+        const float NavigationBaseMapHeight = 188f;
+        const float NavigationHorizontalFurniture = 14f;
+        const float NavigationVerticalFurniture = 39f;
+        const float NavigationMinimumMapScale = 1.0f;
         const float BaseGap = 12f;
         const float MinimumPanelWidth = 220f;
         const float MinimumPanelHeight = 140f;
@@ -156,9 +160,14 @@ namespace AERISFlightControl.UI
 
             float defaultPanelWidth = BasePanelWidth * resolutionScale;
             float defaultPanelHeight = BasePanelHeight * resolutionScale;
-            Rect defaultNdRect = new Rect(navFurniture.xMin - defaultPanelWidth - gap,
-                nav.center.y - defaultPanelHeight * 0.5f,
-                defaultPanelWidth, defaultPanelHeight);
+            float defaultNdMapScale = Mathf.Max(NavigationMinimumMapScale, resolutionScale);
+            float defaultNdWidth = NavigationHorizontalFurniture +
+                NavigationBaseMapWidth * defaultNdMapScale;
+            float defaultNdHeight = NavigationVerticalFurniture +
+                NavigationBaseMapHeight * defaultNdMapScale;
+            Rect defaultNdRect = new Rect(navFurniture.xMin - defaultNdWidth - gap,
+                nav.center.y - defaultNdHeight * 0.5f,
+                defaultNdWidth, defaultNdHeight);
             Rect defaultFdiRect = new Rect(verticalRect.xMax + gap,
                 nav.center.y - defaultPanelHeight * 0.5f,
                 defaultPanelWidth, defaultPanelHeight);
@@ -402,12 +411,15 @@ namespace AERISFlightControl.UI
         {
             if (kind == PanelKind.NavigationDisplay)
             {
-                // Fit the fixed-aspect panel inside the requested bounding box. Using
-                // the smaller scale guarantees migration never expands an old free-aspect
-                // layout and prevents a resolution change from silently growing ND work.
+                // Interpret saved geometry as a bounding box for the map surface. Existing
+                // outer-aspect layouts are migrated without enlarging either dimension.
+                float availableMapWidth = Mathf.Max(1f,
+                    rect.width - NavigationHorizontalFurniture);
+                float availableMapHeight = Mathf.Max(1f,
+                    rect.height - NavigationVerticalFurniture);
                 float requestedScale = Mathf.Min(
-                    rect.width / Mathf.Max(1f, BasePanelWidth),
-                    rect.height / Mathf.Max(1f, BasePanelHeight));
+                    availableMapWidth / NavigationBaseMapWidth,
+                    availableMapHeight / NavigationBaseMapHeight);
                 return SetNavigationPanelScale(rect, requestedScale);
             }
             float maxWidth = Mathf.Max(MinimumPanelWidth, Screen.width - 8f);
@@ -419,12 +431,15 @@ namespace AERISFlightControl.UI
 
         static Rect ResizeNavigationPanel(Rect start, Vector2 delta)
         {
-            float startScale = start.width / Mathf.Max(1f, BasePanelWidth);
-            float widthScale = (start.width + delta.x) / Mathf.Max(1f, BasePanelWidth);
-            float heightScale = (start.height + delta.y) / Mathf.Max(1f, BasePanelHeight);
-            // Whichever axis the user moved farther in normalized scale owns the drag;
-            // the other axis follows automatically. Horizontal-only and vertical-only
-            // drags therefore both produce a predictable uniform resize.
+            float startScale = Mathf.Max(0.01f,
+                (start.width - NavigationHorizontalFurniture) /
+                NavigationBaseMapWidth);
+            float widthScale = (start.width + delta.x -
+                NavigationHorizontalFurniture) / NavigationBaseMapWidth;
+            float heightScale = (start.height + delta.y -
+                NavigationVerticalFurniture) / NavigationBaseMapHeight;
+            // Dominant normalized drag axis controls one map-surface scale. Furniture
+            // remains fixed, so only the 366:188 cartographic canvas grows or shrinks.
             float requestedScale = Mathf.Abs(widthScale - startScale) >=
                 Mathf.Abs(heightScale - startScale) ? widthScale : heightScale;
             return SetNavigationPanelScale(start, requestedScale);
@@ -433,19 +448,16 @@ namespace AERISFlightControl.UI
         static Rect SetNavigationPanelScale(Rect rect, float requestedScale)
         {
             float screenScale = Mathf.Min(
-                Mathf.Max(1f, Screen.width - 8f) / BasePanelWidth,
-                Mathf.Max(1f, Screen.height - 8f) / BasePanelHeight);
-            // Below 0.80 the ND's readability floors (header/control/margin) stop
-            // shrinking proportionally and would alter the internal map-plot aspect.
-            // 0.80 is therefore the fixed-geometry minimum for ND only.
-            float minimumScale = Mathf.Max(0.80f, Mathf.Max(
-                MinimumPanelWidth / BasePanelWidth,
-                MinimumPanelHeight / BasePanelHeight));
-            float maximumScale = Mathf.Max(0.10f, screenScale);
-            minimumScale = Mathf.Min(minimumScale, maximumScale);
+                Mathf.Max(1f, Screen.width - 8f - NavigationHorizontalFurniture) /
+                    NavigationBaseMapWidth,
+                Mathf.Max(1f, Screen.height - 8f - NavigationVerticalFurniture) /
+                    NavigationBaseMapHeight);
+            float minimumScale = Mathf.Min(NavigationMinimumMapScale,
+                Mathf.Max(0.10f, screenScale));
+            float maximumScale = Mathf.Max(minimumScale, screenScale);
             float scale = Mathf.Clamp(requestedScale, minimumScale, maximumScale);
-            rect.width = BasePanelWidth * scale;
-            rect.height = BasePanelHeight * scale;
+            rect.width = NavigationHorizontalFurniture + NavigationBaseMapWidth * scale;
+            rect.height = NavigationVerticalFurniture + NavigationBaseMapHeight * scale;
             return rect;
         }
 
