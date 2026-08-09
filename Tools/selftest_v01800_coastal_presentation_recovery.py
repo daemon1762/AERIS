@@ -20,7 +20,9 @@ ck('fx + fy <= 1f' in C and 'sd * (fx + fy - 1f)' in C,
    'subdivision follows existing FAR triangle topology')
 ck('row % factor == 0 && column % factor == 0' in C,
    'original source-grid classes are copied exactly')
-ck('presentationCoastalFlags = tile.HighDensityCoastalFlags' in R,
+ck('bool highDensityBoundary' in R and
+   'presentationCoastalFlags = highDensityBoundary ?' in R and
+   'tile.HighDensityCoastalFlags : null' in R,
    'persisted Candidate11 HD mask remains first authority')
 ck('!highDensityBoundary && tile.Key.Lod == AERISTerrainTileLod.Far' in R,
    'synthetic refinement is FAR coastal fallback only')
