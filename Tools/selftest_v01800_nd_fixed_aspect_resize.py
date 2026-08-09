@@ -26,6 +26,11 @@ ck('widthScale' in U and 'heightScale' in U and
 ck('rect.width = BasePanelWidth * scale;' in U and
    'rect.height = BasePanelHeight * scale;' in U,
    'every ND resize writes both dimensions from one scale')
+N=(ROOT/'Source/AERISFlightControl/UI/AERISNavigationDisplay.cs').read_text()
+ck('Mathf.Max(0.80f,' in N and '1.25f' not in N[N.index('internal void Draw(Rect rect)'):N.index('void EnsureStyles')],
+   'ND internal layout follows panel scale above 1.25 without geometry drift')
+ck('float minimumScale = Mathf.Max(0.80f' in U,
+   'ND minimum size stays above internal readability-floor distortion threshold')
 ck('requestedScale = Mathf.Min(' in U and
    'PersistPanelRect(kind, rect, false);' in U,
    'legacy free-aspect ND layouts migrate without enlargement')

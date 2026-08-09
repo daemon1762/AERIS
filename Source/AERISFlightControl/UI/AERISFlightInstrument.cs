@@ -435,9 +435,12 @@ namespace AERISFlightControl.UI
             float screenScale = Mathf.Min(
                 Mathf.Max(1f, Screen.width - 8f) / BasePanelWidth,
                 Mathf.Max(1f, Screen.height - 8f) / BasePanelHeight);
-            float minimumScale = Mathf.Max(
+            // Below 0.80 the ND's readability floors (header/control/margin) stop
+            // shrinking proportionally and would alter the internal map-plot aspect.
+            // 0.80 is therefore the fixed-geometry minimum for ND only.
+            float minimumScale = Mathf.Max(0.80f, Mathf.Max(
                 MinimumPanelWidth / BasePanelWidth,
-                MinimumPanelHeight / BasePanelHeight);
+                MinimumPanelHeight / BasePanelHeight));
             float maximumScale = Mathf.Max(0.10f, screenScale);
             minimumScale = Mathf.Min(minimumScale, maximumScale);
             float scale = Mathf.Clamp(requestedScale, minimumScale, maximumScale);

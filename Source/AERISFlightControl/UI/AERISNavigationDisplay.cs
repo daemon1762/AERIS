@@ -198,7 +198,13 @@ namespace AERISFlightControl.UI
             bool sampleGc = repaint && now >= nextNdGcSampleRealtime;
             long gcBefore = sampleGc ? GC.GetTotalMemory(false) : 0L;
             long drawStartTicks = measure ? Stopwatch.GetTimestamp() : 0L;
-            float scale = Mathf.Clamp(Mathf.Min(rect.width / 380f, rect.height / 244f), 0.30f, 1.25f);
+            // ND panel resizing is fixed-aspect. Keep every internal furniture dimension
+            // on that same scale as well; the old 1.25 ceiling made larger panels drift
+            // away from the accepted 366:188 map-plot geometry even when the outer panel
+            // itself remained 380:244. Screen bounds in AERISFlightInstrument own the
+            // upper size limit.
+            float scale = Mathf.Max(0.80f,
+                Mathf.Min(rect.width / 380f, rect.height / 244f));
             EnsureStyles(scale);
             Color previousColor = GUI.color;
             Color previousBackground = GUI.backgroundColor;
