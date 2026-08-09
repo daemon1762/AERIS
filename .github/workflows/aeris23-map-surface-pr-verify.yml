@@ -1,0 +1,41 @@
+name: AERIS23 ND Map Surface PR Verify
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - cp3.75/nd-recovery
+permissions:
+  contents: write
+jobs:
+  verify:
+    if: github.head_ref == 'agent/aeris23-map-surface-resize-cleanup'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/aeris23-map-surface-resize-cleanup
+          fetch-depth: 0
+      - name: Apply patch and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 Tools/aeris23_map_surface_patch.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+          git diff --check
+          grep -q 'const float scale = 1f' Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+          ! grep -q 'CLICK RWY  PREVIEW' Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+          ! grep -q 'rightHeader' Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+          grep -q 'NavigationBaseMapWidth = 366f' Source/AERISFlightControl/UI/AERISFlightInstrument.cs
+          git config user.name 'AERIS Patch Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add Source/AERISFlightControl/UI/AERISFlightInstrument.cs \
+                  Source/AERISFlightControl/UI/AERISNavigationDisplay.cs \
+                  Tools/run_v01800_operation_health_pass3_prebuild.py \
+                  Tools/selftest_v01800_nd_fixed_aspect_resize.py
+          git commit -m 'Resize only the ND map surface'
+          git rm .github/workflows/aeris23-map-surface-resize-cleanup.yml \
+                 .github/workflows/aeris23-map-surface-pr-verify.yml \
+                 Tools/aeris23_map_surface_patch.py \
+                 Tools/aeris23_map_surface_trigger.tmp
+          git commit -m 'Remove temporary ND surface validation files'
+          git push origin HEAD:agent/aeris23-map-surface-resize-cleanup
