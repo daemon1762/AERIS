@@ -1,0 +1,154 @@
+name: AERIS23 Fixed Aspect Rollback
+on:
+  pull_request:
+    branches: [ "cp3.75/nd-recovery" ]
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: write
+jobs:
+  rollback-and-verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/aeris23-fixed-aspect-rollback
+          fetch-depth: 0
+      - name: Restore pre-aspect map and lock ND ratio
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=2c545ad21f47f1ae7e89f956fbb85e60963775cb
+
+          # Runtime-rejected chain: PR15 Aspect-Correct, PR16 whole-tile 65,
+          # PR17 synthetic coastal fallback. Restore the exact pre-PR15 files while
+          # retaining PR12-14 load reductions and the accepted Resize Cadence Guard.
+          git checkout "$BASE" -- \
+            Source/AERISFlightControl/Terrain/AERISNdMapProjection.cs \
+            Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs \
+            Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs \
+            Source/AERISFlightControl/Terrain/AERISTerrainViewportFoundationPlanner.cs \
+            Source/AERISFlightControl/Terrain/AERISTerrainVirtualDetail.cs \
+            Source/AERISFlightControl/Terrain/AERISTerrainCoastlinePolicy.cs \
+            Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs \
+            Source/AERISFlightControl/UI/AERISNavigationDisplay.cs \
+            Tools/run_v01800_operation_health_pass3_prebuild.py \
+            Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py
+
+          rm -f \
+            Tools/selftest_v01800_aspect_correct_map_core.py \
+            Tools/selftest_v01800_aspect_correct_map_ui.py \
+            Tools/selftest_v01800_coastal_presentation_recovery.py \
+            Tools/selftest_v01800_golden_low_surface_refinement.py
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Source/AERISFlightControl/UI/AERISFlightInstrument.cs')
+          t=p.read_text()
+
+          old='''        const float BasePanelWidth = 380f;\n        const float BasePanelHeight = 244f;\n        const float BaseGap = 12f;\n'''
+          new='''        const float BasePanelWidth = 380f;\n        const float BasePanelHeight = 244f;\n        // AERIS23 rollback recovery: the ND may scale, but its panel geometry may not\n        // change aspect ratio. 380:244 keeps the accepted Golden internal map geometry\n        // (approximately 366:188 after furniture/margins) invariant at every size.\n        const float NavigationPanelAspect = BasePanelWidth / BasePanelHeight;\n        const float BaseGap = 12f;\n'''
+          if t.count(old)!=1: raise SystemExit('constant anchor count='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          old='''            Rect rect = customized ? ReadNormalizedPanelRect(kind) : defaultRect;\n            rect = ClampPanelSize(rect);\n            if (!customized) return ClampToScreen(rect, 4f);\n'''
+          new='''            Rect rect = customized ? ReadNormalizedPanelRect(kind) : defaultRect;\n            Rect beforeSizeClamp = rect;\n            rect = ClampPanelSize(kind, rect);\n            // Migrate any previously saved free-aspect ND size in memory immediately.\n            // This never enlarges either old dimension; the next ordinary settings save\n            // persists the fixed-ratio geometry. FDI remains independently resizable.\n            if (customized && kind == PanelKind.NavigationDisplay &&\n                (Mathf.Abs(beforeSizeClamp.width - rect.width) > 0.5f ||\n                 Mathf.Abs(beforeSizeClamp.height - rect.height) > 0.5f))\n                PersistPanelRect(kind, rect, false);\n            if (!customized) return ClampToScreen(rect, 4f);\n'''
+          if t.count(old)!=1: raise SystemExit('resolve anchor count='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          old='''                else\n                {\n                    rect.width = interactionStartRect.width + delta.x;\n                    rect.height = interactionStartRect.height + delta.y;\n                    rect = ClampPanelSize(rect);\n                }\n'''
+          new='''                else\n                {\n                    if (kind == PanelKind.NavigationDisplay)\n                        rect = ResizeNavigationPanel(interactionStartRect, delta);\n                    else\n                    {\n                        rect.width = interactionStartRect.width + delta.x;\n                        rect.height = interactionStartRect.height + delta.y;\n                        rect = ClampPanelSize(kind, rect);\n                    }\n                }\n'''
+          if t.count(old)!=1: raise SystemExit('resize anchor count='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          old='''        static Rect ClampPanelSize(Rect rect)\n        {\n            float maxWidth = Mathf.Max(MinimumPanelWidth, Screen.width - 8f);\n            float maxHeight = Mathf.Max(MinimumPanelHeight, Screen.height - 8f);\n            rect.width = Mathf.Clamp(rect.width, MinimumPanelWidth, maxWidth);\n            rect.height = Mathf.Clamp(rect.height, MinimumPanelHeight, maxHeight);\n            return rect;\n        }\n'''
+          new='''        static Rect ClampPanelSize(PanelKind kind, Rect rect)\n        {\n            if (kind == PanelKind.NavigationDisplay)\n            {\n                // Fit the fixed-aspect panel inside the requested bounding box. Using\n                // the smaller scale guarantees migration never expands an old free-aspect\n                // layout and prevents a resolution change from silently growing ND work.\n                float requestedScale = Mathf.Min(\n                    rect.width / Mathf.Max(1f, BasePanelWidth),\n                    rect.height / Mathf.Max(1f, BasePanelHeight));\n                return SetNavigationPanelScale(rect, requestedScale);\n            }\n            float maxWidth = Mathf.Max(MinimumPanelWidth, Screen.width - 8f);\n            float maxHeight = Mathf.Max(MinimumPanelHeight, Screen.height - 8f);\n            rect.width = Mathf.Clamp(rect.width, MinimumPanelWidth, maxWidth);\n            rect.height = Mathf.Clamp(rect.height, MinimumPanelHeight, maxHeight);\n            return rect;\n        }\n\n        static Rect ResizeNavigationPanel(Rect start, Vector2 delta)\n        {\n            float startScale = start.width / Mathf.Max(1f, BasePanelWidth);\n            float widthScale = (start.width + delta.x) / Mathf.Max(1f, BasePanelWidth);\n            float heightScale = (start.height + delta.y) / Mathf.Max(1f, BasePanelHeight);\n            // Whichever axis the user moved farther in normalized scale owns the drag;\n            // the other axis follows automatically. Horizontal-only and vertical-only\n            // drags therefore both produce a predictable uniform resize.\n            float requestedScale = Mathf.Abs(widthScale - startScale) >=\n                Mathf.Abs(heightScale - startScale) ? widthScale : heightScale;\n            return SetNavigationPanelScale(start, requestedScale);\n        }\n\n        static Rect SetNavigationPanelScale(Rect rect, float requestedScale)\n        {\n            float screenScale = Mathf.Min(\n                Mathf.Max(1f, Screen.width - 8f) / BasePanelWidth,\n                Mathf.Max(1f, Screen.height - 8f) / BasePanelHeight);\n            float minimumScale = Mathf.Max(\n                MinimumPanelWidth / BasePanelWidth,\n                MinimumPanelHeight / BasePanelHeight);\n            float maximumScale = Mathf.Max(0.10f, screenScale);\n            minimumScale = Mathf.Min(minimumScale, maximumScale);\n            float scale = Mathf.Clamp(requestedScale, minimumScale, maximumScale);\n            rect.width = BasePanelWidth * scale;\n            rect.height = BasePanelHeight * scale;\n            return rect;\n        }\n'''
+          if t.count(old)!=1: raise SystemExit('clamp anchor count='+str(t.count(old)))
+          t=t.replace(old,new,1)
+          p.write_text(t)
+          PY
+
+          cat > Tools/selftest_v01800_nd_fixed_aspect_resize.py <<'PY'
+          #!/usr/bin/env python3
+          from pathlib import Path
+          import math,sys
+          sys.dont_write_bytecode=True
+          ROOT=Path(__file__).resolve().parents[1]
+          U=(ROOT/'Source/AERISFlightControl/UI/AERISFlightInstrument.cs').read_text()
+          P=(ROOT/'Source/AERISFlightControl/Terrain/AERISNdMapProjection.cs').read_text()
+          F=(ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainViewportFoundationPlanner.cs').read_text()
+          V=(ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainVirtualDetail.cs').read_text()
+          C=(ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainCoastlinePolicy.cs').read_text()
+          R=(ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          checks=[]
+          def ck(v,n): checks.append((bool(v),n)); print(('[PASS] ' if v else '[FAIL] ')+n)
+          ck('const float BasePanelWidth = 380f;' in U and 'const float BasePanelHeight = 244f;' in U,
+             'ND fixed ratio uses accepted 380x244 panel baseline')
+          ck('NavigationPanelAspect = BasePanelWidth / BasePanelHeight' in U,
+             'fixed aspect authority is explicit')
+          ck('ClampPanelSize(PanelKind kind, Rect rect)' in U and
+             'kind == PanelKind.NavigationDisplay' in U,
+             'ND size clamp is panel-kind aware')
+          ck('ResizeNavigationPanel(interactionStartRect, delta)' in U,
+             'ND resize uses dedicated uniform scale path')
+          ck('widthScale' in U and 'heightScale' in U and
+             'Mathf.Abs(widthScale - startScale)' in U,
+             'dominant normalized drag axis controls uniform scaling')
+          ck('rect.width = BasePanelWidth * scale;' in U and
+             'rect.height = BasePanelHeight * scale;' in U,
+             'every ND resize writes both dimensions from one scale')
+          ck('requestedScale = Mathf.Min(' in U and
+             'PersistPanelRect(kind, rect, false);' in U,
+             'legacy free-aspect ND layouts migrate without enlargement')
+          ck('NavigationPanelAspect' in U and abs(380.0/244.0-1.55737704918)<1e-9,
+             'numerical panel aspect is 380:244')
+          # PR15 rollback markers: accepted pre-aspect projection/planner behavior.
+          ck('HorizontalMeters = Math.Max(1.0, rangeMeters * 1.30)' in P and
+             'ResolveAspectCorrectExtents' not in P,
+             'PR15 aspect-dependent geographic expansion is removed')
+          ck('MaximumFarKeys = 192' in F and 'MaximumFarKeys = 1024' not in F,
+             'foundation capacity returns to pre-PR15 bounded model')
+          ck('GOLDEN LOW 65' not in V,
+             'runtime-failed PR16 whole-tile 65 reconstruction is absent')
+          ck('BuildTopologyPreservingCoastalPresentationMask' not in C,
+             'runtime-failed PR17 synthetic coastline fallback is absent')
+          ck('oh_aspect_resize_defer=' not in R and 'aspect_hv=' not in R,
+             'PR15 resize-expansion telemetry/path is absent')
+          # A uniformly scaled panel preserves its exact aspect at representative sizes.
+          for s in (0.58,1.0,1.5,2.0):
+              w,h=380.0*s,244.0*s
+              ck(abs(w/h-380.0/244.0)<1e-12,'uniform scale %.2f preserves ND aspect' % s)
+          failed=[n for ok,n in checks if not ok]
+          print('\n[ND Fixed Aspect Rollback] %d/%d PASS' % (len(checks)-len(failed),len(checks)))
+          if failed:
+              print('FAILED: '+', '.join(failed)); raise SystemExit(1)
+          PY
+          chmod +x Tools/selftest_v01800_nd_fixed_aspect_resize.py
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Tools/run_v01800_operation_health_pass3_prebuild.py')
+          t=p.read_text()
+          anchor=" ('Operation Health Conservative Entry Culling','selftest_v01800_operation_health_conservative_entry_culling.py'),\n"
+          insert=anchor+" ('ND Fixed Aspect Rollback','selftest_v01800_nd_fixed_aspect_resize.py'),\n"
+          if t.count(anchor)!=1: raise SystemExit('prebuild anchor count='+str(t.count(anchor)))
+          p.write_text(t.replace(anchor,insert,1))
+          PY
+
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+          git diff --check
+
+          # Explicit rollback guards.
+          ! grep -R -q 'ResolveAspectCorrectExtents' Source/AERISFlightControl/Terrain Source/AERISFlightControl/UI/AERISNavigationDisplay.cs
+          ! grep -R -q 'GOLDEN LOW 65' Source/AERISFlightControl/Terrain
+          ! grep -R -q 'BuildTopologyPreservingCoastalPresentationMask' Source/AERISFlightControl/Terrain
+          grep -q 'ResizeNavigationPanel(interactionStartRect, delta)' Source/AERISFlightControl/UI/AERISFlightInstrument.cs
+          grep -q 'rect.width = BasePanelWidth \* scale' Source/AERISFlightControl/UI/AERISFlightInstrument.cs
+          grep -q 'rect.height = BasePanelHeight \* scale' Source/AERISFlightControl/UI/AERISFlightInstrument.cs
+
+          git config user.name 'AERIS Patch Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Rollback free-aspect ND and lock panel ratio'
+          git rm .github/workflows/aeris23-fixed-aspect-rollback.yml
+          git commit -m 'Remove temporary fixed-aspect validator'
+          git push origin HEAD:agent/aeris23-fixed-aspect-rollback
