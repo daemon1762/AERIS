@@ -17,10 +17,6 @@ namespace AERISFlightControl.Terrain
         internal double CenterLatitudeDeg;
         internal double CenterLongitudeDeg;
         internal float RangeMeters;
-        internal double HorizontalMeters;
-        internal double VerticalMeters;
-        internal float PlotWidthPixels;
-        internal float PlotHeightPixels;
         internal float MapHeadingDeg;
         internal bool TrackUp;
         internal float AnchorV;
@@ -82,7 +78,6 @@ namespace AERISFlightControl.Terrain
             internal double LastProjectionCenterLongitudeDeg = double.NaN;
             internal double LastProjectionBodyRadius = double.NaN;
             internal float LastProjectionRangeMeters = float.NaN;
-            internal double LastProjectionHorizontalMeters = double.NaN;
             internal float LastProjectionAnchorBottom = float.NaN;
             internal AERISTerrainRenderTargetOrientation LastProjectionOrientation =
                 (AERISTerrainRenderTargetOrientation)(-1);
@@ -287,8 +282,6 @@ namespace AERISFlightControl.Terrain
         double contentCenterLatitudeDeg;
         double contentCenterLongitudeDeg;
         float contentRangeMeters;
-        double contentHorizontalMeters;
-        double contentVerticalMeters;
         float contentHeadingDeg;
         bool contentTrackUp;
         float contentAnchorV;
@@ -307,7 +300,6 @@ namespace AERISFlightControl.Terrain
         long operationHealthCulledEntries;
         long operationHealthVisibleEntries;
         long operationHealthWideRangeCullBypassFrames;
-        long operationHealthAspectResizeDeferrals;
         long useSequence;
         long usedEntryBytes;
         long backTargetBytes;
@@ -345,10 +337,6 @@ namespace AERISFlightControl.Terrain
         double frontCenterLongitudeDeg;
         float frontRangeMeters;
         float frontSurfaceRangeMeters;
-        double frontHorizontalMeters;
-        double frontVerticalMeters;
-        float frontPlotWidthPixels;
-        float frontPlotHeightPixels;
         float frontMapHeadingDeg;
         bool frontTrackUp;
         float frontAnchorV;
@@ -547,19 +535,6 @@ namespace AERISFlightControl.Terrain
                 presentationNow >= nextAuthoritativePresentationTickRealtime;
             if (!authoritativeTickDue)
             {
-                // Never stretch an old FRONT into a new window geometry. A resize is a
-                // geographic viewport change; wait for the next normal 10 Hz authority
-                // tick and show the standby background meanwhile.
-                if (frontBufferValid && !FrontPlotMatches(plot))
-                {
-                    operationHealthAspectResizeDeferrals++;
-                    lastFrontBufferPresented = false;
-                    lastFrontBufferLatched = false;
-                    presentedProjection.Valid = false;
-                    lastVisualCoverageFraction = 0f;
-                    lastDrawState = AERISTerrainGpuDrawState.Partial;
-                    return lastDrawState;
-                }
                 if (TryPresentCoalescedFront(plot, vessel))
                     return lastDrawState;
                 if (!frontBufferValid)
@@ -643,14 +618,9 @@ namespace AERISFlightControl.Terrain
             float contourInterval = ResolveContourInterval(rangeMeters);
             string styleKey = BuildStyleKey(contourInterval, virtualDetail);
 
-            double requestedHorizontalMeters, requestedVerticalMeters;
-            AERISNdMapProjection.ResolveAspectCorrectExtents(rangeMeters, plot.width,
-                plot.height, out requestedHorizontalMeters, out requestedVerticalMeters);
-
             bool workerResultReady = rasterizer.CompletedCount > 0;
             bool contentGeometryChanged = NeedsContentRefresh(system, vessel,
-                centerLatitudeDeg, centerLongitudeDeg, rangeMeters,
-                requestedHorizontalMeters, requestedVerticalMeters, mapHeadingDeg,
+                centerLatitudeDeg, centerLongitudeDeg, rangeMeters, mapHeadingDeg,
                 trackUp, anchorV, orientation, styleKey);
             bool contentRetryDue = (rasterizer.PendingCount > 0 ||
                 !requestedViewReady) &&
@@ -673,9 +643,8 @@ namespace AERISFlightControl.Terrain
                 // CaptureVisible owns planner-generation updates and RAM tile selection.
                 // Step 2 simply stops invoking this allocation/resolve path for pure motion.
                 visible = system.CaptureVisible(centerLatitudeDeg,
-                    centerLongitudeDeg, rangeMeters, requestedHorizontalMeters,
-                    requestedVerticalMeters, mapHeadingDeg, trackUp, anchorV,
-                    orientation);
+                    centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
+                    anchorV, orientation);
                 operationHealthContentCaptures++;
                 if (visible == null || visible.Tiles == null ||
                     visible.Tiles.Length == 0)
@@ -731,8 +700,6 @@ namespace AERISFlightControl.Terrain
                 contentCenterLatitudeDeg = centerLatitudeDeg;
                 contentCenterLongitudeDeg = centerLongitudeDeg;
                 contentRangeMeters = rangeMeters;
-                contentHorizontalMeters = requestedHorizontalMeters;
-                contentVerticalMeters = requestedVerticalMeters;
                 contentHeadingDeg = mapHeadingDeg;
                 contentTrackUp = trackUp;
                 contentAnchorV = anchorV;
@@ -760,10 +727,9 @@ namespace AERISFlightControl.Terrain
                 lastCoverageFraction = contentFoundationCoverage;
             }
 
-            AERISNdMapProjection projection =
-                AERISNdMapProjection.CreateWithExtents(vessel.mainBody,
-                    centerLatitudeDeg, centerLongitudeDeg, requestedHorizontalMeters,
-                    requestedVerticalMeters, mapHeadingDeg, trackUp, anchorV, orientation);
+            AERISNdMapProjection projection = AERISNdMapProjection.Create(
+                vessel.mainBody, centerLatitudeDeg, centerLongitudeDeg, rangeMeters,
+                mapHeadingDeg, trackUp, anchorV, orientation);
             Matrix4x4 mapRotation = projection.ResolveScaleCorrectedRenderMatrix();
             AERISNdMapProjection historySurfaceProjection = projection;
             Matrix4x4 historySurfaceMapRotation = mapRotation;
@@ -799,8 +765,8 @@ namespace AERISFlightControl.Terrain
             if (authoritativeMotionRefreshRequired) operationHealthMotionRefreshes++;
             bool projectionRefreshRequired = authoritativeMotionRefreshRequired ||
                 NeedsProjectionRefresh(visible, vessel, centerLatitudeDeg,
-                    centerLongitudeDeg, rangeMeters, projection, plot, mapHeadingDeg,
-                    trackUp, anchorV, orientation);
+                    centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
+                    anchorV, orientation);
             bool colourRefreshRequired = frontColourMode != effectiveMode ||
                 frontColourPreset != currentPreset;
             bool refreshRequired = !frontBufferValid ||
@@ -827,7 +793,7 @@ namespace AERISFlightControl.Terrain
                 if (foundationComplete)
                 {
                     SwapFrontAndBack(visible, vessel, centerLatitudeDeg,
-                        centerLongitudeDeg, rangeMeters, rangeMeters, projection, plot,
+                        centerLongitudeDeg, rangeMeters, rangeMeters,
                         mapHeadingDeg, trackUp, anchorV, orientation);
                     frontColourMode = effectiveMode;
                     frontColourPreset = currentPreset;
@@ -852,8 +818,8 @@ namespace AERISFlightControl.Terrain
                 frontColourPreset == currentPreset;
             bool directCompatible = colourCompatible &&
                 IsFrontBufferCompatible(visible, vessel, centerLatitudeDeg,
-                    centerLongitudeDeg, rangeMeters, projection, plot, mapHeadingDeg,
-                    trackUp, anchorV, orientation);
+                    centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
+                    anchorV, orientation);
             lastHistoryReprojected = false;
             lastHistoryConfidence = 0f;
             bool present = false;
@@ -881,7 +847,7 @@ namespace AERISFlightControl.Terrain
             // the last complete FRONT visible and publish that FRONT projection so terrain,
             // ownship, runway, vector and LAND geometry share one coordinate authority.
             if (!present && colourCompatible &&
-                CanPresentLatchedFront(visible, vessel, plot))
+                CanPresentLatchedFront(visible, vessel))
             {
                 if (frontTerrainGeneration != visible.TerrainGeneration)
                     generationBridgeFrames++;
@@ -915,7 +881,7 @@ namespace AERISFlightControl.Terrain
                 if (recovered)
                 {
                     SwapFrontAndBack(visible, vessel, centerLatitudeDeg,
-                        centerLongitudeDeg, rangeMeters, rangeMeters, projection, plot,
+                        centerLongitudeDeg, rangeMeters, rangeMeters,
                         mapHeadingDeg, trackUp, anchorV, orientation);
                     frontColourMode = effectiveMode;
                     frontColourPreset = currentPreset;
@@ -958,8 +924,7 @@ namespace AERISFlightControl.Terrain
 
         bool NeedsContentRefresh(AERISTerrainTileSystem system, Vessel vessel,
             double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
-            double horizontalMeters, double verticalMeters, float mapHeadingDeg,
-            bool trackUp, float anchorV,
+            float mapHeadingDeg, bool trackUp, float anchorV,
             AERISTerrainRenderTargetOrientation orientation, string styleKey)
         {
             if (!contentSnapshotValid || contentVisible == null || system == null ||
@@ -968,11 +933,7 @@ namespace AERISFlightControl.Terrain
                 !string.Equals(contentStyleKey, styleKey, StringComparison.Ordinal) ||
                 contentTrackUp != trackUp || contentOrientation != orientation ||
                 Math.Abs(contentAnchorV - anchorV) > 0.001f ||
-                Math.Abs(contentRangeMeters - rangeMeters) > 0.5f ||
-                Math.Abs(contentHorizontalMeters - horizontalMeters) >
-                    Math.Max(100.0, horizontalMeters * 0.005) ||
-                Math.Abs(contentVerticalMeters - verticalMeters) >
-                    Math.Max(100.0, verticalMeters * 0.005)) return true;
+                Math.Abs(contentRangeMeters - rangeMeters) > 0.5f) return true;
             if (trackUp && Mathf.Abs(Mathf.DeltaAngle(contentHeadingDeg,
                 mapHeadingDeg)) >= 3f) return true;
             double displacement = GreatCircleDistanceMeters(vessel.mainBody,
@@ -991,8 +952,6 @@ namespace AERISFlightControl.Terrain
             contentCenterLatitudeDeg = 0.0;
             contentCenterLongitudeDeg = 0.0;
             contentRangeMeters = 0f;
-            contentHorizontalMeters = 0.0;
-            contentVerticalMeters = 0.0;
             contentHeadingDeg = 0f;
             contentTrackUp = false;
             contentAnchorV = 0.5f;
@@ -1047,7 +1006,7 @@ namespace AERISFlightControl.Terrain
                     if (entryCullingEnabled &&
                         ShouldCullEntryOutsidePresentation(drawEntry, vessel.mainBody,
                             projectionCenterLatitudeDeg, projectionCenterLongitudeDeg,
-                            projection, rangeMeters)) continue;
+                            rangeMeters, anchorV)) continue;
                     operationHealthPreparedEntryUses++;
                     EnsureProjectedGeometry(drawEntry, projection,
                         projectionThresholdMeters, projectionCenterLatitudeDeg,
@@ -1106,8 +1065,7 @@ namespace AERISFlightControl.Terrain
 
         void SwapFrontAndBack(AERISTerrainVisibleTileSet visible, Vessel vessel,
             double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
-            float surfaceRangeMeters, AERISNdMapProjection projection, Rect plot,
-            float mapHeadingDeg, bool trackUp, float anchorV,
+            float surfaceRangeMeters, float mapHeadingDeg, bool trackUp, float anchorV,
             AERISTerrainRenderTargetOrientation orientation)
         {
             RenderTexture previousFront = frontTarget;
@@ -1127,10 +1085,6 @@ namespace AERISFlightControl.Terrain
             frontCenterLongitudeDeg = centerLongitudeDeg;
             frontRangeMeters = rangeMeters;
             frontSurfaceRangeMeters = Math.Max(rangeMeters, surfaceRangeMeters);
-            frontHorizontalMeters = projection.HorizontalMeters;
-            frontVerticalMeters = projection.VerticalMeters;
-            frontPlotWidthPixels = plot.width;
-            frontPlotHeightPixels = plot.height;
             frontMapHeadingDeg = mapHeadingDeg;
             frontTrackUp = trackUp;
             frontAnchorV = anchorV;
@@ -1146,8 +1100,7 @@ namespace AERISFlightControl.Terrain
 
         bool IsFrontBufferCompatible(AERISTerrainVisibleTileSet visible, Vessel vessel,
             double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
-            AERISNdMapProjection projection, Rect plot, float mapHeadingDeg, bool trackUp,
-            float anchorV,
+            float mapHeadingDeg, bool trackUp, float anchorV,
             AERISTerrainRenderTargetOrientation orientation)
         {
             if (!frontBufferValid || frontTarget == null || !frontTarget.IsCreated() ||
@@ -1161,10 +1114,7 @@ namespace AERISFlightControl.Terrain
                 frontTrackUp != trackUp || frontOrientation != orientation ||
                 Math.Abs(frontAnchorV - anchorV) > 0.001f) return false;
             if (Math.Abs(frontRangeMeters - rangeMeters) >
-                Math.Max(1f, rangeMeters * 0.001f) ||
-                Math.Abs(frontHorizontalMeters - projection.HorizontalMeters) > 0.5 ||
-                Math.Abs(frontVerticalMeters - projection.VerticalMeters) > 0.5 ||
-                !FrontPlotMatches(plot)) return false;
+                Math.Max(1f, rangeMeters * 0.001f)) return false;
             if (trackUp && Mathf.Abs(Mathf.DeltaAngle(frontMapHeadingDeg,
                 mapHeadingDeg)) > ProjectionRefreshHeadingDeg) return false;
             double displacement = GreatCircleDistanceMeters(vessel.mainBody,
@@ -1174,21 +1124,11 @@ namespace AERISFlightControl.Terrain
                 displacement <= ProjectionRefreshDistanceMeters(rangeMeters);
         }
 
-
-        bool FrontPlotMatches(Rect plot)
-        {
-            return frontBufferValid && frontPlotWidthPixels > 0f &&
-                frontPlotHeightPixels > 0f &&
-                Mathf.Abs(frontPlotWidthPixels - plot.width) <= 0.5f &&
-                Mathf.Abs(frontPlotHeightPixels - plot.height) <= 0.5f;
-        }
-
         bool TryPresentCoalescedFront(Rect plot, Vessel vessel)
         {
             if (!frontBufferValid || frontTarget == null || !frontTarget.IsCreated() ||
                 vessel == null || vessel.mainBody == null ||
-                !ReferenceEquals(frontBodyReference, vessel.mainBody) ||
-                !FrontPlotMatches(plot)) return false;
+                !ReferenceEquals(frontBodyReference, vessel.mainBody)) return false;
             // Non-authoritative Repaint must still place the retained texture once because
             // Unity IMGUI rebuilds the framebuffer every rendered frame. Everything else
             // reuses state established by the 10 Hz authoritative FRONT commit.
@@ -1271,8 +1211,7 @@ namespace AERISFlightControl.Terrain
 
         bool NeedsProjectionRefresh(AERISTerrainVisibleTileSet visible, Vessel vessel,
             double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
-            AERISNdMapProjection projection, Rect plot, float mapHeadingDeg, bool trackUp,
-            float anchorV,
+            float mapHeadingDeg, bool trackUp, float anchorV,
             AERISTerrainRenderTargetOrientation orientation)
         {
             if (!frontBufferValid || visible == null || vessel == null ||
@@ -1283,10 +1222,7 @@ namespace AERISFlightControl.Terrain
                 frontTrackUp != trackUp || frontOrientation != orientation ||
                 Math.Abs(frontAnchorV - anchorV) > 0.001f) return true;
             if (Math.Abs(frontRangeMeters - rangeMeters) >
-                Math.Max(1f, rangeMeters * 0.0025f) ||
-                Math.Abs(frontHorizontalMeters - projection.HorizontalMeters) > 0.5 ||
-                Math.Abs(frontVerticalMeters - projection.VerticalMeters) > 0.5 ||
-                !FrontPlotMatches(plot)) return true;
+                Math.Max(1f, rangeMeters * 0.0025f)) return true;
             if (trackUp && Mathf.Abs(Mathf.DeltaAngle(frontMapHeadingDeg,
                 mapHeadingDeg)) >= ProjectionRefreshHeadingDeg) return true;
             double displacement = GreatCircleDistanceMeters(vessel.mainBody,
@@ -1303,12 +1239,10 @@ namespace AERISFlightControl.Terrain
             return Math.Max(250.0, Math.Max(1f, rangeMeters) * 0.06);
         }
 
-        bool CanPresentLatchedFront(AERISTerrainVisibleTileSet visible, Vessel vessel,
-            Rect plot)
+        bool CanPresentLatchedFront(AERISTerrainVisibleTileSet visible, Vessel vessel)
         {
             if (!frontBufferValid || frontTarget == null || !frontTarget.IsCreated() ||
-                visible == null || vessel == null || vessel.mainBody == null ||
-                !FrontPlotMatches(plot)) return false;
+                visible == null || vessel == null || vessel.mainBody == null) return false;
             // Gate 5 Candidate 3: TerrainGeneration is a supply-generation boundary, not a
             // presentation-invalidity boundary. The last fully committed GPU FRONT is still
             // geographically self-consistent for its own published projection and may bridge
@@ -1333,10 +1267,6 @@ namespace AERISFlightControl.Terrain
             presentedProjection.CenterLatitudeDeg = frontCenterLatitudeDeg;
             presentedProjection.CenterLongitudeDeg = frontCenterLongitudeDeg;
             presentedProjection.RangeMeters = frontRangeMeters;
-            presentedProjection.HorizontalMeters = frontHorizontalMeters;
-            presentedProjection.VerticalMeters = frontVerticalMeters;
-            presentedProjection.PlotWidthPixels = frontPlotWidthPixels;
-            presentedProjection.PlotHeightPixels = frontPlotHeightPixels;
             presentedProjection.MapHeadingDeg = frontMapHeadingDeg;
             presentedProjection.TrackUp = frontTrackUp;
             presentedProjection.AnchorV = frontAnchorV;
@@ -1412,12 +1342,11 @@ namespace AERISFlightControl.Terrain
             if (double.IsNaN(displacement) || double.IsInfinity(displacement) ||
                 displacement > Math.Max(3500.0, rangeMeters * 0.32)) return false;
 
-            AERISNdMapProjection oldProjection =
-                AERISNdMapProjection.CreateWithExtents(vessel.mainBody,
-                    frontCenterLatitudeDeg, frontCenterLongitudeDeg,
-                    Math.Max(1.0, frontHorizontalMeters),
-                    Math.Max(1.0, frontVerticalMeters), frontMapHeadingDeg,
-                    frontTrackUp, frontAnchorV, frontOrientation);
+            AERISNdMapProjection oldProjection = AERISNdMapProjection.Create(
+                vessel.mainBody, frontCenterLatitudeDeg, frontCenterLongitudeDeg,
+                Math.Max(frontRangeMeters, frontSurfaceRangeMeters), frontMapHeadingDeg,
+                frontTrackUp, frontAnchorV,
+                frontOrientation);
             Vector2 q00, q10, q01, q11;
             if (!ProjectHistoryGuiPoint(oldProjection, currentProjection, 0f, 0f, out q00) ||
                 !ProjectHistoryGuiPoint(oldProjection, currentProjection, 1f, 0f, out q10) ||
@@ -1523,8 +1452,8 @@ namespace AERISFlightControl.Terrain
         }
 
         bool ShouldCullEntryOutsidePresentation(Entry entry, CelestialBody body,
-            double centerLatitudeDeg, double centerLongitudeDeg,
-            AERISNdMapProjection projection, float rangeMeters)
+            double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
+            float anchorV)
         {
             operationHealthCullTests++;
             if (entry == null || body == null || body.Radius <= 0.0 ||
@@ -1549,9 +1478,9 @@ namespace AERISFlightControl.Terrain
             // circumscribed radius contains the complete rectangular ND viewport for any
             // heading. Extra multiplicative and absolute margins deliberately bias toward
             // false negatives (extra work), never false positives (missing terrain).
-            double horizontal = Math.Max(1.0, projection.HorizontalMeters * 0.5);
-            double vertical = Math.Max(1.0, projection.VerticalMeters * Math.Max(
-                projection.AnchorGuiV, 1f - projection.AnchorGuiV));
+            double horizontal = Math.Max(1.0, rangeMeters * 0.65);
+            double vertical = Math.Max(1.0, rangeMeters * Math.Max(
+                Mathf.Clamp01(anchorV), 1f - Mathf.Clamp01(anchorV)));
             double viewportRadius = Math.Sqrt(horizontal * horizontal +
                 vertical * vertical);
             double viewportSafetyRadius = viewportRadius * 1.08 +
@@ -1707,13 +1636,6 @@ namespace AERISFlightControl.Terrain
                 "; oh_culled_entry=" + operationHealthCulledEntries +
                 "; oh_visible_entry=" + operationHealthVisibleEntries +
                 "; oh_cull_wide_bypass=" + operationHealthWideRangeCullBypassFrames +
-                "; oh_aspect_resize_defer=" + operationHealthAspectResizeDeferrals +
-                "; aspect_hv=" + frontHorizontalMeters.ToString("F0",
-                    CultureInfo.InvariantCulture) + "/" +
-                    frontVerticalMeters.ToString("F0", CultureInfo.InvariantCulture) +
-                "; aspect_plot=" + frontPlotWidthPixels.ToString("F0",
-                    CultureInfo.InvariantCulture) + "x" +
-                    frontPlotHeightPixels.ToString("F0", CultureInfo.InvariantCulture) +
                 "; oh_mesh_pool=" + meshPool.Count +
                 "; oh_mesh_pool_hit=" + operationHealthMeshPoolHits +
                 "; oh_mesh_pool_miss=" + operationHealthMeshPoolMisses +
@@ -1764,10 +1686,6 @@ namespace AERISFlightControl.Terrain
             frontCenterLongitudeDeg = 0.0;
             frontRangeMeters = 0f;
             frontSurfaceRangeMeters = 0f;
-            frontHorizontalMeters = 0.0;
-            frontVerticalMeters = 0.0;
-            frontPlotWidthPixels = 0f;
-            frontPlotHeightPixels = 0f;
             frontMapHeadingDeg = 0f;
             frontTrackUp = false;
             frontAnchorV = 0.5f;
@@ -2457,8 +2375,6 @@ namespace AERISFlightControl.Terrain
                 double.IsNaN(entry.LastProjectionCenterLatitudeDeg) ||
                 Math.Abs(entry.LastProjectionBodyRadius - context.RadiusMeters) > 0.01 ||
                 Math.Abs(entry.LastProjectionRangeMeters - context.VerticalMeters) > 0.01 ||
-                double.IsNaN(entry.LastProjectionHorizontalMeters) ||
-                Math.Abs(entry.LastProjectionHorizontalMeters - context.HorizontalMeters) > 0.01 ||
                 Math.Abs(entry.LastProjectionAnchorBottom - context.AnchorRenderV) > 0.000001f ||
                 entry.LastProjectionOrientation != context.Orientation;
             if (!projectionChanged)
@@ -2492,7 +2408,6 @@ namespace AERISFlightControl.Terrain
             entry.LastProjectionCenterLongitudeDeg = currentCenterLongitudeDeg;
             entry.LastProjectionBodyRadius = context.RadiusMeters;
             entry.LastProjectionRangeMeters = (float)context.VerticalMeters;
-            entry.LastProjectionHorizontalMeters = context.HorizontalMeters;
             entry.LastProjectionAnchorBottom = context.AnchorRenderV;
             entry.LastProjectionOrientation = context.Orientation;
         }

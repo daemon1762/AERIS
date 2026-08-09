@@ -55,6 +55,10 @@ namespace AERISFlightControl.UI
         const float BackgroundAlpha = 0.72f;
         const float BasePanelWidth = 380f;
         const float BasePanelHeight = 244f;
+        // AERIS23 rollback recovery: the ND may scale, but its panel geometry may not
+        // change aspect ratio. 380:244 keeps the accepted Golden internal map geometry
+        // (approximately 366:188 after furniture/margins) invariant at every size.
+        const float NavigationPanelAspect = BasePanelWidth / BasePanelHeight;
         const float BaseGap = 12f;
         const float MinimumPanelWidth = 220f;
         const float MinimumPanelHeight = 140f;
@@ -264,7 +268,15 @@ namespace AERISFlightControl.UI
                 ? settings.FlightInstrumentLayoutCustomized
                 : settings.NavigationDisplayLayoutCustomized;
             Rect rect = customized ? ReadNormalizedPanelRect(kind) : defaultRect;
-            rect = ClampPanelSize(rect);
+            Rect beforeSizeClamp = rect;
+            rect = ClampPanelSize(kind, rect);
+            // Migrate any previously saved free-aspect ND size in memory immediately.
+            // This never enlarges either old dimension; the next ordinary settings save
+            // persists the fixed-ratio geometry. FDI remains independently resizable.
+            if (customized && kind == PanelKind.NavigationDisplay &&
+                (Mathf.Abs(beforeSizeClamp.width - rect.width) > 0.5f ||
+                 Mathf.Abs(beforeSizeClamp.height - rect.height) > 0.5f))
+                PersistPanelRect(kind, rect, false);
             if (!customized) return ClampToScreen(rect, 4f);
             if (FullyOutsideScreen(rect))
             {
@@ -356,9 +368,14 @@ namespace AERISFlightControl.UI
                 }
                 else
                 {
-                    rect.width = interactionStartRect.width + delta.x;
-                    rect.height = interactionStartRect.height + delta.y;
-                    rect = ClampPanelSize(rect);
+                    if (kind == PanelKind.NavigationDisplay)
+                        rect = ResizeNavigationPanel(interactionStartRect, delta);
+                    else
+                    {
+                        rect.width = interactionStartRect.width + delta.x;
+                        rect.height = interactionStartRect.height + delta.y;
+                        rect = ClampPanelSize(kind, rect);
+                    }
                 }
                 PersistPanelRect(kind, rect, false);
                 GUI.changed = true;
@@ -381,12 +398,51 @@ namespace AERISFlightControl.UI
             return rect;
         }
 
-        static Rect ClampPanelSize(Rect rect)
+        static Rect ClampPanelSize(PanelKind kind, Rect rect)
         {
+            if (kind == PanelKind.NavigationDisplay)
+            {
+                // Fit the fixed-aspect panel inside the requested bounding box. Using
+                // the smaller scale guarantees migration never expands an old free-aspect
+                // layout and prevents a resolution change from silently growing ND work.
+                float requestedScale = Mathf.Min(
+                    rect.width / Mathf.Max(1f, BasePanelWidth),
+                    rect.height / Mathf.Max(1f, BasePanelHeight));
+                return SetNavigationPanelScale(rect, requestedScale);
+            }
             float maxWidth = Mathf.Max(MinimumPanelWidth, Screen.width - 8f);
             float maxHeight = Mathf.Max(MinimumPanelHeight, Screen.height - 8f);
             rect.width = Mathf.Clamp(rect.width, MinimumPanelWidth, maxWidth);
             rect.height = Mathf.Clamp(rect.height, MinimumPanelHeight, maxHeight);
+            return rect;
+        }
+
+        static Rect ResizeNavigationPanel(Rect start, Vector2 delta)
+        {
+            float startScale = start.width / Mathf.Max(1f, BasePanelWidth);
+            float widthScale = (start.width + delta.x) / Mathf.Max(1f, BasePanelWidth);
+            float heightScale = (start.height + delta.y) / Mathf.Max(1f, BasePanelHeight);
+            // Whichever axis the user moved farther in normalized scale owns the drag;
+            // the other axis follows automatically. Horizontal-only and vertical-only
+            // drags therefore both produce a predictable uniform resize.
+            float requestedScale = Mathf.Abs(widthScale - startScale) >=
+                Mathf.Abs(heightScale - startScale) ? widthScale : heightScale;
+            return SetNavigationPanelScale(start, requestedScale);
+        }
+
+        static Rect SetNavigationPanelScale(Rect rect, float requestedScale)
+        {
+            float screenScale = Mathf.Min(
+                Mathf.Max(1f, Screen.width - 8f) / BasePanelWidth,
+                Mathf.Max(1f, Screen.height - 8f) / BasePanelHeight);
+            float minimumScale = Mathf.Max(
+                MinimumPanelWidth / BasePanelWidth,
+                MinimumPanelHeight / BasePanelHeight);
+            float maximumScale = Mathf.Max(0.10f, screenScale);
+            minimumScale = Mathf.Min(minimumScale, maximumScale);
+            float scale = Mathf.Clamp(requestedScale, minimumScale, maximumScale);
+            rect.width = BasePanelWidth * scale;
+            rect.height = BasePanelHeight * scale;
             return rect;
         }
 
