@@ -1,0 +1,29 @@
+name: AERIS23 Coastal Recovery Final Check
+on:
+  pull_request:
+    branches: [ "cp3.75/nd-recovery" ]
+    types: [synchronize, reopened, ready_for_review]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/aeris23-coastal-presentation-recovery
+          fetch-depth: 0
+      - name: Validate and clean workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+          git diff --check origin/cp3.75/nd-recovery...HEAD
+          grep -q 'output\[targetIndex\] = 0;' Source/AERISFlightControl/Terrain/AERISTerrainCoastlinePolicy.cs
+          grep -q 'presentationCoastalFlags = highDensityBoundary ?' Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs
+          ! grep -q 'GOLDEN LOW 65' Source/AERISFlightControl/Terrain/AERISTerrainVirtualDetail.cs
+          git config user.name 'AERIS Patch Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git rm .github/workflows/aeris23-coastal-recovery-final-check.yml
+          git commit -m 'Remove temporary coastal recovery final check'
+          git push origin HEAD:agent/aeris23-coastal-presentation-recovery
