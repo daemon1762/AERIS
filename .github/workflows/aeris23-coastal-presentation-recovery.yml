@@ -1,0 +1,49 @@
+name: AERIS23 Coastal Presentation Recovery
+on:
+  pull_request:
+    branches: [ "cp3.75/nd-recovery" ]
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: write
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/aeris23-coastal-presentation-recovery
+          fetch-depth: 0
+      - name: Patch rasterizer and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs')
+          t=p.read_text()
+          old='''            bool highDensityBoundary = AERISTerrainCoastlineExtractor.HasCurrentHighDensityPayload(tile);\n            // Step 2 derives one topology-preserving presentation field from the existing\n            // 129x129 classification payload. The same field is consumed by both coastline\n            // vectors and sparse land/water correction, so the painter boundary stays exact.\n            float[] coastalBoundaryField = highDensityBoundary ?\n                AERISTerrainCoastlinePolicy.BuildPresentationBoundaryField(\n                    tile.HighDensityCoastalFlags,\n                    tile.HighDensityCoastlineResolution) : new float[0];\n'''
+          new='''            bool highDensityBoundary =\n                AERISTerrainCoastlineExtractor.HasCurrentHighDensityPayload(tile);\n            byte[] presentationCoastalFlags = highDensityBoundary ?\n                tile.HighDensityCoastalFlags : null;\n            int presentationCoastalResolution = highDensityBoundary ?\n                tile.HighDensityCoastlineResolution : 0;\n            AERISTerrainHeightTile coastalPresentationTile = tile;\n            if (!highDensityBoundary && tile.Key.Lod == AERISTerrainTileLod.Far &&\n                AERISTerrainCoastlineExtractor.ContainsLandWaterBoundary(tile))\n            {\n                byte[] syntheticFlags = AERISTerrainCoastlinePolicy.\n                    BuildTopologyPreservingCoastalPresentationMask(tile,\n                        AERISTerrainCoastlineExtractor.HighDensityResolution);\n                if (syntheticFlags != null && syntheticFlags.Length ==\n                    AERISTerrainCoastlineExtractor.HighDensityResolution *\n                    AERISTerrainCoastlineExtractor.HighDensityResolution)\n                {\n                    presentationCoastalFlags = syntheticFlags;\n                    presentationCoastalResolution =\n                        AERISTerrainCoastlineExtractor.HighDensityResolution;\n                    coastalPresentationTile = tile.CloneImmutable();\n                    coastalPresentationTile.HighDensityCoastlineResolution =\n                        presentationCoastalResolution;\n                    coastalPresentationTile.HighDensityCoastalFlags = syntheticFlags;\n                    coastalPresentationTile.HighDensityCoastlineSegments = new float[0];\n                }\n            }\n            bool presentationBoundary = presentationCoastalFlags != null &&\n                presentationCoastalResolution >= 2;\n            // Persisted Candidate11 data remains first authority. If it is absent, only\n            // a transient coastal parent-cell fallback enters this same line/fill path.\n            float[] coastalBoundaryField = presentationBoundary ?\n                AERISTerrainCoastlinePolicy.BuildPresentationBoundaryField(\n                    presentationCoastalFlags, presentationCoastalResolution) :\n                new float[0];\n'''
+          if t.count(old)!=1: raise SystemExit('selection anchor count='+str(t.count(old)))
+          t=t.replace(old,new,1)
+          old='''            if (highDensityBoundary) BuildSparseCoastalCorrections(tile,\n                request.ShadingEnabled, coastalBoundaryField, out correctionLandXY,\n                out correctionLandElevation, out correctionLandShade,\n                out correctionWaterXY, out correctionParents);\n'''
+          new='''            if (presentationBoundary) BuildSparseCoastalCorrections(\n                coastalPresentationTile, request.ShadingEnabled, coastalBoundaryField,\n                out correctionLandXY, out correctionLandElevation,\n                out correctionLandShade, out correctionWaterXY,\n                out correctionParents);\n'''
+          if t.count(old)!=1: raise SystemExit('correction anchor count='+str(t.count(old)))
+          t=t.replace(old,new,1)
+          old='''            float[] coastlines = highDensityBoundary ?\n                AERISTerrainCoastlineExtractor.BuildFromClassMask(\n                    tile.HighDensityCoastalFlags,\n                    tile.HighDensityCoastlineResolution,\n                    coastalBoundaryField) : AERISTerrainCoastlineExtractor.Build(tile);\n'''
+          new='''            float[] coastlines = presentationBoundary ?\n                AERISTerrainCoastlineExtractor.BuildFromClassMask(\n                    presentationCoastalFlags, presentationCoastalResolution,\n                    coastalBoundaryField) : AERISTerrainCoastlineExtractor.Build(tile);\n'''
+          if t.count(old)!=1: raise SystemExit('line anchor count='+str(t.count(old)))
+          t=t.replace(old,new,1)
+          p.write_text(t)
+          PY
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+          git diff --check origin/cp3.75/nd-recovery...HEAD
+          grep -q 'presentationCoastalFlags = tile.HighDensityCoastalFlags' Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs
+          grep -q 'BuildTopologyPreservingCoastalPresentationMask' Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs
+          ! grep -q 'GOLDEN LOW 65' Source/AERISFlightControl/Terrain/AERISTerrainVirtualDetail.cs
+          git config user.name 'AERIS Patch Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs
+          git commit -m 'Route missing HD coast through coastal-only fallback'
+          git rm .github/workflows/aeris23-coastal-presentation-recovery.yml
+          git commit -m 'Remove temporary coastal recovery workflow'
+          git push origin HEAD:agent/aeris23-coastal-presentation-recovery
