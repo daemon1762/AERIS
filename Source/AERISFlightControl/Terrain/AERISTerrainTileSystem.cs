@@ -119,8 +119,6 @@ namespace AERISFlightControl.Terrain
         double displayViewLatitudeDeg;
         double displayViewLongitudeDeg;
         double displayViewRangeMeters;
-        double displayViewHorizontalMeters;
-        double displayViewVerticalMeters;
         double displayViewHeadingDeg;
         bool displayViewTrackUp;
         float displayViewAnchorGuiV = 0.5f;
@@ -297,8 +295,6 @@ namespace AERISFlightControl.Terrain
             displayViewLatitudeDeg = 0.0;
             displayViewLongitudeDeg = 0.0;
             displayViewRangeMeters = 0.0;
-            displayViewHorizontalMeters = 0.0;
-            displayViewVerticalMeters = 0.0;
             displayViewHeadingDeg = 0.0;
             displayViewTrackUp = false;
             displayViewAnchorGuiV = 0.5f;
@@ -466,8 +462,6 @@ namespace AERISFlightControl.Terrain
             displayViewLatitudeDeg = 0.0;
             displayViewLongitudeDeg = 0.0;
             displayViewRangeMeters = 0.0;
-            displayViewHorizontalMeters = 0.0;
-            displayViewVerticalMeters = 0.0;
             displayViewHeadingDeg = 0.0;
             displayViewTrackUp = false;
             displayViewAnchorGuiV = 0.5f;
@@ -579,8 +573,6 @@ namespace AERISFlightControl.Terrain
             displayViewLatitudeDeg = 0.0;
             displayViewLongitudeDeg = 0.0;
             displayViewRangeMeters = 0.0;
-            displayViewHorizontalMeters = 0.0;
-            displayViewVerticalMeters = 0.0;
             displayViewHeadingDeg = 0.0;
             displayViewTrackUp = false;
             displayViewAnchorGuiV = 0.5f;
@@ -704,20 +696,6 @@ namespace AERISFlightControl.Terrain
             // displayViewRangeMeters can be an internal temporal-overscan range.
             // Preserve that exact bounded value for viewport-foundation planning.
             range = Math.Max(1000.0, Math.Min(250000.0, range));
-            double horizontalMeters, verticalMeters;
-            if (displayViewValid && displayViewHorizontalMeters > 0.0 &&
-                displayViewVerticalMeters > 0.0)
-            {
-                horizontalMeters = displayViewHorizontalMeters;
-                verticalMeters = displayViewVerticalMeters;
-            }
-            else
-            {
-                AERISNdMapProjection.ResolveAspectCorrectExtents((float)range,
-                    AERISNdMapProjection.ReferencePlotWidthPixels,
-                    AERISNdMapProjection.ReferencePlotHeightPixels,
-                    out horizontalMeters, out verticalMeters);
-            }
             double vesselLatitude = vessel.latitude;
             double vesselLongitude = NormalizeLongitude(vessel.longitude);
             double latitude = displayViewValid ? displayViewLatitudeDeg : vesselLatitude;
@@ -744,8 +722,8 @@ namespace AERISFlightControl.Terrain
             // This set is admitted in full before any exact detail or look-ahead work.
             AERISTerrainViewportFoundationPlan foundation =
                 AERISTerrainViewportFoundationPlanner.Build(activeBody,
-                    environmentHash, latitude, longitude, range, horizontalMeters,
-                    verticalMeters, displayViewHeadingDeg, displayViewTrackUp,
+                    environmentHash, latitude, longitude, range,
+                    displayViewHeadingDeg, displayViewTrackUp,
                     displayViewAnchorGuiV, displayViewOrientation);
             AddFoundationKeys(foundation.GlobalKeys, planningCapacity);
             AddFoundationKeys(foundation.FarKeys, planningCapacity);
@@ -2175,28 +2153,22 @@ namespace AERISFlightControl.Terrain
         }
 
         void UpdateDisplayView(double latitudeDeg, double longitudeDeg,
-            double rangeMeters, double horizontalMeters, double verticalMeters,
-            double headingDeg, bool trackUp, float anchorGuiV,
+            double rangeMeters, double headingDeg, bool trackUp, float anchorGuiV,
             AERISTerrainRenderTargetOrientation orientation)
         {
             if (!IsFinite(latitudeDeg) || !IsFinite(longitudeDeg) ||
-                !IsFinite(rangeMeters) || rangeMeters <= 0.0 ||
-                !IsFinite(horizontalMeters) || !IsFinite(verticalMeters) ||
-                horizontalMeters <= 0.0 || verticalMeters <= 0.0) return;
+                !IsFinite(rangeMeters) || rangeMeters <= 0.0) return;
             double normalizedLatitude = Math.Max(-90.0, Math.Min(90.0, latitudeDeg));
             double normalizedLongitude = NormalizeLongitude(longitudeDeg);
+            // Internal presentation planning may deliberately use a non-UI overscan
+            // range (Gate 4B temporal history surface). Do not snap it back to the
+            // 5/10/20/40/80/160 km user selector steps. The public UI range remains
+            // normalized before it reaches the renderer; this value is planner-only.
             double normalizedRange = Math.Max(1000.0, Math.Min(250000.0, rangeMeters));
-            double normalizedHorizontal = Math.Max(1.0, horizontalMeters);
-            double normalizedVertical = Math.Max(1.0, verticalMeters);
             double normalizedHeading = NormalizeHeading(headingDeg);
             float normalizedAnchor = Mathf.Clamp01(anchorGuiV);
             bool rangeChanged = !displayViewValid ||
                 Math.Abs(displayViewRangeMeters - normalizedRange) > 0.5;
-            bool extentChanged = !displayViewValid ||
-                Math.Abs(displayViewHorizontalMeters - normalizedHorizontal) >
-                    Math.Max(100.0, normalizedHorizontal * 0.005) ||
-                Math.Abs(displayViewVerticalMeters - normalizedVertical) >
-                    Math.Max(100.0, normalizedVertical * 0.005);
             double centerMovement = !displayViewValid ? double.MaxValue :
                 GreatCircleDistanceMeters(activeBody, displayViewLatitudeDeg,
                     displayViewLongitudeDeg, normalizedLatitude, normalizedLongitude);
@@ -2207,21 +2179,18 @@ namespace AERISFlightControl.Terrain
                 Math.Abs(displayViewAnchorGuiV - normalizedAnchor) > 0.001f;
             bool headingChanged = !displayViewValid || (trackUp &&
                 Math.Abs(DeltaAngle(displayViewHeadingDeg, normalizedHeading)) > 3.0);
-            bool materiallyChanged = rangeChanged || extentChanged || centerChanged ||
+            bool materiallyChanged = rangeChanged || centerChanged ||
                 orientationChanged || headingChanged;
             displayViewValid = true;
             displayViewLatitudeDeg = normalizedLatitude;
             displayViewLongitudeDeg = normalizedLongitude;
             displayViewRangeMeters = normalizedRange;
-            displayViewHorizontalMeters = normalizedHorizontal;
-            displayViewVerticalMeters = normalizedVertical;
             displayViewHeadingDeg = normalizedHeading;
             displayViewTrackUp = trackUp;
             displayViewAnchorGuiV = normalizedAnchor;
             displayViewOrientation = orientation;
-            if (rangeChanged || extentChanged) rangeGeneration++;
-            if (centerChanged || extentChanged || orientationChanged || headingChanged)
-                planGeneration++;
+            if (rangeChanged) rangeGeneration++;
+            if (centerChanged || orientationChanged || headingChanged) planGeneration++;
             if (materiallyChanged)
             {
                 viewGeneration++;
@@ -2233,8 +2202,8 @@ namespace AERISFlightControl.Terrain
         }
 
         internal AERISTerrainVisibleTileSet CaptureVisible(double centerLatitudeDeg,
-            double centerLongitudeDeg, double rangeMeters, double horizontalMeters,
-            double verticalMeters, double headingDeg, bool trackUp, float anchorGuiV,
+            double centerLongitudeDeg, double rangeMeters, double headingDeg,
+            bool trackUp, float anchorGuiV,
             AERISTerrainRenderTargetOrientation orientation)
         {
             if (!flightViewportActive)
@@ -2259,8 +2228,7 @@ namespace AERISFlightControl.Terrain
                     Status = "FLIGHT TERRAIN VIEWPORT INACTIVE"
                 };
             UpdateDisplayView(centerLatitudeDeg, centerLongitudeDeg, rangeMeters,
-                horizontalMeters, verticalMeters, headingDeg, trackUp, anchorGuiV,
-                orientation);
+                headingDeg, trackUp, anchorGuiV, orientation);
             visibleTiles.Clear();
             int missing = 0;
             int foundationMissing = 0;
