@@ -1,0 +1,25 @@
+name: AERIS23 Golden LOW Surface Fix
+on:
+  pull_request:
+    branches: [ "cp3.75/nd-recovery" ]
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/aeris23-golden-low-surface-fix
+          fetch-depth: 0
+      - name: Validate Golden LOW presentation repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+          git diff --check origin/cp3.75/nd-recovery...HEAD
+          grep -q '"GOLDEN LOW 65", 2, 65, 1.0f' Source/AERISFlightControl/Terrain/AERISTerrainVirtualDetail.cs
+          grep -q 'if (low) return GoldenLow;' Source/AERISFlightControl/Terrain/AERISTerrainVirtualDetail.cs
+          grep -q 'DefaultResolution = 33' Source/AERISFlightControl/Terrain/AERISTerrainTileContracts.cs
+          ! grep -q '"GOLDEN LOW 65", 2, 65, 1.25f' Source/AERISFlightControl/Terrain/AERISTerrainVirtualDetail.cs
