@@ -10,6 +10,7 @@ suites=[
  ('Operation Health Conservative Entry Culling','selftest_v01800_operation_health_conservative_entry_culling.py'),
  ('Aspect-Correct Map Core','selftest_v01800_aspect_correct_map_core.py'),
  ('Aspect-Correct Map UI','selftest_v01800_aspect_correct_map_ui.py'),
+ ('Golden LOW Surface Refinement','selftest_v01800_golden_low_surface_refinement.py'),
  ('Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State','selftest_v01800_operation_health_pass3_cadence_hotfix4_loading_ready_state.py'),
  ('Operation Health Pass 3 Cadence Hotfix 3 Motion Commit','selftest_v01800_operation_health_pass3_cadence_hotfix3_motion_commit.py'),
  ('Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing','selftest_v01800_operation_health_pass3_cadence_hotfix2_refresh_coalescing.py'),
