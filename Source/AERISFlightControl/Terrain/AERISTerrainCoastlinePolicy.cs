@@ -132,11 +132,11 @@ namespace AERISFlightControl.Terrain
                     byte fa = tile.Flags[a], fb = tile.Flags[b];
                     byte fc = tile.Flags[c], fd = tile.Flags[d];
 
-                    // Invalid source samples are never interpreted as a new coast.
+                    // Unknown source topology is never synthesized. Leave these subpoints
+                    // invalid so the existing coarse/base presentation remains authority.
                     if (fa == 0 || fb == 0 || fc == 0 || fd == 0)
                     {
-                        output[targetIndex] = NearestPresentationFlag(
-                            fa, fb, fc, fd, fx, fy);
+                        output[targetIndex] = 0;
                         continue;
                     }
 
