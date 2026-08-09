@@ -34,6 +34,13 @@ jobs:
           if t.count(old)!=1: raise SystemExit('line anchor count='+str(t.count(old)))
           t=t.replace(old,new,1)
           p.write_text(t)
+
+          q=Path('Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py')
+          s=q.read_text()
+          old="ck('BuildSparseCoastalCorrections(tile' in RA and 'coastalBoundaryField' in RA,'sparse land/water correction consumes same boundary field')"
+          new="ck('BuildSparseCoastalCorrections' in RA and 'coastalBoundaryField' in RA and 'presentationBoundary' in RA,'sparse land/water correction consumes selected coastal boundary field')"
+          if s.count(old)!=1: raise SystemExit('Step2 test anchor count='+str(s.count(old)))
+          q.write_text(s.replace(old,new,1))
           PY
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
           git diff --check origin/cp3.75/nd-recovery...HEAD
@@ -42,7 +49,7 @@ jobs:
           ! grep -q 'GOLDEN LOW 65' Source/AERISFlightControl/Terrain/AERISTerrainVirtualDetail.cs
           git config user.name 'AERIS Patch Automation'
           git config user.email 'actions@users.noreply.github.com'
-          git add Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs
+          git add Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py
           git commit -m 'Route missing HD coast through coastal-only fallback'
           git rm .github/workflows/aeris23-coastal-presentation-recovery.yml
           git commit -m 'Remove temporary coastal recovery workflow'
