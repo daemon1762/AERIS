@@ -1,0 +1,169 @@
+name: AERIS23 Projection Motion Bridge
+on:
+  pull_request:
+    branches:
+      - cp3.75/nd-recovery
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: write
+jobs:
+  patch-verify-publish:
+    if: github.head_ref == 'agent/aeris23-projection-motion-bridge'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/aeris23-projection-motion-bridge
+          fetch-depth: 0
+      - name: Patch motion bridge and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs')
+          t=p.read_text()
+
+          old='''            internal double LastProjectionCenterLatitudeDeg = double.NaN;\n            internal double LastProjectionCenterLongitudeDeg = double.NaN;\n            internal double LastProjectionBodyRadius = double.NaN;'''
+          new='''            internal double LastProjectionCenterLatitudeDeg = double.NaN;\n            internal double LastProjectionCenterLongitudeDeg = double.NaN;\n            // Exact-projection origin retained as a unit vector. Motion-only 10 Hz ticks\n            // can translate the immutable projected mesh instead of rewriting every vertex.\n            internal double LastProjectionCenterX = double.NaN;\n            internal double LastProjectionCenterY = double.NaN;\n            internal double LastProjectionCenterZ = double.NaN;\n            internal float LastExactProjectionRealtime = -1f;\n            internal double LastProjectionBodyRadius = double.NaN;'''
+          if t.count(old)!=1: raise SystemExit('entry projection fields anchor='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          old='''        const float ProjectionRefreshAgeSeconds = 0.50f;\n        const float ProjectionRefreshHeadingDeg = 8f;'''
+          new='''        const float ProjectionRefreshAgeSeconds = 0.50f;\n        const float ProjectionRefreshHeadingDeg = 8f;\n        // AERIS23 Projection Motion Bridge. Full CPU projection/upload is retained as the\n        // exact authority, but motion between exact commits may use a tiny N-UP translation.\n        // The bridge stays below 0.20 of the existing pixel-derived movement threshold, is\n        // exact-refreshed within 0.50 s, and is disabled where polar convergence grows.\n        const float ProjectionBridgeThresholdScale = 0.80f;\n        const float ProjectionBridgeMinimumLatitudeScale = 0.35f;\n        const float ProjectionBridgeLatitudeLimitDeg = 70f;'''
+          if t.count(old)!=1: raise SystemExit('projection constants anchor='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          old='''        long operationHealthForcedProjectionRefreshes;\n        long operationHealthLoadingBackdropFrames;'''
+          new='''        long operationHealthForcedProjectionRefreshes;\n        long operationHealthProjectionExactRefreshes;\n        long operationHealthProjectionBridgeUses;\n        long operationHealthLoadingBackdropFrames;'''
+          if t.count(old)!=1: raise SystemExit('projection telemetry fields anchor='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          old='''                    EnsureProjectedGeometry(drawEntry, projection,\n                        projectionThresholdMeters, projectionCenterLatitudeDeg,\n                        projectionCenterLongitudeDeg, forceCenterProjectionRefresh);\n                    bool entryRendered = DrawEntry(drawEntry, mapRotation, true, effectiveMode,'''
+          new='''                    Matrix4x4 projectionBridge = EnsureProjectedGeometry(drawEntry, projection,\n                        projectionThresholdMeters, projectionCenterLatitudeDeg,\n                        projectionCenterLongitudeDeg, forceCenterProjectionRefresh);\n                    // Cached geometry is N-UP. Apply the tiny center-motion bridge first,\n                    // then the existing exact scale-corrected TRACK-UP rotation.\n                    Matrix4x4 entryMapMatrix = mapRotation * projectionBridge;\n                    bool entryRendered = DrawEntry(drawEntry, entryMapMatrix, true, effectiveMode,'''
+          if t.count(old)!=1: raise SystemExit('RenderBackBuffer projection call anchor='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          start=t.index('        void EnsureProjectedGeometry(Entry entry,')
+          end=t.index('        void ProjectMesh(',start)
+          replacement='''        Matrix4x4 EnsureProjectedGeometry(Entry entry,\n            AERISNdMapProjection context, float movementThresholdMeters,\n            double currentCenterLatitudeDeg, double currentCenterLongitudeDeg,\n            bool forceCenterProjectionRefresh)\n        {\n            if (entry == null) return Matrix4x4.identity;\n            bool structuralProjectionChange =\n                double.IsNaN(entry.LastProjectionCenterLatitudeDeg) ||\n                double.IsNaN(entry.LastProjectionCenterX) ||\n                Math.Abs(entry.LastProjectionBodyRadius - context.RadiusMeters) > 0.01 ||\n                Math.Abs(entry.LastProjectionRangeMeters - context.VerticalMeters) > 0.01 ||\n                Math.Abs(entry.LastProjectionAnchorBottom - context.AnchorRenderV) > 0.000001f ||\n                entry.LastProjectionOrientation != context.Orientation;\n\n            double east = 0.0, north = 0.0;\n            bool centerMoved = false;\n            double centerMotionSquared = 0.0;\n            if (!structuralProjectionChange)\n            {\n                ToLocalMeters(context.RadiusMeters,\n                    entry.LastProjectionCenterLatitudeDeg,\n                    entry.LastProjectionCenterLongitudeDeg,\n                    currentCenterLatitudeDeg, currentCenterLongitudeDeg,\n                    out east, out north);\n                centerMotionSquared = east * east + north * north;\n                centerMoved = centerMotionSquared > 0.0001;\n            }\n\n            // Existing movementThresholdMeters is 0.25 pixel in the current BACK target.\n            // Bridge at only 80% of that threshold (0.20 pixel), tighten east/west motion\n            // with latitude convergence, and disable the approximation above 70 degrees.\n            float latitudeScale = Mathf.Max(ProjectionBridgeMinimumLatitudeScale,\n                Mathf.Abs(Mathf.Cos((float)currentCenterLatitudeDeg * Mathf.Deg2Rad)));\n            double exactDistanceThreshold = Math.Max(0.01,\n                movementThresholdMeters * ProjectionBridgeThresholdScale * latitudeScale);\n            bool polarExactOnly = Math.Abs(currentCenterLatitudeDeg) >=\n                ProjectionBridgeLatitudeLimitDeg;\n            float exactAge = entry.LastExactProjectionRealtime < 0f ? float.MaxValue :\n                Math.Max(0f, Time.realtimeSinceStartup - entry.LastExactProjectionRealtime);\n            bool exactProjectionDue = structuralProjectionChange ||\n                centerMoved && (polarExactOnly ||\n                    centerMotionSquared >= exactDistanceThreshold * exactDistanceThreshold ||\n                    exactAge >= ProjectionRefreshAgeSeconds);\n\n            if (!exactProjectionDue)\n            {\n                // A moving-map authoritative tick still commits at 10 Hz. Instead of\n                // reprojecting and uploading every vertex, move the cached N-UP geometry by\n                // the exact current projection of its last exact center. Heading is still\n                // handled by ResolveScaleCorrectedRenderMatrix after this translation.\n                if (centerMoved || forceCenterProjectionRefresh)\n                {\n                    float oldCenterU, oldCenterV;\n                    context.ProjectUnitToRenderNUp(entry.LastProjectionCenterX,\n                        entry.LastProjectionCenterY, entry.LastProjectionCenterZ,\n                        out oldCenterU, out oldCenterV);\n                    float deltaU = oldCenterU - 0.5f;\n                    float deltaV = oldCenterV - context.AnchorRenderV;\n                    if (Mathf.Abs(deltaU) > 0.0000001f ||\n                        Mathf.Abs(deltaV) > 0.0000001f)\n                    {\n                        operationHealthProjectionBridgeUses++;\n                        return Matrix4x4.Translate(new Vector3(deltaU, deltaV, 0f));\n                    }\n                }\n                return Matrix4x4.identity;\n            }\n\n            ProjectMesh(entry.LandMesh, entry.LandGeographicPoints,\n                entry.LandProjectedVertices, context);\n            ProjectMesh(entry.WaterMesh, entry.WaterGeographicPoints,\n                entry.WaterProjectedVertices, context);\n            ProjectMesh(entry.CoastalLandCorrectionMesh,\n                entry.CoastalLandCorrectionGeographicPoints,\n                entry.CoastalLandCorrectionProjectedVertices, context);\n            ProjectMesh(entry.CoastalWaterCorrectionMesh,\n                entry.CoastalWaterCorrectionGeographicPoints,\n                entry.CoastalWaterCorrectionProjectedVertices, context);\n            ProjectMesh(entry.ContourMesh, entry.ContourGeographicPoints,\n                entry.ContourProjectedVertices, context);\n            ProjectMesh(entry.CoastlineMesh, entry.CoastlineGeographicPoints,\n                entry.CoastlineProjectedVertices, context);\n            entry.LastProjectionCenterLatitudeDeg = currentCenterLatitudeDeg;\n            entry.LastProjectionCenterLongitudeDeg = currentCenterLongitudeDeg;\n            entry.LastProjectionCenterX = context.CenterX;\n            entry.LastProjectionCenterY = context.CenterY;\n            entry.LastProjectionCenterZ = context.CenterZ;\n            entry.LastExactProjectionRealtime = Time.realtimeSinceStartup;\n            entry.LastProjectionBodyRadius = context.RadiusMeters;\n            entry.LastProjectionRangeMeters = (float)context.VerticalMeters;\n            entry.LastProjectionAnchorBottom = context.AnchorRenderV;\n            entry.LastProjectionOrientation = context.Orientation;\n            operationHealthProjectionExactRefreshes++;\n            return Matrix4x4.identity;\n        }\n\n'''
+          t=t[:start]+replacement+t[end:]
+
+          old='''                "; oh_motion_refresh=" + operationHealthMotionRefreshes +\n                "; oh_forced_project=" + operationHealthForcedProjectionRefreshes +\n                "; oh_loading_backdrop=" + operationHealthLoadingBackdropFrames +'''
+          new='''                "; oh_motion_refresh=" + operationHealthMotionRefreshes +\n                "; oh_forced_project=" + operationHealthForcedProjectionRefreshes +\n                "; oh_project_exact=" + operationHealthProjectionExactRefreshes +\n                "; oh_project_bridge=" + operationHealthProjectionBridgeUses +\n                "; oh_loading_backdrop=" + operationHealthLoadingBackdropFrames +'''
+          if t.count(old)!=1: raise SystemExit('projection telemetry log anchor='+str(t.count(old)))
+          t=t.replace(old,new,1)
+          p.write_text(t)
+
+          # Hotfix3 regression: 10 Hz movement must still reach BACK, but full vertex upload\n          # is no longer required on every subpixel motion tick.\n          test=Path('Tools/selftest_v01800_operation_health_pass3_cadence_hotfix3_motion_commit.py')
+          tt=test.read_text()
+          old="ck('bool forceCenterProjectionRefresh' in project and 'bool projectionChanged = forceCenterProjectionRefresh ||' in project,'subpixel movement bypasses old 0.25px projection hold')"
+          new="ck('bool forceCenterProjectionRefresh' in project and 'Matrix4x4.Translate' in project and 'ProjectionBridgeThresholdScale' in R,'subpixel movement keeps 10 Hz motion through bounded projection bridge')"
+          if tt.count(old)!=1: raise SystemExit('hotfix3 projection assertion anchor='+str(tt.count(old)))
+          test.write_text(tt.replace(old,new,1))
+
+          newtest=Path('Tools/selftest_v01800_operation_health_projection_motion_bridge.py')
+          newtest.write_text(r'''#!/usr/bin/env python3
+from pathlib import Path
+import math,sys
+sys.dont_write_bytecode=True
+ROOT=Path(__file__).resolve().parents[1]
+R=(ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+checks=[]
+def ck(v,n): checks.append((bool(v),n)); print(('[PASS] ' if v else '[FAIL] ')+n)
+render=R[R.index('bool RenderBackBuffer('):R.index('float MeasureFoundationGpuReadiness')]
+project=R[R.index('Matrix4x4 EnsureProjectedGeometry('):R.index('void ProjectMesh(')]
+ck('Matrix4x4 projectionBridge = EnsureProjectedGeometry' in render and 'mapRotation * projectionBridge' in render,'motion bridge is applied before existing TRACK-UP map matrix')
+ck('ProjectMesh(entry.LandMesh' in project and 'mesh.vertices = projectedVertices' in R,'exact projection/upload path remains intact')
+ck('ProjectionBridgeThresholdScale = 0.80f' in R,'bridge distance is capped below existing quarter-pixel threshold')
+ck('ProjectionBridgeLatitudeLimitDeg = 70f' in R and 'polarExactOnly' in project,'polar convergence disables motion approximation')
+ck('exactAge >= ProjectionRefreshAgeSeconds' in project and 'ProjectionRefreshAgeSeconds = 0.50f' in R,'moving bridge exact-refreshes within 0.50 seconds')
+ck('context.ProjectUnitToRenderNUp(entry.LastProjectionCenterX' in project and 'Matrix4x4.Translate' in project,'bridge derives translation from exact prior geographic center')
+ck('oh_project_exact=' in R and 'oh_project_bridge=' in R,'runtime distinguishes exact projection from bridge use')
+ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R,'render-target quality authority unchanged')
+ck('MaximumContourLevelsPerTile = 96' in (ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs').read_text(),'Candidate11 contour quality authority unchanged')
+ck('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in R,'10 Hz presentation authority unchanged')
+
+# Numerical safety audit of the translation bridge against the exact spherical projection.
+# Test the worst allowed latitude just below the 70 deg exact-only fence, 160 km range,
+# 366x188 stock map surface scaled to the supported 3x UI size. Motion is set to 99% of
+# the latitude-tightened 0.20-pixel exact refresh threshold. The bridge error must remain
+# sub-0.20 rendered pixel even at 3x; ordinary equatorial error is far smaller.
+BODY=600000.0; RANGE=160000.0; W=366.0*3.0; HPIX=188.0*3.0
+HM=RANGE*1.30; VM=RANGE
+lat0=math.radians(69.9); lon0=0.0
+base_threshold=RANGE/188.0*0.25
+lat_scale=max(0.35,abs(math.cos(lat0)))
+move=base_threshold*0.80*lat_scale*0.99
+
+def unit(lat,lon):
+    c=math.cos(lat); return (c*math.cos(lon),c*math.sin(lon),math.sin(lat))
+def basis(lat,lon):
+    c=unit(lat,lon); e=(-math.sin(lon),math.cos(lon),0.0)
+    n=(-math.sin(lat)*math.cos(lon),-math.sin(lat)*math.sin(lon),math.cos(lat))
+    return c,e,n
+def dot(a,b): return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]
+def project(p,lat,lon):
+    c,e,n=basis(lat,lon); eu=dot(p,e); nu=dot(p,n); rs=max(0.0,eu*eu+nu*nu)
+    if rs<=0.18:
+        f=1.0+rs*(1/6+rs*(3/40+rs*(5/112+rs*(35/1152+rs*63/2816))))
+    else:
+        radial=math.sqrt(rs); f=1.0 if radial<=1e-12 else math.atan2(radial,dot(p,c))/radial
+    return (0.5+eu*BODY*f/HM,0.5+nu*BODY*f/VM)
+def dest(lat,lon,east,north):
+    dist=math.hypot(east,north)
+    if dist<=1e-12:return unit(lat,lon)
+    br=math.atan2(east,north); ad=dist/BODY
+    lat2=math.asin(math.sin(lat)*math.cos(ad)+math.cos(lat)*math.sin(ad)*math.cos(br))
+    lon2=lon+math.atan2(math.sin(br)*math.sin(ad)*math.cos(lat),math.cos(ad)-math.sin(lat)*math.sin(lat2))
+    return unit(lat2,lon2)
+newc=dest(lat0,lon0,move,0.0); newlat=math.asin(newc[2]); newlon=math.atan2(newc[1],newc[0])
+oldcenter=unit(lat0,lon0); cproj=project(oldcenter,newlat,newlon); delta=(cproj[0]-0.5,cproj[1]-0.5)
+maxerr=0.0
+for ix in range(11):
+    east=-0.65*RANGE+1.30*RANGE*ix/10.0
+    for iy in range(11):
+        north=-0.50*RANGE+RANGE*iy/10.0
+        p=dest(lat0,lon0,east,north); oldp=project(p,lat0,lon0); exact=project(p,newlat,newlon)
+        bridge=(oldp[0]+delta[0],oldp[1]+delta[1])
+        err=math.hypot((exact[0]-bridge[0])*W,(exact[1]-bridge[1])*HPIX)
+        maxerr=max(maxerr,err)
+ck(maxerr < 0.20,'worst permitted 160 km bridge stays sub-0.20 pixel at 3x map scale (%.4f px)'%maxerr)
+failed=[n for ok,n in checks if not ok]
+print('\n[Operation Health Projection Motion Bridge] %d/%d PASS' % (len(checks)-len(failed),len(checks)))
+if failed:
+ print('FAILED: '+', '.join(failed)); raise SystemExit(1)
+''')
+
+          pre=Path('Tools/run_v01800_operation_health_pass3_prebuild.py')
+          pt=pre.read_text()
+          marker=" ('Operation Health Pass 3 Cadence Hotfix 3 Motion Commit','selftest_v01800_operation_health_pass3_cadence_hotfix3_motion_commit.py'),"
+          if marker not in pt: raise SystemExit('prebuild motion suite marker absent')
+          pt=pt.replace(marker," ('Operation Health Projection Motion Bridge','selftest_v01800_operation_health_projection_motion_bridge.py'),\n"+marker,1)
+          pre.write_text(pt)
+          PY
+
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+          git diff --check
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          p=r[r.index('Matrix4x4 EnsureProjectedGeometry('):r.index('void ProjectMesh(')]
+          assert 'Matrix4x4.Translate' in p
+          assert 'mesh.vertices = projectedVertices' not in p
+          assert 'ProjectionBridgeLatitudeLimitDeg = 70f' in r
+          assert 'oh_project_exact=' in r and 'oh_project_bridge=' in r
+          assert 'mapRotation * projectionBridge' in r
+          print('projection motion bridge source audit PASS')
+          PY
+
+          git config user.name 'AERIS Patch Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs \
+            Tools/run_v01800_operation_health_pass3_prebuild.py \
+            Tools/selftest_v01800_operation_health_pass3_cadence_hotfix3_motion_commit.py \
+            Tools/selftest_v01800_operation_health_projection_motion_bridge.py
+          git commit -m 'Bridge motion between exact ND projections'
+          git rm .github/workflows/aeris23-projection-motion-bridge.yml
+          git commit -m 'Remove temporary projection bridge validator'
+          git push origin HEAD:agent/aeris23-projection-motion-bridge
