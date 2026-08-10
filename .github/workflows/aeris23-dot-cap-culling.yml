@@ -1,0 +1,113 @@
+name: AERIS23 Dot Cap Culling
+on:
+  pull_request:
+    branches:
+      - cp3.75/nd-recovery
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: write
+jobs:
+  patch-verify-publish:
+    if: github.head_ref == 'agent/aeris23-dot-cap-culling'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/aeris23-dot-cap-culling
+          fetch-depth: 0
+      - name: Patch cheap spherical-cap broad phase
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs')
+          t=p.read_text()
+
+          old='''            internal double BoundCenterLatitudeDeg;\n            internal double BoundCenterLongitudeDeg;\n            internal double BoundAngularRadiusRad = Math.PI;'''
+          new='''            internal double BoundCenterLatitudeDeg;\n            internal double BoundCenterLongitudeDeg;\n            internal double BoundAngularRadiusRad = Math.PI;\n            // AERIS23 cheap spherical-cap broad phase. These are immutable and are\n            // calculated once when the Entry is built, so the 10 Hz hot path needs only\n            // a dot product and one cosine-addition identity per Entry.\n            internal double BoundCenterX;\n            internal double BoundCenterY;\n            internal double BoundCenterZ;\n            internal double BoundRadiusSin;\n            internal double BoundRadiusCos = -1.0;'''
+          if t.count(old)!=1: raise SystemExit('Entry bound fields anchor='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          old='''        long operationHealthCullTests;\n        long operationHealthCulledEntries;\n        long operationHealthVisibleEntries;\n        long operationHealthWideRangeCullBypassFrames;'''
+          new='''        long operationHealthCullTests;\n        long operationHealthCulledEntries;\n        long operationHealthVisibleEntries;\n        long operationHealthWideRangeCullBypassFrames;\n        long operationHealthDotCapCullTests;'''
+          if t.count(old)!=1: raise SystemExit('cull telemetry fields anchor='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          old='''            double boundCenterLatitudeDeg, boundCenterLongitudeDeg,\n                boundAngularRadiusRad;\n            ResolveConservativeEntryBounds(result.SouthLatitudeDeg,\n                result.NorthLatitudeDeg, result.WestLongitudeDeg,\n                result.EastLongitudeDeg, out boundCenterLatitudeDeg,\n                out boundCenterLongitudeDeg, out boundAngularRadiusRad);\n            return new Entry'''
+          new='''            double boundCenterLatitudeDeg, boundCenterLongitudeDeg,\n                boundAngularRadiusRad;\n            ResolveConservativeEntryBounds(result.SouthLatitudeDeg,\n                result.NorthLatitudeDeg, result.WestLongitudeDeg,\n                result.EastLongitudeDeg, out boundCenterLatitudeDeg,\n                out boundCenterLongitudeDeg, out boundAngularRadiusRad);\n            double boundCenterX = 0.0, boundCenterY = 0.0, boundCenterZ = 0.0;\n            double boundRadiusSin = 0.0, boundRadiusCos = -1.0;\n            ResolveSphericalCapFastData(boundCenterLatitudeDeg,\n                boundCenterLongitudeDeg, boundAngularRadiusRad,\n                out boundCenterX, out boundCenterY, out boundCenterZ,\n                out boundRadiusSin, out boundRadiusCos);\n            return new Entry'''
+          if t.count(old)!=1: raise SystemExit('BuildEntry bound prep anchor='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          old='''                BoundCenterLatitudeDeg = boundCenterLatitudeDeg,\n                BoundCenterLongitudeDeg = boundCenterLongitudeDeg,\n                BoundAngularRadiusRad = boundAngularRadiusRad,'''
+          new='''                BoundCenterLatitudeDeg = boundCenterLatitudeDeg,\n                BoundCenterLongitudeDeg = boundCenterLongitudeDeg,\n                BoundAngularRadiusRad = boundAngularRadiusRad,\n                BoundCenterX = boundCenterX,\n                BoundCenterY = boundCenterY,\n                BoundCenterZ = boundCenterZ,\n                BoundRadiusSin = boundRadiusSin,\n                BoundRadiusCos = boundRadiusCos,'''
+          if t.count(old)!=1: raise SystemExit('Entry initializer bound anchor='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          old='''                // Runtime A/B on 160 km showed ~1000 spherical cull tests/sec while only\n                // rejecting ~7-10% of entries. The great-circle test itself became more\n                // expensive than the work it saved. Keep culling for narrower views where\n                // rejection measured ~60%+, but bypass it entirely for the 160 km preset.\n                bool entryCullingEnabled = rangeMeters < 120000f;\n                if (!entryCullingEnabled) operationHealthWideRangeCullBypassFrames++;\n                for (int i = 0; i < tiles.Length; i++)'''
+          new='''                // AERIS23 dot-cap culling: the previous great-circle test was too\n                // expensive at 160 km. Resolve the conservative viewport cap once per BACK\n                // frame, then reject whole Entries using only precomputed cap data + a dot\n                // product. This re-enables conservative culling at every range without\n                // bringing per-Entry atan/sqrt/trigonometric distance work back.\n                double viewportCullSin, viewportCullCos;\n                bool entryCullingEnabled = ResolveViewportCullCap(vessel.mainBody,\n                    rangeMeters, anchorV, out viewportCullSin, out viewportCullCos);\n                for (int i = 0; i < tiles.Length; i++)'''
+          if t.count(old)!=1: raise SystemExit('RenderBackBuffer cull setup anchor='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          old='''                    if (entryCullingEnabled &&\n                        ShouldCullEntryOutsidePresentation(drawEntry, vessel.mainBody,\n                            projectionCenterLatitudeDeg, projectionCenterLongitudeDeg,\n                            rangeMeters, anchorV)) continue;'''
+          new='''                    if (entryCullingEnabled &&\n                        ShouldCullEntryOutsidePresentation(drawEntry,\n                            projection.CenterX, projection.CenterY, projection.CenterZ,\n                            viewportCullSin, viewportCullCos)) continue;'''
+          if t.count(old)!=1: raise SystemExit('RenderBackBuffer cull call anchor='+str(t.count(old)))
+          t=t.replace(old,new,1)
+
+          start=t.index('        bool ShouldCullEntryOutsidePresentation(')
+          end=t.index('        static void ResolveConservativeEntryBounds(', start)
+          replacement='''        bool ShouldCullEntryOutsidePresentation(Entry entry,\n            double centerX, double centerY, double centerZ,\n            double viewportRadiusSin, double viewportRadiusCos)\n        {\n            operationHealthCullTests++;\n            operationHealthDotCapCullTests++;\n            if (entry == null ||\n                double.IsNaN(entry.BoundAngularRadiusRad) ||\n                double.IsInfinity(entry.BoundAngularRadiusRad) ||\n                entry.BoundAngularRadiusRad >= Math.PI * 0.50 ||\n                entry.BoundRadiusCos < 0.0 ||\n                double.IsNaN(entry.BoundRadiusCos) ||\n                double.IsInfinity(entry.BoundRadiusCos))\n            {\n                operationHealthVisibleEntries++;\n                return false;\n            }\n\n            // cos(viewport + entryRadius) from one viewport sin/cos pair and the\n            // Entry's precomputed radius pair. If the combined cap reaches a hemisphere\n            // or more, do not cull; this deliberately biases toward extra work.\n            double thresholdCos = viewportRadiusCos * entry.BoundRadiusCos -\n                viewportRadiusSin * entry.BoundRadiusSin;\n            double combinedSin = viewportRadiusSin * entry.BoundRadiusCos +\n                viewportRadiusCos * entry.BoundRadiusSin;\n            if (combinedSin <= 0.0 || thresholdCos <= 0.0)\n            {\n                operationHealthVisibleEntries++;\n                return false;\n            }\n            double dot = centerX * entry.BoundCenterX +\n                centerY * entry.BoundCenterY + centerZ * entry.BoundCenterZ;\n            if (double.IsNaN(dot) || double.IsInfinity(dot))\n            {\n                operationHealthVisibleEntries++;\n                return false;\n            }\n            // Dot smaller than cos(combined radius) proves the two conservative caps\n            // cannot touch. Equality remains visible, preserving the old safety bias.\n            bool culled = dot < thresholdCos;\n            if (culled) operationHealthCulledEntries++;\n            else operationHealthVisibleEntries++;\n            return culled;\n        }\n\n        static bool ResolveViewportCullCap(CelestialBody body, float rangeMeters,\n            float anchorV, out double radiusSin, out double radiusCos)\n        {\n            radiusSin = 0.0;\n            radiusCos = -1.0;\n            if (body == null || body.Radius <= 0.0) return false;\n            // Exactly preserve the accepted conservative viewport margins from the old\n            // great-circle implementation: circumscribed rectangle *1.08 plus the larger\n            // of 2.5 km or 3% range. Add one microradian only in the safe direction.\n            double horizontal = Math.Max(1.0, rangeMeters * 0.65);\n            double vertical = Math.Max(1.0, rangeMeters * Math.Max(\n                Mathf.Clamp01(anchorV), 1f - Mathf.Clamp01(anchorV)));\n            double viewportRadius = Math.Sqrt(horizontal * horizontal +\n                vertical * vertical);\n            double viewportSafetyRadius = viewportRadius * 1.08 +\n                Math.Max(2500.0, Math.Max(1f, rangeMeters) * 0.03);\n            double angularRadius = Math.Min(Math.PI * 0.499999,\n                viewportSafetyRadius / body.Radius + 0.000001);\n            if (angularRadius <= 0.0 || double.IsNaN(angularRadius) ||\n                double.IsInfinity(angularRadius)) return false;\n            radiusSin = Math.Sin(angularRadius);\n            radiusCos = Math.Cos(angularRadius);\n            return radiusCos > 0.0;\n        }\n\n        static void ResolveSphericalCapFastData(double centerLatitudeDeg,\n            double centerLongitudeDeg, double angularRadiusRad,\n            out double centerX, out double centerY, out double centerZ,\n            out double radiusSin, out double radiusCos)\n        {\n            centerX = centerY = centerZ = 0.0;\n            radiusSin = 0.0;\n            radiusCos = -1.0;\n            if (double.IsNaN(centerLatitudeDeg) ||\n                double.IsInfinity(centerLatitudeDeg) ||\n                double.IsNaN(centerLongitudeDeg) ||\n                double.IsInfinity(centerLongitudeDeg) ||\n                double.IsNaN(angularRadiusRad) ||\n                double.IsInfinity(angularRadiusRad) ||\n                angularRadiusRad <= 0.0 || angularRadiusRad >= Math.PI * 0.50) return;\n            double lat = centerLatitudeDeg * Math.PI / 180.0;\n            double lon = centerLongitudeDeg * Math.PI / 180.0;\n            double cosLat = Math.Cos(lat);\n            centerX = cosLat * Math.Cos(lon);\n            centerY = cosLat * Math.Sin(lon);\n            centerZ = Math.Sin(lat);\n            radiusSin = Math.Sin(angularRadiusRad);\n            radiusCos = Math.Cos(angularRadiusRad);\n        }\n\n'''
+          t=t[:start]+replacement+t[end:]
+
+          old='''                "; oh_cull_wide_bypass=" + operationHealthWideRangeCullBypassFrames +\n                "; oh_mesh_pool=" + meshPool.Count +'''
+          new='''                "; oh_cull_wide_bypass=" + operationHealthWideRangeCullBypassFrames +\n                "; oh_dot_cap_test=" + operationHealthDotCapCullTests +\n                "; oh_mesh_pool=" + meshPool.Count +'''
+          if t.count(old)!=1: raise SystemExit('telemetry log anchor='+str(t.count(old)))
+          t=t.replace(old,new,1)
+          p.write_text(t)
+
+          test=Path('Tools/selftest_v01800_operation_health_conservative_entry_culling.py')
+          tt=test.read_text()
+          tt=tt.replace("ck('rangeMeters < 120000f' in R and\n   'operationHealthWideRangeCullBypassFrames++' in R,\n   '160 km preset bypasses spherical entry culling')",
+                        "ck('ResolveViewportCullCap(vessel.mainBody' in R and\n   'rangeMeters < 120000f' not in R,\n   'cheap spherical-cap culling is enabled at 160 km as well')")
+          tt=tt.replace("ck('rangeMeters < 120000f' in R and\n   'ShouldCullEntryOutsidePresentation' in R,\n   'narrow views retain conservative entry culling')",
+                        "ck('ShouldCullEntryOutsidePresentation(drawEntry' in R and\n   'viewportCullSin' in R and 'viewportCullCos' in R,\n   'all ranges use one precomputed viewport cap')")
+          tt=tt.replace("ck('oh_cull_wide_bypass=' in R,\n   'wide-range culling bypass telemetry is published')",
+                        "ck('oh_dot_cap_test=' in R,\n   'cheap dot-cap culling telemetry is published')")
+          test.write_text(tt)
+
+          newtest=Path('Tools/selftest_v01800_operation_health_dot_cap_culling.py')
+          newtest.write_text('''#!/usr/bin/env python3\nfrom pathlib import Path\nimport sys\nsys.dont_write_bytecode=True\nROOT=Path(__file__).resolve().parents[1]\nR=(ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()\nchecks=[]\ndef ck(v,n): checks.append((bool(v),n)); print(('[PASS] ' if v else '[FAIL] ')+n)\nstart=R.index('bool ShouldCullEntryOutsidePresentation')\nend=R.index('static void ResolveConservativeEntryBounds',start)\nhot=R[start:end]\nck('GreatCircleDistanceMeters' not in hot and 'Math.Atan2' not in hot and 'Math.Sqrt' not in hot, 'per-entry cull hot path has no great-circle/trig/sqrt distance work')\nck('BoundCenterX' in R and 'BoundCenterY' in R and 'BoundCenterZ' in R, 'entry cap center unit vector is precomputed')\nck('BoundRadiusSin' in R and 'BoundRadiusCos' in R and 'ResolveSphericalCapFastData' in R, 'entry radius trig is precomputed once')\nck('projection.CenterX' in R and 'projection.CenterY' in R and 'projection.CenterZ' in R, 'BACK path reuses projection center unit vector')\nck('viewportRadius * 1.08' in R and 'Math.Max(2500.0' in R, 'accepted viewport safety margins remain')\nck('radius * 1.10 + 0.0005' in R, 'accepted entry-bound inflation remains')\nck('viewportSafetyRadius / body.Radius + 0.000001' in R, 'dot-cap adds only safe-direction angular pad')\nck('dot < thresholdCos' in hot, 'only mathematically disjoint conservative caps are rejected')\nck('rangeMeters < 120000f' not in R, '160 km no longer bypasses cheap culling')\nrender=R[R.index('bool RenderBackBuffer'):R.index('float MeasureFoundationGpuReadiness') ]\nck(render.index('ShouldCullEntryOutsidePresentation') < render.index('EnsureProjectedGeometry'), 'cull remains before projection/upload')\nck(render.index('ShouldCullEntryOutsidePresentation') < render.index('DrawEntry'), 'cull remains before draw submission')\nck('oh_dot_cap_test=' in R, 'runtime can prove fast path activity')\nfailed=[n for ok,n in checks if not ok]\nprint('\\n[Operation Health Dot-Cap Culling] %d/%d PASS' % (len(checks)-len(failed),len(checks)))\nif failed:\n    print('FAILED: '+', '.join(failed)); raise SystemExit(1)\n''')
+
+          pre=Path('Tools/run_v01800_operation_health_pass3_prebuild.py')
+          pt=pre.read_text()
+          marker="('Operation Health Conservative Entry Culling', 'selftest_v01800_operation_health_conservative_entry_culling.py'),"
+          if marker not in pt: raise SystemExit('prebuild cull suite marker absent')
+          pt=pt.replace(marker, marker+"\n    ('Operation Health Dot-Cap Culling', 'selftest_v01800_operation_health_dot_cap_culling.py'),",1)
+          pre.write_text(pt)
+          PY
+
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+          git diff --check
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          assert 'rangeMeters < 120000f' not in r
+          assert 'oh_dot_cap_test=' in r
+          s=r.index('bool ShouldCullEntryOutsidePresentation')
+          e=r.index('static void ResolveConservativeEntryBounds',s)
+          hot=r[s:e]
+          assert 'GreatCircleDistanceMeters' not in hot
+          assert 'Math.Atan2' not in hot
+          print('final dot-cap source audit PASS')
+          PY
+
+          git config user.name 'AERIS Patch Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs \
+            Tools/run_v01800_operation_health_pass3_prebuild.py \
+            Tools/selftest_v01800_operation_health_conservative_entry_culling.py \
+            Tools/selftest_v01800_operation_health_dot_cap_culling.py
+          git commit -m 'Use cheap dot-cap culling at all ND ranges'
+          git rm .github/workflows/aeris23-dot-cap-culling.yml
+          git commit -m 'Remove temporary dot-cap validator'
+          git push origin HEAD:agent/aeris23-dot-cap-culling
