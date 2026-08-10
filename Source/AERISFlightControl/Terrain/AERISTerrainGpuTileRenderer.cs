@@ -74,6 +74,14 @@ namespace AERISFlightControl.Terrain
             internal double BoundCenterLatitudeDeg;
             internal double BoundCenterLongitudeDeg;
             internal double BoundAngularRadiusRad = Math.PI;
+            // AERIS23 cheap spherical-cap broad phase. These are immutable and are
+            // calculated once when the Entry is built, so the 10 Hz hot path needs only
+            // a dot product and one cosine-addition identity per Entry.
+            internal double BoundCenterX;
+            internal double BoundCenterY;
+            internal double BoundCenterZ;
+            internal double BoundRadiusSin;
+            internal double BoundRadiusCos = -1.0;
             internal double LastProjectionCenterLatitudeDeg = double.NaN;
             internal double LastProjectionCenterLongitudeDeg = double.NaN;
             internal double LastProjectionBodyRadius = double.NaN;
@@ -300,6 +308,7 @@ namespace AERISFlightControl.Terrain
         long operationHealthCulledEntries;
         long operationHealthVisibleEntries;
         long operationHealthWideRangeCullBypassFrames;
+        long operationHealthDotCapCullTests;
         long useSequence;
         long usedEntryBytes;
         long backTargetBytes;
@@ -990,12 +999,14 @@ namespace AERISFlightControl.Terrain
                     projection.CenterX, projection.CenterY, projection.CenterZ);
                 double projectionCenterLongitudeDeg = UnitLongitude(
                     projection.CenterX, projection.CenterY);
-                // Runtime A/B on 160 km showed ~1000 spherical cull tests/sec while only
-                // rejecting ~7-10% of entries. The great-circle test itself became more
-                // expensive than the work it saved. Keep culling for narrower views where
-                // rejection measured ~60%+, but bypass it entirely for the 160 km preset.
-                bool entryCullingEnabled = rangeMeters < 120000f;
-                if (!entryCullingEnabled) operationHealthWideRangeCullBypassFrames++;
+                // AERIS23 dot-cap culling: the previous great-circle test was too
+                // expensive at 160 km. Resolve the conservative viewport cap once per BACK
+                // frame, then reject whole Entries using only precomputed cap data + a dot
+                // product. This re-enables conservative culling at every range without
+                // bringing per-Entry atan/sqrt/trigonometric distance work back.
+                double viewportCullSin, viewportCullCos;
+                bool entryCullingEnabled = ResolveViewportCullCap(vessel.mainBody,
+                    rangeMeters, anchorV, out viewportCullSin, out viewportCullCos);
                 for (int i = 0; i < tiles.Length; i++)
                 {
                     AERISTerrainHeightTile tile = tiles[i];
@@ -1004,9 +1015,9 @@ namespace AERISFlightControl.Terrain
                         drawEntries[i] : null;
                     if (drawEntry == null) continue;
                     if (entryCullingEnabled &&
-                        ShouldCullEntryOutsidePresentation(drawEntry, vessel.mainBody,
-                            projectionCenterLatitudeDeg, projectionCenterLongitudeDeg,
-                            rangeMeters, anchorV)) continue;
+                        ShouldCullEntryOutsidePresentation(drawEntry,
+                            projection.CenterX, projection.CenterY, projection.CenterZ,
+                            viewportCullSin, viewportCullCos)) continue;
                     operationHealthPreparedEntryUses++;
                     EnsureProjectedGeometry(drawEntry, projection,
                         projectionThresholdMeters, projectionCenterLatitudeDeg,
@@ -1451,33 +1462,60 @@ namespace AERISFlightControl.Terrain
             return true;
         }
 
-        bool ShouldCullEntryOutsidePresentation(Entry entry, CelestialBody body,
-            double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
-            float anchorV)
+        bool ShouldCullEntryOutsidePresentation(Entry entry,
+            double centerX, double centerY, double centerZ,
+            double viewportRadiusSin, double viewportRadiusCos)
         {
             operationHealthCullTests++;
-            if (entry == null || body == null || body.Radius <= 0.0 ||
+            operationHealthDotCapCullTests++;
+            if (entry == null ||
                 double.IsNaN(entry.BoundAngularRadiusRad) ||
                 double.IsInfinity(entry.BoundAngularRadiusRad) ||
-                entry.BoundAngularRadiusRad >= Math.PI * 0.50)
-            {
-                operationHealthVisibleEntries++;
-                return false;
-            }
-            double centerDistance = GreatCircleDistanceMeters(body,
-                centerLatitudeDeg, centerLongitudeDeg, entry.BoundCenterLatitudeDeg,
-                entry.BoundCenterLongitudeDeg);
-            if (double.IsNaN(centerDistance) || double.IsInfinity(centerDistance))
+                entry.BoundAngularRadiusRad >= Math.PI * 0.50 ||
+                entry.BoundRadiusCos < 0.0 ||
+                double.IsNaN(entry.BoundRadiusCos) ||
+                double.IsInfinity(entry.BoundRadiusCos))
             {
                 operationHealthVisibleEntries++;
                 return false;
             }
 
-            // AERISNdMapProjection uses +/-0.65*range horizontally. Vertically the
-            // ownship anchor divides one full range; use the farther edge. The resulting
-            // circumscribed radius contains the complete rectangular ND viewport for any
-            // heading. Extra multiplicative and absolute margins deliberately bias toward
-            // false negatives (extra work), never false positives (missing terrain).
+            // cos(viewport + entryRadius) from one viewport sin/cos pair and the
+            // Entry's precomputed radius pair. If the combined cap reaches a hemisphere
+            // or more, do not cull; this deliberately biases toward extra work.
+            double thresholdCos = viewportRadiusCos * entry.BoundRadiusCos -
+                viewportRadiusSin * entry.BoundRadiusSin;
+            double combinedSin = viewportRadiusSin * entry.BoundRadiusCos +
+                viewportRadiusCos * entry.BoundRadiusSin;
+            if (combinedSin <= 0.0 || thresholdCos <= 0.0)
+            {
+                operationHealthVisibleEntries++;
+                return false;
+            }
+            double dot = centerX * entry.BoundCenterX +
+                centerY * entry.BoundCenterY + centerZ * entry.BoundCenterZ;
+            if (double.IsNaN(dot) || double.IsInfinity(dot))
+            {
+                operationHealthVisibleEntries++;
+                return false;
+            }
+            // Dot smaller than cos(combined radius) proves the two conservative caps
+            // cannot touch. Equality remains visible, preserving the old safety bias.
+            bool culled = dot < thresholdCos;
+            if (culled) operationHealthCulledEntries++;
+            else operationHealthVisibleEntries++;
+            return culled;
+        }
+
+        static bool ResolveViewportCullCap(CelestialBody body, float rangeMeters,
+            float anchorV, out double radiusSin, out double radiusCos)
+        {
+            radiusSin = 0.0;
+            radiusCos = -1.0;
+            if (body == null || body.Radius <= 0.0) return false;
+            // Exactly preserve the accepted conservative viewport margins from the old
+            // great-circle implementation: circumscribed rectangle *1.08 plus the larger
+            // of 2.5 km or 3% range. Add one microradian only in the safe direction.
             double horizontal = Math.Max(1.0, rangeMeters * 0.65);
             double vertical = Math.Max(1.0, rangeMeters * Math.Max(
                 Mathf.Clamp01(anchorV), 1f - Mathf.Clamp01(anchorV)));
@@ -1485,12 +1523,38 @@ namespace AERISFlightControl.Terrain
                 vertical * vertical);
             double viewportSafetyRadius = viewportRadius * 1.08 +
                 Math.Max(2500.0, Math.Max(1f, rangeMeters) * 0.03);
-            double entryRadiusMeters = Math.Max(0.0, body.Radius *
-                entry.BoundAngularRadiusRad);
-            bool culled = centerDistance - entryRadiusMeters > viewportSafetyRadius;
-            if (culled) operationHealthCulledEntries++;
-            else operationHealthVisibleEntries++;
-            return culled;
+            double angularRadius = Math.Min(Math.PI * 0.499999,
+                viewportSafetyRadius / body.Radius + 0.000001);
+            if (angularRadius <= 0.0 || double.IsNaN(angularRadius) ||
+                double.IsInfinity(angularRadius)) return false;
+            radiusSin = Math.Sin(angularRadius);
+            radiusCos = Math.Cos(angularRadius);
+            return radiusCos > 0.0;
+        }
+
+        static void ResolveSphericalCapFastData(double centerLatitudeDeg,
+            double centerLongitudeDeg, double angularRadiusRad,
+            out double centerX, out double centerY, out double centerZ,
+            out double radiusSin, out double radiusCos)
+        {
+            centerX = centerY = centerZ = 0.0;
+            radiusSin = 0.0;
+            radiusCos = -1.0;
+            if (double.IsNaN(centerLatitudeDeg) ||
+                double.IsInfinity(centerLatitudeDeg) ||
+                double.IsNaN(centerLongitudeDeg) ||
+                double.IsInfinity(centerLongitudeDeg) ||
+                double.IsNaN(angularRadiusRad) ||
+                double.IsInfinity(angularRadiusRad) ||
+                angularRadiusRad <= 0.0 || angularRadiusRad >= Math.PI * 0.50) return;
+            double lat = centerLatitudeDeg * Math.PI / 180.0;
+            double lon = centerLongitudeDeg * Math.PI / 180.0;
+            double cosLat = Math.Cos(lat);
+            centerX = cosLat * Math.Cos(lon);
+            centerY = cosLat * Math.Sin(lon);
+            centerZ = Math.Sin(lat);
+            radiusSin = Math.Sin(angularRadiusRad);
+            radiusCos = Math.Cos(angularRadiusRad);
         }
 
         static void ResolveConservativeEntryBounds(double southLatitudeDeg,
@@ -1636,6 +1700,7 @@ namespace AERISFlightControl.Terrain
                 "; oh_culled_entry=" + operationHealthCulledEntries +
                 "; oh_visible_entry=" + operationHealthVisibleEntries +
                 "; oh_cull_wide_bypass=" + operationHealthWideRangeCullBypassFrames +
+                "; oh_dot_cap_test=" + operationHealthDotCapCullTests +
                 "; oh_mesh_pool=" + meshPool.Count +
                 "; oh_mesh_pool_hit=" + operationHealthMeshPoolHits +
                 "; oh_mesh_pool_miss=" + operationHealthMeshPoolMisses +
@@ -2050,6 +2115,12 @@ namespace AERISFlightControl.Terrain
                 result.NorthLatitudeDeg, result.WestLongitudeDeg,
                 result.EastLongitudeDeg, out boundCenterLatitudeDeg,
                 out boundCenterLongitudeDeg, out boundAngularRadiusRad);
+            double boundCenterX = 0.0, boundCenterY = 0.0, boundCenterZ = 0.0;
+            double boundRadiusSin = 0.0, boundRadiusCos = -1.0;
+            ResolveSphericalCapFastData(boundCenterLatitudeDeg,
+                boundCenterLongitudeDeg, boundAngularRadiusRad,
+                out boundCenterX, out boundCenterY, out boundCenterZ,
+                out boundRadiusSin, out boundRadiusCos);
             return new Entry
             {
                 CacheKey = cacheKey,
@@ -2097,6 +2168,11 @@ namespace AERISFlightControl.Terrain
                 BoundCenterLatitudeDeg = boundCenterLatitudeDeg,
                 BoundCenterLongitudeDeg = boundCenterLongitudeDeg,
                 BoundAngularRadiusRad = boundAngularRadiusRad,
+                BoundCenterX = boundCenterX,
+                BoundCenterY = boundCenterY,
+                BoundCenterZ = boundCenterZ,
+                BoundRadiusSin = boundRadiusSin,
+                BoundRadiusCos = boundRadiusCos,
                 LandElevationMeters = land.Elevation.ToArray(),
                 LandShade = land.Shade.ToArray(),
                 LandColours = new Color32[land.Vertices.Count],
