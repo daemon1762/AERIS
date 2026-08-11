@@ -29,8 +29,27 @@ replace_once(
     "ck(render.index('ShouldCullEntryOutsidePresentation') < render.index('DrawLayerBatches'), 'cull remains before global layer draw submission')",
     'Dot-cap draw-stage anchor')
 
-# Report any remaining legacy DrawEntry dependency in permanent selftests so the
-# next prebuild failure is not discovered one suite at a time.
+hotfix3 = ROOT / 'Tools/selftest_v01800_operation_health_pass3_cadence_hotfix3_motion_commit.py'
+replace_once(
+    hotfix3,
+    "render=R[R.index('bool RenderBackBuffer('):R.index('bool DrawEntry(')]",
+    "render=R[R.index('bool RenderBackBuffer('):R.index('float MeasureFoundationGpuReadiness(')]",
+    'Hotfix3 RenderBackBuffer slice anchor')
+
+cp2_runway = ROOT / 'Tools/selftest_v01800_cp2_runway_map_lock_hotfix1.py'
+replace_once(
+    cp2_runway,
+    '    "DrawEntry(fallbackEntry, mapRotation", "DrawEntry(currentEntry, mapRotation",\n',
+    '    "Matrix4x4 entryMapMatrix = mapRotation * projectionBridge",\n    "layerBatchMatricesScratch[layerBatchCount] = entryMapMatrix",\n',
+    'CP2 runway shared map-matrix draw contract')
+
+gate4a_runway = ROOT / 'Tools/selftest_v01800_cp3_gate4a_runway_map_lock_successor.py'
+replace_once(
+    gate4a_runway,
+    '    "DrawEntry(drawEntry, mapRotation",\n',
+    '    "Matrix4x4 entryMapMatrix = mapRotation * projectionBridge",\n    "layerBatchMatricesScratch[layerBatchCount] = entryMapMatrix",\n',
+    'Gate4A runway shared map-matrix draw contract')
+
 remaining = []
 for path in sorted((ROOT / 'Tools').glob('selftest_*.py')):
     text = path.read_text()
@@ -42,4 +61,4 @@ if remaining:
 else:
     print('[PASS] no remaining permanent selftest depends on legacy DrawEntry(')
 
-print('[AERIS23 Global Layer Pass Batching] legacy culling selftests updated')
+print('[AERIS23 Global Layer Pass Batching] legacy draw-contract selftests updated')
