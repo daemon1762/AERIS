@@ -40,4 +40,9 @@ require('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in
         'fixed 10 Hz authority remains intact')
 require('RenderTextureFormat.ARGB32' in r and 'FilterMode.Bilinear' in r,
         'ARGB32/Bilinear visual authority remains intact')
-print('[AERIS23 CANDIDATE VERIFY] WITNESS_BOUNDED_AFFINE_PROJECTION SOURCE PASS')
+
+numerical=ROOT/'Tools/selftest_v01800_operation_health_witness_affine_numerical.py'
+if not numerical.is_file():
+    raise SystemExit('[AERIS23 AFFINE VERIFY] numerical safety audit missing')
+subprocess.run([sys.executable,str(numerical)],cwd=str(ROOT),check=True)
+print('[AERIS23 CANDIDATE VERIFY] WITNESS_BOUNDED_AFFINE_PROJECTION SOURCE+NUMERICAL PASS')
