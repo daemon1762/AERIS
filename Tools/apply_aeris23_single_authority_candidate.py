@@ -10,6 +10,7 @@ steps = [
     ROOT / 'Tools/apply_aeris23_candidate_identity_guard.py',
     ROOT / 'Tools/verify_aeris23_single_authority_source.py',
     ROOT / 'Tools/fix_aeris23_single_authority_pass3_selftest.py',
+    ROOT / 'Tools/fix_aeris23_single_authority_pass2_selftest.py',
 ]
 for step in steps:
     if not step.is_file():
