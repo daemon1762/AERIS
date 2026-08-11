@@ -29,4 +29,11 @@ replace_once(
     "check('projection geometry still updates only when exact-dirty while subpixel motion avoids vertex rewrite',\n      'bool exactProjectionDue =' in renderer and 'if (!exactProjectionDue)' in renderer and\n      'Matrix4x4.Translate' in renderer and\n      renderer.index('if (!exactProjectionDue)') < renderer.index('ProjectMesh(entry.LandMesh'))",
     'Pass2 exact-dirty projection contract')
 
+pass1 = ROOT / 'Tools/selftest_v01800_operation_health_pass1_zero_visual_cost.py'
+replace_once(
+    pass1,
+    "projection_block=renderer[renderer.index('void EnsureProjectedGeometry'):renderer.index('void ProjectMesh')]",
+    "projection_block=renderer[renderer.index('Matrix4x4 EnsureProjectedGeometry'):renderer.index('void ProjectMesh')]",
+    'Pass1 projection method anchor')
+
 print('[AERIS23 Projection Motion Bridge] legacy selftests updated')
