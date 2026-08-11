@@ -36,7 +36,10 @@ check('terrain BACK cadence remains 0.10 seconds or approved shared 10 Hz author
       ('nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f;' in renderer) or
       ('nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime;' in renderer and
        'nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f;' in renderer))
-check('projection geometry still updates only when dirty', 'if (!projectionChanged) return;' in renderer and 'EnsureProjectedGeometry' in renderer)
+check('projection geometry still updates only when exact-dirty while subpixel motion avoids vertex rewrite',
+      'bool exactProjectionDue =' in renderer and 'if (!exactProjectionDue)' in renderer and
+      'Matrix4x4.Translate' in renderer and
+      renderer.index('if (!exactProjectionDue)') < renderer.index('ProjectMesh(entry.LandMesh'))
 check('Operation Health Hotfix 1 FRONT-synchronized symbology retained', 'terrainSymbologyFrontSwap' in nav and 'terrainTileRenderer.FrontBufferSwaps' in nav)
 check('Hotfix 1 prediction vector retains synchronized speed/track', 'terrainSymbologyGroundSpeedMps' in nav and 'terrainSymbologyGroundTrackDeg' in nav)
 

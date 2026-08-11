@@ -84,6 +84,12 @@ namespace AERISFlightControl.Terrain
             internal double BoundRadiusCos = -1.0;
             internal double LastProjectionCenterLatitudeDeg = double.NaN;
             internal double LastProjectionCenterLongitudeDeg = double.NaN;
+            // Exact-projection origin retained as a unit vector. Motion-only 10 Hz ticks
+            // can translate the immutable projected mesh instead of rewriting every vertex.
+            internal double LastProjectionCenterX = double.NaN;
+            internal double LastProjectionCenterY = double.NaN;
+            internal double LastProjectionCenterZ = double.NaN;
+            internal float LastExactProjectionRealtime = -1f;
             internal double LastProjectionBodyRadius = double.NaN;
             internal float LastProjectionRangeMeters = float.NaN;
             internal float LastProjectionAnchorBottom = float.NaN;
@@ -176,6 +182,13 @@ namespace AERISFlightControl.Terrain
         const float MaximumHistorySurfaceRangeMeters = 250000f;
         const float ProjectionRefreshAgeSeconds = 0.50f;
         const float ProjectionRefreshHeadingDeg = 8f;
+        // AERIS23 Projection Motion Bridge. Full CPU projection/upload remains the exact
+        // authority. Between exact commits only a tiny N-UP translation may be applied.
+        // The bridge budget is 80% of the existing quarter-pixel movement threshold
+        // (=0.20 pixel), tightens with latitude, and is disabled in polar convergence.
+        const float ProjectionBridgeThresholdScale = 0.80f;
+        const float ProjectionBridgeMinimumLatitudeScale = 0.35f;
+        const float ProjectionBridgeLatitudeLimitDeg = 70f;
         // Cadence Hotfix 3: the 0.50s/large-distance rules remain safety/fallback
         // authorities, but a genuinely moving map commits on every fixed 10 Hz
         // authoritative tick. The speed guard prevents parked floating-origin noise
@@ -261,6 +274,8 @@ namespace AERISFlightControl.Terrain
         long operationHealthDirtyCommits;
         long operationHealthMotionRefreshes;
         long operationHealthForcedProjectionRefreshes;
+        long operationHealthProjectionExactRefreshes;
+        long operationHealthProjectionBridgeUses;
         long operationHealthLoadingBackdropFrames;
         long operationHealthRequestedViewReadyTransitions;
         // Step 2 splits expensive content maintenance from the fixed motion clock.
@@ -1019,10 +1034,13 @@ namespace AERISFlightControl.Terrain
                             projection.CenterX, projection.CenterY, projection.CenterZ,
                             viewportCullSin, viewportCullCos)) continue;
                     operationHealthPreparedEntryUses++;
-                    EnsureProjectedGeometry(drawEntry, projection,
+                    Matrix4x4 projectionBridge = EnsureProjectedGeometry(drawEntry, projection,
                         projectionThresholdMeters, projectionCenterLatitudeDeg,
                         projectionCenterLongitudeDeg, forceCenterProjectionRefresh);
-                    bool entryRendered = DrawEntry(drawEntry, mapRotation, true, effectiveMode,
+                    // Cached geometry is N-UP. Apply the tiny center-motion bridge first,
+                    // then the existing exact scale-corrected TRACK-UP rotation.
+                    Matrix4x4 entryMapMatrix = mapRotation * projectionBridge;
+                    bool entryRendered = DrawEntry(drawEntry, entryMapMatrix, true, effectiveMode,
                         settings == null ? AERISTerrainColourPreset.Standard :
                         settings.TerrainColourPreset, (float)vessel.altitude);
                     rendered = entryRendered || rendered;
@@ -1725,6 +1743,8 @@ namespace AERISFlightControl.Terrain
                 "; oh_dirty_commit=" + operationHealthDirtyCommits +
                 "; oh_motion_refresh=" + operationHealthMotionRefreshes +
                 "; oh_forced_project=" + operationHealthForcedProjectionRefreshes +
+                "; oh_project_exact=" + operationHealthProjectionExactRefreshes +
+                "; oh_project_bridge=" + operationHealthProjectionBridgeUses +
                 "; oh_loading_backdrop=" + operationHealthLoadingBackdropFrames +
                 "; oh_ready_transition=" + operationHealthRequestedViewReadyTransitions +
                 "; requested_view_ready=" + (requestedViewReady ? "1" : "0") +
@@ -2441,30 +2461,73 @@ namespace AERISFlightControl.Terrain
             return output;
         }
 
-        void EnsureProjectedGeometry(Entry entry,
+        Matrix4x4 EnsureProjectedGeometry(Entry entry,
             AERISNdMapProjection context, float movementThresholdMeters,
             double currentCenterLatitudeDeg, double currentCenterLongitudeDeg,
             bool forceCenterProjectionRefresh)
         {
-            if (entry == null) return;
-            bool projectionChanged = forceCenterProjectionRefresh ||
+            if (entry == null) return Matrix4x4.identity;
+            bool structuralProjectionChange =
                 double.IsNaN(entry.LastProjectionCenterLatitudeDeg) ||
+                double.IsNaN(entry.LastProjectionCenterX) ||
                 Math.Abs(entry.LastProjectionBodyRadius - context.RadiusMeters) > 0.01 ||
                 Math.Abs(entry.LastProjectionRangeMeters - context.VerticalMeters) > 0.01 ||
                 Math.Abs(entry.LastProjectionAnchorBottom - context.AnchorRenderV) > 0.000001f ||
                 entry.LastProjectionOrientation != context.Orientation;
-            if (!projectionChanged)
+
+            double east = 0.0, north = 0.0;
+            bool centerMoved = false;
+            double centerMotionSquared = 0.0;
+            if (!structuralProjectionChange)
             {
-                double east, north;
                 ToLocalMeters(context.RadiusMeters,
                     entry.LastProjectionCenterLatitudeDeg,
                     entry.LastProjectionCenterLongitudeDeg,
                     currentCenterLatitudeDeg, currentCenterLongitudeDeg,
                     out east, out north);
-                projectionChanged = east * east + north * north >=
-                    movementThresholdMeters * movementThresholdMeters;
+                centerMotionSquared = east * east + north * north;
+                centerMoved = centerMotionSquared > 0.0001;
             }
-            if (!projectionChanged) return;
+
+            // movementThresholdMeters is 0.25 rendered pixel in the current BACK target.
+            // The bridge may use only 80% of that distance. Latitude convergence tightens
+            // the allowance; at |lat| >= 70 degrees any center motion is exact-only.
+            float latitudeScale = Mathf.Max(ProjectionBridgeMinimumLatitudeScale,
+                Mathf.Abs(Mathf.Cos((float)currentCenterLatitudeDeg * Mathf.Deg2Rad)));
+            double exactDistanceThreshold = Math.Max(0.01,
+                movementThresholdMeters * ProjectionBridgeThresholdScale * latitudeScale);
+            bool polarExactOnly = Math.Abs(currentCenterLatitudeDeg) >=
+                ProjectionBridgeLatitudeLimitDeg;
+            float exactAge = entry.LastExactProjectionRealtime < 0f ? float.MaxValue :
+                Math.Max(0f, Time.realtimeSinceStartup - entry.LastExactProjectionRealtime);
+            bool exactProjectionDue = structuralProjectionChange ||
+                centerMoved && (polarExactOnly ||
+                    centerMotionSquared >= exactDistanceThreshold * exactDistanceThreshold ||
+                    exactAge >= ProjectionRefreshAgeSeconds);
+
+            if (!exactProjectionDue)
+            {
+                // The authoritative BACK still commits at fixed 10 Hz. Instead of
+                // reprojecting/uploading every vertex, move the cached N-UP geometry by
+                // the current projection of its last exact geographic center. Heading is
+                // handled afterwards by the existing scale-corrected map matrix.
+                if (centerMoved || forceCenterProjectionRefresh)
+                {
+                    float oldCenterU, oldCenterV;
+                    context.ProjectUnitToRenderNUp(entry.LastProjectionCenterX,
+                        entry.LastProjectionCenterY, entry.LastProjectionCenterZ,
+                        out oldCenterU, out oldCenterV);
+                    float deltaU = oldCenterU - 0.5f;
+                    float deltaV = oldCenterV - context.AnchorRenderV;
+                    if (Mathf.Abs(deltaU) > 0.0000001f ||
+                        Mathf.Abs(deltaV) > 0.0000001f)
+                    {
+                        operationHealthProjectionBridgeUses++;
+                        return Matrix4x4.Translate(new Vector3(deltaU, deltaV, 0f));
+                    }
+                }
+                return Matrix4x4.identity;
+            }
 
             ProjectMesh(entry.LandMesh, entry.LandGeographicPoints,
                 entry.LandProjectedVertices, context);
@@ -2482,10 +2545,16 @@ namespace AERISFlightControl.Terrain
                 entry.CoastlineProjectedVertices, context);
             entry.LastProjectionCenterLatitudeDeg = currentCenterLatitudeDeg;
             entry.LastProjectionCenterLongitudeDeg = currentCenterLongitudeDeg;
+            entry.LastProjectionCenterX = context.CenterX;
+            entry.LastProjectionCenterY = context.CenterY;
+            entry.LastProjectionCenterZ = context.CenterZ;
+            entry.LastExactProjectionRealtime = Time.realtimeSinceStartup;
             entry.LastProjectionBodyRadius = context.RadiusMeters;
             entry.LastProjectionRangeMeters = (float)context.VerticalMeters;
             entry.LastProjectionAnchorBottom = context.AnchorRenderV;
             entry.LastProjectionOrientation = context.Orientation;
+            operationHealthProjectionExactRefreshes++;
+            return Matrix4x4.identity;
         }
 
         void ProjectMesh(Mesh mesh, GeographicUnitPoint[] points,
