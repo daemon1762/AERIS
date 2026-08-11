@@ -11,6 +11,7 @@ suites=[
     ('Operation Health Dot-Cap Culling', 'selftest_v01800_operation_health_dot_cap_culling.py'),
  ('ND Fixed Map Surface Resize','selftest_v01800_nd_fixed_aspect_resize.py'),
  ('Operation Health Pass 3 Cadence Hotfix 4 Loading Ready State','selftest_v01800_operation_health_pass3_cadence_hotfix4_loading_ready_state.py'),
+ ('Operation Health Projection Motion Bridge','selftest_v01800_operation_health_projection_motion_bridge.py'),
  ('Operation Health Pass 3 Cadence Hotfix 3 Motion Commit','selftest_v01800_operation_health_pass3_cadence_hotfix3_motion_commit.py'),
  ('Operation Health Pass 3 Cadence Hotfix 2 Refresh Coalescing','selftest_v01800_operation_health_pass3_cadence_hotfix2_refresh_coalescing.py'),
  ('Operation Health Pass 3 Cadence Hotfix 1','selftest_v01800_operation_health_pass3_cadence_hotfix1.py'),

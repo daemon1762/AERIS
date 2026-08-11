@@ -22,8 +22,8 @@ ck('authoritativeMotionRefreshRequired ||' in draw and 'NeedsProjectionRefresh' 
 ck('forceCenterProjectionRefresh' in draw,'moving-center force flag reaches renderer')
 render=R[R.index('bool RenderBackBuffer('):R.index('bool DrawEntry(')]
 ck('bool forceCenterProjectionRefresh' in render and 'operationHealthForcedProjectionRefreshes++' in render,'BACK render observes forced moving-center projection')
-project=R[R.index('void EnsureProjectedGeometry('):R.index('void ProjectMesh(')]
-ck('bool forceCenterProjectionRefresh' in project and 'bool projectionChanged = forceCenterProjectionRefresh ||' in project,'subpixel movement bypasses old 0.25px projection hold')
+project=R[R.index('Matrix4x4 EnsureProjectedGeometry('):R.index('void ProjectMesh(')]
+ck('bool forceCenterProjectionRefresh' in project and 'Matrix4x4.Translate' in project and 'ProjectionBridgeThresholdScale' in R,'subpixel movement keeps 10 Hz motion through bounded projection bridge')
 ck('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in R,'presentation remains bounded to authoritative 10 Hz')
 ck('TryPresentCoalescedFront(plot, vessel)' in R,'non-tick Repaints still use cheap FRONT reuse')
 ck('oh_motion_refresh=' in R and 'oh_forced_project=' in R,'motion-commit telemetry is published')
