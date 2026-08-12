@@ -6,6 +6,7 @@ ROOT=Path(__file__).resolve().parents[1]
 steps=[
     ROOT/'Tools/apply_aeris23_witness_affine_candidate.py',
     ROOT/'Tools/apply_aeris23_staggered_exact_refresh.py',
+    ROOT/'Tools/apply_aeris23_staggered_exact_refresh_burst_telemetry.py',
     ROOT/'Tools/apply_aeris23_staggered_exact_refresh_identity_guard.py',
     ROOT/'Tools/verify_aeris23_staggered_exact_refresh_source.py',
 ]
