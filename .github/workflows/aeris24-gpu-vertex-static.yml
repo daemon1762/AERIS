@@ -21,8 +21,23 @@ jobs:
             Tools/apply_aeris24_gpu_vertex_projection_poc.py \
             Tools/verify_aeris24_gpu_vertex_projection_poc.py
       - name: Apply exact candidate lineage and GPU Vertex PoC
+        id: apply
+        continue-on-error: true
+        shell: bash
         run: |
-          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris24_gpu_vertex_projection_poc.py
+          set -o pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris24_gpu_vertex_projection_poc.py \
+            2>&1 | tee aeris24_gpu_vertex_apply.log
+      - name: Upload apply diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeris24-gpu-vertex-apply-log
+          path: aeris24_gpu_vertex_apply.log
+          if-no-files-found: error
+      - name: Fail if applicator failed
+        if: steps.apply.outcome == 'failure'
+        run: exit 1
       - name: Operation Health Pass3 prebuild
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
