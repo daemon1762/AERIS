@@ -16,7 +16,7 @@ elif new not in text:
     raise SystemExit("[PENICILLIN IDENTITY] expected Stagger candidate identity is missing")
 
 old_verify = 'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris23_staggered_exact_refresh_source.py"'
-new_verify = 'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris23_oh_penicillin_source.py"'
+new_verify = 'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris23_oh_penicillin_candidate.py"'
 if old_verify in text:
     text = text.replace(old_verify, new_verify, 1)
 elif new_verify not in text:
@@ -33,5 +33,5 @@ if verified.count("AERISOperationHealth.cfg") < 2:
     raise SystemExit("[PENICILLIN IDENTITY] FATAL: Operation Health config is not preserved")
 
 print("[PENICILLIN IDENTITY] candidate=AERIS23_OH_PENICILLIN")
-print("[PENICILLIN IDENTITY] build preflight=verify_aeris23_oh_penicillin_source.py")
+print("[PENICILLIN IDENTITY] build preflight=verify_aeris23_oh_penicillin_candidate.py")
 print("[PENICILLIN IDENTITY] single-step Stagger -> PENICILLIN promotion PASS")
