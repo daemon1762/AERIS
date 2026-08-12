@@ -1,0 +1,3 @@
+branch=agent/aeris23-staggered-exact-refresh
+base=agent/aeris23-witness-bounded-affine-projection
+candidate=AERIS23_AFFINE_STAGGERED_EXACT_REFRESH
