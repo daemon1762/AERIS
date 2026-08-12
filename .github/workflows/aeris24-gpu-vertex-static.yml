@@ -40,7 +40,22 @@ jobs:
         if: steps.apply.outcome == 'failure'
         run: exit 1
       - name: Operation Health Pass3 prebuild
+        id: prebuild
+        continue-on-error: true
+        shell: bash
         run: |
-          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+          set -o pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py \
+            2>&1 | tee aeris24_gpu_vertex_prebuild.log
+      - name: Upload prebuild diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeris24-gpu-vertex-prebuild-log
+          path: aeris24_gpu_vertex_prebuild.log
+          if-no-files-found: error
+      - name: Fail if prebuild failed
+        if: steps.prebuild.outcome == 'failure'
+        run: exit 1
       - name: Diff hygiene
         run: git diff --check
