@@ -1,0 +1,11 @@
+PASS requires:
+- runtime candidate identity and DLL SHA match
+- golden visual output; no blank/blue/seams/painter corruption
+- Runway Map Lock ~= 0 px and visualCoverage=1
+- authority remains fixed nominal 10 Hz
+- mesh churn remains near zero
+- affine witness max <= 0.08 px
+- oh_stagger_due and oh_stagger_defer both advance during sustained motion
+- steady oh_stagger_back_peak materially below synchronized affine burst behavior
+- oh_stagger_back_gt8 rare/zero after READY
+- 80/160 km BACK p95 improves materially without unacceptable median regression
