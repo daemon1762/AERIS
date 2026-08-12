@@ -10,6 +10,7 @@ steps = [
     ROOT / "Tools/apply_aeris23_staggered_exact_refresh_candidate.py",
     ROOT / "Tools/apply_aeris23_oh_penicillin_measurement_calibration.py",
     ROOT / "Tools/apply_aeris23_oh_penicillin_runtime_hooks.py",
+    ROOT / "Tools/apply_aeris23_oh_penicillin_logging_policy.py",
     ROOT / "Tools/apply_aeris23_oh_penicillin_identity_finalize.py",
     ROOT / "Tools/verify_aeris23_oh_penicillin_candidate.py",
 ]
