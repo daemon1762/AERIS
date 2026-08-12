@@ -18,6 +18,10 @@ def require(ok,msg):
     if not ok:
         raise SystemExit('[AERIS23 STAGGER VERIFY] FAIL: '+msg)
     print('[PASS] '+msg)
+def active_count(text,line):
+    target=line.strip()
+    return sum(1 for raw in text.splitlines() if raw.strip()==target)
+
 require('StaggeredExactRefreshSlotCount = 12' in r,'twelve-slot exact refresh distribution is present')
 require('StaggeredExactRefreshMinimumSeconds = 2.80f' in r and
         'StaggeredExactRefreshSlotSeconds = 0.10f' in r,'2.80-3.90 second stagger window is present')
@@ -30,13 +34,12 @@ require('staggerBurstTelemetryEligible = frontBufferValid && requestedViewReady'
 require('AffineWitnessAcceptancePixels = 0.08f' in r,'0.08 px affine witness gate is unchanged')
 require('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in r,'fixed 10 Hz authority remains intact')
 require('RenderTextureFormat.ARGB32' in r and 'FilterMode.Bilinear' in r,'visual RenderTexture authority remains intact')
-# Candidate identity is part of the executable contract, not just packaging metadata.
-# The 2026-08-12 runtime proved the stagger algorithm could be present while an old
-# Affine candidate label remained embedded. Never allow that mixed state to build again.
-require('CANDIDATE_NAME="AERIS23_AFFINE_STAGGERED_EXACT_REFRESH"' in b,
-        'build candidate identity is exactly STAGGERED_EXACT_REFRESH')
-require('CANDIDATE_NAME="AERIS23_WITNESS_BOUNDED_AFFINE_PROJECTION"' not in b,
-        'stale Affine candidate identity is absent from build script')
-require('verify_aeris23_staggered_exact_refresh_source.py' in b,
-        'build preflight requires the stagger verifier itself')
+new='CANDIDATE_NAME="AERIS23_AFFINE_STAGGERED_EXACT_REFRESH"'
+old='CANDIDATE_NAME="AERIS23_WITNESS_BOUNDED_AFFINE_PROJECTION"'
+new_verify='PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris23_staggered_exact_refresh_source.py"'
+old_verify='PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris23_witness_affine_source.py"'
+require(active_count(b,new)==1,'build candidate identity is exactly STAGGERED_EXACT_REFRESH')
+require(active_count(b,old)==0,'no executable stale Affine candidate identity remains')
+require(active_count(b,new_verify)==1,'build preflight requires the stagger verifier itself')
+require(active_count(b,old_verify)==0,'no executable stale Affine verifier remains')
 print('[AERIS23 CANDIDATE VERIFY] AFFINE_STAGGERED_EXACT_REFRESH SOURCE+IDENTITY PASS')
