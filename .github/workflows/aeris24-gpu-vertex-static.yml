@@ -1,0 +1,30 @@
+name: AERIS24 GPU Vertex Static
+
+on:
+  push:
+    branches:
+      - agent/aeris24-gpu-vertex-projection-poc
+  pull_request:
+    branches:
+      - agent/aeris23-oh-penicillin
+
+jobs:
+  source-and-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Python syntax
+        run: |
+          python3 -m py_compile \
+            Tools/apply_aeris24_gpu_vertex_projection_poc.py \
+            Tools/verify_aeris24_gpu_vertex_projection_poc.py
+      - name: Apply exact candidate lineage and GPU Vertex PoC
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris24_gpu_vertex_projection_poc.py
+      - name: Operation Health Pass3 prebuild
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py
+      - name: Diff hygiene
+        run: git diff --check
