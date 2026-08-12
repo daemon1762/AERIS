@@ -7,9 +7,11 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 
 source_verify = ROOT / "Tools/verify_aeris23_oh_penicillin_source.py"
-if not source_verify.is_file():
-    raise SystemExit("[PENICILLIN FINAL VERIFY] source verifier missing")
-subprocess.run([sys.executable, str(source_verify)], cwd=str(ROOT), check=True)
+logging_verify = ROOT / "Tools/verify_aeris23_oh_penicillin_logging.py"
+for verifier in (source_verify, logging_verify):
+    if not verifier.is_file():
+        raise SystemExit("[PENICILLIN FINAL VERIFY] verifier missing: " + str(verifier))
+    subprocess.run([sys.executable, str(verifier)], cwd=str(ROOT), check=True)
 
 monitor = (ROOT / "Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs").read_text()
 build = (ROOT / "build_ubuntu.sh").read_text()
@@ -30,4 +32,4 @@ require('CANDIDATE_NAME="AERIS23_OH_PENICILLIN"' in build,
 require("verify_aeris23_oh_penicillin_candidate.py" in build,
         "build preflight requires final calibrated PENICILLIN verifier")
 
-print("[AERIS23 CANDIDATE VERIFY] OH_PENICILLIN CALIBRATED SOURCE+SAFETY PASS")
+print("[AERIS23 CANDIDATE VERIFY] OH_PENICILLIN CALIBRATED SOURCE+LOGGING+SAFETY PASS")
