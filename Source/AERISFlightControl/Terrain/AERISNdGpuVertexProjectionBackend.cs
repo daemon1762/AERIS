@@ -10,8 +10,8 @@ namespace AERISFlightControl.Terrain
     // The shader receives immutable unit-sphere geographic XYZ through TEXCOORD1.
     // Every authoritative 10 Hz BACK render updates only the map projection uniforms;
     // the GPU then executes the same spherical projection law as AERISNdMapProjection.
-    // This backend owns presentation only.  It has no flight-control, runway-certification,
-    // LAND, safety, or terrain-content authority.  Failure is fail-closed to the existing
+    // This backend owns presentation only. It has no flight-control, runway-certification,
+    // LAND, safety, or terrain-content authority. Failure is fail-closed to the existing
     // CPU exact projection/upload path.
     internal sealed class AERISNdGpuVertexProjectionBackend : IDisposable
     {
@@ -130,6 +130,27 @@ namespace AERISFlightControl.Terrain
             return material;
         }
 
+        // Validate all three passes before any Entry writes into the BACK target. If a
+        // driver/backend rejects the shader, this frame falls back to CPU exact before a
+        // partially drawn BACK can become eligible for FRONT swap.
+        internal bool ValidatePassesOrFallback()
+        {
+            if (!Active) return false;
+            try
+            {
+                bool ok = terrainMaterial.SetPass(0) && contourMaterial.SetPass(0) &&
+                    coastlineMaterial.SetPass(0);
+                if (ok) return true;
+                DisableAndFallback("custom vertex shader SetPass rejected");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                DisableAndFallback("SetPass " + ex.GetType().Name + ": " + ex.Message);
+                return false;
+            }
+        }
+
         internal void ConfigureProjection(AERISNdMapProjection projection,
             Color contourColour)
         {
@@ -194,7 +215,10 @@ namespace AERISFlightControl.Terrain
                 failure + ".");
         }
 
-        public void Dispose()
+        // Terrain OFF/suspension follows the renderer's existing release contract. A later
+        // Terrain ON may load the bundle again; a transient presentation lifecycle event is
+        // not a permanent GPU capability failure.
+        internal void ReleaseForSuspension()
         {
             DestroyMaterial(ref terrainMaterial);
             DestroyMaterial(ref contourMaterial);
@@ -205,6 +229,16 @@ namespace AERISFlightControl.Terrain
                 bundle = null;
             }
             shader = null;
+            attempted = false;
+            disabled = false;
+            failureLogged = false;
+            failure = string.Empty;
+            bundlePath = string.Empty;
+        }
+
+        public void Dispose()
+        {
+            ReleaseForSuspension();
             disabled = true;
         }
 
