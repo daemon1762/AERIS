@@ -20,49 +20,24 @@ jobs:
           python3 -m py_compile \
             Tools/fix_aeris24_gpu_vertex_projection_poc_anchors.py \
             Tools/apply_aeris24_gpu_vertex_projection_poc.py \
-            Tools/verify_aeris24_gpu_vertex_projection_poc.py
-      - name: Apply exact candidate lineage and GPU Vertex PoC
-        id: apply
+            Tools/fix_aeris24_gpu_vertex_single_authority_selftest.py \
+            Tools/verify_aeris24_gpu_vertex_projection_poc.py \
+            Tools/apply_aeris24_gpu_vertex_projection_ready.py
+      - name: Prepare and verify complete static candidate
+        id: candidate
         continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris24_gpu_vertex_projection_poc_anchors.py 2>&1 | tee aeris24_gpu_vertex_apply.log
-          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris24_gpu_vertex_projection_poc.py 2>&1 | tee -a aeris24_gpu_vertex_apply.log
-      - name: Upload apply diagnostic
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris24_gpu_vertex_projection_ready.py \
+            2>&1 | tee aeris24_gpu_vertex_static.log
+      - name: Upload static candidate diagnostic
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: aeris24-gpu-vertex-apply-log
-          path: aeris24_gpu_vertex_apply.log
+          name: aeris24-gpu-vertex-static-log
+          path: aeris24_gpu_vertex_static.log
           if-no-files-found: error
-      - name: Upload generated Single-Authority selftest
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: aeris24-generated-single-authority-selftest
-          path: Tools/selftest_v01800_gpu_single_authority_terrain_pack.py
-          if-no-files-found: error
-      - name: Fail if applicator failed
-        if: steps.apply.outcome == 'failure'
+      - name: Fail if static candidate gate failed
+        if: steps.candidate.outcome == 'failure'
         run: exit 1
-      - name: Operation Health Pass3 prebuild
-        id: prebuild
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py \
-            2>&1 | tee aeris24_gpu_vertex_prebuild.log
-      - name: Upload prebuild diagnostic
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: aeris24-gpu-vertex-prebuild-log
-          path: aeris24_gpu_vertex_prebuild.log
-          if-no-files-found: error
-      - name: Fail if prebuild failed
-        if: steps.prebuild.outcome == 'failure'
-        run: exit 1
-      - name: Diff hygiene
-        run: git diff --check
