@@ -119,8 +119,8 @@ require('CANDIDATE_NAME="AERIS23_OH_PENICILLIN"' in build,
         "build candidate identity is exactly AERIS23_OH_PENICILLIN")
 require('CANDIDATE_NAME="AERIS23_AFFINE_STAGGERED_EXACT_REFRESH"' not in build,
         "stale Stagger candidate identity is absent")
-require("verify_aeris23_oh_penicillin_source.py" in build,
-        "build preflight requires PENICILLIN verifier")
+require("verify_aeris23_oh_penicillin_candidate.py" in build,
+        "build preflight requires final calibrated PENICILLIN verifier")
 
 # Hard no-touch boundary for control systems. PENICILLIN observes around them only.
 for forbidden_token in (
