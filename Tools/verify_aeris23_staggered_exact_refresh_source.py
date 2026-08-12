@@ -22,6 +22,10 @@ require('StaggeredExactRefreshMinimumSeconds = 2.80f' in r and
         'StaggeredExactRefreshSlotSeconds = 0.10f' in r,'2.80-3.90 second stagger window is present')
 require('AffineWitnessMaximumAgeSeconds = 4.00f' in r,'4.00 second hard freshness authority is retained')
 require('oh_stagger_due=' in r and 'oh_stagger_defer=' in r,'stagger runtime telemetry is published')
+require('oh_stagger_back_peak=' in r and 'oh_stagger_back_samples=' in r and
+        'oh_stagger_back_gt8=' in r,'READY steady-state exact burst telemetry is published')
+require('staggerBurstTelemetryEligible = frontBufferValid && requestedViewReady' in r,
+        'bootstrap/loading exact work is excluded from steady burst telemetry')
 require('AffineWitnessAcceptancePixels = 0.08f' in r,'0.08 px affine witness gate is unchanged')
 require('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in r,'fixed 10 Hz authority remains intact')
 require('RenderTextureFormat.ARGB32' in r and 'FilterMode.Bilinear' in r,'visual RenderTexture authority remains intact')
