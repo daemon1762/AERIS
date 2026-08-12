@@ -21,15 +21,20 @@ def require(condition, message):
         raise SystemExit("[PENICILLIN FINAL VERIFY] FAIL: " + message)
     print("[PASS] " + message)
 
+def active_count(text, line):
+    target = line.strip()
+    return sum(1 for raw in text.splitlines() if raw.strip() == target)
+
 require("double latestFiveSecondRealtimeRatio = double.NaN;" in monitor,
         "5-second realtime ratio is NA until a real 5-second sample exists")
 require("double normalFixedPhaseSeconds" in monitor and
         "wallSinceWindow - fixedSimSecondsWindow -" in monitor and
         "normalFixedPhaseSeconds) * 1000.0" in monitor,
         "physics debt ignores one normal FixedUpdate phase")
-require('CANDIDATE_NAME="AERIS23_OH_PENICILLIN"' in build,
-        "build candidate identity remains PENICILLIN")
-require("verify_aeris23_oh_penicillin_candidate.py" in build,
+require(active_count(build, 'CANDIDATE_NAME="AERIS23_OH_PENICILLIN"') == 1,
+        "build executable candidate identity remains PENICILLIN")
+require(active_count(build,
+        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris23_oh_penicillin_candidate.py"') == 1,
         "build preflight requires final calibrated PENICILLIN verifier")
 
 print("[AERIS23 CANDIDATE VERIFY] OH_PENICILLIN CALIBRATED SOURCE+LOGGING+SAFETY PASS")
