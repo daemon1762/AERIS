@@ -24,5 +24,12 @@ if old_verify in text:
 elif new_verify not in text:
     raise SystemExit('[AERIS23 STAGGER IDENTITY] verifier anchor missing')
 build.write_text(text)
+# Read back from disk and fail immediately if a mixed Affine/Stagger identity survived.
+verified=build.read_text()
+if new not in verified or old in verified:
+    raise SystemExit('[AERIS23 STAGGER IDENTITY] FATAL: stale Affine candidate identity survived')
+if new_verify not in verified or old_verify in verified:
+    raise SystemExit('[AERIS23 STAGGER IDENTITY] FATAL: build preflight still targets Affine verifier')
 print('[AERIS23 STAGGER IDENTITY] candidate=AERIS23_AFFINE_STAGGERED_EXACT_REFRESH')
 print('[AERIS23 STAGGER IDENTITY] build preflight now requires staggered exact-refresh source')
+print('[AERIS23 STAGGER IDENTITY] stale Affine identity check PASS')
