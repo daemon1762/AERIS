@@ -36,6 +36,13 @@ jobs:
           name: aeris24-gpu-vertex-apply-log
           path: aeris24_gpu_vertex_apply.log
           if-no-files-found: error
+      - name: Upload generated Single-Authority selftest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeris24-generated-single-authority-selftest
+          path: Tools/selftest_v01800_gpu_single_authority_terrain_pack.py
+          if-no-files-found: error
       - name: Fail if applicator failed
         if: steps.apply.outcome == 'failure'
         run: exit 1
