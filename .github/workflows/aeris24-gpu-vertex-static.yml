@@ -15,14 +15,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Python syntax
+      - name: Script syntax
         run: |
           python3 -m py_compile \
             Tools/fix_aeris24_gpu_vertex_projection_poc_anchors.py \
             Tools/apply_aeris24_gpu_vertex_projection_poc.py \
             Tools/fix_aeris24_gpu_vertex_single_authority_selftest.py \
             Tools/verify_aeris24_gpu_vertex_projection_poc.py \
-            Tools/apply_aeris24_gpu_vertex_projection_ready.py
+            Tools/apply_aeris24_gpu_vertex_projection_ready.py \
+            Tools/prepare_aeris24_gpu_vertex_runtime.py
+          bash -n Tools/build_aeris24_gpu_shader_bundle.sh
       - name: Prepare and verify complete static candidate
         id: candidate
         continue-on-error: true
