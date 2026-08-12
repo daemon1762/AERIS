@@ -8,9 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 steps = [
     ROOT / "Tools/apply_aeris23_staggered_exact_refresh_candidate.py",
+    ROOT / "Tools/apply_aeris23_oh_penicillin_measurement_calibration.py",
     ROOT / "Tools/apply_aeris23_oh_penicillin_runtime_hooks.py",
     ROOT / "Tools/apply_aeris23_oh_penicillin_identity_finalize.py",
-    ROOT / "Tools/verify_aeris23_oh_penicillin_source.py",
+    ROOT / "Tools/verify_aeris23_oh_penicillin_candidate.py",
 ]
 
 for step in steps:
@@ -19,7 +20,7 @@ for step in steps:
     print("[PENICILLIN] running " + step.name)
     subprocess.run([sys.executable, str(step)], cwd=str(ROOT), check=True)
 
-print("[PENICILLIN] AERIS23_OH_PENICILLIN candidate fully applied and source-verified")
+print("[PENICILLIN] AERIS23_OH_PENICILLIN calibrated candidate fully applied and source-verified")
 print("[PENICILLIN] AA/AP/FBW/PROTECT/LAND control source remains outside candidate scope")
 print("Next: PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py")
 print("Then: git diff --check")
