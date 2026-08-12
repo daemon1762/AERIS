@@ -25,10 +25,14 @@ text=replace_once(text,
 '''            long frameStartTicks = Stopwatch.GetTimestamp();\n            long exactRefreshesAtBackStart = operationHealthProjectionExactRefreshes;\n            bool staggerBurstTelemetryEligible = frontBufferValid && requestedViewReady;\n            RenderTexture previous = RenderTexture.active;''',
 'capture exact count at BACK start')
 
+# Do not anchor on the generic AERISPerformanceRuntime block alone: the current
+# renderer legitimately contains several such blocks.  Bind this insertion to the
+# unique RenderBackBuffer tail that records frameStartTicks and immediately returns
+# the rendered result.  If that exact tail moves, fail closed instead of guessing.
 text=replace_once(text,
-'''            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;\n            if (runtime != null)''',
-'''            if (staggerBurstTelemetryEligible)\n            {\n                long exactThisBack = Math.Max(0L,\n                    operationHealthProjectionExactRefreshes - exactRefreshesAtBackStart);\n                operationHealthStaggeredExactBackSamples++;\n                if (exactThisBack > operationHealthStaggeredExactBackPeak)\n                    operationHealthStaggeredExactBackPeak = exactThisBack;\n                if (exactThisBack > 8L) operationHealthStaggeredExactBackOverEight++;\n            }\n            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;\n            if (runtime != null)''',
-'measure steady exact count per BACK')
+'''            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;\n            if (runtime != null)\n                runtime.Gpu.RecordFrameCost((Stopwatch.GetTimestamp() - frameStartTicks) *\n                    1000.0 / Stopwatch.Frequency);\n            return rendered;''',
+'''            if (staggerBurstTelemetryEligible)\n            {\n                long exactThisBack = Math.Max(0L,\n                    operationHealthProjectionExactRefreshes - exactRefreshesAtBackStart);\n                operationHealthStaggeredExactBackSamples++;\n                if (exactThisBack > operationHealthStaggeredExactBackPeak)\n                    operationHealthStaggeredExactBackPeak = exactThisBack;\n                if (exactThisBack > 8L) operationHealthStaggeredExactBackOverEight++;\n            }\n            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;\n            if (runtime != null)\n                runtime.Gpu.RecordFrameCost((Stopwatch.GetTimestamp() - frameStartTicks) *\n                    1000.0 / Stopwatch.Frequency);\n            return rendered;''',
+'measure steady exact count at unique BACK tail')
 
 text=replace_once(text,
 '''                "; oh_stagger_due=" + operationHealthStaggeredExactDue +\n                "; oh_stagger_defer=" + operationHealthStaggeredExactDeferrals +\n                "; oh_loading_backdrop=" + operationHealthLoadingBackdropFrames +''',
