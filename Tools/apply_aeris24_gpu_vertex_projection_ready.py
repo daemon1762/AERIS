@@ -30,6 +30,8 @@ steps = [
      ROOT / "Tools/verify_aeris24_gpu_vertex_projection_poc.py"),
     ("promote Operation Health Phase 3 identity",
      ROOT / "Tools/promote_aeris24_oh_phase3.py"),
+    ("verify Operation Health Phase 3 identity",
+     ROOT / "Tools/verify_aeris24_oh_phase3.py"),
     ("run inherited Operation Health Pass3 prebuild suite",
      ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"),
 ]
