@@ -33,8 +33,13 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          echo '=== FIRST GENERATION ===' | tee aeris24_gpu_vertex_static.log
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris24_gpu_vertex_projection_ready.py \
-            2>&1 | tee aeris24_gpu_vertex_static.log
+            2>&1 | tee -a aeris24_gpu_vertex_static.log
+          echo '=== IDEMPOTENT RE-ENTRY ===' | tee -a aeris24_gpu_vertex_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris24_gpu_vertex_projection_ready.py \
+            2>&1 | tee -a aeris24_gpu_vertex_static.log
+          grep -Fq 'STATIC CANDIDATE PASS (IDEMPOTENT RE-ENTRY)' aeris24_gpu_vertex_static.log
       - name: Upload static candidate diagnostic
         if: always()
         uses: actions/upload-artifact@v4
