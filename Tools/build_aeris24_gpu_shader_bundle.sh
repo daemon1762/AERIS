@@ -38,6 +38,16 @@ EOF
   exit 2
 fi
 
+# Unity 2019.4 still links against legacy GConf on Linux. Modern Ubuntu releases
+# no longer package libgconf-2-4, so AERIS may keep the old runtime library in an
+# isolated user-owned compatibility directory instead of mixing old distro repos.
+UNITY_COMPAT_ROOT="${AERIS_UNITY2019_COMPAT_ROOT:-$HOME/Unity/compat/aeris2019}"
+UNITY_COMPAT_LIB="$UNITY_COMPAT_ROOT/usr/lib/x86_64-linux-gnu"
+if [[ -e "$UNITY_COMPAT_LIB/libgconf-2.so.4" ]]; then
+  export LD_LIBRARY_PATH="$UNITY_COMPAT_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  echo "[AERIS24 GPU VERTEX] Unity 2019 compat=$UNITY_COMPAT_LIB"
+fi
+
 run_target(){
   local method="$1"
   echo "[AERIS24 GPU VERTEX] Unity=$UNITY"
