@@ -27,12 +27,7 @@ def run(args, env=None):
 
 
 def static_candidate_ready():
-    """Return True only for a fully promoted AERIS24/EPINEPHRINE workspace.
-
-    The runtime helper may legitimately stop after the static gate when Unity 2019.4.18f1
-    is not installed yet. Re-running after installing Unity must continue from that gate,
-    not replay the AERIS23 parent identity applicators over an already-promoted workspace.
-    """
+    """Return True only for a fully promoted AERIS24/EPINEPHRINE workspace."""
     try:
         monitor = (ROOT / "Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs").read_text()
         config = (ROOT / "GameData/AERISFlightControl/Config/AERISOperationHealth.cfg").read_text()
@@ -68,7 +63,7 @@ def verify_static_candidate():
 parser = argparse.ArgumentParser(description="Prepare, build and install the AERIS24 GPU Vertex Projection runtime candidate.")
 parser.add_argument("ksp_path", help="Kerbal Space Program installation root")
 parser.add_argument("--rebuild-shader", action="store_true",
-                    help="force rebuilding the platform shader AssetBundle even if it already exists")
+                    help="force rebuilding the platform shader/probe AssetBundles even if they already exist")
 parser.add_argument("--unity-editor", default=os.environ.get("UNITY_EDITOR", ""),
                     help="Unity 2019.4.18f1 Editor executable; also accepted through UNITY_EDITOR")
 args = parser.parse_args()
@@ -85,27 +80,37 @@ else:
 if (ksp / "KSP_x64_Data" / "Managed" / "Assembly-CSharp.dll").is_file():
     shader_mode = "windows"
     bundle_name = "aeris_nd_gpu_vertex_projection_windows.bundle"
+    probe_name = "aeris_gpu_bundle_probe_windows.bundle"
 elif ((ksp / "KSP_Data" / "Managed" / "Assembly-CSharp.dll").is_file() or
       (ksp / "KSP_x86_64_Data" / "Managed" / "Assembly-CSharp.dll").is_file()):
     shader_mode = "linux"
     bundle_name = "aeris_nd_gpu_vertex_projection_linux.bundle"
+    probe_name = "aeris_gpu_bundle_probe_linux.bundle"
 else:
     raise SystemExit("[AERIS24 GPU VERTEX RUNTIME] could not identify KSP Unity player layout under: " + str(ksp))
 
-bundle = ROOT / "GameData" / "AERISFlightControl" / "Shaders" / bundle_name
-if args.rebuild_shader or not bundle.is_file():
+shader_dir = ROOT / "GameData" / "AERISFlightControl" / "Shaders"
+bundle = shader_dir / bundle_name
+probe = shader_dir / probe_name
+if args.rebuild_shader or not bundle.is_file() or not probe.is_file():
     env = os.environ.copy()
     if args.unity_editor:
         env["UNITY_EDITOR"] = args.unity_editor
     run(["bash", ROOT / "Tools/build_aeris24_gpu_shader_bundle.sh", shader_mode], env=env)
 else:
     print("[AERIS24 GPU VERTEX RUNTIME] using existing shader bundle: " + str(bundle))
+    print("[AERIS24 GPU VERTEX RUNTIME] using existing probe bundle: " + str(probe))
 
-if not bundle.is_file() or bundle.stat().st_size == 0:
-    raise SystemExit("[AERIS24 GPU VERTEX RUNTIME] shader bundle missing/empty after asset gate: " + str(bundle))
+for path, label in ((bundle, "shader"), (probe, "probe")):
+    if not path.is_file() or path.stat().st_size == 0:
+        raise SystemExit("[AERIS24 GPU VERTEX RUNTIME] %s bundle missing/empty after asset gate: %s" %
+                         (label, path))
 source_bundle_sha = sha256(bundle)
+source_probe_sha = sha256(probe)
 print("[AERIS24_GPU_VERTEX_BUNDLE] mode=%s; name=%s; sha256=%s" %
       (shader_mode, bundle_name, source_bundle_sha))
+print("[AERIS24_GPU_BUNDLE_PROBE] mode=%s; name=%s; sha256=%s" %
+      (shader_mode, probe_name, source_probe_sha))
 
 run(["bash", ROOT / "build_ubuntu.sh", ksp])
 
@@ -113,21 +118,25 @@ source_dll = ROOT / "GameData" / "AERISFlightControl" / "Plugins" / "AERISFlight
 installed_root = ksp / "GameData" / "AERISFlightControl"
 installed_dll = installed_root / "Plugins" / "AERISFlightControl.dll"
 installed_bundle = installed_root / "Shaders" / bundle_name
+installed_probe = installed_root / "Shaders" / probe_name
 identity = installed_root / "AERISCandidateBuildIdentity.txt"
 installed_config = installed_root / "Config" / "AERISOperationHealth.cfg"
-for path in (source_dll, installed_dll, installed_bundle, identity, installed_config):
+for path in (source_dll, installed_dll, installed_bundle, installed_probe,
+             identity, installed_config):
     if not path.is_file():
         raise SystemExit("[AERIS24 GPU VERTEX RUNTIME] required installed identity artifact missing: " + str(path))
 
 source_dll_sha = sha256(source_dll)
 installed_dll_sha = sha256(installed_dll)
 installed_bundle_sha = sha256(installed_bundle)
+installed_probe_sha = sha256(installed_probe)
 identity_text = identity.read_text(errors="replace")
 config_text = installed_config.read_text(errors="replace")
 
 checks = [
     (source_dll_sha == installed_dll_sha, "built/installed DLL SHA"),
     (source_bundle_sha == installed_bundle_sha, "source/installed shader bundle SHA"),
+    (source_probe_sha == installed_probe_sha, "source/installed probe bundle SHA"),
     (("candidate=" + CANDIDATE) in identity_text, "candidate identity"),
     (("gpu_shader_bundle=" + bundle_name) in identity_text, "shader bundle identity"),
     (("gpu_shader_bundle_sha256=" + source_bundle_sha) in identity_text,
@@ -149,6 +158,7 @@ print("oh_revision=" + OH_REVISION)
 print("dll_sha256=" + installed_dll_sha)
 print("gpu_shader_bundle=" + bundle_name)
 print("gpu_shader_bundle_sha256=" + installed_bundle_sha)
-print("Next runtime gate: launch KSP and require [AERIS23_RUNTIME_CANDIDATE] candidate=" + CANDIDATE)
-print("Then require [OH] codename=" + OH_CODENAME + "; revision=" + OH_REVISION + "; candidate=" + CANDIDATE)
+print("gpu_probe_bundle=" + probe_name)
+print("gpu_probe_bundle_sha256=" + installed_probe_sha)
+print("Next runtime gate: require [AERIS24_GPU_BUNDLE_PROBE] PASS/FAIL to classify container compatibility.")
 print("Then require [AERIS24_GPU_VERTEX_PROJECTION] ACTIVE before interpreting GPU performance.")
