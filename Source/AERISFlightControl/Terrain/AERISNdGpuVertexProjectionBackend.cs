@@ -18,6 +18,9 @@ namespace AERISFlightControl.Terrain
         const string ShaderName = "AERIS/ND/ExactVertexProjection";
         const string BundleWindows = "aeris_nd_gpu_vertex_projection_windows.bundle";
         const string BundleLinux = "aeris_nd_gpu_vertex_projection_linux.bundle";
+        const string ProbeWindows = "aeris_gpu_bundle_probe_windows.bundle";
+        const string ProbeLinux = "aeris_gpu_bundle_probe_linux.bundle";
+        const string ProbeMarker = "AERIS24_GPU_BUNDLE_PROBE_V1";
         // Managed-memory recovery is a one-time compatibility path for Proton/Wine cases
         // where System.IO can read the package but Unity native LoadFromFile rejects the
         // translated path. Bound the allocation so a corrupted/replaced package cannot
@@ -72,48 +75,33 @@ namespace AERISFlightControl.Terrain
                     return Fail("graphicsShaderLevel<30");
 
                 string fileName;
+                string probeFileName;
                 if (Application.platform == RuntimePlatform.WindowsPlayer)
+                {
                     fileName = BundleWindows;
+                    probeFileName = ProbeWindows;
+                }
                 else if (Application.platform == RuntimePlatform.LinuxPlayer)
+                {
                     fileName = BundleLinux;
+                    probeFileName = ProbeLinux;
+                }
                 else
                     return Fail("unsupported runtime platform=" + Application.platform);
 
                 string root = KSPUtil.ApplicationRootPath;
                 if (string.IsNullOrEmpty(root))
                     return Fail("KSP application root unavailable");
-                bundlePath = Path.Combine(root, "GameData", "AERISFlightControl",
-                    "Shaders", fileName);
-                if (!File.Exists(bundlePath))
-                    return Fail("shader bundle missing: " + bundlePath);
+                string shaderDirectory = Path.Combine(root, "GameData",
+                    "AERISFlightControl", "Shaders");
+                RunContainerProbe(Path.Combine(shaderDirectory, probeFileName),
+                    probeFileName);
 
-                bundle = AssetBundle.LoadFromFile(bundlePath);
-                if (bundle != null)
-                {
-                    bundleLoadMode = "FILE";
-                }
-                else
-                {
-                    // Runtime evidence on Proton showed File.Exists/SHA verification
-                    // succeeding while Unity native LoadFromFile returned null. Re-read
-                    // exactly the same installed package through managed System.IO and
-                    // hand the bytes to Unity, avoiding native path translation only.
-                    var info = new FileInfo(bundlePath);
-                    long length = info.Exists ? info.Length : -1L;
-                    if (length <= 0L || length > MaximumManagedBundleBytes)
-                        return Fail("AssetBundle.LoadFromFile returned null; managed recovery size rejected=" +
-                            length);
-                    byte[] bytes = File.ReadAllBytes(bundlePath);
-                    if (bytes == null || bytes.LongLength != length)
-                        return Fail("AssetBundle.LoadFromFile returned null; managed recovery read mismatch");
-                    bundle = AssetBundle.LoadFromMemory(bytes);
-                    if (bundle == null)
-                        return Fail("AssetBundle.LoadFromFile returned null; AssetBundle.LoadFromMemory returned null; bytes=" +
-                            length);
-                    bundleLoadMode = "MEMORY";
-                    AERISLogger.Info("[AERIS24_GPU_VERTEX_PROJECTION] bundle file-path load rejected; managed-memory recovery accepted; bytes=" +
-                        length + ".");
-                }
+                bundlePath = Path.Combine(shaderDirectory, fileName);
+                string loadFailure;
+                if (!TryLoadBundle(bundlePath, out bundle, out bundleLoadMode,
+                        out loadFailure))
+                    return Fail(loadFailure);
 
                 Shader[] shaders = bundle.LoadAllAssets<Shader>();
                 if (shaders != null)
@@ -140,14 +128,115 @@ namespace AERISFlightControl.Terrain
                 failure = string.Empty;
                 AERISLogger.Info("[AERIS24_GPU_VERTEX_PROJECTION] ACTIVE; shader=" +
                     ShaderName + "; bundle=" + fileName + "; load=" + bundleLoadMode +
-                    "; graphics=" + SystemInfo.graphicsDeviceType + "/" +
-                    SystemInfo.graphicsDeviceName + ".");
+                    "; unity=" + Application.unityVersion + "; platform=" +
+                    Application.platform + "; graphics=" + SystemInfo.graphicsDeviceType +
+                    "/" + SystemInfo.graphicsDeviceName + ".");
                 return true;
             }
             catch (Exception ex)
             {
                 return Fail(ex.GetType().Name + ": " + ex.Message);
             }
+        }
+
+        void RunContainerProbe(string path, string fileName)
+        {
+            AssetBundle probe = null;
+            string mode;
+            string reason;
+            try
+            {
+                if (!TryLoadBundle(path, out probe, out mode, out reason))
+                {
+                    AERISLogger.Warn("[AERIS24_GPU_BUNDLE_PROBE] FAIL; bundle=" +
+                        fileName + "; reason=" + reason + "; unity=" +
+                        Application.unityVersion + "; platform=" + Application.platform +
+                        "; graphics=" + SystemInfo.graphicsDeviceType + ".");
+                    return;
+                }
+
+                bool markerFound = false;
+                TextAsset[] assets = probe.LoadAllAssets<TextAsset>();
+                if (assets != null)
+                    for (int i = 0; i < assets.Length; i++)
+                        if (assets[i] != null && assets[i].text != null &&
+                            assets[i].text.IndexOf(ProbeMarker,
+                                StringComparison.Ordinal) >= 0)
+                        {
+                            markerFound = true;
+                            break;
+                        }
+                if (!markerFound)
+                {
+                    AERISLogger.Warn("[AERIS24_GPU_BUNDLE_PROBE] FAIL; bundle=" +
+                        fileName + "; reason=TextAsset marker missing; load=" + mode +
+                        "; unity=" + Application.unityVersion + ".");
+                    return;
+                }
+
+                long bytes = new FileInfo(path).Length;
+                AERISLogger.Info("[AERIS24_GPU_BUNDLE_PROBE] PASS; bundle=" + fileName +
+                    "; load=" + mode + "; bytes=" + bytes + "; unity=" +
+                    Application.unityVersion + "; platform=" + Application.platform +
+                    "; graphics=" + SystemInfo.graphicsDeviceType + ".");
+            }
+            catch (Exception ex)
+            {
+                AERISLogger.Warn("[AERIS24_GPU_BUNDLE_PROBE] FAIL; bundle=" + fileName +
+                    "; reason=" + ex.GetType().Name + ": " + ex.Message +
+                    "; unity=" + Application.unityVersion + ".");
+            }
+            finally
+            {
+                if (probe != null)
+                {
+                    try { probe.Unload(false); } catch { }
+                }
+            }
+        }
+
+        bool TryLoadBundle(string path, out AssetBundle loaded, out string mode,
+            out string reason)
+        {
+            loaded = null;
+            mode = "NONE";
+            reason = string.Empty;
+            if (!File.Exists(path))
+            {
+                reason = "bundle missing: " + path;
+                return false;
+            }
+
+            loaded = AssetBundle.LoadFromFile(path);
+            if (loaded != null)
+            {
+                mode = "FILE";
+                return true;
+            }
+
+            var info = new FileInfo(path);
+            long length = info.Exists ? info.Length : -1L;
+            if (length <= 0L || length > MaximumManagedBundleBytes)
+            {
+                reason = "AssetBundle.LoadFromFile returned null; managed recovery size rejected=" +
+                    length;
+                return false;
+            }
+            byte[] bytes = File.ReadAllBytes(path);
+            if (bytes == null || bytes.LongLength != length)
+            {
+                reason = "AssetBundle.LoadFromFile returned null; managed recovery read mismatch";
+                return false;
+            }
+            loaded = AssetBundle.LoadFromMemory(bytes);
+            if (loaded == null)
+            {
+                reason = "AssetBundle.LoadFromFile returned null; AssetBundle.LoadFromMemory returned null; bytes=" +
+                    length;
+                return false;
+            }
+            mode = "MEMORY";
+            return true;
         }
 
         Material CreateMaterial(string name)
@@ -244,7 +333,8 @@ namespace AERISFlightControl.Terrain
             if (failureLogged) return;
             failureLogged = true;
             AERISLogger.Warn("[AERIS24_GPU_VERTEX_PROJECTION] CPU EXACT FALLBACK; reason=" +
-                failure + ".");
+                failure + "; unity=" + Application.unityVersion + "; platform=" +
+                Application.platform + "; graphics=" + SystemInfo.graphicsDeviceType + ".");
         }
 
         // Terrain OFF/suspension follows the renderer's existing release contract. A later
