@@ -10,7 +10,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS24_GPU_VERTEX_PROJECTION_POC"
 OH_CODENAME = "EPI" + "NEPHRINE"
-OH_REVISION = "OH_PHASE3_004"
+OH_REVISION = "OH_PHASE3_005"
 
 
 def sha256(path):
@@ -48,6 +48,8 @@ def static_candidate_ready():
         'oh_gpu_vertex_requested=' in renderer,
         'oh_gpu_vertex_exact_bypass=' in renderer,
         'oh_nd_reload_pct=' in renderer,
+        'oh_nd_reload_snapshot=' in renderer,
+        'reloadSnapshotCenterLatitudeDeg' in renderer,
         'CPU_EXACT_REQUESTED' in backend,
         'AERISNdProjectionBackendMode' in settings,
         'RELOADING ND' in ui,
@@ -60,6 +62,7 @@ def verify_static_candidate():
     print("[AERIS24 GPU VERTEX RUNTIME] existing EPINEPHRINE static candidate detected; parent reconstruction skipped")
     run([sys.executable, ROOT / "Tools/verify_aeris24_gpu_vertex_projection_poc.py"])
     run([sys.executable, ROOT / "Tools/verify_aeris24_nd_backend_reload.py"])
+    run([sys.executable, ROOT / "Tools/verify_aeris24_nd_reload_snapshot_hotfix.py"])
     run([sys.executable, ROOT / "Tools/verify_aeris24_oh_phase3.py"])
     run([sys.executable, ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"])
     run(["git", "diff", "--check"])
@@ -164,5 +167,5 @@ print("gpu_shader_bundle=" + bundle_name)
 print("gpu_shader_bundle_sha256=" + installed_bundle_sha)
 print("gpu_probe_bundle=" + probe_name)
 print("gpu_probe_bundle_sha256=" + installed_probe_sha)
-print("Next runtime gate: cycle ND MENU PROJ AUTO/CPU/GPU and verify black reload / requested-effective telemetry.")
-print("Explicit CPU must report AssetBundleInit=0; GPU may still fail closed until the native bundle incompatibility is solved.")
+print("Next runtime gate: high-speed range/backend reload must show monotonic percent and oh_nd_reload_snapshot=LOCKED while black.")
+print("GPU is now a runtime-proven path on the laptop bundle; performance acceptance still requires the 160 km spike gate.")
