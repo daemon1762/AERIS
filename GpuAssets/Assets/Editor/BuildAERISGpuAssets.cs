@@ -8,21 +8,26 @@ namespace AERIS.Editor
     public static class BuildAERISGpuAssets
     {
         const string ShaderAssetPath = "Assets/AERISNdExactVertexProjection.shader";
-        const string BundleName = "aeris_nd_gpu_vertex_projection";
+        const string ProbeAssetPath = "Assets/AERISBundleProbe.txt";
+        const string ShaderBundleName = "aeris_nd_gpu_vertex_projection";
+        const string ProbeBundleName = "aeris_gpu_bundle_probe";
 
         public static void BuildWindows()
         {
             Build(BuildTarget.StandaloneWindows64,
-                "aeris_nd_gpu_vertex_projection_windows.bundle");
+                "aeris_nd_gpu_vertex_projection_windows.bundle",
+                "aeris_gpu_bundle_probe_windows.bundle");
         }
 
         public static void BuildLinux()
         {
             Build(BuildTarget.StandaloneLinux64,
-                "aeris_nd_gpu_vertex_projection_linux.bundle");
+                "aeris_nd_gpu_vertex_projection_linux.bundle",
+                "aeris_gpu_bundle_probe_linux.bundle");
         }
 
-        static void Build(BuildTarget target, string installedName)
+        static void Build(BuildTarget target, string installedShaderName,
+            string installedProbeName)
         {
             // The batch launcher must open this project under the same active target as
             // the bundle target (-buildTarget Win64/Linux64). Fail instead of silently
@@ -30,49 +35,70 @@ namespace AERIS.Editor
             if (EditorUserBuildSettings.activeBuildTarget != target)
                 throw new InvalidOperationException("Active build target mismatch: active=" +
                     EditorUserBuildSettings.activeBuildTarget + "; requested=" + target);
-
-            AssetImporter importer = AssetImporter.GetAtPath(ShaderAssetPath);
-            if (importer == null)
-                throw new InvalidOperationException("Shader asset not found: " +
-                    ShaderAssetPath);
-            importer.assetBundleName = BundleName;
-            importer.assetBundleVariant = string.Empty;
-            importer.SaveAndReimport();
-            AssetDatabase.SaveAssets();
+            if (!File.Exists(Path.Combine(Application.dataPath,
+                    "AERISNdExactVertexProjection.shader")))
+                throw new FileNotFoundException("Shader asset not found", ShaderAssetPath);
+            if (!File.Exists(Path.Combine(Application.dataPath, "AERISBundleProbe.txt")))
+                throw new FileNotFoundException("Probe asset not found", ProbeAssetPath);
 
             string projectRoot = Directory.GetParent(Application.dataPath).FullName;
             string repositoryRoot = Directory.GetParent(projectRoot).FullName;
             string tempOutput = Path.Combine(projectRoot, "Temp",
                 "AERIS_GPU_BUNDLE_" + target);
+            if (Directory.Exists(tempOutput)) Directory.Delete(tempOutput, true);
             Directory.CreateDirectory(tempOutput);
 
-            // ForceRebuild prevents an earlier host-target/incremental artifact from being
-            // reused after the active-target correction. StrictMode promotes any shader
-            // compilation warning/error that would make the runtime bundle unusable into
-            // a build failure instead of allowing a bad bundle to escape the asset gate.
+            // These bundles are tiny. Use uncompressed UnityFS so the next runtime test
+            // eliminates LZ4 block decoding as a variable. Build the shader and a plain
+            // TextAsset probe as two explicit bundles under the exact same target/options.
+            // If the probe loads but the shader bundle does not, the failure is shader-
+            // specific. If both fail, the container/platform compatibility path is at fault.
             BuildAssetBundleOptions options =
-                BuildAssetBundleOptions.ChunkBasedCompression |
+                BuildAssetBundleOptions.UncompressedAssetBundle |
                 BuildAssetBundleOptions.DeterministicAssetBundle |
                 BuildAssetBundleOptions.ForceRebuildAssetBundle |
                 BuildAssetBundleOptions.StrictMode;
+            AssetBundleBuild[] builds = new AssetBundleBuild[2];
+            builds[0] = new AssetBundleBuild
+            {
+                assetBundleName = ShaderBundleName,
+                assetNames = new[] { ShaderAssetPath }
+            };
+            builds[1] = new AssetBundleBuild
+            {
+                assetBundleName = ProbeBundleName,
+                assetNames = new[] { ProbeAssetPath }
+            };
+
             AssetBundleManifest manifest = BuildPipeline.BuildAssetBundles(tempOutput,
-                options, target);
+                builds, options, target);
             if (manifest == null)
                 throw new InvalidOperationException("BuildAssetBundles returned null for " +
                     target);
 
-            string source = Path.Combine(tempOutput, BundleName);
-            if (!File.Exists(source))
-                throw new FileNotFoundException("Expected AssetBundle was not emitted", source);
+            string shaderSource = Path.Combine(tempOutput, ShaderBundleName);
+            string probeSource = Path.Combine(tempOutput, ProbeBundleName);
+            if (!File.Exists(shaderSource))
+                throw new FileNotFoundException("Expected shader AssetBundle was not emitted",
+                    shaderSource);
+            if (!File.Exists(probeSource))
+                throw new FileNotFoundException("Expected probe AssetBundle was not emitted",
+                    probeSource);
 
             string destinationDirectory = Path.Combine(repositoryRoot, "GameData",
                 "AERISFlightControl", "Shaders");
             Directory.CreateDirectory(destinationDirectory);
-            string destination = Path.Combine(destinationDirectory, installedName);
-            File.Copy(source, destination, true);
+            string shaderDestination = Path.Combine(destinationDirectory,
+                installedShaderName);
+            string probeDestination = Path.Combine(destinationDirectory,
+                installedProbeName);
+            File.Copy(shaderSource, shaderDestination, true);
+            File.Copy(probeSource, probeDestination, true);
 
-            Debug.Log("[AERIS24 GPU VERTEX] built target-matched " + target +
-                " bundle: " + destination);
+            Debug.Log("[AERIS24 GPU VERTEX] built target-matched uncompressed " + target +
+                " shader bundle: " + shaderDestination);
+            Debug.Log("[AERIS24 GPU VERTEX] built target-matched uncompressed " + target +
+                " probe bundle: " + probeDestination);
         }
     }
 }
