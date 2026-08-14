@@ -55,6 +55,14 @@ fi
 export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 echo "[AERIS24 GPU VERTEX] LicensingClient globalization=invariant (process-local)"
 
+# Ubuntu 24.04 commonly exports TERM=xterm-256color. Its ncurses terminfo entry uses
+# the newer extended numeric format (magic 542), while Unity 2019.4's embedded Mono
+# TermInfoReader only understands the classic format (magic 282). xterm's base entry
+# remains classic-format. Limit this override to the Unity build process so the user's
+# terminal configuration is not changed outside this command.
+export TERM=xterm
+echo "[AERIS24 GPU VERTEX] Mono terminfo compatibility=TERM=xterm (process-local)"
+
 run_target(){
   local method="$1"
   echo "[AERIS24 GPU VERTEX] Unity=$UNITY"
