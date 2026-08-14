@@ -12,7 +12,7 @@ B = (ROOT / "build_ubuntu.sh").read_text()
 R = (ROOT / "Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs").read_text()
 checks = [
     (('internal const string Codename = "' + NEW + '";') in M, "Phase 3 codename"),
-    ('internal const string Revision = "OH_PHASE3_002";' in M, "Phase 3 hotfix revision"),
+    ('internal const string Revision = "OH_PHASE3_003";' in M, "Phase 3 graphics-API hotfix revision"),
     (('internal const string Candidate = "' + CANDIDATE + '";') in M, "stable technical candidate"),
     (("    codename = " + NEW) in C and ("    codename = " + OLD) not in C, "packaged config codename"),
     (('CANDIDATE_NAME="' + CANDIDATE + '"') in B, "build candidate"),
