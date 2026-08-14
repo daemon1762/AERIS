@@ -29,6 +29,17 @@ namespace AERISFlightControl.Terrain
         internal bool TrackUp;
         internal AERISTerrainRenderTargetOrientation Orientation;
 
+        // Presentation orientation remains owned by the canonical ND projection.
+        // GPU backends consume only this resolved sign and never duplicate enum knowledge.
+        internal float RenderNorthSign
+        {
+            get
+            {
+                return Orientation == AERISTerrainRenderTargetOrientation.Flipped ?
+                    -1f : 1f;
+            }
+        }
+
         internal static AERISNdMapProjection Create(CelestialBody body,
             double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
             float headingDeg, bool trackUp, float anchorGuiV,
