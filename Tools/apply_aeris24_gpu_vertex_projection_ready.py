@@ -20,7 +20,6 @@ def run_step(label, script):
 
 
 def generated_phase3_ready():
-    """Return True only for the fully generated EPINEPHRINE successor tree."""
     try:
         monitor = (ROOT / "Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs").read_text()
         build = (ROOT / "build_ubuntu.sh").read_text()
@@ -77,31 +76,20 @@ elif old_line not in config_text:
     raise SystemExit("[AERIS24 OH PHASE3] parent config identity anchor missing")
 
 steps = [
-    ("align final parent/Stagger anchors",
-     ROOT / "Tools/fix_aeris24_gpu_vertex_projection_poc_anchors.py"),
-    ("apply AERIS24 GPU Vertex Projection PoC",
-     ROOT / "Tools/apply_aeris24_gpu_vertex_projection_poc.py"),
-    ("upgrade inherited Single-Authority Pass3 assertion",
-     ROOT / "Tools/fix_aeris24_gpu_vertex_single_authority_selftest.py"),
-    ("verify AERIS24 GPU Vertex source/safety/math",
-     ROOT / "Tools/verify_aeris24_gpu_vertex_projection_poc.py"),
-    ("apply ND projection backend / black reload successor",
-     ROOT / "Tools/apply_aeris24_nd_backend_reload.py"),
-    ("verify ND projection backend / black reload successor",
-     ROOT / "Tools/verify_aeris24_nd_backend_reload.py"),
-    ("promote Operation Health Phase 3 identity",
-     ROOT / "Tools/promote_aeris24_oh_phase3.py"),
-    ("verify Operation Health Phase 3 identity",
-     ROOT / "Tools/verify_aeris24_oh_phase3.py"),
-    ("run inherited Operation Health Pass3 prebuild suite",
-     ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"),
+    ("align final parent/Stagger anchors", ROOT / "Tools/fix_aeris24_gpu_vertex_projection_poc_anchors.py"),
+    ("apply AERIS24 GPU Vertex Projection PoC", ROOT / "Tools/apply_aeris24_gpu_vertex_projection_poc.py"),
+    ("upgrade inherited Single-Authority Pass3 assertion", ROOT / "Tools/fix_aeris24_gpu_vertex_single_authority_selftest.py"),
+    ("verify AERIS24 GPU Vertex source/safety/math", ROOT / "Tools/verify_aeris24_gpu_vertex_projection_poc.py"),
+    ("align ND backend / black reload successor anchors", ROOT / "Tools/fix_aeris24_nd_backend_reload_anchors.py"),
+    ("apply ND projection backend / black reload successor", ROOT / "Tools/apply_aeris24_nd_backend_reload.py"),
+    ("verify ND projection backend / black reload successor", ROOT / "Tools/verify_aeris24_nd_backend_reload.py"),
+    ("promote Operation Health Phase 3 identity", ROOT / "Tools/promote_aeris24_oh_phase3.py"),
+    ("verify Operation Health Phase 3 identity", ROOT / "Tools/verify_aeris24_oh_phase3.py"),
+    ("run inherited Operation Health Pass3 prebuild suite", ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"),
 ]
-
 for label, script in steps:
     run_step(label, script)
-
 subprocess.run(["git", "diff", "--check"], cwd=str(ROOT), check=True)
-
 print("\n[AERIS24 GPU VERTEX READY] STATIC CANDIDATE PASS")
 print("codename=" + NEW_OH)
 print("revision=" + REVISION)
