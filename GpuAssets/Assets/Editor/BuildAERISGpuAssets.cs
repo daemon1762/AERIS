@@ -12,27 +12,30 @@ namespace AERIS.Editor
         const string ProbeAssetPath = "Assets/AERISBundleProbe.txt";
         const string ShaderBundleName = "aeris_nd_gpu_vertex_projection";
         const string ProbeBundleName = "aeris_gpu_bundle_probe";
+        const string KspBtShaderBundleName = "aeris_nd_gpu_vertex_projection_kspbt";
+        const string KspBtProbeBundleName = "aeris_gpu_bundle_probe_kspbt";
 
         public static void BuildWindows()
         {
             Build(BuildTarget.StandaloneWindows64,
                 "aeris_nd_gpu_vertex_projection_windows.bundle",
-                "aeris_gpu_bundle_probe_windows.bundle");
+                "aeris_gpu_bundle_probe_windows.bundle",
+                "aeris_nd_gpu_vertex_projection_kspbt_windows.bundle",
+                "aeris_gpu_bundle_probe_kspbt_windows.bundle");
         }
 
         public static void BuildLinux()
         {
             Build(BuildTarget.StandaloneLinux64,
                 "aeris_nd_gpu_vertex_projection_linux.bundle",
-                "aeris_gpu_bundle_probe_linux.bundle");
+                "aeris_gpu_bundle_probe_linux.bundle",
+                null, null);
         }
 
         static void Build(BuildTarget target, string installedShaderName,
-            string installedProbeName)
+            string installedProbeName, string installedKspBtShaderName,
+            string installedKspBtProbeName)
         {
-            // The batch launcher must open this project under the same active target as
-            // the bundle target (-buildTarget Win64/Linux64). Fail instead of silently
-            // emitting a host-target-imported bundle if that invariant is broken.
             if (EditorUserBuildSettings.activeBuildTarget != target)
                 throw new InvalidOperationException("Active build target mismatch: active=" +
                     EditorUserBuildSettings.activeBuildTarget + "; requested=" + target);
@@ -42,10 +45,6 @@ namespace AERIS.Editor
             if (!File.Exists(Path.Combine(Application.dataPath, "AERISBundleProbe.txt")))
                 throw new FileNotFoundException("Probe asset not found", ProbeAssetPath);
 
-            // Mirror the KSPBuildTools Windows graphics-API environment.  KSPBuildTools
-            // deliberately disables Unity's default Windows graphics API list and exports
-            // with OpenGLCore + Direct3D11.  Keep every other diagnostic variable unchanged
-            // for this hotfix so the next probe isolates this one compatibility condition.
             if (target == BuildTarget.StandaloneWindows64)
             {
                 PlayerSettings.SetUseDefaultGraphicsAPIs(
@@ -57,60 +56,106 @@ namespace AERIS.Editor
 
             string projectRoot = Directory.GetParent(Application.dataPath).FullName;
             string repositoryRoot = Directory.GetParent(projectRoot).FullName;
-            string tempOutput = Path.Combine(projectRoot, "Temp",
-                "AERIS_GPU_BUNDLE_" + target);
-            if (Directory.Exists(tempOutput)) Directory.Delete(tempOutput, true);
-            Directory.CreateDirectory(tempOutput);
+            string destinationDirectory = Path.Combine(repositoryRoot, "GameData",
+                "AERISFlightControl", "Shaders");
+            Directory.CreateDirectory(destinationDirectory);
 
-            // Keep the exact previous diagnostic container format: tiny, uncompressed
-            // UnityFS bundles built under the same target/options.  The only intended
-            // experimental change in this revision is the Windows graphics API list above.
-            BuildAssetBundleOptions options =
-                BuildAssetBundleOptions.UncompressedAssetBundle |
-                BuildAssetBundleOptions.DeterministicAssetBundle |
-                BuildAssetBundleOptions.ForceRebuildAssetBundle |
-                BuildAssetBundleOptions.StrictMode;
-            AssetBundleBuild[] builds = new AssetBundleBuild[2];
-            builds[0] = new AssetBundleBuild
+            // AERIS diagnostic path: uncompressed and force-rebuilt so compression/cache
+            // variables stay eliminated. This is the already-tested control arm.
+            string diagnosticOutput = Path.Combine(projectRoot, "Temp",
+                "AERIS_GPU_BUNDLE_DIAGNOSTIC_" + target);
+            RecreateDirectory(diagnosticOutput);
+            AssetBundleBuild[] diagnosticBuilds = new AssetBundleBuild[2];
+            diagnosticBuilds[0] = new AssetBundleBuild
             {
                 assetBundleName = ShaderBundleName,
                 assetNames = new[] { ShaderAssetPath }
             };
-            builds[1] = new AssetBundleBuild
+            diagnosticBuilds[1] = new AssetBundleBuild
             {
                 assetBundleName = ProbeBundleName,
                 assetNames = new[] { ProbeAssetPath }
             };
+            BuildAssetBundleOptions diagnosticOptions =
+                BuildAssetBundleOptions.UncompressedAssetBundle |
+                BuildAssetBundleOptions.DeterministicAssetBundle |
+                BuildAssetBundleOptions.ForceRebuildAssetBundle |
+                BuildAssetBundleOptions.StrictMode;
+            RequireManifest(BuildPipeline.BuildAssetBundles(diagnosticOutput,
+                diagnosticBuilds, diagnosticOptions, target), "AERIS diagnostic", target);
+            CopyRequired(Path.Combine(diagnosticOutput, ShaderBundleName),
+                Path.Combine(destinationDirectory, installedShaderName), "diagnostic shader");
+            CopyRequired(Path.Combine(diagnosticOutput, ProbeBundleName),
+                Path.Combine(destinationDirectory, installedProbeName), "diagnostic probe");
 
-            AssetBundleManifest manifest = BuildPipeline.BuildAssetBundles(tempOutput,
-                builds, options, target);
+            // Windows A/B arm: mirror KSPBuildTools' builtin AssetBundleBuilder as closely
+            // as possible. It uses an explicit AssetBundleBuild and ONLY
+            // ChunkBasedCompression. No Deterministic, ForceRebuild, StrictMode or
+            // Uncompressed flags are added. Build shader/probe as separate one-bundle
+            // invocations so each mirrors KSPBuildTools' asset-list action mode.
+            if (target == BuildTarget.StandaloneWindows64)
+            {
+                string kspBtShaderOutput = Path.Combine(projectRoot, "Temp",
+                    "AERIS_GPU_KSPBT_SHADER");
+                string kspBtProbeOutput = Path.Combine(projectRoot, "Temp",
+                    "AERIS_GPU_KSPBT_PROBE");
+                RecreateDirectory(kspBtShaderOutput);
+                RecreateDirectory(kspBtProbeOutput);
+
+                AssetBundleBuild[] shaderBuild = new[]
+                {
+                    new AssetBundleBuild
+                    {
+                        assetBundleName = KspBtShaderBundleName,
+                        assetNames = new[] { ShaderAssetPath }
+                    }
+                };
+                AssetBundleBuild[] probeBuild = new[]
+                {
+                    new AssetBundleBuild
+                    {
+                        assetBundleName = KspBtProbeBundleName,
+                        assetNames = new[] { ProbeAssetPath }
+                    }
+                };
+                BuildAssetBundleOptions kspBtOptions =
+                    BuildAssetBundleOptions.ChunkBasedCompression;
+                RequireManifest(BuildPipeline.BuildAssetBundles(kspBtShaderOutput,
+                    shaderBuild, kspBtOptions, target), "KSPBuildTools parity shader", target);
+                RequireManifest(BuildPipeline.BuildAssetBundles(kspBtProbeOutput,
+                    probeBuild, kspBtOptions, target), "KSPBuildTools parity probe", target);
+
+                CopyRequired(Path.Combine(kspBtShaderOutput, KspBtShaderBundleName),
+                    Path.Combine(destinationDirectory, installedKspBtShaderName),
+                    "KSPBuildTools parity shader");
+                CopyRequired(Path.Combine(kspBtProbeOutput, KspBtProbeBundleName),
+                    Path.Combine(destinationDirectory, installedKspBtProbeName),
+                    "KSPBuildTools parity probe");
+                Debug.Log("[AERIS24 GPU VERTEX] KSPBuildTools A/B bundles built with ChunkBasedCompression only");
+            }
+        }
+
+        static void RecreateDirectory(string path)
+        {
+            if (Directory.Exists(path)) Directory.Delete(path, true);
+            Directory.CreateDirectory(path);
+        }
+
+        static void RequireManifest(AssetBundleManifest manifest, string label,
+            BuildTarget target)
+        {
             if (manifest == null)
-                throw new InvalidOperationException("BuildAssetBundles returned null for " +
-                    target);
+                throw new InvalidOperationException(label +
+                    " BuildAssetBundles returned null for " + target);
+        }
 
-            string shaderSource = Path.Combine(tempOutput, ShaderBundleName);
-            string probeSource = Path.Combine(tempOutput, ProbeBundleName);
-            if (!File.Exists(shaderSource))
-                throw new FileNotFoundException("Expected shader AssetBundle was not emitted",
-                    shaderSource);
-            if (!File.Exists(probeSource))
-                throw new FileNotFoundException("Expected probe AssetBundle was not emitted",
-                    probeSource);
-
-            string destinationDirectory = Path.Combine(repositoryRoot, "GameData",
-                "AERISFlightControl", "Shaders");
-            Directory.CreateDirectory(destinationDirectory);
-            string shaderDestination = Path.Combine(destinationDirectory,
-                installedShaderName);
-            string probeDestination = Path.Combine(destinationDirectory,
-                installedProbeName);
-            File.Copy(shaderSource, shaderDestination, true);
-            File.Copy(probeSource, probeDestination, true);
-
-            Debug.Log("[AERIS24 GPU VERTEX] built target-matched uncompressed " + target +
-                " shader bundle: " + shaderDestination);
-            Debug.Log("[AERIS24 GPU VERTEX] built target-matched uncompressed " + target +
-                " probe bundle: " + probeDestination);
+        static void CopyRequired(string source, string destination, string label)
+        {
+            if (!File.Exists(source))
+                throw new FileNotFoundException("Expected " + label +
+                    " AssetBundle was not emitted", source);
+            File.Copy(source, destination, true);
+            Debug.Log("[AERIS24 GPU VERTEX] built " + label + ": " + destination);
         }
     }
 }
