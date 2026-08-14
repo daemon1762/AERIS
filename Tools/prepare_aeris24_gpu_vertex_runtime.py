@@ -10,7 +10,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS24_GPU_VERTEX_PROJECTION_POC"
 OH_CODENAME = "EPI" + "NEPHRINE"
-OH_REVISION = "OH_PHASE3_002"
+OH_REVISION = "OH_PHASE3_003"
 
 
 def sha256(path):
