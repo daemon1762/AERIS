@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace AERIS.Editor
 {
@@ -41,6 +42,21 @@ namespace AERIS.Editor
             if (!File.Exists(Path.Combine(Application.dataPath, "AERISBundleProbe.txt")))
                 throw new FileNotFoundException("Probe asset not found", ProbeAssetPath);
 
+            // Mirror the KSPBuildTools Windows AssetBundle environment.  KSPBuildTools
+            // deliberately disables Unity's default Windows graphics API list and exports
+            // bundles with OpenGLCore + Direct3D11.  The runtime evidence from KSP showed
+            // even a plain TextAsset bundle being rejected at the native archive/version
+            // gate, so keep the AERIS bundle build conditions aligned with the established
+            // KSP modding pipeline before changing Unity versions or shader semantics.
+            if (target == BuildTarget.StandaloneWindows64)
+            {
+                PlayerSettings.SetUseDefaultGraphicsAPIs(
+                    BuildTarget.StandaloneWindows64, false);
+                PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64,
+                    new[] { GraphicsDeviceType.OpenGLCore, GraphicsDeviceType.Direct3D11 });
+                Debug.Log("[AERIS24 GPU VERTEX] Windows graphics APIs=OpenGLCore,Direct3D11 (KSPBuildTools parity)");
+            }
+
             string projectRoot = Directory.GetParent(Application.dataPath).FullName;
             string repositoryRoot = Directory.GetParent(projectRoot).FullName;
             string tempOutput = Path.Combine(projectRoot, "Temp",
@@ -48,14 +64,14 @@ namespace AERIS.Editor
             if (Directory.Exists(tempOutput)) Directory.Delete(tempOutput, true);
             Directory.CreateDirectory(tempOutput);
 
-            // These bundles are tiny. Use uncompressed UnityFS so the next runtime test
-            // eliminates LZ4 block decoding as a variable. Build the shader and a plain
-            // TextAsset probe as two explicit bundles under the exact same target/options.
-            // If the probe loads but the shader bundle does not, the failure is shader-
-            // specific. If both fail, the container/platform compatibility path is at fault.
+            // Return to the KSPBuildTools LZ4 container convention now that the prior
+            // uncompressed probe proved compression was not the rejection cause.  Force
+            // rebuild prevents stale artifacts; StrictMode prevents shader errors escaping
+            // the asset gate.  DeterministicAssetBundle is intentionally omitted to keep
+            // the emitted format as close as practical to the established KSPBuildTools
+            // BuildPipeline contract.
             BuildAssetBundleOptions options =
-                BuildAssetBundleOptions.UncompressedAssetBundle |
-                BuildAssetBundleOptions.DeterministicAssetBundle |
+                BuildAssetBundleOptions.ChunkBasedCompression |
                 BuildAssetBundleOptions.ForceRebuildAssetBundle |
                 BuildAssetBundleOptions.StrictMode;
             AssetBundleBuild[] builds = new AssetBundleBuild[2];
@@ -95,9 +111,9 @@ namespace AERIS.Editor
             File.Copy(shaderSource, shaderDestination, true);
             File.Copy(probeSource, probeDestination, true);
 
-            Debug.Log("[AERIS24 GPU VERTEX] built target-matched uncompressed " + target +
+            Debug.Log("[AERIS24 GPU VERTEX] built KSPBuildTools-parity " + target +
                 " shader bundle: " + shaderDestination);
-            Debug.Log("[AERIS24 GPU VERTEX] built target-matched uncompressed " + target +
+            Debug.Log("[AERIS24 GPU VERTEX] built KSPBuildTools-parity " + target +
                 " probe bundle: " + probeDestination);
         }
     }
