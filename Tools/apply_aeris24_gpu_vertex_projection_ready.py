@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OLD_OH = "PENI" + "CILLIN"
 NEW_OH = "EPI" + "NEPHRINE"
 CANDIDATE = "AERIS24_GPU_VERTEX_PROJECTION_POC"
-REVISION = "OH_PHASE3_001"
+REVISION = "OH_PHASE3_002"
 
 
 def run_step(label, script):
