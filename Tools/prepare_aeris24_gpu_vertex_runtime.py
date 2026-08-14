@@ -10,7 +10,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS24_GPU_VERTEX_PROJECTION_POC"
 OH_CODENAME = "EPI" + "NEPHRINE"
-OH_REVISION = "OH_PHASE3_005"
+OH_REVISION = "OH_PHASE3_006"
 
 
 def sha256(path):
@@ -35,6 +35,7 @@ def static_candidate_ready():
         backend = (ROOT / "Source/AERISFlightControl/Terrain/AERISNdGpuVertexProjectionBackend.cs").read_text()
         settings = (ROOT / "Source/AERISFlightControl/Settings/AERISSettings.cs").read_text()
         ui = (ROOT / "Source/AERISFlightControl/UI/AERISNavigationDisplay.cs").read_text()
+        window = (ROOT / "Source/AERISFlightControl/UI/AERISWindow.cs").read_text()
         project = (ROOT / "Source/AERISFlightControl/AERISFlightControl.csproj").read_text()
     except Exception:
         return False
@@ -47,12 +48,17 @@ def static_candidate_ready():
         'OPERATION HEALTH PHASE 3 ' + OH_CODENAME + ' GPU VERTEX PROJECTION' in build,
         'oh_gpu_vertex_requested=' in renderer,
         'oh_gpu_vertex_exact_bypass=' in renderer,
+        'oh_gpu_vertex_resident_suspend=' in renderer,
         'oh_nd_reload_pct=' in renderer,
         'oh_nd_reload_snapshot=' in renderer,
         'reloadSnapshotCenterLatitudeDeg' in renderer,
         'CPU_EXACT_REQUESTED' in backend,
+        'RetainForViewportSuspension' in backend,
         'AERISNdProjectionBackendMode' in settings,
+        'TerrainGpuMode = AERISTerrainGpuMode.On' in settings,
         'RELOADING ND' in ui,
+        'DrawProjectionBackendSelector' in window,
+        'GUILayout.HorizontalSlider' in window,
         'Terrain\\AERISNdGpuVertexProjectionBackend.cs' in project,
     )
     return all(markers)
@@ -63,6 +69,7 @@ def verify_static_candidate():
     run([sys.executable, ROOT / "Tools/verify_aeris24_gpu_vertex_projection_poc.py"])
     run([sys.executable, ROOT / "Tools/verify_aeris24_nd_backend_reload.py"])
     run([sys.executable, ROOT / "Tools/verify_aeris24_nd_reload_snapshot_hotfix.py"])
+    run([sys.executable, ROOT / "Tools/verify_aeris24_system_options_residency_hotfix.py"])
     run([sys.executable, ROOT / "Tools/verify_aeris24_oh_phase3.py"])
     run([sys.executable, ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"])
     run(["git", "diff", "--check"])
@@ -167,5 +174,5 @@ print("gpu_shader_bundle=" + bundle_name)
 print("gpu_shader_bundle_sha256=" + installed_bundle_sha)
 print("gpu_probe_bundle=" + probe_name)
 print("gpu_probe_bundle_sha256=" + installed_probe_sha)
-print("Next runtime gate: high-speed range/backend reload must show monotonic percent and oh_nd_reload_snapshot=LOCKED while black.")
-print("GPU is now a runtime-proven path on the laptop bundle; performance acceptance still requires the 160 km spike gate.")
+print("Next runtime gate: after GPU ACTIVE, toggle SYSTEM ND display OFF/ALWAYS and verify activation count does not rise.")
+print("Also verify SYSTEM projection selector sync, FDR 1..30 slider, fixed Terrain GPU ON, and one high-speed 160 km segment.")
