@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OLD = "PENI" + "CILLIN"
 NEW = "EPI" + "NEPHRINE"
 REV_OLD = "OH_PHASE2_001"
-REV_NEW = "OH_PHASE3_004"
+REV_NEW = "OH_PHASE3_003"
 CANDIDATE = "AERIS24_GPU_VERTEX_PROJECTION_POC"
 
 def one(text, old, new, label):
@@ -32,7 +32,6 @@ build = ROOT / "build_ubuntu.sh"
 text = build.read_text()
 text = one(text, 'DISPLAY="AERIS Flight Control v$SEMVER DEV CP3.75 OPERATION HEALTH STEP 2 MOTION CONTENT SPLIT COASTAL EDGE REFINEMENT"', 'DISPLAY="AERIS Flight Control v$SEMVER DEV CP3.75 OPERATION HEALTH PHASE 3 ' + NEW + ' GPU VERTEX PROJECTION"', "display")
 text = one(text, 'internal const string UiCheckpoint = "DEV CP3.75 — OPERATION HEALTH STEP 2 MOTION CONTENT SPLIT COASTAL EDGE REFINEMENT";', 'internal const string UiCheckpoint = "DEV CP3.75 — OPERATION HEALTH PHASE 3 ' + NEW + ' — GPU VERTEX PROJECTION";', "ui")
-
 install_marker = '''for USER_CONFIG in AERISSettings.cfg NavigationDisplayProfiles.cfg AERISOperationHealth.cfg; do
   if test -f "$PRESERVE_DIR/Config/$USER_CONFIG"; then
     cp -a "$PRESERVE_DIR/Config/$USER_CONFIG" "$TARGET/Config/"
@@ -41,7 +40,7 @@ done
 '''
 identity_block = '''# Operation Health generation identity is package-owned even though the rest of
 # AERISOperationHealth.cfg is user-owned policy. Preserve policy values, then promote
-# only codename so an older installed PENICILLIN config cannot mask EPINEPHRINE.
+# only codename so an older installed config cannot mask EPINEPHRINE.
 OH_CONFIG="$TARGET/Config/AERISOperationHealth.cfg"
 if test -f "$OH_CONFIG"; then
   python3 - "$OH_CONFIG" <<'PYOH'
