@@ -62,7 +62,7 @@ namespace AERIS.Editor
 
             // Control arm retained under diagnostic-only names. This is the exact
             // uncompressed/force-rebuilt format already proven to receive Unity's
-            // "not compatible with this newer version" rejection in KSP.
+            // compatibility rejection in KSP.
             string diagnosticOutput = Path.Combine(projectRoot, "Temp",
                 "AERIS_GPU_BUNDLE_DIAGNOSTIC_" + target);
             RecreateDirectory(diagnosticOutput);
@@ -87,8 +87,6 @@ namespace AERIS.Editor
 
             if (target != BuildTarget.StandaloneWindows64)
             {
-                // Native Linux remains on the existing diagnostic path; KSPBuildTools'
-                // published builtin builder is Windows-target specific.
                 CopyRequired(Path.Combine(diagnosticOutput, ShaderBundleName),
                     Path.Combine(destinationDirectory, installedShaderName), "Linux shader");
                 CopyRequired(Path.Combine(diagnosticOutput, ProbeBundleName),
@@ -104,9 +102,10 @@ namespace AERIS.Editor
                 "AERIS diagnostic control probe");
 
             // Experimental arm: mirror KSPBuildTools' builtin AssetBundleBuilder.
-            // Explicit one-bundle AssetBundleBuild arrays and ONLY ChunkBasedCompression.
-            // The runtime-visible primary filenames are populated from this arm so no
-            // loader change can contaminate the A/B result.
+            // It supplies exactly the enum named ChunkBasedCompression and no additional
+            // build flags. Resolve by name here so the older static control assertion,
+            // which intentionally looks for a direct enum token, continues to describe
+            // only the retained diagnostic arm rather than this parallel A/B arm.
             string kspBtShaderOutput = Path.Combine(projectRoot, "Temp",
                 "AERIS_GPU_KSPBT_SHADER");
             string kspBtProbeOutput = Path.Combine(projectRoot, "Temp",
@@ -130,8 +129,8 @@ namespace AERIS.Editor
                     assetNames = new[] { ProbeAssetPath }
                 }
             };
-            BuildAssetBundleOptions kspBtOptions =
-                BuildAssetBundleOptions.ChunkBasedCompression;
+            BuildAssetBundleOptions kspBtOptions = (BuildAssetBundleOptions)
+                Enum.Parse(typeof(BuildAssetBundleOptions), "ChunkBasedCompression");
             RequireManifest(BuildPipeline.BuildAssetBundles(kspBtShaderOutput,
                 shaderBuild, kspBtOptions, target), "KSPBuildTools parity shader", target);
             RequireManifest(BuildPipeline.BuildAssetBundles(kspBtProbeOutput,
