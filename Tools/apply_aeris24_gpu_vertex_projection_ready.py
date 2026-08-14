@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OLD_OH = "PENI" + "CILLIN"
 NEW_OH = "EPI" + "NEPHRINE"
 CANDIDATE = "AERIS24_GPU_VERTEX_PROJECTION_POC"
-REVISION = "OH_PHASE3_002"
+REVISION = "OH_PHASE3_003"
 
 
 def run_step(label, script):
@@ -20,12 +20,7 @@ def run_step(label, script):
 
 
 def generated_phase3_ready():
-    """Return True only for the fully generated EPINEPHRINE successor tree.
-
-    This deliberately requires independent runtime, build, config and renderer markers.
-    The repository branch itself carries the packaged EPINEPHRINE config, so config alone
-    must never cause the parent reconstruction to be skipped on a clean checkout.
-    """
+    """Return True only for the fully generated EPINEPHRINE successor tree."""
     try:
         monitor = (ROOT / "Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs").read_text()
         build = (ROOT / "build_ubuntu.sh").read_text()
@@ -45,10 +40,6 @@ def generated_phase3_ready():
     )
 
 
-# Idempotent re-entry path. The runtime preparation can legitimately stop after this
-# script (for example because Unity Editor or a platform AssetBundle is missing). A later
-# retry must revalidate the already-generated candidate instead of replaying the AERIS23
-# identity promotion chain over EPINEPHRINE output.
 if generated_phase3_ready():
     print("[AERIS24 GPU VERTEX READY] generated EPINEPHRINE tree already present")
     print("[AERIS24 GPU VERTEX READY] re-entry mode: reconstruction skipped; full verification retained")
@@ -67,9 +58,6 @@ if generated_phase3_ready():
     print("Then build/install with ./build_ubuntu.sh <KSP_PATH> and require MATCH=YES.")
     raise SystemExit(0)
 
-# Clean-generation path. The branch packages the new OH codename, but parent
-# reconstruction is deliberately verified under its original identity before the Phase-3
-# promotion step runs.
 config = ROOT / "GameData/AERISFlightControl/Config/AERISOperationHealth.cfg"
 config_text = config.read_text()
 old_line = "    codename = " + OLD_OH
