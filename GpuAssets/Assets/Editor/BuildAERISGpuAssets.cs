@@ -20,8 +20,8 @@ namespace AERIS.Editor
             Build(BuildTarget.StandaloneWindows64,
                 "aeris_nd_gpu_vertex_projection_windows.bundle",
                 "aeris_gpu_bundle_probe_windows.bundle",
-                "aeris_nd_gpu_vertex_projection_kspbt_windows.bundle",
-                "aeris_gpu_bundle_probe_kspbt_windows.bundle");
+                "aeris_nd_gpu_vertex_projection_diagnostic_windows.bundle",
+                "aeris_gpu_bundle_probe_diagnostic_windows.bundle");
         }
 
         public static void BuildLinux()
@@ -33,8 +33,8 @@ namespace AERIS.Editor
         }
 
         static void Build(BuildTarget target, string installedShaderName,
-            string installedProbeName, string installedKspBtShaderName,
-            string installedKspBtProbeName)
+            string installedProbeName, string diagnosticShaderName,
+            string diagnosticProbeName)
         {
             if (EditorUserBuildSettings.activeBuildTarget != target)
                 throw new InvalidOperationException("Active build target mismatch: active=" +
@@ -60,8 +60,9 @@ namespace AERIS.Editor
                 "AERISFlightControl", "Shaders");
             Directory.CreateDirectory(destinationDirectory);
 
-            // AERIS diagnostic path: uncompressed and force-rebuilt so compression/cache
-            // variables stay eliminated. This is the already-tested control arm.
+            // Control arm retained under diagnostic-only names. This is the exact
+            // uncompressed/force-rebuilt format already proven to receive Unity's
+            // "not compatible with this newer version" rejection in KSP.
             string diagnosticOutput = Path.Combine(projectRoot, "Temp",
                 "AERIS_GPU_BUNDLE_DIAGNOSTIC_" + target);
             RecreateDirectory(diagnosticOutput);
@@ -83,56 +84,66 @@ namespace AERIS.Editor
                 BuildAssetBundleOptions.StrictMode;
             RequireManifest(BuildPipeline.BuildAssetBundles(diagnosticOutput,
                 diagnosticBuilds, diagnosticOptions, target), "AERIS diagnostic", target);
-            CopyRequired(Path.Combine(diagnosticOutput, ShaderBundleName),
-                Path.Combine(destinationDirectory, installedShaderName), "diagnostic shader");
-            CopyRequired(Path.Combine(diagnosticOutput, ProbeBundleName),
-                Path.Combine(destinationDirectory, installedProbeName), "diagnostic probe");
 
-            // Windows A/B arm: mirror KSPBuildTools' builtin AssetBundleBuilder as closely
-            // as possible. It uses an explicit AssetBundleBuild and ONLY
-            // ChunkBasedCompression. No Deterministic, ForceRebuild, StrictMode or
-            // Uncompressed flags are added. Build shader/probe as separate one-bundle
-            // invocations so each mirrors KSPBuildTools' asset-list action mode.
-            if (target == BuildTarget.StandaloneWindows64)
+            if (target != BuildTarget.StandaloneWindows64)
             {
-                string kspBtShaderOutput = Path.Combine(projectRoot, "Temp",
-                    "AERIS_GPU_KSPBT_SHADER");
-                string kspBtProbeOutput = Path.Combine(projectRoot, "Temp",
-                    "AERIS_GPU_KSPBT_PROBE");
-                RecreateDirectory(kspBtShaderOutput);
-                RecreateDirectory(kspBtProbeOutput);
-
-                AssetBundleBuild[] shaderBuild = new[]
-                {
-                    new AssetBundleBuild
-                    {
-                        assetBundleName = KspBtShaderBundleName,
-                        assetNames = new[] { ShaderAssetPath }
-                    }
-                };
-                AssetBundleBuild[] probeBuild = new[]
-                {
-                    new AssetBundleBuild
-                    {
-                        assetBundleName = KspBtProbeBundleName,
-                        assetNames = new[] { ProbeAssetPath }
-                    }
-                };
-                BuildAssetBundleOptions kspBtOptions =
-                    BuildAssetBundleOptions.ChunkBasedCompression;
-                RequireManifest(BuildPipeline.BuildAssetBundles(kspBtShaderOutput,
-                    shaderBuild, kspBtOptions, target), "KSPBuildTools parity shader", target);
-                RequireManifest(BuildPipeline.BuildAssetBundles(kspBtProbeOutput,
-                    probeBuild, kspBtOptions, target), "KSPBuildTools parity probe", target);
-
-                CopyRequired(Path.Combine(kspBtShaderOutput, KspBtShaderBundleName),
-                    Path.Combine(destinationDirectory, installedKspBtShaderName),
-                    "KSPBuildTools parity shader");
-                CopyRequired(Path.Combine(kspBtProbeOutput, KspBtProbeBundleName),
-                    Path.Combine(destinationDirectory, installedKspBtProbeName),
-                    "KSPBuildTools parity probe");
-                Debug.Log("[AERIS24 GPU VERTEX] KSPBuildTools A/B bundles built with ChunkBasedCompression only");
+                // Native Linux remains on the existing diagnostic path; KSPBuildTools'
+                // published builtin builder is Windows-target specific.
+                CopyRequired(Path.Combine(diagnosticOutput, ShaderBundleName),
+                    Path.Combine(destinationDirectory, installedShaderName), "Linux shader");
+                CopyRequired(Path.Combine(diagnosticOutput, ProbeBundleName),
+                    Path.Combine(destinationDirectory, installedProbeName), "Linux probe");
+                return;
             }
+
+            CopyRequired(Path.Combine(diagnosticOutput, ShaderBundleName),
+                Path.Combine(destinationDirectory, diagnosticShaderName),
+                "AERIS diagnostic control shader");
+            CopyRequired(Path.Combine(diagnosticOutput, ProbeBundleName),
+                Path.Combine(destinationDirectory, diagnosticProbeName),
+                "AERIS diagnostic control probe");
+
+            // Experimental arm: mirror KSPBuildTools' builtin AssetBundleBuilder.
+            // Explicit one-bundle AssetBundleBuild arrays and ONLY ChunkBasedCompression.
+            // The runtime-visible primary filenames are populated from this arm so no
+            // loader change can contaminate the A/B result.
+            string kspBtShaderOutput = Path.Combine(projectRoot, "Temp",
+                "AERIS_GPU_KSPBT_SHADER");
+            string kspBtProbeOutput = Path.Combine(projectRoot, "Temp",
+                "AERIS_GPU_KSPBT_PROBE");
+            RecreateDirectory(kspBtShaderOutput);
+            RecreateDirectory(kspBtProbeOutput);
+
+            AssetBundleBuild[] shaderBuild = new[]
+            {
+                new AssetBundleBuild
+                {
+                    assetBundleName = KspBtShaderBundleName,
+                    assetNames = new[] { ShaderAssetPath }
+                }
+            };
+            AssetBundleBuild[] probeBuild = new[]
+            {
+                new AssetBundleBuild
+                {
+                    assetBundleName = KspBtProbeBundleName,
+                    assetNames = new[] { ProbeAssetPath }
+                }
+            };
+            BuildAssetBundleOptions kspBtOptions =
+                BuildAssetBundleOptions.ChunkBasedCompression;
+            RequireManifest(BuildPipeline.BuildAssetBundles(kspBtShaderOutput,
+                shaderBuild, kspBtOptions, target), "KSPBuildTools parity shader", target);
+            RequireManifest(BuildPipeline.BuildAssetBundles(kspBtProbeOutput,
+                probeBuild, kspBtOptions, target), "KSPBuildTools parity probe", target);
+
+            CopyRequired(Path.Combine(kspBtShaderOutput, KspBtShaderBundleName),
+                Path.Combine(destinationDirectory, installedShaderName),
+                "KSPBuildTools parity PRIMARY shader");
+            CopyRequired(Path.Combine(kspBtProbeOutput, KspBtProbeBundleName),
+                Path.Combine(destinationDirectory, installedProbeName),
+                "KSPBuildTools parity PRIMARY probe");
+            Debug.Log("[AERIS24 GPU VERTEX] A/B arm=KSPBuildTools; options=ChunkBasedCompression only; runtime primary replaced");
         }
 
         static void RecreateDirectory(string path)
