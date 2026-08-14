@@ -12,6 +12,7 @@ B = (ROOT / "Source/AERISFlightControl/Terrain/AERISNdGpuVertexProjectionBackend
 P = (ROOT / "Source/AERISFlightControl/AERISFlightControl.csproj").read_text()
 S = (ROOT / "GpuAssets/Assets/AERISNdExactVertexProjection.shader").read_text()
 E = (ROOT / "GpuAssets/Assets/Editor/BuildAERISGpuAssets.cs").read_text()
+PROBE = (ROOT / "GpuAssets/Assets/AERISBundleProbe.txt").read_text()
 BUILD = (ROOT / "build_ubuntu.sh").read_text()
 PV = (ROOT / "GpuAssets/ProjectSettings/ProjectVersion.txt").read_text()
 
@@ -40,10 +41,19 @@ ck('2019.4.18f1' in PV,
    "shader AssetBundle project pinned to KSP Unity 2019.4.18f1")
 ck('BuildTarget.StandaloneWindows64' in E and 'BuildTarget.StandaloneLinux64' in E,
    "shader builder supports current Proton/WindowsPlayer and native Linux KSP")
+ck('AERIS24_GPU_BUNDLE_PROBE_V1' in PROBE and 'ProbeBundleName' in E and
+   'AssetBundleBuild[2]' in E,
+   "separate plain-TextAsset container probe is built beside shader bundle")
+ck('BuildAssetBundleOptions.UncompressedAssetBundle' in E and
+   'BuildAssetBundleOptions.ChunkBasedCompression' not in E,
+   "diagnostic shader/probe bundles eliminate compression as a runtime variable")
 
 # Runtime/backend fail-closed contract.
 ck('AssetBundle.LoadFromFile' in B and 'LoadAllAssets<Shader>' in B,
    "runtime loads precompiled shader AssetBundle without runtime shader compilation")
+ck('AERIS24_GPU_BUNDLE_PROBE' in B and 'LoadAllAssets<TextAsset>' in B and
+   'Application.unityVersion' in B,
+   "runtime classifies container compatibility before shader load")
 ck('CPU EXACT FALLBACK' in B and 'DisableAndFallback' in B and
    'ValidatePassesOrFallback' in B,
    "missing/unsupported/rejected shader fails closed to CPU exact")
@@ -139,7 +149,6 @@ def basis(lat, lon):
     return center, east, north
 
 def destination(center, east, north, angle, bearing):
-    # Tangent direction; rotate the center unit vector by angular distance on the sphere.
     t = tuple(east[i] * math.sin(bearing) + north[i] * math.cos(bearing)
               for i in range(3))
     return tuple(center[i] * math.cos(angle) + t[i] * math.sin(angle)
