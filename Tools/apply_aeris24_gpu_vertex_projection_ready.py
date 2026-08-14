@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OLD_OH = "PENI" + "CILLIN"
 NEW_OH = "EPI" + "NEPHRINE"
 CANDIDATE = "AERIS24_GPU_VERTEX_PROJECTION_POC"
-REVISION = "OH_PHASE3_003"
+REVISION = "OH_PHASE3_004"
 
 
 def run_step(label, script):
@@ -25,6 +25,9 @@ def generated_phase3_ready():
         monitor = (ROOT / "Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs").read_text()
         build = (ROOT / "build_ubuntu.sh").read_text()
         renderer = (ROOT / "Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs").read_text()
+        backend = (ROOT / "Source/AERISFlightControl/Terrain/AERISNdGpuVertexProjectionBackend.cs").read_text()
+        settings = (ROOT / "Source/AERISFlightControl/Settings/AERISSettings.cs").read_text()
+        ui = (ROOT / "Source/AERISFlightControl/UI/AERISNavigationDisplay.cs").read_text()
         config = (ROOT / "GameData/AERISFlightControl/Config/AERISOperationHealth.cfg").read_text()
     except OSError:
         return False
@@ -35,8 +38,13 @@ def generated_phase3_ready():
         ('CANDIDATE_NAME="' + CANDIDATE + '"') in build and
         'verify_aeris24_gpu_vertex_projection_poc.py' in build and
         ('codename = ' + NEW_OH) in config and
-        'oh_gpu_vertex_projection=' in renderer and
-        'operationHealthGpuVertexExactBypasses' in renderer
+        'oh_gpu_vertex_requested=' in renderer and
+        'oh_nd_reload_pct=' in renderer and
+        'ReloadProgressPercent' in renderer and
+        'CPU_EXACT_REQUESTED' in backend and
+        'AERISNdProjectionBackendMode' in settings and
+        'RELOADING ND' in ui and
+        'FormatProjectionBackend' in ui
     )
 
 
@@ -45,6 +53,8 @@ if generated_phase3_ready():
     print("[AERIS24 GPU VERTEX READY] re-entry mode: reconstruction skipped; full verification retained")
     run_step("revalidate AERIS24 GPU Vertex source/safety/math",
              ROOT / "Tools/verify_aeris24_gpu_vertex_projection_poc.py")
+    run_step("revalidate ND projection backend / black reload successor",
+             ROOT / "Tools/verify_aeris24_nd_backend_reload.py")
     run_step("revalidate Operation Health Phase 3 identity",
              ROOT / "Tools/verify_aeris24_oh_phase3.py")
     run_step("rerun inherited Operation Health Pass3 prebuild suite",
@@ -54,8 +64,7 @@ if generated_phase3_ready():
     print("codename=" + NEW_OH)
     print("revision=" + REVISION)
     print("candidate=" + CANDIDATE)
-    print("Next asset gate: Tools/build_aeris24_gpu_shader_bundle.sh windows")
-    print("Then build/install with ./build_ubuntu.sh <KSP_PATH> and require MATCH=YES.")
+    print("Next runtime gate: build/install, then exercise PROJ AUTO/CPU/GPU and black reload.")
     raise SystemExit(0)
 
 config = ROOT / "GameData/AERISFlightControl/Config/AERISOperationHealth.cfg"
@@ -76,6 +85,10 @@ steps = [
      ROOT / "Tools/fix_aeris24_gpu_vertex_single_authority_selftest.py"),
     ("verify AERIS24 GPU Vertex source/safety/math",
      ROOT / "Tools/verify_aeris24_gpu_vertex_projection_poc.py"),
+    ("apply ND projection backend / black reload successor",
+     ROOT / "Tools/apply_aeris24_nd_backend_reload.py"),
+    ("verify ND projection backend / black reload successor",
+     ROOT / "Tools/verify_aeris24_nd_backend_reload.py"),
     ("promote Operation Health Phase 3 identity",
      ROOT / "Tools/promote_aeris24_oh_phase3.py"),
     ("verify Operation Health Phase 3 identity",
@@ -93,6 +106,5 @@ print("\n[AERIS24 GPU VERTEX READY] STATIC CANDIDATE PASS")
 print("codename=" + NEW_OH)
 print("revision=" + REVISION)
 print("candidate=" + CANDIDATE)
-print("Inherited Operation Health Pass3 prebuild must report 20/20 PASS above.")
-print("Next asset gate: Tools/build_aeris24_gpu_shader_bundle.sh windows")
-print("Then build/install with ./build_ubuntu.sh <KSP_PATH> and require MATCH=YES.")
+print("Inherited Operation Health Pass3 prebuild must report 17/17 suites PASS above.")
+print("Next runtime gate: build/install, then exercise PROJ AUTO/CPU/GPU and black reload.")
