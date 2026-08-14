@@ -26,6 +26,45 @@ def run(args, env=None):
     subprocess.run([str(x) for x in args], cwd=str(ROOT), env=env, check=True)
 
 
+def static_candidate_ready():
+    """Return True only for a fully promoted AERIS24/EPINEPHRINE workspace.
+
+    The runtime helper may legitimately stop after the static gate when Unity 2019.4.18f1
+    is not installed yet. Re-running after installing Unity must continue from that gate,
+    not replay the AERIS23 parent identity applicators over an already-promoted workspace.
+    """
+    try:
+        monitor = (ROOT / "Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs").read_text()
+        config = (ROOT / "GameData/AERISFlightControl/Config/AERISOperationHealth.cfg").read_text()
+        build = (ROOT / "build_ubuntu.sh").read_text()
+        renderer = (ROOT / "Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs").read_text()
+        project = (ROOT / "Source/AERISFlightControl/AERISFlightControl.csproj").read_text()
+    except Exception:
+        return False
+
+    markers = (
+        'internal const string Codename = "' + OH_CODENAME + '";' in monitor,
+        'internal const string Revision = "' + OH_REVISION + '";' in monitor,
+        'internal const string Candidate = "' + CANDIDATE + '";' in monitor,
+        ('codename = ' + OH_CODENAME) in config,
+        ('CANDIDATE_NAME="' + CANDIDATE + '"') in build,
+        'OPERATION HEALTH PHASE 3 ' + OH_CODENAME + ' GPU VERTEX PROJECTION' in build,
+        'oh_gpu_vertex_projection=' in renderer,
+        'oh_gpu_vertex_exact_bypass=' in renderer,
+        'Terrain\\AERISNdGpuVertexProjectionBackend.cs' in project,
+    )
+    return all(markers)
+
+
+def verify_static_candidate():
+    print("[AERIS24 GPU VERTEX RUNTIME] existing EPINEPHRINE static candidate detected; parent reconstruction skipped")
+    run([sys.executable, ROOT / "Tools/verify_aeris24_gpu_vertex_projection_poc.py"])
+    run([sys.executable, ROOT / "Tools/verify_aeris24_oh_phase3.py"])
+    run([sys.executable, ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"])
+    run(["git", "diff", "--check"])
+    print("[AERIS24 GPU VERTEX RUNTIME] restart-safe static revalidation PASS")
+
+
 parser = argparse.ArgumentParser(description="Prepare, build and install the AERIS24 GPU Vertex Projection runtime candidate.")
 parser.add_argument("ksp_path", help="Kerbal Space Program installation root")
 parser.add_argument("--rebuild-shader", action="store_true",
@@ -38,7 +77,10 @@ ksp = Path(args.ksp_path).expanduser().resolve()
 if not ksp.is_dir():
     raise SystemExit("[AERIS24 GPU VERTEX RUNTIME] KSP path not found: " + str(ksp))
 
-run([sys.executable, ROOT / "Tools/apply_aeris24_gpu_vertex_projection_ready.py"])
+if static_candidate_ready():
+    verify_static_candidate()
+else:
+    run([sys.executable, ROOT / "Tools/apply_aeris24_gpu_vertex_projection_ready.py"])
 
 if (ksp / "KSP_x64_Data" / "Managed" / "Assembly-CSharp.dll").is_file():
     shader_mode = "windows"
