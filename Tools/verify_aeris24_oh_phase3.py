@@ -18,6 +18,10 @@ checks = [
     (('CANDIDATE_NAME="' + CANDIDATE + '"') in B, "build candidate"),
     (("OPERATION HEALTH PHASE 3 " + NEW + " GPU VERTEX PROJECTION") in B, "build display"),
     ('oh_gpu_vertex_projection=' in R and 'oh_gpu_vertex_exact_bypass=' in R, "GPU feature telemetry"),
+    ('AERISSettings.cfg NavigationDisplayProfiles.cfg AERISOperationHealth.cfg' in B and
+     'OH_CONFIG="$TARGET/Config/AERISOperationHealth.cfg"' in B and
+     ("r'\\1" + NEW + "'") in B,
+     "preserved Operation Health policy promotes package-owned codename"),
 ]
 failed = []
 for ok, label in checks:
