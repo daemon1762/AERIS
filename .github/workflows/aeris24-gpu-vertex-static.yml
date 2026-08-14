@@ -22,8 +22,11 @@ jobs:
             Tools/apply_aeris24_gpu_vertex_projection_poc.py \
             Tools/fix_aeris24_gpu_vertex_single_authority_selftest.py \
             Tools/verify_aeris24_gpu_vertex_projection_poc.py \
+            Tools/fix_aeris24_nd_backend_reload_anchors.py \
             Tools/apply_aeris24_nd_backend_reload.py \
             Tools/verify_aeris24_nd_backend_reload.py \
+            Tools/apply_aeris24_nd_reload_snapshot_hotfix.py \
+            Tools/verify_aeris24_nd_reload_snapshot_hotfix.py \
             Tools/promote_aeris24_oh_phase3.py \
             Tools/verify_aeris24_oh_phase3.py \
             Tools/apply_aeris24_gpu_vertex_projection_ready.py \
