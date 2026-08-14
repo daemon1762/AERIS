@@ -65,9 +65,18 @@ echo "[AERIS24 GPU VERTEX] Mono terminfo compatibility=TERM=xterm (process-local
 
 run_target(){
   local method="$1"
+  local build_target="$2"
   echo "[AERIS24 GPU VERTEX] Unity=$UNITY"
   echo "[AERIS24 GPU VERTEX] method=$method"
+  echo "[AERIS24 GPU VERTEX] editor build target=$build_target"
+  # Unity 2019.4's AssetBundle troubleshooting guidance requires command-line builds
+  # to open the project under the same active target as the bundle target. Supplying
+  # only BuildPipeline.BuildAssetBundles(..., target) leaves a fresh batch project on
+  # its default host target and can produce target-import ambiguity. Set -buildTarget
+  # before project load so platform-specific shader import and bundle serialization
+  # are both performed under the intended player target.
   "$UNITY" -batchmode -nographics -quit \
+    -buildTarget "$build_target" \
     -projectPath "$PROJECT" \
     -executeMethod "$method" \
     -logFile -
@@ -75,16 +84,16 @@ run_target(){
 
 case "$MODE" in
   windows)
-    run_target AERIS.Editor.BuildAERISGpuAssets.BuildWindows
+    run_target AERIS.Editor.BuildAERISGpuAssets.BuildWindows Win64
     BUNDLE="$ROOT/GameData/AERISFlightControl/Shaders/aeris_nd_gpu_vertex_projection_windows.bundle"
     ;;
   linux)
-    run_target AERIS.Editor.BuildAERISGpuAssets.BuildLinux
+    run_target AERIS.Editor.BuildAERISGpuAssets.BuildLinux Linux64
     BUNDLE="$ROOT/GameData/AERISFlightControl/Shaders/aeris_nd_gpu_vertex_projection_linux.bundle"
     ;;
   all)
-    run_target AERIS.Editor.BuildAERISGpuAssets.BuildWindows
-    run_target AERIS.Editor.BuildAERISGpuAssets.BuildLinux
+    run_target AERIS.Editor.BuildAERISGpuAssets.BuildWindows Win64
+    run_target AERIS.Editor.BuildAERISGpuAssets.BuildLinux Linux64
     echo "[AERIS24 GPU VERTEX] bundles:"
     sha256sum \
       "$ROOT/GameData/AERISFlightControl/Shaders/aeris_nd_gpu_vertex_projection_windows.bundle" \
