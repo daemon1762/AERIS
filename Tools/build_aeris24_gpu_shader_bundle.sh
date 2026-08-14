@@ -48,6 +48,13 @@ if [[ -e "$UNITY_COMPAT_LIB/libgconf-2.so.4" ]]; then
   echo "[AERIS24 GPU VERTEX] Unity 2019 compat=$UNITY_COMPAT_LIB"
 fi
 
+# The Unity 2019.4 LicensingClient bundles an older .NET runtime which can fail on
+# modern Ubuntu ICU versions before it can connect to the Hub licensing service.
+# Restrict the documented .NET invariant-globalization switch to this Unity build
+# process and its children only. It does not alter the shell, KSP, or system locale.
+export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+echo "[AERIS24 GPU VERTEX] LicensingClient globalization=invariant (process-local)"
+
 run_target(){
   local method="$1"
   echo "[AERIS24 GPU VERTEX] Unity=$UNITY"
