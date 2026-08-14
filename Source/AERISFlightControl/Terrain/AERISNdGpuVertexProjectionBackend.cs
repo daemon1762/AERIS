@@ -18,6 +18,11 @@ namespace AERISFlightControl.Terrain
         const string ShaderName = "AERIS/ND/ExactVertexProjection";
         const string BundleWindows = "aeris_nd_gpu_vertex_projection_windows.bundle";
         const string BundleLinux = "aeris_nd_gpu_vertex_projection_linux.bundle";
+        // Managed-memory recovery is a one-time compatibility path for Proton/Wine cases
+        // where System.IO can read the package but Unity native LoadFromFile rejects the
+        // translated path. Bound the allocation so a corrupted/replaced package cannot
+        // create an unbounded main-thread allocation.
+        const long MaximumManagedBundleBytes = 8L * 1024L * 1024L;
 
         static readonly int CenterId = Shader.PropertyToID("_AerisCenter");
         static readonly int EastId = Shader.PropertyToID("_AerisEast");
@@ -39,6 +44,7 @@ namespace AERISFlightControl.Terrain
         bool failureLogged;
         string failure = string.Empty;
         string bundlePath = string.Empty;
+        string bundleLoadMode = "NONE";
 
         internal bool Active
         {
@@ -82,8 +88,32 @@ namespace AERISFlightControl.Terrain
                     return Fail("shader bundle missing: " + bundlePath);
 
                 bundle = AssetBundle.LoadFromFile(bundlePath);
-                if (bundle == null)
-                    return Fail("AssetBundle.LoadFromFile returned null");
+                if (bundle != null)
+                {
+                    bundleLoadMode = "FILE";
+                }
+                else
+                {
+                    // Runtime evidence on Proton showed File.Exists/SHA verification
+                    // succeeding while Unity native LoadFromFile returned null. Re-read
+                    // exactly the same installed package through managed System.IO and
+                    // hand the bytes to Unity, avoiding native path translation only.
+                    var info = new FileInfo(bundlePath);
+                    long length = info.Exists ? info.Length : -1L;
+                    if (length <= 0L || length > MaximumManagedBundleBytes)
+                        return Fail("AssetBundle.LoadFromFile returned null; managed recovery size rejected=" +
+                            length);
+                    byte[] bytes = File.ReadAllBytes(bundlePath);
+                    if (bytes == null || bytes.LongLength != length)
+                        return Fail("AssetBundle.LoadFromFile returned null; managed recovery read mismatch");
+                    bundle = AssetBundle.LoadFromMemory(bytes);
+                    if (bundle == null)
+                        return Fail("AssetBundle.LoadFromFile returned null; AssetBundle.LoadFromMemory returned null; bytes=" +
+                            length);
+                    bundleLoadMode = "MEMORY";
+                    AERISLogger.Info("[AERIS24_GPU_VERTEX_PROJECTION] bundle file-path load rejected; managed-memory recovery accepted; bytes=" +
+                        length + ".");
+                }
 
                 Shader[] shaders = bundle.LoadAllAssets<Shader>();
                 if (shaders != null)
@@ -109,8 +139,8 @@ namespace AERISFlightControl.Terrain
 
                 failure = string.Empty;
                 AERISLogger.Info("[AERIS24_GPU_VERTEX_PROJECTION] ACTIVE; shader=" +
-                    ShaderName + "; bundle=" + fileName + "; graphics=" +
-                    SystemInfo.graphicsDeviceType + "/" +
+                    ShaderName + "; bundle=" + fileName + "; load=" + bundleLoadMode +
+                    "; graphics=" + SystemInfo.graphicsDeviceType + "/" +
                     SystemInfo.graphicsDeviceName + ".");
                 return true;
             }
@@ -236,6 +266,7 @@ namespace AERISFlightControl.Terrain
             failureLogged = false;
             failure = string.Empty;
             bundlePath = string.Empty;
+            bundleLoadMode = "NONE";
         }
 
         public void Dispose()
