@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OLD = "PENI" + "CILLIN"
 NEW = "EPI" + "NEPHRINE"
 REV_OLD = "OH_PHASE2_001"
-REV_NEW = "OH_PHASE3_002"
+REV_NEW = "OH_PHASE3_003"
 CANDIDATE = "AERIS24_GPU_VERTEX_PROJECTION_POC"
 
 def one(text, old, new, label):
