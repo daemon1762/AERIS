@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using AERISFlightControl.Logging;
@@ -207,36 +208,91 @@ namespace AERISFlightControl.Terrain
                 return false;
             }
 
-            loaded = AssetBundle.LoadFromFile(path);
-            if (loaded != null)
+            var nativeLog = new NativeUnityLogCapture();
+            try
             {
-                mode = "FILE";
+                loaded = AssetBundle.LoadFromFile(path);
+                if (loaded != null)
+                {
+                    mode = "FILE";
+                    return true;
+                }
+
+                var info = new FileInfo(path);
+                long length = info.Exists ? info.Length : -1L;
+                if (length <= 0L || length > MaximumManagedBundleBytes)
+                {
+                    reason = "AssetBundle.LoadFromFile returned null; managed recovery size rejected=" +
+                        length + NativeDiagnosticSuffix(nativeLog);
+                    return false;
+                }
+                byte[] bytes = File.ReadAllBytes(path);
+                if (bytes == null || bytes.LongLength != length)
+                {
+                    reason = "AssetBundle.LoadFromFile returned null; managed recovery read mismatch" +
+                        NativeDiagnosticSuffix(nativeLog);
+                    return false;
+                }
+                loaded = AssetBundle.LoadFromMemory(bytes);
+                if (loaded == null)
+                {
+                    reason = "AssetBundle.LoadFromFile returned null; AssetBundle.LoadFromMemory returned null; bytes=" +
+                        length + NativeDiagnosticSuffix(nativeLog);
+                    return false;
+                }
+                mode = "MEMORY";
                 return true;
             }
+            finally
+            {
+                nativeLog.Dispose();
+            }
+        }
 
-            var info = new FileInfo(path);
-            long length = info.Exists ? info.Length : -1L;
-            if (length <= 0L || length > MaximumManagedBundleBytes)
+        static string NativeDiagnosticSuffix(NativeUnityLogCapture capture)
+        {
+            if (capture == null) return "; unityNative=NONE";
+            string summary = capture.Summary;
+            return "; unityNative=" + (string.IsNullOrEmpty(summary) ? "NONE" : summary);
+        }
+
+        sealed class NativeUnityLogCapture : IDisposable
+        {
+            const int MaximumMessages = 12;
+            readonly List<string> messages = new List<string>(MaximumMessages);
+            bool disposed;
+
+            internal NativeUnityLogCapture()
             {
-                reason = "AssetBundle.LoadFromFile returned null; managed recovery size rejected=" +
-                    length;
-                return false;
+                Application.logMessageReceived += OnLog;
             }
-            byte[] bytes = File.ReadAllBytes(path);
-            if (bytes == null || bytes.LongLength != length)
+
+            void OnLog(string condition, string stackTrace, LogType type)
             {
-                reason = "AssetBundle.LoadFromFile returned null; managed recovery read mismatch";
-                return false;
+                if (disposed || messages.Count >= MaximumMessages) return;
+                if (type != LogType.Error && type != LogType.Exception &&
+                    type != LogType.Assert && type != LogType.Warning) return;
+                string text = condition ?? string.Empty;
+                text = text.Replace('\r', ' ').Replace('\n', ' ').Replace(';', ',');
+                if (text.Length > 400) text = text.Substring(0, 400);
+                messages.Add(type + ":" + text);
             }
-            loaded = AssetBundle.LoadFromMemory(bytes);
-            if (loaded == null)
+
+            internal string Summary
             {
-                reason = "AssetBundle.LoadFromFile returned null; AssetBundle.LoadFromMemory returned null; bytes=" +
-                    length;
-                return false;
+                get
+                {
+                    return messages.Count == 0 ? string.Empty :
+                        string.Join(" | ", messages.ToArray());
+                }
             }
-            mode = "MEMORY";
-            return true;
+
+            public void Dispose()
+            {
+                if (disposed) return;
+                disposed = true;
+                Application.logMessageReceived -= OnLog;
+            }
         }
 
         Material CreateMaterial(string name)
