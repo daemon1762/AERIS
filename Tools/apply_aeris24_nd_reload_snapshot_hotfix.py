@@ -26,8 +26,7 @@ else:
         raise SystemExit("[AERIS24 ND RELOAD SNAPSHOT] backend/black reload predecessor absent")
 
     text = replace_once(text,
-'''        long operationHealthProjectionBackendSwitches;
-        readonly List<Entry> releaseEntryScratch = new List<Entry>(128);''',
+'''        long operationHealthProjectionBackendSwitches;''',
 '''        long operationHealthProjectionBackendSwitches;
         // Hotfix: while the ND is deliberately black for a discrete view/backend
         // reload, freeze the geographic request at one authoritative snapshot. At
@@ -41,8 +40,7 @@ else:
         float reloadSnapshotMapHeadingDeg;
         int reloadProgressPercentFloor;
         long operationHealthReloadSnapshotCaptures;
-        long operationHealthReloadSnapshotFrames;
-        readonly List<Entry> releaseEntryScratch = new List<Entry>(128);''',
+        long operationHealthReloadSnapshotFrames;''',
 'reload snapshot fields')
 
     text = replace_once(text,
