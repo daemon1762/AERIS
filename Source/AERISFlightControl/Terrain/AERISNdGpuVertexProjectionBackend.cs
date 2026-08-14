@@ -161,8 +161,10 @@ namespace AERISFlightControl.Terrain
                 (float)projection.EastY, 0f, 0f);
             Vector4 north = new Vector4((float)projection.NorthX,
                 (float)projection.NorthY, (float)projection.NorthZ, 0f);
-            float orientationSign = projection.Orientation ==
-                AERISTerrainRenderTargetOrientation.Flipped ? -1f : 1f;
+            // Render-target orientation is resolved by the canonical ND projection.
+            // The GPU backend consumes only the resolved sign and does not duplicate
+            // AERISTerrainRenderTargetOrientation knowledge.
+            float orientationSign = projection.RenderNorthSign;
 
             ConfigureMaterial(terrainMaterial, projection, center, east, north,
                 orientationSign, Color.white);
