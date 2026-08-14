@@ -12,12 +12,14 @@ B = (ROOT / "build_ubuntu.sh").read_text()
 R = (ROOT / "Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs").read_text()
 checks = [
     (('internal const string Codename = "' + NEW + '";') in M, "Phase 3 codename"),
-    ('internal const string Revision = "OH_PHASE3_003";' in M, "Phase 3 graphics-API hotfix revision"),
+    ('internal const string Revision = "OH_PHASE3_004";' in M, "Phase 3 ND backend / black reload revision"),
     (('internal const string Candidate = "' + CANDIDATE + '";') in M, "stable technical candidate"),
     (("    codename = " + NEW) in C and ("    codename = " + OLD) not in C, "packaged config codename"),
     (('CANDIDATE_NAME="' + CANDIDATE + '"') in B, "build candidate"),
     (("OPERATION HEALTH PHASE 3 " + NEW + " GPU VERTEX PROJECTION") in B, "build display"),
-    ('oh_gpu_vertex_projection=' in R and 'oh_gpu_vertex_exact_bypass=' in R, "GPU feature telemetry"),
+    ('oh_gpu_vertex_requested=' in R and 'oh_gpu_vertex_projection=' in R and
+     'oh_gpu_vertex_exact_bypass=' in R and 'oh_nd_reload=' in R,
+     "GPU requested/effective + black reload telemetry"),
     ('AERISSettings.cfg NavigationDisplayProfiles.cfg AERISOperationHealth.cfg' in B and
      'OH_CONFIG="$TARGET/Config/AERISOperationHealth.cfg"' in B and
      ("r'\\1" + NEW + "'") in B,
