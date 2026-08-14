@@ -10,7 +10,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS24_GPU_VERTEX_PROJECTION_POC"
 OH_CODENAME = "EPI" + "NEPHRINE"
-OH_REVISION = "OH_PHASE3_003"
+OH_REVISION = "OH_PHASE3_004"
 
 
 def sha256(path):
@@ -27,16 +27,17 @@ def run(args, env=None):
 
 
 def static_candidate_ready():
-    """Return True only for a fully promoted AERIS24/EPINEPHRINE workspace."""
     try:
         monitor = (ROOT / "Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs").read_text()
         config = (ROOT / "GameData/AERISFlightControl/Config/AERISOperationHealth.cfg").read_text()
         build = (ROOT / "build_ubuntu.sh").read_text()
         renderer = (ROOT / "Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs").read_text()
+        backend = (ROOT / "Source/AERISFlightControl/Terrain/AERISNdGpuVertexProjectionBackend.cs").read_text()
+        settings = (ROOT / "Source/AERISFlightControl/Settings/AERISSettings.cs").read_text()
+        ui = (ROOT / "Source/AERISFlightControl/UI/AERISNavigationDisplay.cs").read_text()
         project = (ROOT / "Source/AERISFlightControl/AERISFlightControl.csproj").read_text()
     except Exception:
         return False
-
     markers = (
         'internal const string Codename = "' + OH_CODENAME + '";' in monitor,
         'internal const string Revision = "' + OH_REVISION + '";' in monitor,
@@ -44,8 +45,12 @@ def static_candidate_ready():
         ('codename = ' + OH_CODENAME) in config,
         ('CANDIDATE_NAME="' + CANDIDATE + '"') in build,
         'OPERATION HEALTH PHASE 3 ' + OH_CODENAME + ' GPU VERTEX PROJECTION' in build,
-        'oh_gpu_vertex_projection=' in renderer,
+        'oh_gpu_vertex_requested=' in renderer,
         'oh_gpu_vertex_exact_bypass=' in renderer,
+        'oh_nd_reload_pct=' in renderer,
+        'CPU_EXACT_REQUESTED' in backend,
+        'AERISNdProjectionBackendMode' in settings,
+        'RELOADING ND' in ui,
         'Terrain\\AERISNdGpuVertexProjectionBackend.cs' in project,
     )
     return all(markers)
@@ -54,6 +59,7 @@ def static_candidate_ready():
 def verify_static_candidate():
     print("[AERIS24 GPU VERTEX RUNTIME] existing EPINEPHRINE static candidate detected; parent reconstruction skipped")
     run([sys.executable, ROOT / "Tools/verify_aeris24_gpu_vertex_projection_poc.py"])
+    run([sys.executable, ROOT / "Tools/verify_aeris24_nd_backend_reload.py"])
     run([sys.executable, ROOT / "Tools/verify_aeris24_oh_phase3.py"])
     run([sys.executable, ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"])
     run(["git", "diff", "--check"])
@@ -132,15 +138,13 @@ installed_bundle_sha = sha256(installed_bundle)
 installed_probe_sha = sha256(installed_probe)
 identity_text = identity.read_text(errors="replace")
 config_text = installed_config.read_text(errors="replace")
-
 checks = [
     (source_dll_sha == installed_dll_sha, "built/installed DLL SHA"),
     (source_bundle_sha == installed_bundle_sha, "source/installed shader bundle SHA"),
     (source_probe_sha == installed_probe_sha, "source/installed probe bundle SHA"),
     (("candidate=" + CANDIDATE) in identity_text, "candidate identity"),
     (("gpu_shader_bundle=" + bundle_name) in identity_text, "shader bundle identity"),
-    (("gpu_shader_bundle_sha256=" + source_bundle_sha) in identity_text,
-     "shader bundle SHA identity"),
+    (("gpu_shader_bundle_sha256=" + source_bundle_sha) in identity_text, "shader bundle SHA identity"),
     (("codename = " + OH_CODENAME) in config_text, "Operation Health Phase 3 config identity"),
 ]
 failed = []
@@ -160,5 +164,5 @@ print("gpu_shader_bundle=" + bundle_name)
 print("gpu_shader_bundle_sha256=" + installed_bundle_sha)
 print("gpu_probe_bundle=" + probe_name)
 print("gpu_probe_bundle_sha256=" + installed_probe_sha)
-print("Next runtime gate: require [AERIS24_GPU_BUNDLE_PROBE] PASS/FAIL to classify container compatibility.")
-print("Then require [AERIS24_GPU_VERTEX_PROJECTION] ACTIVE before interpreting GPU performance.")
+print("Next runtime gate: cycle ND MENU PROJ AUTO/CPU/GPU and verify black reload / requested-effective telemetry.")
+print("Explicit CPU must report AssetBundleInit=0; GPU may still fail closed until the native bundle incompatibility is solved.")
