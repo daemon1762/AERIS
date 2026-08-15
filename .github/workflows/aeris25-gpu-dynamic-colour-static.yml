@@ -20,6 +20,7 @@ jobs:
           python3 -m py_compile \
             Tools/fix_aeris25_gpu_dynamic_colour_anchors.py \
             Tools/apply_aeris25_gpu_dynamic_terrain_colour.py \
+            Tools/apply_aeris25_assetbundle_compat_hotfix.py \
             Tools/verify_aeris25_gpu_dynamic_terrain_colour.py \
             Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py \
             Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py \
@@ -38,6 +39,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py \
             2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
           grep -Fq 'core ATROPINE tree already present; reconstruction skipped' aeris25_gpu_dynamic_colour_static.log
+          grep -Fq '[AERIS25 ASSETBUNDLE COMPAT] AERIS25 probe namespace isolated' aeris25_gpu_dynamic_colour_static.log
           grep -Fq '[AERIS25 GPU DYNAMIC COLOUR READY] STATIC READY PASS' aeris25_gpu_dynamic_colour_static.log
       - name: Upload AERIS25 static diagnostic
         if: always()
@@ -49,6 +51,7 @@ jobs:
             Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
             Source/AERISFlightControl/Terrain/AERISNdGpuVertexProjectionBackend.cs
             GpuAssets/Assets/AERISNdExactVertexProjection.shader
+            GpuAssets/Assets/Editor/BuildAERISGpuAssets.cs
             build_ubuntu.sh
           if-no-files-found: error
       - name: Fail if AERIS25 static gate failed
