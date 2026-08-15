@@ -23,12 +23,11 @@ jobs:
             Tools/verify_aeris25_main_thread_commit_governor.py \
             Tools/prepare_aeris25_main_thread_commit_governor_runtime.py
 
-      - name: Reconstruct accepted ADENOSINE and apply Phase6
+      - name: Reconstruct accepted ATROPINE rev009
         shell: bash
         run: |
           set -euo pipefail
           LOG=aeris25_main_thread_commit_governor_static.log
-
           echo '=== AERIS25-1 ATROPINE LINEAGE ===' | tee "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py 2>&1 | tee -a "$LOG"
@@ -43,11 +42,21 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_content_generation_burst_governor_hotfix.py 2>&1 | tee -a "$LOG"
           echo '=== ATROPINE REV009 ACCEPTED PRE-PROMOTION PASS ===' | tee -a "$LOG"
 
+      - name: Promote accepted ADENOSINE Phase5
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_main_thread_commit_governor_static.log
           echo '=== AERIS25-2 ADENOSINE OH_PHASE5_001 ===' | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
           echo '=== ADENOSINE ACCEPTED PRE-PROMOTION PASS ===' | tee -a "$LOG"
 
+      - name: Apply and verify NOREPINEPHRINE Phase6
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_main_thread_commit_governor_static.log
           echo '=== AERIS25-3 NOREPINEPHRINE OH_PHASE6_001 ===' | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
