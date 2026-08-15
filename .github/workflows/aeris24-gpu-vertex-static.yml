@@ -29,6 +29,8 @@ jobs:
             Tools/verify_aeris24_nd_reload_snapshot_hotfix.py \
             Tools/apply_aeris24_system_options_residency_hotfix.py \
             Tools/verify_aeris24_system_options_residency_hotfix.py \
+            Tools/apply_aeris24_warm_visibility_suspend_hotfix.py \
+            Tools/verify_aeris24_warm_visibility_suspend_hotfix.py \
             Tools/promote_aeris24_oh_phase3.py \
             Tools/verify_aeris24_oh_phase3.py \
             Tools/apply_aeris24_gpu_vertex_projection_ready.py \
