@@ -36,6 +36,16 @@ if release_count:
 elif text.count(retain) < 2:
     raise SystemExit("[AERIS25 ANCHORS] rev007 renderer residency tokens missing")
 
+# UiCheckpoint is embedded inside build_ubuntu.sh's printf-generated C# line, not a
+# standalone shell line. Match AERIS24's promotion strategy: substring replace once.
+ui_active = '''bu = replace_active_line(bu,\n    'internal const string UiCheckpoint = "DEV CP3.75 — OPERATION HEALTH PHASE 3 ' + OLD_OH + ' — GPU VERTEX PROJECTION";',\n    'internal const string UiCheckpoint = "DEV CP3.75 — AERIS25 — OPERATION HEALTH PHASE 4 ' + NEW_OH + ' — GPU DYNAMIC TERRAIN COLOUR";',\n    'in-game checkpoint identity')'''
+ui_once = '''bu = replace_once(bu,\n    'internal const string UiCheckpoint = "DEV CP3.75 — OPERATION HEALTH PHASE 3 ' + OLD_OH + ' — GPU VERTEX PROJECTION";',\n    'internal const string UiCheckpoint = "DEV CP3.75 — AERIS25 — OPERATION HEALTH PHASE 4 ' + NEW_OH + ' — GPU DYNAMIC TERRAIN COLOUR";',\n    'in-game checkpoint identity')'''
+if ui_once not in text:
+    if text.count(ui_active) != 1:
+        raise SystemExit("[AERIS25 ANCHORS] embedded UiCheckpoint applicator block mismatch")
+    text = text.replace(ui_active, ui_once, 1)
+    changed = True
+
 if changed:
     path.write_text(text)
     print("[AERIS25 ANCHORS] aligned AERIS25 applicator to accepted rev007 anchors")
