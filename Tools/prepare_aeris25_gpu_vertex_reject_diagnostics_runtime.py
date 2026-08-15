@@ -119,7 +119,12 @@ if not static_candidate_ready():
 else:
     print("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] rev007 generated tree already present; reconstruction skipped")
 
+# Runtime prep deliberately executes both rev007-specific and common AERIS25 verifiers
+# after final revision promotion. This prevents a descendant-identity allowlist from
+# passing CI but failing later inside build_ubuntu.sh's shared prebuild gate.
 run([sys.executable, ROOT / "Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py"])
+run([sys.executable, ROOT / "Tools/verify_aeris25_gpu_dynamic_terrain_colour.py"])
+run([sys.executable, ROOT / "Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py"])
 run([sys.executable, ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"])
 run(["git", "diff", "--check"])
 
