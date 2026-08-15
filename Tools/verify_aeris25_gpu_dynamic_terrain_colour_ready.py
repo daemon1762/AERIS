@@ -17,8 +17,8 @@ U = (ROOT / "build_ubuntu.sh").read_text()
 S = (ROOT / "Tools/build_aeris25_gpu_shader_bundle.sh").read_text()
 P = (ROOT / "Tools/prepare_aeris25_gpu_dynamic_terrain_colour_runtime.py").read_text()
 M = (ROOT / "GpuAssets/Packages/manifest.json").read_text()
-S_ACTIVE = [line.strip() for line in S.splitlines()
-            if line.strip() and not line.lstrip().startswith('#')]
+SH = (ROOT / "GpuAssets/Assets/AERISNdExactVertexProjection.shader").read_text()
+MON = (ROOT / "Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs").read_text()
 checks = []
 def ck(v, name):
     ok = bool(v)
@@ -53,13 +53,26 @@ ck((ROOT / 'Tools/apply_aeris25_assetbundle_compat_hotfix.py').is_file(),
    'AssetBundle compatibility hotfix is generated and repeatable')
 ck('"dependencies": {}' in M,
    'GpuAssets project has no Package Manager dependencies')
-ck(any('-noUpm' in line for line in S_ACTIVE),
+ck('-noUpm' in S,
    'Unity batch AssetBundle generation disables Package Manager')
-ck(any(line == '-logFile "$log_file"' for line in S_ACTIVE) and
-   not any(line == '-logFile -' for line in S_ACTIVE),
+active_shader_build_lines = [line for line in S.splitlines()
+                             if line.strip() and not line.lstrip().startswith('#')]
+active_shader_build = '\n'.join(active_shader_build_lines)
+ck('-logFile "$log_file"' in active_shader_build and '-logFile -' not in active_shader_build,
    'Unity/UPM logging is isolated from caller stdout to a real log file')
 ck('ERR_STREAM_DESTROYED' in S,
    'builder documents Unity 2019 Package Manager destroyed-stream failure containment')
+ck((ROOT / 'Tools/apply_aeris25_gpu_dynamic_colour_perf_hotfix.py').is_file() and
+   (ROOT / 'Tools/verify_aeris25_gpu_dynamic_colour_perf_hotfix.py').is_file(),
+   'ATROPINE rev002 performance hotfix is generated and independently verifiable')
+ck('internal const string Revision = "OH_PHASE4_002";' in MON and
+   'AERIS25_DYNAMIC_COLOUR_MODE_SPLIT' in SH,
+   'final READY tree carries OH_PHASE4_002 mode-exclusive shader contract')
+ck('oh_gpu_dynamic_vertex_submit=' in R and
+   'oh_gpu_vertex_packed_mismatch=' in R and
+   'oh_gpu_vertex_contour_mismatch=' in R and
+   'oh_gpu_vertex_coast_mismatch=' in R,
+   'rev002 runtime publishes GPU vertex pressure and fallback-cause telemetry')
 
 failed = [name for ok, name in checks if not ok]
 print("\n[AERIS25 GPU DYNAMIC TERRAIN COLOUR READY] %d/%d PASS" %
