@@ -5,6 +5,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="$ROOT/GpuAssets"
 MODE="${1:-windows}"
 UNITY_VERSION="2019.4.18f1"
+EXPECTED_WINDOWS_PROBE_SHA="6465e6dfa7c9809a734d5ce85b202b49ea6ee5fcaac19d55d4b75bd532a35f0d"
+AERIS24_PROBE_WINDOWS="$ROOT/GameData/AERISFlightControl/Shaders/aeris_gpu_bundle_probe_windows.bundle"
+AERIS25_PROBE_WINDOWS="$ROOT/GameData/AERISFlightControl/Shaders/aeris25_gpu_dynamic_colour_probe_windows.bundle"
 
 find_unity(){
   if [[ -n "${UNITY_EDITOR:-}" && -x "${UNITY_EDITOR}" ]]; then
@@ -43,6 +46,29 @@ fi
 export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 export TERM=xterm
 
+# AERIS25 runtime acceptance exposed a stale AssetBundle build-cache failure: the
+# emitted Windows probe collapsed from the accepted 1203-byte container to 422 bytes
+# and lost the AssetBundle container object even though the editor version string was
+# still 2019.4.18f1. A deliberate shader rebuild must therefore start from a clean
+# Unity import/build cache. Assets and ProjectSettings are preserved.
+clean_unity_cache(){
+  echo "[AERIS25 GPU DYNAMIC COLOUR] clean Unity project cache: Library/Temp/obj"
+  rm -rf "$PROJECT/Library" "$PROJECT/Temp" "$PROJECT/obj"
+}
+
+bundle_has_container(){
+  python3 - "$1" <<'PY'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1])
+b=p.read_bytes()
+if not b.startswith(b"UnityFS\x00"):
+    raise SystemExit(1)
+if b"AssetBundle" not in b:
+    raise SystemExit(2)
+PY
+}
+
 run_target(){
   local method="$1"
   local build_target="$2"
@@ -55,21 +81,27 @@ run_target(){
     -logFile -
 }
 
+clean_unity_cache
+
 case "$MODE" in
   windows)
     run_target AERIS.Editor.BuildAERISGpuAssets.BuildWindows Win64
     BUNDLE="$ROOT/GameData/AERISFlightControl/Shaders/aeris25_nd_gpu_dynamic_terrain_colour_windows.bundle"
+    PROBE="$AERIS25_PROBE_WINDOWS"
     ;;
   linux)
     run_target AERIS.Editor.BuildAERISGpuAssets.BuildLinux Linux64
     BUNDLE="$ROOT/GameData/AERISFlightControl/Shaders/aeris25_nd_gpu_dynamic_terrain_colour_linux.bundle"
+    PROBE="$ROOT/GameData/AERISFlightControl/Shaders/aeris25_gpu_dynamic_colour_probe_linux.bundle"
     ;;
   all)
     run_target AERIS.Editor.BuildAERISGpuAssets.BuildWindows Win64
     run_target AERIS.Editor.BuildAERISGpuAssets.BuildLinux Linux64
     sha256sum \
       "$ROOT/GameData/AERISFlightControl/Shaders/aeris25_nd_gpu_dynamic_terrain_colour_windows.bundle" \
-      "$ROOT/GameData/AERISFlightControl/Shaders/aeris25_nd_gpu_dynamic_terrain_colour_linux.bundle"
+      "$ROOT/GameData/AERISFlightControl/Shaders/aeris25_gpu_dynamic_colour_probe_windows.bundle" \
+      "$ROOT/GameData/AERISFlightControl/Shaders/aeris25_nd_gpu_dynamic_terrain_colour_linux.bundle" \
+      "$ROOT/GameData/AERISFlightControl/Shaders/aeris25_gpu_dynamic_colour_probe_linux.bundle"
     exit 0
     ;;
   *)
@@ -79,5 +111,33 @@ case "$MODE" in
 esac
 
 test -s "$BUNDLE" || { echo "[AERIS25 GPU DYNAMIC COLOUR] ERROR: bundle not emitted: $BUNDLE" >&2; exit 1; }
+test -s "$PROBE" || { echo "[AERIS25 GPU DYNAMIC COLOUR] ERROR: probe not emitted: $PROBE" >&2; exit 1; }
+
+if ! bundle_has_container "$BUNDLE"; then
+  echo "[AERIS25 GPU DYNAMIC COLOUR] ERROR: shader bundle lacks Unity AssetBundle container metadata: $BUNDLE" >&2
+  exit 1
+fi
+if ! bundle_has_container "$PROBE"; then
+  echo "[AERIS25 GPU DYNAMIC COLOUR] ERROR: probe lacks Unity AssetBundle container metadata: $PROBE" >&2
+  exit 1
+fi
+
+if [[ "$MODE" == "windows" ]]; then
+  ACTUAL_PROBE_SHA="$(sha256sum "$PROBE" | awk '{print $1}')"
+  if [[ "$ACTUAL_PROBE_SHA" != "$EXPECTED_WINDOWS_PROBE_SHA" ]]; then
+    echo "[AERIS25 GPU DYNAMIC COLOUR] ERROR: Windows compatibility control probe SHA mismatch" >&2
+    echo "expected=$EXPECTED_WINDOWS_PROBE_SHA" >&2
+    echo "actual=$ACTUAL_PROBE_SHA" >&2
+    echo "size=$(stat -c%s "$PROBE")" >&2
+    echo "Refusing KSP install; AssetBundle generation environment is not accepted." >&2
+    exit 1
+  fi
+  # The AERIS25 probe is byte-identical to the accepted AERIS24 compatibility probe.
+  # Repair/preserve the frozen AERIS24 probe name only after the exact SHA gate passes.
+  cp -f "$PROBE" "$AERIS24_PROBE_WINDOWS"
+  echo "[AERIS25 GPU DYNAMIC COLOUR] Windows probe compatibility gate PASS"
+  echo "[AERIS25 GPU DYNAMIC COLOUR] restored frozen AERIS24 probe from exact accepted bytes"
+fi
+
 echo "[AERIS25 GPU DYNAMIC COLOUR] bundle ready: $BUNDLE"
-sha256sum "$BUNDLE"
+sha256sum "$BUNDLE" "$PROBE"
