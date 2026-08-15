@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OLD = "PENI" + "CILLIN"
 NEW = "EPI" + "NEPHRINE"
 REV_OLD = "OH_PHASE2_001"
-REV_NEW = "OH_PHASE3_006"
+REV_NEW = "OH_PHASE3_007"
 CANDIDATE = "AERIS24_GPU_VERTEX_PROJECTION_POC"
 
 def one(text, old, new, label):
@@ -65,6 +65,6 @@ build.write_text(text)
 print("[OH PHASE3] codename=" + NEW)
 print("[OH PHASE3] revision=" + REV_NEW)
 print("[OH PHASE3] candidate=" + CANDIDATE)
-print("[OH PHASE3] SYSTEM options + resident GPU visibility hotfix revision PASS")
+print("[OH PHASE3] warm visibility suspend + bounded post-FRONT prune revision PASS")
 print("[OH PHASE3] preserved config policy + package-owned codename promotion PASS")
 print("[OH PHASE3] identity promotion PASS")
