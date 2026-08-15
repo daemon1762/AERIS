@@ -48,20 +48,17 @@ else:
 
 renderer = ROOT / "Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs"
 text = renderer.read_text()
-old = '''                (packedTerrainSource == null ? 0L :
-                    packedTerrainSource.LongLength * (3L * 8L + 3L * 4L + 3L * 4L + 4L) +
-                    packedTerrainIndexCount * 4L) +'''
-new = '''                (packedTerrainSource == null ? 0L :
-                    packedTerrainSource.LongLength * (3L * 8L + 3L * 4L + 3L * 4L + 4L + 3L * 4L) +
-                    packedTerrainIndexCount * 4L) +'''
-if new not in text:
-    if text.count(old) != 1:
-        raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] TEXCOORD2 VRAM accounting anchor mismatch")
-    text = text.replace(old, new, 1)
+semantic_accounting = '''                (packedTerrainSource == null ? 0L :
+                    packedTerrainSource.LongLength * (3L * 4L)) +'''
+if semantic_accounting not in text:
+    anchor = '''                    packedTerrainIndexCount * 4L) +'''
+    if text.count(anchor) != 1:
+        raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] packed terrain byte-accounting tail mismatch")
+    text = text.replace(anchor, anchor + "\n" + semantic_accounting, 1)
     renderer.write_text(text)
-    print("[AERIS25 GPU DYNAMIC COLOUR READY] added persistent TEXCOORD2 float3 to AERIS-managed VRAM accounting")
+    print("[AERIS25 GPU DYNAMIC COLOUR READY] added independent TEXCOORD2 float3 semantic accounting (+12 bytes/packed vertex)")
 else:
-    print("[AERIS25 GPU DYNAMIC COLOUR READY] TEXCOORD2 VRAM accounting already present")
+    print("[AERIS25 GPU DYNAMIC COLOUR READY] TEXCOORD2 semantic accounting already present")
 
 build_path = ROOT / "build_ubuntu.sh"
 build = build_path.read_text()
