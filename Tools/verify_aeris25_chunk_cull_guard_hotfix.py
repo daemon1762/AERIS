@@ -17,8 +17,9 @@ def ck(value, name):
     print(("[PASS] " if ok else "[FAIL] ") + name)
 
 
-ck('internal const string Revision = "OH_PHASE4_003";' in M,
-   'ATROPINE revision is OH_PHASE4_003')
+ck(('internal const string Revision = "OH_PHASE4_003";' in M) or
+   ('internal const string Revision = "OH_PHASE4_004";' in M),
+   'ATROPINE revision is rev003 or approved rev004 descendant')
 ck('AERIS25_CHUNK_CULL_GUARD' in R and
    'TileMayIntersectPresentation(tile, projection)' in R,
    'dot-cap cull candidates receive projected presentation witness')
@@ -45,8 +46,9 @@ ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R,
    'Golden ARGB32/Bilinear render target remains unchanged')
 ck('runwayMapLockErrorPx=' in R and 'visualCoverage=' in R,
    'Runway Map Lock and Golden coverage telemetry remain present')
-ck('REV003 CHUNK CULL GUARD' in U,
-   'build and in-game identity expose rev003 chunk cull guard')
+ck(('REV003 CHUNK CULL GUARD' in U) or
+   ('REV004 TEMPORAL FOUNDATION OVERSCAN' in U),
+   'build identity exposes rev003 guard or approved rev004 descendant')
 
 frozen = ['Source/AERISFlightControl/AA', 'Source/AERISFlightControl/Autopilot',
           'Source/AERISFlightControl/Protect', 'Source/AERISFlightControl/Landing']
