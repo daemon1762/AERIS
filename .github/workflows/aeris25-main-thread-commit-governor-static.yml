@@ -52,14 +52,19 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
           echo '=== ADENOSINE ACCEPTED PRE-PROMOTION PASS ===' | tee -a "$LOG"
 
-      - name: Apply and verify NOREPINEPHRINE Phase6
+      - name: Apply NOREPINEPHRINE Phase6
         shell: bash
         run: |
           set -euo pipefail
           LOG=aeris25_main_thread_commit_governor_static.log
           echo '=== AERIS25-3 NOREPINEPHRINE OH_PHASE6_001 ===' | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
-          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
+
+      - name: Verify NOREPINEPHRINE Phase6
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_main_thread_commit_governor.py 2>&1 | tee -a aeris25_main_thread_commit_governor_static.log
 
       - name: Phase6 inherited contract matrix
         shell: bash
