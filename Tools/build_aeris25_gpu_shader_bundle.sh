@@ -8,6 +8,7 @@ UNITY_VERSION="2019.4.18f1"
 EXPECTED_WINDOWS_PROBE_SHA="6465e6dfa7c9809a734d5ce85b202b49ea6ee5fcaac19d55d4b75bd532a35f0d"
 AERIS24_PROBE_WINDOWS="$ROOT/GameData/AERISFlightControl/Shaders/aeris_gpu_bundle_probe_windows.bundle"
 AERIS25_PROBE_WINDOWS="$ROOT/GameData/AERISFlightControl/Shaders/aeris25_gpu_dynamic_colour_probe_windows.bundle"
+UNITY_LOG_DIR="$ROOT/.aeris25-unity-logs"
 
 find_unity(){
   if [[ -n "${UNITY_EDITOR:-}" && -x "${UNITY_EDITOR}" ]]; then
@@ -72,13 +73,39 @@ PY
 run_target(){
   local method="$1"
   local build_target="$2"
+  local log_file="$UNITY_LOG_DIR/${build_target}.log"
+  mkdir -p "$UNITY_LOG_DIR"
+  rm -f "$log_file"
   echo "[AERIS25 GPU DYNAMIC COLOUR] Unity=$UNITY"
   echo "[AERIS25 GPU DYNAMIC COLOUR] method=$method target=$build_target"
-  "$UNITY" -batchmode -nographics -quit \
+  echo "[AERIS25 GPU DYNAMIC COLOUR] Package Manager=DISABLED (-noUpm; GpuAssets has no package dependencies)"
+  echo "[AERIS25 GPU DYNAMIC COLOUR] Unity log=$log_file"
+
+  # Unity 2019.4's Package Manager server is an external Node process. On modern
+  # Linux it can throw ERR_STREAM_DESTROYED while Winston writes to a stdout stream
+  # that Unity has already closed. This project has an empty Packages dependency set,
+  # so keep UPM entirely out of the AssetBundle generation path. Also write the Unity
+  # Editor log to a real file rather than '-logFile -' so no child logger shares the
+  # caller's terminal stream during Editor shutdown.
+  set +e
+  "$UNITY" -batchmode -nographics -quit -noUpm \
     -buildTarget "$build_target" \
     -projectPath "$PROJECT" \
     -executeMethod "$method" \
-    -logFile -
+    -logFile "$log_file"
+  local status=$?
+  set -e
+
+  if [[ $status -ne 0 ]]; then
+    echo "[AERIS25 GPU DYNAMIC COLOUR] ERROR: Unity exited status=$status" >&2
+    echo "[AERIS25 GPU DYNAMIC COLOUR] ---- Unity log tail ----" >&2
+    tail -n 160 "$log_file" >&2 || true
+    echo "[AERIS25 GPU DYNAMIC COLOUR] ---- end Unity log ----" >&2
+    return "$status"
+  fi
+
+  echo "[AERIS25 GPU DYNAMIC COLOUR] Unity batch process exited cleanly"
+  grep -E '\[AERIS25 GPU DYNAMIC COLOUR\]|AssetBundle|Error|Exception' "$log_file" | tail -n 80 || true
 }
 
 clean_unity_cache
