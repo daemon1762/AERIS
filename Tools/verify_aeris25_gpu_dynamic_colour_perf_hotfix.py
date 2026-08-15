@@ -19,8 +19,9 @@ ck(('internal const string Revision = "OH_PHASE4_002";' in M) or
    ('internal const string Revision = "OH_PHASE4_003";' in M) or
    ('internal const string Revision = "OH_PHASE4_004";' in M) or
    ('internal const string Revision = "OH_PHASE4_005";' in M) or
-   ('internal const string Revision = "OH_PHASE4_006";' in M),
-   'ATROPINE revision is rev002 or approved rev003/rev004/rev005/rev006 descendant')
+   ('internal const string Revision = "OH_PHASE4_006";' in M) or
+   ('internal const string Revision = "OH_PHASE4_007";' in M),
+   'ATROPINE revision is rev002 or approved rev003/rev004/rev005/rev006/rev007 descendant')
 ck('AERIS25_DYNAMIC_COLOUR_MODE_SPLIT' in S,
    'dynamic-colour shader carries explicit mode-split marker')
 ck('if (_AerisTerrainDisplayMode > 0.5)' in S and
@@ -61,17 +62,15 @@ ck('runwayMapLockErrorPx=' in R and 'visualCoverage=' in R,
 frozen = ['Source/AERISFlightControl/AA', 'Source/AERISFlightControl/Autopilot',
           'Source/AERISFlightControl/Protect', 'Source/AERISFlightControl/Landing']
 try:
-    changed = subprocess.check_output(
-        ['git', '-C', str(ROOT), 'diff', '--name-only', 'HEAD', '--'] + frozen,
-        text=True).strip().splitlines()
+    changed=subprocess.check_output(['git','-C',str(ROOT),'diff','--name-only','HEAD','--']+frozen,text=True).strip().splitlines()
 except Exception:
-    changed = ['GIT_DIFF_UNAVAILABLE']
-ck(changed == [], 'AA/AP/PROTECT/LAND working-tree edits remain NONE')
+    changed=['GIT_DIFF_UNAVAILABLE']
+ck(changed==[],'AA/AP/PROTECT/LAND working-tree edits remain NONE')
 
-failed = [name for ok, name in checks if not ok]
+failed=[name for ok,name in checks if not ok]
 print("\n[AERIS25 ATROPINE REV002 PERFORMANCE] %d/%d PASS" %
-      (len(checks) - len(failed), len(checks)))
+      (len(checks)-len(failed),len(checks)))
 if failed:
-    print('FAILED: ' + '; '.join(failed))
+    print('FAILED: '+'; '.join(failed))
     raise SystemExit(1)
 print('[AERIS25 ATROPINE REV002 PERFORMANCE] STATIC PASS')
