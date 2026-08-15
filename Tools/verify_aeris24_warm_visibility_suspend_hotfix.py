@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-sys.dont_writebytecode = True
+sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 R = (ROOT / "Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs").read_text()
 U = (ROOT / "Source/AERISFlightControl/UI/AERISNavigationDisplay.cs").read_text()
