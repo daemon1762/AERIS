@@ -65,9 +65,10 @@ ck('ERR_STREAM_DESTROYED' in S,
 ck((ROOT / 'Tools/apply_aeris25_gpu_dynamic_colour_perf_hotfix.py').is_file() and
    (ROOT / 'Tools/verify_aeris25_gpu_dynamic_colour_perf_hotfix.py').is_file(),
    'ATROPINE rev002 performance hotfix is generated and independently verifiable')
-ck('internal const string Revision = "OH_PHASE4_002";' in MON and
+ck((('internal const string Revision = "OH_PHASE4_002";' in MON) or
+    ('internal const string Revision = "OH_PHASE4_003";' in MON)) and
    'AERIS25_DYNAMIC_COLOUR_MODE_SPLIT' in SH,
-   'final READY tree carries OH_PHASE4_002 mode-exclusive shader contract')
+   'final READY tree carries rev002 mode split or approved rev003 descendant')
 ck('oh_gpu_dynamic_vertex_submit=' in R and
    'oh_gpu_vertex_packed_mismatch=' in R and
    'oh_gpu_vertex_contour_mismatch=' in R and
