@@ -10,7 +10,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS25_GPU_DYNAMIC_TERRAIN_COLOUR"
 OH_CODENAME = "ATRO" + "PINE"
-OH_REVISION = "OH_PHASE4_002"
+OH_REVISION = "OH_PHASE4_003"
 EXPECTED_WINDOWS_PROBE_SHA = "6465e6dfa7c9809a734d5ce85b202b49ea6ee5fcaac19d55d4b75bd532a35f0d"
 
 
@@ -52,9 +52,14 @@ def static_candidate_ready():
         ('internal const string Candidate = "' + CANDIDATE + '";') in monitor,
         ('codename = ' + OH_CODENAME) in config,
         ('CANDIDATE_NAME="' + CANDIDATE + '"') in build,
+        'REV003 CHUNK CULL GUARD' in build,
+        'verify_aeris25_chunk_cull_guard_hotfix.py' in build,
         'oh_gpu_dynamic_colour=' in renderer,
         'oh_gpu_dynamic_vertex_submit=' in renderer,
         'oh_gpu_vertex_packed_mismatch=' in renderer,
+        'AERIS25_CHUNK_CULL_GUARD' in renderer,
+        'oh_cull_guard_veto=' in renderer,
+        'oh_cull_guard_confirm=' in renderer,
         'GpuDynamicColourAttributesReady' in renderer,
         'SetUVs(2, gpuDynamicTerrainSemanticScratch)' in renderer,
         'packedTerrainSource.LongLength * (3L * 4L)) +' in renderer,
@@ -70,7 +75,7 @@ def static_candidate_ready():
 
 
 parser = argparse.ArgumentParser(
-    description="Prepare, build and install AERIS25 GPU Dynamic Terrain Colour.")
+    description="Prepare, build and install AERIS25 GPU Dynamic Terrain Colour rev003.")
 parser.add_argument("ksp_path", help="Kerbal Space Program installation root")
 parser.add_argument("--rebuild-shader", action="store_true",
                     help="force a clean rebuild of the platform AERIS25 shader/probe bundles")
@@ -82,10 +87,15 @@ ksp = Path(args.ksp_path).expanduser().resolve()
 if not ksp.is_dir():
     raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] KSP path not found: " + str(ksp))
 
+# The checked-in branch remains reconstructible from the accepted AERIS24 parent.
+# Build the rev002 GPU Dynamic Colour baseline first, then layer the C#-only rev003
+# chunk-cull safety guard. The rev003 hotfix intentionally does not alter shader bytes.
 if not static_candidate_ready():
     run([sys.executable, ROOT / "Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py"])
+    run([sys.executable, ROOT / "Tools/apply_aeris25_chunk_cull_guard_hotfix.py"])
 run([sys.executable, ROOT / "Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py"])
 run([sys.executable, ROOT / "Tools/verify_aeris25_gpu_dynamic_colour_perf_hotfix.py"])
+run([sys.executable, ROOT / "Tools/verify_aeris25_chunk_cull_guard_hotfix.py"])
 run([sys.executable, ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"])
 run(["git", "diff", "--check"])
 
@@ -114,7 +124,7 @@ if need_rebuild:
         env["UNITY_EDITOR"] = args.unity_editor
     run(["bash", ROOT / "Tools/build_aeris25_gpu_shader_bundle.sh", shader_mode], env=env)
 else:
-    print("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] using existing accepted AERIS25 shader/probe bundle pair")
+    print("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] rev003 has no shader change; reusing existing accepted AERIS25 shader/probe bundle pair")
 
 for path, label in ((bundle, "shader"), (probe, "probe")):
     if not path.is_file() or path.stat().st_size == 0:
@@ -179,6 +189,7 @@ print("gpu_shader_bundle=" + bundle_name)
 print("gpu_shader_bundle_sha256=" + installed_bundle_sha)
 print("gpu_probe_bundle=" + probe_name)
 print("gpu_probe_bundle_sha256=" + installed_probe_sha)
-print("Runtime gate: verify oh_gpu_dynamic_colour=ACTIVE and OH_PHASE4_002.")
-print("Observe oh_gpu_dynamic_vertex_submit and packed/contour/coast mismatch counters while flying.")
-print("Golden visualCoverage=1.000, Runway Map Lock, 10 Hz authority and warm OFF/ON behavior must remain unchanged.")
+print("Runtime gate: verify oh_gpu_dynamic_colour=ACTIVE and OH_PHASE4_003.")
+print("Observe oh_cull_guard_veto / oh_cull_guard_confirm while reproducing 160 km Track-Up flight.")
+print("No rectangular terrain holes; semantic failures/mismatches remain zero; Golden visualCoverage=1.000 and Runway Map Lock remain required.")
+print("Performance must remain materially recovered from rev001; fixed 10 Hz authority and warm OFF/ON behavior remain unchanged.")
