@@ -21,6 +21,40 @@ def ck(value, name):
     print(('[PASS] ' if ok else '[FAIL] ') + name)
 
 
+def matching_brace(text, open_index):
+    depth = 0
+    i = open_index
+    state = 'code'
+    while i < len(text):
+        c = text[i]
+        n = text[i + 1] if i + 1 < len(text) else ''
+        if state == 'code':
+            if c == '/' and n == '/': state = 'line'; i += 2; continue
+            if c == '/' and n == '*': state = 'block'; i += 2; continue
+            if c == '"': state = 'string'; i += 1; continue
+            if c == "'": state = 'char'; i += 1; continue
+            if c == '{': depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0: return i
+            i += 1; continue
+        if state == 'line':
+            if c == '\n': state = 'code'
+            i += 1; continue
+        if state == 'block':
+            if c == '*' and n == '/': state = 'code'; i += 2; continue
+            i += 1; continue
+        if state == 'string':
+            if c == '\\': i += 2; continue
+            if c == '"': state = 'code'
+            i += 1; continue
+        if state == 'char':
+            if c == '\\': i += 2; continue
+            if c == "'": state = 'code'
+            i += 1; continue
+    return -1
+
+
 ck('internal const string Codename = "NOREPINEPHRINE";' in M and
    'internal const string Revision = "OH_PHASE6_001";' in M and
    'internal const string Candidate = "AERIS25_MAIN_THREAD_COMMIT_GOVERNOR";' in M and
@@ -40,8 +74,9 @@ ck('SteadyContentCommitMaximumResults = 2' in R and
    'ATROPINE rev009 2/4 count ceilings remain hard safety rails')
 
 start = R.find('        void DrainCompleted(AERISTerrainTileSystem system)')
-end = R.find('        bool IsEntryGenerationCurrent(', start)
-drain = R[start:end] if start >= 0 and end > start else ''
+method_open = R.find('{', start) if start >= 0 else -1
+end = matching_brace(R, method_open) if method_open >= 0 else -1
+drain = R[start:end + 1] if start >= 0 and end > start else ''
 ck('rasterizer.Drain(completed, 1)' in drain and
    'rasterizer.Drain(completed, maximum)' not in drain,
    'completed raster results are consumed one at a time')
