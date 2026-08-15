@@ -16,6 +16,7 @@ E = (ROOT / "GpuAssets/Assets/Editor/BuildAERISGpuAssets.cs").read_text()
 U = (ROOT / "build_ubuntu.sh").read_text()
 S = (ROOT / "Tools/build_aeris25_gpu_shader_bundle.sh").read_text()
 P = (ROOT / "Tools/prepare_aeris25_gpu_dynamic_terrain_colour_runtime.py").read_text()
+M = (ROOT / "GpuAssets/Packages/manifest.json").read_text()
 checks = []
 def ck(v, name):
     ok = bool(v)
@@ -48,6 +49,14 @@ ck('b"AssetBundle"' in P and 'EXPECTED_WINDOWS_PROBE_SHA' in P,
    'runtime preparation rejects malformed/unaccepted bundle containers before install')
 ck((ROOT / 'Tools/apply_aeris25_assetbundle_compat_hotfix.py').is_file(),
    'AssetBundle compatibility hotfix is generated and repeatable')
+ck('"dependencies": {}' in M,
+   'GpuAssets project has no Package Manager dependencies')
+ck('-noUpm' in S,
+   'Unity batch AssetBundle generation disables Package Manager')
+ck('-logFile "$log_file"' in S and '-logFile -' not in S,
+   'Unity/UPM logging is isolated from caller stdout to a real log file')
+ck('ERR_STREAM_DESTROYED' in S,
+   'builder documents Unity 2019 Package Manager destroyed-stream failure containment')
 
 failed = [name for ok, name in checks if not ok]
 print("\n[AERIS25 GPU DYNAMIC TERRAIN COLOUR READY] %d/%d PASS" %
