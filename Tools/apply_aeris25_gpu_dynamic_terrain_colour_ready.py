@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-sys.dont_write_bytecode = True
+sys.dont_writebytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS25_GPU_DYNAMIC_TERRAIN_COLOUR"
 CODENAME = "ATRO" + "PINE"
@@ -51,9 +51,9 @@ text = renderer.read_text()
 semantic_accounting = '''                (packedTerrainSource == null ? 0L :
                     packedTerrainSource.LongLength * (3L * 4L)) +'''
 if semantic_accounting not in text:
-    anchor = '''                    packedTerrainIndexCount * 4L) +'''
+    anchor = '''                packedTerrainIndexCount * 4L +'''
     if text.count(anchor) != 1:
-        raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] packed terrain byte-accounting tail mismatch")
+        raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] packed terrain index-accounting anchor mismatch")
     text = text.replace(anchor, anchor + "\n" + semantic_accounting, 1)
     renderer.write_text(text)
     print("[AERIS25 GPU DYNAMIC COLOUR READY] added independent TEXCOORD2 float3 semantic accounting (+12 bytes/packed vertex)")
