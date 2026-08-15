@@ -1,0 +1,140 @@
+name: AERIS25 GPU Dynamic Colour Static
+
+on:
+  push:
+    branches:
+      - agent/aeris25-gpu-dynamic-terrain-colour
+  pull_request:
+    branches:
+      - agent/aeris24-gpu-vertex-projection-poc
+
+jobs:
+  source-and-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: AERIS25 script syntax
+        run: |
+          python3 -m py_compile \
+            Tools/fix_aeris25_gpu_dynamic_colour_anchors.py \
+            Tools/apply_aeris25_gpu_dynamic_terrain_colour.py \
+            Tools/apply_aeris25_assetbundle_compat_hotfix.py \
+            Tools/apply_aeris25_gpu_dynamic_colour_perf_hotfix.py \
+            Tools/apply_aeris25_chunk_cull_guard_hotfix.py \
+            Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py \
+            Tools/apply_aeris25_foundation_cull_bypass_hotfix.py \
+            Tools/apply_aeris25_renderable_entry_gate_hotfix.py \
+            Tools/verify_aeris25_gpu_dynamic_terrain_colour.py \
+            Tools/verify_aeris25_gpu_dynamic_colour_perf_hotfix.py \
+            Tools/verify_aeris25_chunk_cull_guard_hotfix.py \
+            Tools/verify_aeris25_temporal_foundation_overscan_hotfix.py \
+            Tools/verify_aeris25_foundation_cull_bypass_hotfix.py \
+            Tools/verify_aeris25_renderable_entry_gate_hotfix.py \
+            Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py \
+            Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py \
+            Tools/prepare_aeris25_gpu_dynamic_terrain_colour_runtime.py
+          bash -n Tools/build_aeris25_gpu_shader_bundle.sh
+      - name: Generate and verify AERIS25 ATROPINE candidate
+        id: candidate
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          echo '=== REV002 BASELINE GENERATION ===' | tee aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          echo '=== REV002 IDEMPOTENT RE-ENTRY ===' | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          grep -Fq 'core ATROPINE tree already present; reconstruction skipped' aeris25_gpu_dynamic_colour_static.log
+          grep -Fq '[AERIS25 ASSETBUNDLE COMPAT] AERIS25 probe namespace isolated' aeris25_gpu_dynamic_colour_static.log
+          grep -Fq '[AERIS25 ATROPINE REV002 PERFORMANCE] STATIC PASS' aeris25_gpu_dynamic_colour_static.log
+          grep -Fq '[AERIS25 GPU DYNAMIC COLOUR READY] STATIC READY PASS' aeris25_gpu_dynamic_colour_static.log
+
+          echo '=== REV003 CHUNK CULL GUARD ===' | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_chunk_cull_guard_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          echo '=== REV003 IDEMPOTENT RE-ENTRY ===' | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_chunk_cull_guard_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          grep -Fq '[AERIS25 ATROPINE REV003 CHUNK CULL GUARD] STATIC PASS' aeris25_gpu_dynamic_colour_static.log
+          grep -Fq 'presentation cull safety guard already present' aeris25_gpu_dynamic_colour_static.log
+
+          echo '=== REV004 TEMPORAL FOUNDATION OVERSCAN ===' | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_temporal_foundation_overscan_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          echo '=== REV004 IDEMPOTENT RE-ENTRY ===' | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_temporal_foundation_overscan_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          grep -Fq '[AERIS25 ATROPINE REV004 TEMPORAL FOUNDATION OVERSCAN] STATIC PASS' aeris25_gpu_dynamic_colour_static.log
+          grep -Fq 'temporal foundation overscan already present' aeris25_gpu_dynamic_colour_static.log
+
+          echo '=== REV005 FOUNDATION CULL BYPASS (REJECTED RUNTIME HYPOTHESIS) ===' | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_foundation_cull_bypass_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          echo '=== REV005 IDEMPOTENT RE-ENTRY ===' | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_foundation_cull_bypass_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          grep -Fq '[AERIS25 ATROPINE REV005 FOUNDATION CULL BYPASS] STATIC PASS' aeris25_gpu_dynamic_colour_static.log
+          grep -Fq 'Global/FAR foundation cull bypass already present' aeris25_gpu_dynamic_colour_static.log
+
+          echo '=== REV006 RENDERABLE ENTRY GATE ===' | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_dynamic_colour_perf_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_chunk_cull_guard_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_temporal_foundation_overscan_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_renderable_entry_gate_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          echo '=== REV006 IDEMPOTENT RE-ENTRY ===' | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_renderable_entry_gate_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          git diff --check
+          grep -Fq '[AERIS25 ATROPINE REV006 RENDERABLE ENTRY GATE] STATIC PASS' aeris25_gpu_dynamic_colour_static.log
+          grep -Fq 'renderable Entry promotion gate already present' aeris25_gpu_dynamic_colour_static.log
+          grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' aeris25_gpu_dynamic_colour_static.log
+      - name: Upload AERIS25 static diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeris25-gpu-dynamic-colour-static-log
+          path: |
+            aeris25_gpu_dynamic_colour_static.log
+            Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+            Source/AERISFlightControl/Terrain/AERISNdGpuVertexProjectionBackend.cs
+            Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs
+            GpuAssets/Assets/AERISNdExactVertexProjection.shader
+            GpuAssets/Assets/Editor/BuildAERISGpuAssets.cs
+            build_ubuntu.sh
+          if-no-files-found: error
+      - name: Fail if AERIS25 static gate failed
+        if: steps.candidate.outcome == 'failure'
+        shell: bash
+        run: |
+          tail -n 220 aeris25_gpu_dynamic_colour_static.log || true
+          SUMMARY="$(tail -n 90 aeris25_gpu_dynamic_colour_static.log | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')"
+          echo "::error title=AERIS25 ATROPINE rev006 renderable-entry static candidate gate::${SUMMARY}"
+          exit 1

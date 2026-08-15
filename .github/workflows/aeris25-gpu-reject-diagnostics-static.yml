@@ -1,0 +1,113 @@
+name: AERIS25 GPU Reject Diagnostics Static
+
+on:
+  push:
+    branches:
+      - agent/aeris25-gpu-dynamic-terrain-colour
+  pull_request:
+    branches:
+      - agent/aeris24-gpu-vertex-projection-poc
+
+jobs:
+  reject-attribution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rev007 script syntax
+        run: |
+          python3 -m py_compile \
+            Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
+            Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
+            Tools/prepare_aeris25_gpu_vertex_reject_diagnostics_runtime.py \
+            Tools/verify_aeris25_gpu_dynamic_terrain_colour.py \
+            Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py
+
+      - name: Generate and verify ATROPINE rev007
+        id: candidate
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          LOG=aeris25_gpu_vertex_reject_diagnostics_static.log
+
+          echo '=== REV002 BASELINE GENERATION ===' | tee "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py \
+            2>&1 | tee -a "$LOG"
+
+          echo '=== REV003 CHUNK CULL GUARD ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py \
+            2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_chunk_cull_guard_hotfix.py \
+            2>&1 | tee -a "$LOG"
+
+          echo '=== REV004 TEMPORAL FOUNDATION OVERSCAN ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py \
+            2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_temporal_foundation_overscan_hotfix.py \
+            2>&1 | tee -a "$LOG"
+
+          echo '=== REV005 FOUNDATION CULL BYPASS (REJECTED HYPOTHESIS) ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py \
+            2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_foundation_cull_bypass_hotfix.py \
+            2>&1 | tee -a "$LOG"
+
+          echo '=== REV006 RENDERABLE ENTRY GATE (REJECTED HYPOTHESIS) ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py \
+            2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_renderable_entry_gate_hotfix.py \
+            2>&1 | tee -a "$LOG"
+
+          echo '=== REV007 GPU VERTEX REJECT DIAGNOSTICS ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
+            2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
+            2>&1 | tee -a "$LOG"
+
+          echo '=== REV007 COMMON AERIS25 VERIFIERS ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_dynamic_terrain_colour.py \
+            2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py \
+            2>&1 | tee -a "$LOG"
+
+          echo '=== REV007 IDEMPOTENT RE-ENTRY ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
+            2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
+            2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py \
+            2>&1 | tee -a "$LOG"
+
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py \
+            2>&1 | tee -a "$LOG"
+          git diff --check
+
+          grep -Fq '[AERIS25 ATROPINE REV007 GPU VERTEX REJECT DIAGNOSTICS] STATIC PASS' "$LOG"
+          grep -Fq '[AERIS25 GPU DYNAMIC TERRAIN COLOUR] STATIC PASS' "$LOG"
+          grep -Fq '[AERIS25 GPU DYNAMIC TERRAIN COLOUR READY] STATIC PASS' "$LOG"
+          grep -Fq 'GPU vertex reject diagnostics already present' "$LOG"
+          grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' "$LOG"
+
+      - name: Upload rev007 static diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeris25-gpu-vertex-reject-diagnostics-static-log
+          path: |
+            aeris25_gpu_vertex_reject_diagnostics_static.log
+            Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+            Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs
+            build_ubuntu.sh
+          if-no-files-found: error
+
+      - name: Fail if rev007 static gate failed
+        if: steps.candidate.outcome == 'failure'
+        shell: bash
+        run: |
+          tail -n 240 aeris25_gpu_vertex_reject_diagnostics_static.log || true
+          SUMMARY="$(tail -n 100 aeris25_gpu_vertex_reject_diagnostics_static.log | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')"
+          echo "::error title=AERIS25 ATROPINE rev007 GPU reject diagnostics static gate::${SUMMARY}"
+          exit 1
