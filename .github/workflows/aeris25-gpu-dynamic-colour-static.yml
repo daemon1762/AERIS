@@ -23,9 +23,11 @@ jobs:
             Tools/apply_aeris25_assetbundle_compat_hotfix.py \
             Tools/apply_aeris25_gpu_dynamic_colour_perf_hotfix.py \
             Tools/apply_aeris25_chunk_cull_guard_hotfix.py \
+            Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py \
             Tools/verify_aeris25_gpu_dynamic_terrain_colour.py \
             Tools/verify_aeris25_gpu_dynamic_colour_perf_hotfix.py \
             Tools/verify_aeris25_chunk_cull_guard_hotfix.py \
+            Tools/verify_aeris25_temporal_foundation_overscan_hotfix.py \
             Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py \
             Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py \
             Tools/prepare_aeris25_gpu_dynamic_terrain_colour_runtime.py
@@ -46,12 +48,9 @@ jobs:
           grep -Fq '[AERIS25 ASSETBUNDLE COMPAT] AERIS25 probe namespace isolated' aeris25_gpu_dynamic_colour_static.log
           grep -Fq '[AERIS25 ATROPINE REV002 PERFORMANCE] STATIC PASS' aeris25_gpu_dynamic_colour_static.log
           grep -Fq '[AERIS25 GPU DYNAMIC COLOUR READY] STATIC READY PASS' aeris25_gpu_dynamic_colour_static.log
+
           echo '=== REV003 CHUNK CULL GUARD ===' | tee -a aeris25_gpu_dynamic_colour_static.log
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py \
-            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
-          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py \
-            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
-          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_dynamic_colour_perf_hotfix.py \
             2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_chunk_cull_guard_hotfix.py \
             2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
@@ -60,11 +59,30 @@ jobs:
             2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_chunk_cull_guard_hotfix.py \
             2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          grep -Fq '[AERIS25 ATROPINE REV003 CHUNK CULL GUARD] STATIC PASS' aeris25_gpu_dynamic_colour_static.log
+          grep -Fq 'presentation cull safety guard already present' aeris25_gpu_dynamic_colour_static.log
+
+          echo '=== REV004 TEMPORAL FOUNDATION OVERSCAN ===' | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_dynamic_colour_perf_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_chunk_cull_guard_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_temporal_foundation_overscan_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          echo '=== REV004 IDEMPOTENT RE-ENTRY ===' | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_temporal_foundation_overscan_hotfix.py \
+            2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py \
             2>&1 | tee -a aeris25_gpu_dynamic_colour_static.log
           git diff --check
-          grep -Fq '[AERIS25 ATROPINE REV003 CHUNK CULL GUARD] STATIC PASS' aeris25_gpu_dynamic_colour_static.log
-          grep -Fq 'presentation cull safety guard already present' aeris25_gpu_dynamic_colour_static.log
+          grep -Fq '[AERIS25 ATROPINE REV004 TEMPORAL FOUNDATION OVERSCAN] STATIC PASS' aeris25_gpu_dynamic_colour_static.log
+          grep -Fq 'temporal foundation overscan already present' aeris25_gpu_dynamic_colour_static.log
           grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' aeris25_gpu_dynamic_colour_static.log
       - name: Upload AERIS25 static diagnostic
         if: always()
@@ -84,7 +102,7 @@ jobs:
         if: steps.candidate.outcome == 'failure'
         shell: bash
         run: |
-          tail -n 160 aeris25_gpu_dynamic_colour_static.log || true
-          SUMMARY="$(tail -n 60 aeris25_gpu_dynamic_colour_static.log | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')"
-          echo "::error title=AERIS25 ATROPINE rev003 chunk-cull static candidate gate::${SUMMARY}"
+          tail -n 180 aeris25_gpu_dynamic_colour_static.log || true
+          SUMMARY="$(tail -n 70 aeris25_gpu_dynamic_colour_static.log | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')"
+          echo "::error title=AERIS25 ATROPINE rev004 temporal-foundation-overscan static candidate gate::${SUMMARY}"
           exit 1
