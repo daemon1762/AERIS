@@ -18,8 +18,9 @@ def ck(value, name):
     print(("[PASS] " if ok else "[FAIL] ") + name)
 
 
-ck('internal const string Revision = "OH_PHASE4_006";' in M,
-   'ATROPINE revision is OH_PHASE4_006')
+ck(('internal const string Revision = "OH_PHASE4_006";' in M) or
+   ('internal const string Revision = "OH_PHASE4_007";' in M),
+   'ATROPINE revision is rev006 or approved rev007 descendant')
 ck('AERIS25_RENDERABLE_ENTRY_GATE' in R,
    'renderer carries explicit renderable-entry gate marker')
 ck('operationHealthFoundationCullBypass++' not in R and
@@ -56,19 +57,21 @@ ck('AERIS25_TEMPORAL_FOUNDATION_OVERSCAN' in R and
    'bounded rev004 hidden planning overscan remains intact for later evaluation')
 ck('AERIS25_DYNAMIC_COLOUR_MODE_SPLIT' in SH and
    'AERIS25_RENDERABLE_ENTRY_GATE' not in SH,
-   'rev006 is C# presentation correctness only; accepted shader equations are unchanged')
+   'rev006 remains C# presentation correctness only; accepted shader equations are unchanged')
 ck('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in R,
    'fixed 10 Hz ND authority remains unchanged')
 ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R,
    'Golden ARGB32/Bilinear render target remains unchanged')
 ck('runwayMapLockErrorPx=' in R and 'visualCoverage=' in R,
    'Runway Map Lock and Golden coverage diagnostics remain present')
-ck('REV006 RENDERABLE ENTRY GATE' in U and
-   'verify_aeris25_renderable_entry_gate_hotfix.py' in U and
-   'verify_aeris25_foundation_cull_bypass_hotfix.py' not in
-       '\n'.join(line for line in U.splitlines()
-                 if line.strip().startswith('PYTHONDONTWRITEBYTECODE=1 python3')),
-   'build identity and active verifier gate are rev006-specific')
+active = '\n'.join(line for line in U.splitlines()
+                   if line.strip().startswith('PYTHONDONTWRITEBYTECODE=1 python3'))
+ck((('REV006 RENDERABLE ENTRY GATE' in U and
+     'verify_aeris25_renderable_entry_gate_hotfix.py' in active) or
+    ('REV007 GPU VERTEX REJECT DIAGNOSTICS' in U and
+     'verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py' in active)) and
+   'verify_aeris25_foundation_cull_bypass_hotfix.py' not in active,
+   'build identity exposes rev006 or approved rev007 descendant with rejected rev005 verifier inactive')
 
 frozen = ['Source/AERISFlightControl/AA', 'Source/AERISFlightControl/Autopilot',
           'Source/AERISFlightControl/Protect', 'Source/AERISFlightControl/Landing']
