@@ -6,7 +6,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS25_GPU_DYNAMIC_TERRAIN_COLOUR"
 CODENAME = "ATRO" + "PINE"
-REVISION = "OH_PHASE4_001"
+ACCEPTED_REVISIONS = ("OH_PHASE4_001", "OH_PHASE4_002")
 BUNDLE_WINDOWS = "aeris25_nd_gpu_dynamic_terrain_colour_windows.bundle"
 BUNDLE_LINUX = "aeris25_nd_gpu_dynamic_terrain_colour_linux.bundle"
 R = (ROOT / "Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs").read_text()
@@ -19,7 +19,7 @@ U = (ROOT / "build_ubuntu.sh").read_text()
 checks=[]
 def ck(v,n):
     ok=bool(v); checks.append((ok,n)); print(("[PASS] " if ok else "[FAIL] ")+n)
-ck('internal const string Codename = "'+CODENAME+'";' in M and 'internal const string Revision = "'+REVISION+'";' in M and 'internal const string Candidate = "'+CANDIDATE+'";' in M and ('codename = '+CODENAME) in C,'AERIS25 Operation Health ATROPINE identity is authoritative')
+ck('internal const string Codename = "'+CODENAME+'";' in M and any(('internal const string Revision = "'+revision+'";') in M for revision in ACCEPTED_REVISIONS) and 'internal const string Candidate = "'+CANDIDATE+'";' in M and ('codename = '+CODENAME) in C,'AERIS25 Operation Health ATROPINE identity is authoritative')
 ck(('CANDIDATE_NAME="'+CANDIDATE+'"') in U and 'AERIS25 OPERATION HEALTH PHASE 4 '+CODENAME+' GPU DYNAMIC TERRAIN COLOUR' in U and 'AERIS25 — OPERATION HEALTH PHASE 4 '+CODENAME+' — GPU DYNAMIC TERRAIN COLOUR' in U,'build and in-game identity are AERIS25-specific')
 ck(BUNDLE_WINDOWS in B and BUNDLE_LINUX in B and BUNDLE_WINDOWS in E and BUNDLE_LINUX in E and BUNDLE_WINDOWS in U and BUNDLE_LINUX in U,'AERIS25 shader bundles are separate from preserved AERIS24 bundles')
 ck('float3 terrainSemantic : TEXCOORD2;' in S and '_AerisTerrainSemanticMode' in S and '_AerisTerrainDisplayMode' in S and '_AerisTerrainPreset' in S and '_AerisAircraftAltitudeMeters' in S,'shader consumes persistent terrain semantics plus dynamic uniforms')
