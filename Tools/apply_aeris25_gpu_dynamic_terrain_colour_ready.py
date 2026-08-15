@@ -37,9 +37,11 @@ def core_ready():
 
 
 if not core_ready():
+    fixer = ROOT / "Tools/fix_aeris25_gpu_dynamic_colour_anchors.py"
     base = ROOT / "Tools/apply_aeris25_gpu_dynamic_terrain_colour.py"
-    if not base.is_file():
-        raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] base applicator missing")
+    if not fixer.is_file() or not base.is_file():
+        raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] fixer/base applicator missing")
+    run(fixer)
     run(base)
 else:
     print("[AERIS25 GPU DYNAMIC COLOUR READY] core ATROPINE tree already present; reconstruction skipped")
@@ -61,7 +63,6 @@ if new not in text:
 else:
     print("[AERIS25 GPU DYNAMIC COLOUR READY] TEXCOORD2 VRAM accounting already present")
 
-# The build must validate the hardened candidate, not only the one-shot core patch.
 build_path = ROOT / "build_ubuntu.sh"
 build = build_path.read_text()
 old_verify = 'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris25_gpu_dynamic_terrain_colour.py"'
