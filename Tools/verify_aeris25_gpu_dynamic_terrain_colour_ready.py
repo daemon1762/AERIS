@@ -69,9 +69,10 @@ ck((('internal const string Revision = "OH_PHASE4_002";' in MON) or
     ('internal const string Revision = "OH_PHASE4_003";' in MON) or
     ('internal const string Revision = "OH_PHASE4_004";' in MON) or
     ('internal const string Revision = "OH_PHASE4_005";' in MON) or
-    ('internal const string Revision = "OH_PHASE4_006";' in MON)) and
+    ('internal const string Revision = "OH_PHASE4_006";' in MON) or
+    ('internal const string Revision = "OH_PHASE4_007";' in MON)) and
    'AERIS25_DYNAMIC_COLOUR_MODE_SPLIT' in SH,
-   'final READY tree carries rev002 mode split or approved rev003/rev004/rev005/rev006 descendant')
+   'final READY tree carries rev002 mode split or approved rev003/rev004/rev005/rev006/rev007 descendant')
 ck('oh_gpu_dynamic_vertex_submit=' in R and
    'oh_gpu_vertex_packed_mismatch=' in R and
    'oh_gpu_vertex_contour_mismatch=' in R and
