@@ -7,7 +7,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS25_GPU_DYNAMIC_TERRAIN_COLOUR"
 CODENAME = "ATRO" + "PINE"
-REVISION = "OH_PHASE4_001"
+REVISION = "OH_PHASE4_002"
 
 
 def run(path):
@@ -29,9 +29,11 @@ def core_ready():
         ('internal const string Revision = "' + REVISION + '";') in monitor,
         ('internal const string Candidate = "' + CANDIDATE + '";') in monitor,
         'oh_gpu_dynamic_colour=' in renderer,
+        'oh_gpu_dynamic_vertex_submit=' in renderer,
         'SetUVs(2, gpuDynamicTerrainSemanticScratch)' in renderer,
         'DynamicTerrainSemanticModeId' in backend,
         '_AerisTerrainSemanticMode' in shader,
+        'AERIS25_DYNAMIC_COLOUR_MODE_SPLIT' in shader,
         ('CANDIDATE_NAME="' + CANDIDATE + '"') in build,
     ))
 
@@ -47,12 +49,17 @@ else:
     print("[AERIS25 GPU DYNAMIC COLOUR READY] core ATROPINE tree already present; reconstruction skipped")
 
 # AERIS25 must not overwrite the frozen AERIS24 known-good compatibility probe.
-# Apply the probe namespace split after the generated Phase-4 tree exists so both
-# the runtime backend and Unity bundle builder use AERIS25-specific probe names.
 assetbundle_hotfix = ROOT / "Tools/apply_aeris25_assetbundle_compat_hotfix.py"
 if not assetbundle_hotfix.is_file():
     raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] AssetBundle compatibility hotfix missing")
 run(assetbundle_hotfix)
+
+# OH_PHASE4_002 keeps the ATROPINE feature boundary but removes unnecessary shader
+# work observed in the first GPU-active runtime and adds low-cost failure attribution.
+perf_hotfix = ROOT / "Tools/apply_aeris25_gpu_dynamic_colour_perf_hotfix.py"
+if not perf_hotfix.is_file():
+    raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] rev002 performance hotfix missing")
+run(perf_hotfix)
 
 renderer = ROOT / "Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs"
 text = renderer.read_text()
@@ -94,9 +101,12 @@ if not verifier.is_file():
     raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] hardened verifier missing")
 run(verifier)
 
-# Critical descendant-lineage gate: AERIS24 READY validates inherited Pass3 while the
-# tree still carries Phase 3 identity. Run the inherited suite again after AERIS25
-# promotion so stale predecessor-only identity assertions cannot escape branch CI.
+perf_verifier = ROOT / "Tools/verify_aeris25_gpu_dynamic_colour_perf_hotfix.py"
+if not perf_verifier.is_file():
+    raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] rev002 performance verifier missing")
+run(perf_verifier)
+
+# Run inherited Pass3 after final AERIS25 Phase-4 identity promotion.
 inherited_prebuild = ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"
 if not inherited_prebuild.is_file():
     raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] inherited Pass3 prebuild missing")
