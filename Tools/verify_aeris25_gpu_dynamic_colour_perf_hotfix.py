@@ -20,7 +20,7 @@ ck('internal const string Revision = "OH_PHASE4_002";' in M,
 ck('AERIS25_DYNAMIC_COLOUR_MODE_SPLIT' in S,
    'dynamic-colour shader carries explicit mode-split marker')
 ck('if (_AerisTerrainDisplayMode > 0.5)' in S and
-   'relativeMode ?' not in S,
+   'float4 baseColour = relativeMode ?' not in S,
    'REL and TOPO colour functions are mutually exclusive at shader source level')
 ck('AerisRelativeColour(_AerisAircraftAltitudeMeters - semantic.x, preset)' in S and
    'AerisTopographicColour(semantic.x, preset)' in S,
