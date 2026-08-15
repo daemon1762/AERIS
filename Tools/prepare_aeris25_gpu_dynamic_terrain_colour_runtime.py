@@ -10,7 +10,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS25_GPU_DYNAMIC_TERRAIN_COLOUR"
 OH_CODENAME = "ATRO" + "PINE"
-OH_REVISION = "OH_PHASE4_005"
+OH_REVISION = "OH_PHASE4_006"
 EXPECTED_WINDOWS_PROBE_SHA = "6465e6dfa7c9809a734d5ce85b202b49ea6ee5fcaac19d55d4b75bd532a35f0d"
 
 
@@ -52,19 +52,22 @@ def static_candidate_ready():
         ('internal const string Candidate = "' + CANDIDATE + '";') in monitor,
         ('codename = ' + OH_CODENAME) in config,
         ('CANDIDATE_NAME="' + CANDIDATE + '"') in build,
-        'REV005 FOUNDATION CULL BYPASS' in build,
+        'REV006 RENDERABLE ENTRY GATE' in build,
         'verify_aeris25_chunk_cull_guard_hotfix.py' in build,
         'verify_aeris25_temporal_foundation_overscan_hotfix.py' in build,
-        'verify_aeris25_foundation_cull_bypass_hotfix.py' in build,
+        'verify_aeris25_renderable_entry_gate_hotfix.py' in build,
         'oh_gpu_dynamic_colour=' in renderer,
         'oh_gpu_dynamic_vertex_submit=' in renderer,
         'oh_gpu_vertex_packed_mismatch=' in renderer,
         'AERIS25_CHUNK_CULL_GUARD' in renderer,
         'AERIS25_TEMPORAL_FOUNDATION_OVERSCAN' in renderer,
-        'AERIS25_FOUNDATION_CULL_BYPASS' in renderer,
+        'AERIS25_RENDERABLE_ENTRY_GATE' in renderer,
         'oh_cull_guard_veto=' in renderer,
         'oh_cull_guard_confirm=' in renderer,
         'oh_foundation_cull_bypass=' in renderer,
+        'oh_nonrenderable_entry_reject=' in renderer,
+        'oh_fallback_shadow_prevent=' in renderer,
+        'oh_empty_triangle_result=' in renderer,
         'oh_content_visible_range=' in renderer,
         'oh_content_plan_range=' in renderer,
         'oh_temporal_overscan_capture=' in renderer,
@@ -83,7 +86,7 @@ def static_candidate_ready():
 
 
 parser = argparse.ArgumentParser(
-    description="Prepare, build and install AERIS25 GPU Dynamic Terrain Colour rev005.")
+    description="Prepare, build and install AERIS25 GPU Dynamic Terrain Colour rev006.")
 parser.add_argument("ksp_path", help="Kerbal Space Program installation root")
 parser.add_argument("--rebuild-shader", action="store_true",
                     help="force a clean rebuild of the platform AERIS25 shader/probe bundles")
@@ -95,18 +98,20 @@ ksp = Path(args.ksp_path).expanduser().resolve()
 if not ksp.is_dir():
     raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] KSP path not found: " + str(ksp))
 
-# Reconstruct from the accepted AERIS24 parent, then layer the ATROPINE hotfixes in order.
-# rev003/004/005 are C#-only and intentionally do not alter accepted shader bytes.
+# Reconstruct from the accepted AERIS24 parent, layer the historical ATROPINE hotfixes,
+# then rev006 explicitly rolls back the rejected rev005 cull bypass and enforces a
+# renderable-Entry promotion invariant. rev003/004/005/006 do not alter shader bytes.
 if not static_candidate_ready():
     run([sys.executable, ROOT / "Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py"])
     run([sys.executable, ROOT / "Tools/apply_aeris25_chunk_cull_guard_hotfix.py"])
     run([sys.executable, ROOT / "Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py"])
     run([sys.executable, ROOT / "Tools/apply_aeris25_foundation_cull_bypass_hotfix.py"])
+    run([sys.executable, ROOT / "Tools/apply_aeris25_renderable_entry_gate_hotfix.py"])
 run([sys.executable, ROOT / "Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py"])
 run([sys.executable, ROOT / "Tools/verify_aeris25_gpu_dynamic_colour_perf_hotfix.py"])
 run([sys.executable, ROOT / "Tools/verify_aeris25_chunk_cull_guard_hotfix.py"])
 run([sys.executable, ROOT / "Tools/verify_aeris25_temporal_foundation_overscan_hotfix.py"])
-run([sys.executable, ROOT / "Tools/verify_aeris25_foundation_cull_bypass_hotfix.py"])
+run([sys.executable, ROOT / "Tools/verify_aeris25_renderable_entry_gate_hotfix.py"])
 run([sys.executable, ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"])
 run(["git", "diff", "--check"])
 
@@ -135,7 +140,7 @@ if need_rebuild:
         env["UNITY_EDITOR"] = args.unity_editor
     run(["bash", ROOT / "Tools/build_aeris25_gpu_shader_bundle.sh", shader_mode], env=env)
 else:
-    print("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] rev005 has no shader change; reusing existing accepted AERIS25 shader/probe bundle pair")
+    print("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] rev006 has no shader change; reusing existing accepted AERIS25 shader/probe bundle pair")
 
 for path, label in ((bundle, "shader"), (probe, "probe")):
     if not path.is_file() or path.stat().st_size == 0:
@@ -200,8 +205,10 @@ print("gpu_shader_bundle=" + bundle_name)
 print("gpu_shader_bundle_sha256=" + installed_bundle_sha)
 print("gpu_probe_bundle=" + probe_name)
 print("gpu_probe_bundle_sha256=" + installed_probe_sha)
-print("Runtime gate: verify oh_gpu_dynamic_colour=ACTIVE and OH_PHASE4_005.")
-print("At 160 km require oh_content_visible_range=160000 and oh_content_plan_range=216000.")
-print("Before takeoff, require oh_foundation_cull_bypass > 0 and no rectangular land/ocean/edge holes.")
-print("Route/Local detail keeps rev003 cull guard; semantic failures/mismatches remain zero.")
-print("Golden visualCoverage=1.000, Runway Map Lock, fixed 10 Hz authority and materially recovered performance remain required.")
+print("Runtime gate: verify oh_gpu_dynamic_colour=ACTIVE and OH_PHASE4_006.")
+print("Stationary first: 20 -> 40 -> 80 -> 160 km; no rectangular holes before or after READY.")
+print("Require oh_foundation_cull_bypass to remain zero while oh_cull_test resumes advancing.")
+print("Observe oh_nonrenderable_entry_reject / oh_fallback_shadow_prevent / oh_empty_triangle_result.")
+print("oh_gpu_vertex_attr_fail must no longer explode; semantic failures and geographic mismatches remain zero.")
+print("At 160 km expect oh_content_visible_range=160000 and oh_content_plan_range=216000.")
+print("Golden visualCoverage=1.000, Runway Map Lock, fixed 10 Hz authority and rev002-class performance remain required.")
