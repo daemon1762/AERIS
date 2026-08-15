@@ -5,6 +5,26 @@ import sys
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
+
+# rev007 is a descendant diagnostic stage. Re-run every inherited AERIS25 verifier
+# that remains semantically authoritative on the final rev007 tree. This prevents a
+# historical verifier allowlist from accepting only an older revision and then
+# failing later inside build_ubuntu.sh after the dedicated rev007 static gate passed.
+INHERITED_VERIFIERS = [
+    'verify_aeris25_gpu_dynamic_terrain_colour_ready.py',
+    'verify_aeris25_gpu_dynamic_colour_perf_hotfix.py',
+    'verify_aeris25_chunk_cull_guard_hotfix.py',
+    'verify_aeris25_temporal_foundation_overscan_hotfix.py',
+    'verify_aeris25_renderable_entry_gate_hotfix.py',
+]
+for name in INHERITED_VERIFIERS:
+    script = ROOT / 'Tools' / name
+    if not script.is_file():
+        raise SystemExit('[AERIS25 ATROPINE REV007] inherited verifier missing: ' + name)
+    print('[AERIS25 ATROPINE REV007 INHERITED] $ ' + name)
+    subprocess.run([sys.executable, str(script)], cwd=str(ROOT), check=True)
+print('[AERIS25 ATROPINE REV007 INHERITED] VERIFIER MATRIX PASS')
+
 R = (ROOT / "Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs").read_text()
 M = (ROOT / "Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs").read_text()
 U = (ROOT / "build_ubuntu.sh").read_text()
