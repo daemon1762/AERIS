@@ -51,8 +51,8 @@ cull_new = '''                    if (entryCullingEnabled &&
                         // AERIS25_CHUNK_CULL_GUARD: dot-cap remains the cheap broad phase,
                         // but runtime evidence showed complete FAR Entries could still be
                         // omitted as rectangular holes while foundation/coverage stayed
-                        // READY.  Only candidates already rejected by dot-cap pay for this
-                        // 3x3 presentation witness.  Any possible viewport intersection
+                        // READY. Only candidates already rejected by dot-cap pay for this
+                        // 3x3 presentation witness. Any possible viewport intersection
                         // vetoes the cull; uncertainty therefore costs work, never pixels.
                         if (TileMayIntersectPresentation(tile, projection))
                         {
@@ -107,7 +107,7 @@ helper = '''        bool TileMayIntersectPresentation(AERISTerrainHeightTile til
                     maxV = Math.Max(maxV, v);
                 }
             }
-            // Fail open toward drawing.  The guard is deliberately conservative:
+            // Fail open toward drawing. The guard is deliberately conservative:
             // a projected witness box near the display is sufficient to keep the Entry.
             return maxU >= -safetyMargin && minU <= 1f + safetyMargin &&
                 maxV >= -safetyMargin && minV <= 1f + safetyMargin;
@@ -161,11 +161,26 @@ old_checkpoint = 'internal const string UiCheckpoint = "DEV CP3.75 — AERIS25 �
 new_checkpoint = 'internal const string UiCheckpoint = "DEV CP3.75 — AERIS25 — OPERATION HEALTH PHASE 4 ATROPINE — GPU DYNAMIC TERRAIN COLOUR — REV003 CHUNK CULL GUARD";'
 build, checkpoint_changed = replace_once(build, old_checkpoint, new_checkpoint,
                                          'in-game checkpoint revision')
-if display_changed or checkpoint_changed:
-    BUILD.write_text(build)
-    print('[AERIS25 ATROPINE REV003] in-game identity promoted')
+
+ready_verify = 'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py"'
+cull_verify = 'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris25_chunk_cull_guard_hotfix.py"'
+active_ready = sum(1 for line in build.splitlines() if line.strip() == ready_verify)
+active_cull = sum(1 for line in build.splitlines() if line.strip() == cull_verify)
+verify_changed = False
+if active_ready == 1 and active_cull == 0:
+    build = build.replace(ready_verify, ready_verify + "\n" + cull_verify, 1)
+    verify_changed = True
+elif active_ready == 1 and active_cull == 1:
+    pass
 else:
-    print('[AERIS25 ATROPINE REV003] in-game identity already promoted')
+    raise SystemExit('[AERIS25 ATROPINE REV003] build verifier gate mismatch ready=%d cull=%d' %
+                     (active_ready, active_cull))
+
+if display_changed or checkpoint_changed or verify_changed:
+    BUILD.write_text(build)
+    print('[AERIS25 ATROPINE REV003] build/in-game identity and verifier gate promoted')
+else:
+    print('[AERIS25 ATROPINE REV003] build/in-game identity and verifier gate already promoted')
 
 print('[AERIS25 ATROPINE REV003] CHUNK CULL GUARD HOTFIX APPLIED')
 print('Authority: dot-cap broad phase + fail-open projected 3x3 witness on cull candidates only')
