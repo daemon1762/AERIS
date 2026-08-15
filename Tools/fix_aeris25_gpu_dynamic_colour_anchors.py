@@ -46,6 +46,16 @@ if ui_once not in text:
     text = text.replace(ui_active, ui_once, 1)
     changed = True
 
+# The inherited AERIS24 bundle guard text is user-facing. AERIS25 owns a separate
+# builder because shader content and bundle names have changed.
+guidance_anchor = "bu = bu.replace('[AERIS24 GPU VERTEX]', '[AERIS25 GPU DYNAMIC COLOUR]')"
+guidance_new = guidance_anchor + "\nbu = bu.replace('Run Tools/build_aeris24_gpu_shader_bundle.sh',\n                'Run Tools/build_aeris25_gpu_shader_bundle.sh')"
+if guidance_new not in text:
+    if text.count(guidance_anchor) != 1:
+        raise SystemExit("[AERIS25 ANCHORS] bundle guidance applicator anchor mismatch")
+    text = text.replace(guidance_anchor, guidance_new, 1)
+    changed = True
+
 if changed:
     path.write_text(text)
     print("[AERIS25 ANCHORS] aligned AERIS25 applicator to accepted rev007 anchors")
