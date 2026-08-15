@@ -58,10 +58,11 @@ cull_old = '''                    bool foundationEntry = tile.Key.Lod == AERISTe
                         }
                     }
 '''
-cull_new = '''                    // AERIS25_RENDERABLE_ENTRY_GATE: rev005 runtime proved
-                    // foundation-cull bypass did not remove the holes and caused a severe
-                    // submission regression. Restore rev003 dot-cap + fail-open witness for
-                    // every Entry; hole correctness is now enforced at Entry promotion.
+cull_new = '''                    // AERIS25_CHUNK_CULL_GUARD remains the accepted broad-phase
+                    // + fail-open projected witness authority. AERIS25_RENDERABLE_ENTRY_GATE
+                    // rolls back rev005 foundation-cull bypass after runtime proved it did not
+                    // remove holes and caused severe submission regression. Hole correctness
+                    // is now enforced at Entry promotion rather than by weakening culling.
                     if (entryCullingEnabled &&
                         ShouldCullEntryOutsidePresentation(drawEntry,
                             projection.CenterX, projection.CenterY, projection.CenterZ,
