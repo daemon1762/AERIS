@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS25_GPU_DYNAMIC_TERRAIN_COLOUR"
 OH_CODENAME = "ATRO" + "PINE"
 OH_REVISION = "OH_PHASE4_001"
+EXPECTED_WINDOWS_PROBE_SHA = "6465e6dfa7c9809a734d5ce85b202b49ea6ee5fcaac19d55d4b75bd532a35f0d"
 
 
 def sha256(path):
@@ -19,6 +20,14 @@ def sha256(path):
         for block in iter(lambda: f.read(1024 * 1024), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def has_assetbundle_container(path):
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return False
+    return data.startswith(b"UnityFS\x00") and b"AssetBundle" in data
 
 
 def run(args, env=None):
@@ -34,6 +43,7 @@ def static_candidate_ready():
         renderer = (ROOT / "Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs").read_text()
         backend = (ROOT / "Source/AERISFlightControl/Terrain/AERISNdGpuVertexProjectionBackend.cs").read_text()
         shader = (ROOT / "GpuAssets/Assets/AERISNdExactVertexProjection.shader").read_text()
+        builder = (ROOT / "GpuAssets/Assets/Editor/BuildAERISGpuAssets.cs").read_text()
     except Exception:
         return False
     return all((
@@ -47,6 +57,8 @@ def static_candidate_ready():
         'SetUVs(2, gpuDynamicTerrainSemanticScratch)' in renderer,
         'packedTerrainSource.LongLength * (3L * 4L)) +' in renderer,
         '_AerisTerrainSemanticMode' in backend,
+        'aeris25_gpu_dynamic_colour_probe_windows.bundle' in backend,
+        'aeris25_gpu_dynamic_colour_probe_windows.bundle' in builder,
         '_AerisTerrainSemanticMode' in shader,
         'AerisRelativeColour' in shader,
         'AerisTopographicColour' in shader,
@@ -58,7 +70,7 @@ parser = argparse.ArgumentParser(
     description="Prepare, build and install AERIS25 GPU Dynamic Terrain Colour.")
 parser.add_argument("ksp_path", help="Kerbal Space Program installation root")
 parser.add_argument("--rebuild-shader", action="store_true",
-                    help="force rebuilding the platform AERIS25 shader bundle")
+                    help="force a clean rebuild of the platform AERIS25 shader/probe bundles")
 parser.add_argument("--unity-editor", default=os.environ.get("UNITY_EDITOR", ""),
                     help="Unity 2019.4.18f1 Editor executable; also accepted through UNITY_EDITOR")
 args = parser.parse_args()
@@ -76,35 +88,48 @@ run(["git", "diff", "--check"])
 if (ksp / "KSP_x64_Data" / "Managed" / "Assembly-CSharp.dll").is_file():
     shader_mode = "windows"
     bundle_name = "aeris25_nd_gpu_dynamic_terrain_colour_windows.bundle"
-    probe_name = "aeris_gpu_bundle_probe_windows.bundle"
+    probe_name = "aeris25_gpu_dynamic_colour_probe_windows.bundle"
 elif ((ksp / "KSP_Data" / "Managed" / "Assembly-CSharp.dll").is_file() or
       (ksp / "KSP_x86_64_Data" / "Managed" / "Assembly-CSharp.dll").is_file()):
     shader_mode = "linux"
     bundle_name = "aeris25_nd_gpu_dynamic_terrain_colour_linux.bundle"
-    probe_name = "aeris_gpu_bundle_probe_linux.bundle"
+    probe_name = "aeris25_gpu_dynamic_colour_probe_linux.bundle"
 else:
     raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] could not identify KSP Unity player layout under: " + str(ksp))
 
 shader_dir = ROOT / "GameData" / "AERISFlightControl" / "Shaders"
 bundle = shader_dir / bundle_name
 probe = shader_dir / probe_name
-if args.rebuild_shader or not bundle.is_file() or not probe.is_file():
+need_rebuild = args.rebuild_shader or not bundle.is_file() or not probe.is_file()
+if shader_mode == "windows" and probe.is_file() and sha256(probe) != EXPECTED_WINDOWS_PROBE_SHA:
+    print("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] existing Windows probe is not the accepted compatibility control; forcing clean rebuild")
+    need_rebuild = True
+if need_rebuild:
     env = os.environ.copy()
     if args.unity_editor:
         env["UNITY_EDITOR"] = args.unity_editor
     run(["bash", ROOT / "Tools/build_aeris25_gpu_shader_bundle.sh", shader_mode], env=env)
 else:
-    print("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] using existing AERIS25 shader bundle: " + str(bundle))
+    print("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] using existing accepted AERIS25 shader/probe bundle pair")
 
 for path, label in ((bundle, "shader"), (probe, "probe")):
     if not path.is_file() or path.stat().st_size == 0:
         raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] %s bundle missing/empty: %s" %
                          (label, path))
+    if not has_assetbundle_container(path):
+        raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] %s bundle lacks Unity AssetBundle container metadata: %s" %
+                         (label, path))
 source_bundle_sha = sha256(bundle)
 source_probe_sha = sha256(probe)
+if shader_mode == "windows" and source_probe_sha != EXPECTED_WINDOWS_PROBE_SHA:
+    raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] Windows probe compatibility SHA FAIL expected=%s actual=%s" %
+                     (EXPECTED_WINDOWS_PROBE_SHA, source_probe_sha))
 print("[AERIS25_GPU_DYNAMIC_COLOUR_BUNDLE] mode=%s; name=%s; sha256=%s" %
       (shader_mode, bundle_name, source_bundle_sha))
+print("[AERIS25_GPU_DYNAMIC_COLOUR_PROBE] name=%s; sha256=%s" %
+      (probe_name, source_probe_sha))
 
+# Only compatibility-gated bundles reach the KSP installation step.
 run(["bash", ROOT / "build_ubuntu.sh", ksp])
 
 source_dll = ROOT / "GameData" / "AERISFlightControl" / "Plugins" / "AERISFlightControl.dll"
@@ -128,7 +153,7 @@ config_text = installed_config.read_text(errors="replace")
 checks = [
     (source_dll_sha == installed_dll_sha, "built/installed DLL SHA"),
     (source_bundle_sha == installed_bundle_sha, "source/installed AERIS25 shader bundle SHA"),
-    (source_probe_sha == installed_probe_sha, "source/installed probe SHA"),
+    (source_probe_sha == installed_probe_sha, "source/installed AERIS25 probe SHA"),
     (("candidate=" + CANDIDATE) in identity_text, "AERIS25 candidate identity"),
     (("gpu_shader_bundle=" + bundle_name) in identity_text, "AERIS25 shader bundle identity"),
     (("gpu_shader_bundle_sha256=" + source_bundle_sha) in identity_text, "AERIS25 shader bundle SHA identity"),
