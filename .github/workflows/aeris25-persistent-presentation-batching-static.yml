@@ -1,0 +1,81 @@
+name: AERIS25 Persistent Presentation Batching Static
+
+on:
+  push:
+    branches:
+      - agent/aeris25-persistent-presentation-batching
+  pull_request:
+    branches:
+      - agent/aeris25-gpu-dynamic-terrain-colour
+
+jobs:
+  persistent-presentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: ADENOSINE script syntax
+        run: |
+          python3 -m py_compile \
+            Tools/apply_aeris25_persistent_presentation_batching.py \
+            Tools/verify_aeris25_persistent_presentation_batching.py \
+            Tools/prepare_aeris25_persistent_presentation_batching_runtime.py
+
+      - name: Reconstruct accepted AERIS25-1 and verify ADENOSINE Phase 5
+        id: candidate
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          LOG=aeris25_persistent_presentation_batching_static.log
+
+          echo '=== AERIS25-1 ATROPINE LINEAGE ===' | tee "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_snapshot_mesh_lifetime_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_content_generation_burst_governor_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_content_generation_burst_governor_hotfix.py 2>&1 | tee -a "$LOG"
+          echo '=== AERIS25-1 ACCEPTED PRE-PROMOTION PASS ===' | tee -a "$LOG"
+
+          echo '=== AERIS25-2 ADENOSINE OH_PHASE5_001 ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+
+          echo '=== ADENOSINE IDEMPOTENT RE-ENTRY ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
+          git diff --check
+
+          grep -Fq '[AERIS25 ADENOSINE PHASE5_001 PERSISTENT PRESENTATION BATCHING] STATIC PASS' "$LOG"
+          grep -Fq 'persistent presentation batching already present' "$LOG"
+          grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' "$LOG"
+
+      - name: Upload ADENOSINE static diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeris25-persistent-presentation-batching-static-log
+          path: |
+            aeris25_persistent_presentation_batching_static.log
+            Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+            Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs
+            GameData/AERISFlightControl/Config/AERISOperationHealth.cfg
+            build_ubuntu.sh
+          if-no-files-found: error
+
+      - name: Fail if ADENOSINE static gate failed
+        if: steps.candidate.outcome == 'failure'
+        shell: bash
+        run: |
+          tail -n 300 aeris25_persistent_presentation_batching_static.log || true
+          exit 1

@@ -36,8 +36,15 @@ ck('Entry[] currentEntriesScratch' in renderer and 'Entry[] drawEntriesScratch' 
 ck('MeasureFoundationGpuReadiness(visible,' in renderer and
    'tiles, currentEntriesScratch, out readyGlobal, out readyFar)' in renderer,
    'foundation readiness consumes prepared current entries')
-ck('RenderBackBuffer(tiles, drawEntriesScratch, projection' in renderer,
-   'back rendering consumes prepared draw entries')
+# Phase 5 may compact the already prepared drawEntriesScratch into a persistent packet
+# set before BACK submission. Accept either the historical direct prepared-array path or
+# the ADENOSINE path only when the packet refresh is explicitly sourced from the same
+# prepared draw entries and BACK consumes that packet set.
+legacy_prepared_back = 'RenderBackBuffer(tiles, drawEntriesScratch, projection' in renderer
+phase5_prepared_back = ('RefreshPresentationPackets(tiles, drawEntriesScratch);' in renderer and
+    'RenderBackBuffer(presentationPackets, presentationPacketCount, projection' in renderer)
+ck(legacy_prepared_back or phase5_prepared_back,
+   'back rendering consumes prepared draw entries directly or through persistent packets')
 # Check only the live Schedule implementation. The renderer comment intentionally
 # mentions the retired cacheKey + "|PENDING" representation for traceability.
 schedule=renderer[renderer.index('void Schedule('):renderer.index('void DrainCompleted(')]
