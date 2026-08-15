@@ -46,6 +46,14 @@ if not core_ready():
 else:
     print("[AERIS25 GPU DYNAMIC COLOUR READY] core ATROPINE tree already present; reconstruction skipped")
 
+# AERIS25 must not overwrite the frozen AERIS24 known-good compatibility probe.
+# Apply the probe namespace split after the generated Phase-4 tree exists so both
+# the runtime backend and Unity bundle builder use AERIS25-specific probe names.
+assetbundle_hotfix = ROOT / "Tools/apply_aeris25_assetbundle_compat_hotfix.py"
+if not assetbundle_hotfix.is_file():
+    raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] AssetBundle compatibility hotfix missing")
+run(assetbundle_hotfix)
+
 renderer = ROOT / "Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs"
 text = renderer.read_text()
 semantic_accounting = '''                (packedTerrainSource == null ? 0L :
