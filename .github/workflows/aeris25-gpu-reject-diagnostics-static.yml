@@ -21,7 +21,9 @@ jobs:
           python3 -m py_compile \
             Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
             Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
-            Tools/prepare_aeris25_gpu_vertex_reject_diagnostics_runtime.py
+            Tools/prepare_aeris25_gpu_vertex_reject_diagnostics_runtime.py \
+            Tools/verify_aeris25_gpu_dynamic_terrain_colour.py \
+            Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py
 
       - name: Generate and verify ATROPINE rev007
         id: candidate
@@ -65,10 +67,18 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
             2>&1 | tee -a "$LOG"
 
+          echo '=== REV007 COMMON AERIS25 VERIFIERS ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_dynamic_terrain_colour.py \
+            2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py \
+            2>&1 | tee -a "$LOG"
+
           echo '=== REV007 IDEMPOTENT RE-ENTRY ===' | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
             2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
+            2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py \
             2>&1 | tee -a "$LOG"
 
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py \
@@ -76,6 +86,8 @@ jobs:
           git diff --check
 
           grep -Fq '[AERIS25 ATROPINE REV007 GPU VERTEX REJECT DIAGNOSTICS] STATIC PASS' "$LOG"
+          grep -Fq '[AERIS25 GPU DYNAMIC TERRAIN COLOUR] STATIC PASS' "$LOG"
+          grep -Fq '[AERIS25 GPU DYNAMIC TERRAIN COLOUR READY] STATIC PASS' "$LOG"
           grep -Fq 'GPU vertex reject diagnostics already present' "$LOG"
           grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' "$LOG"
 
