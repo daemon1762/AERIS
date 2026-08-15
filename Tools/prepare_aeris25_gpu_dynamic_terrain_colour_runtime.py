@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys
 
-sys.dont_writebytecode = True
+sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS25_GPU_DYNAMIC_TERRAIN_COLOUR"
 OH_CODENAME = "ATRO" + "PINE"
@@ -45,10 +45,12 @@ def static_candidate_ready():
         'oh_gpu_dynamic_colour=' in renderer,
         'GpuDynamicColourAttributesReady' in renderer,
         'SetUVs(2, gpuDynamicTerrainSemanticScratch)' in renderer,
+        'packedTerrainSource.LongLength * (3L * 8L + 3L * 4L + 3L * 4L + 4L + 3L * 4L)' in renderer,
         '_AerisTerrainSemanticMode' in backend,
         '_AerisTerrainSemanticMode' in shader,
         'AerisRelativeColour' in shader,
         'AerisTopographicColour' in shader,
+        'verify_aeris25_gpu_dynamic_terrain_colour_ready.py' in build,
     ))
 
 
@@ -66,8 +68,8 @@ if not ksp.is_dir():
     raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR RUNTIME] KSP path not found: " + str(ksp))
 
 if not static_candidate_ready():
-    run([sys.executable, ROOT / "Tools/apply_aeris25_gpu_dynamic_terrain_colour.py"])
-run([sys.executable, ROOT / "Tools/verify_aeris25_gpu_dynamic_terrain_colour.py"])
+    run([sys.executable, ROOT / "Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py"])
+run([sys.executable, ROOT / "Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py"])
 run([sys.executable, ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"])
 run(["git", "diff", "--check"])
 
