@@ -10,7 +10,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS24_GPU_VERTEX_PROJECTION_POC"
 OH_CODENAME = "EPI" + "NEPHRINE"
-OH_REVISION = "OH_PHASE3_006"
+OH_REVISION = "OH_PHASE3_007"
 
 
 def sha256(path):
@@ -49,6 +49,10 @@ def static_candidate_ready():
         'oh_gpu_vertex_requested=' in renderer,
         'oh_gpu_vertex_exact_bypass=' in renderer,
         'oh_gpu_vertex_resident_suspend=' in renderer,
+        'oh_nd_warm_suspend_count=' in renderer,
+        'oh_nd_warm_prune_removed=' in renderer,
+        'SuspendVisibilityWarm' in renderer,
+        'PruneWarmResume' in renderer,
         'oh_nd_reload_pct=' in renderer,
         'oh_nd_reload_snapshot=' in renderer,
         'reloadSnapshotCenterLatitudeDeg' in renderer,
@@ -57,6 +61,7 @@ def static_candidate_ready():
         'AERISNdProjectionBackendMode' in settings,
         'TerrainGpuMode = AERISTerrainGpuMode.On' in settings,
         'RELOADING ND' in ui,
+        'SuspendVisibilityWarm();' in ui,
         'DrawProjectionBackendSelector' in window,
         'GUILayout.HorizontalSlider' in window,
         'Terrain\\AERISNdGpuVertexProjectionBackend.cs' in project,
@@ -70,6 +75,7 @@ def verify_static_candidate():
     run([sys.executable, ROOT / "Tools/verify_aeris24_nd_backend_reload.py"])
     run([sys.executable, ROOT / "Tools/verify_aeris24_nd_reload_snapshot_hotfix.py"])
     run([sys.executable, ROOT / "Tools/verify_aeris24_system_options_residency_hotfix.py"])
+    run([sys.executable, ROOT / "Tools/verify_aeris24_warm_visibility_suspend_hotfix.py"])
     run([sys.executable, ROOT / "Tools/verify_aeris24_oh_phase3.py"])
     run([sys.executable, ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"])
     run(["git", "diff", "--check"])
@@ -174,5 +180,5 @@ print("gpu_shader_bundle=" + bundle_name)
 print("gpu_shader_bundle_sha256=" + installed_bundle_sha)
 print("gpu_probe_bundle=" + probe_name)
 print("gpu_probe_bundle_sha256=" + installed_probe_sha)
-print("Next runtime gate: after GPU ACTIVE, toggle SYSTEM ND display OFF/ALWAYS and verify activation count does not rise.")
-print("Also verify SYSTEM projection selector sync, FDR 1..30 slider, fixed Terrain GPU ON, and one high-speed 160 km segment.")
+print("Next runtime gate: GPU ACTIVE then ND OFF/ALWAYS x3. Activation must stay flat; warm suspend/resume must rise without a teardown burst.")
+print("Target: resume frame max <50 ms, immediate mesh-destroy/attribute-upload deltas near zero, Golden + Runway Map Lock unchanged.")
