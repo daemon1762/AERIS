@@ -18,6 +18,7 @@ jobs:
       - name: AERIS25 script syntax
         run: |
           python3 -m py_compile \
+            Tools/fix_aeris25_gpu_dynamic_colour_anchors.py \
             Tools/apply_aeris25_gpu_dynamic_terrain_colour.py \
             Tools/verify_aeris25_gpu_dynamic_terrain_colour.py \
             Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py \
