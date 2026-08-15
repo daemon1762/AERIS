@@ -20,8 +20,9 @@ def ck(value, name):
 ck(('internal const string Revision = "OH_PHASE4_003";' in M) or
    ('internal const string Revision = "OH_PHASE4_004";' in M) or
    ('internal const string Revision = "OH_PHASE4_005";' in M) or
-   ('internal const string Revision = "OH_PHASE4_006";' in M),
-   'ATROPINE revision is rev003 or approved rev004/rev005/rev006 descendant')
+   ('internal const string Revision = "OH_PHASE4_006";' in M) or
+   ('internal const string Revision = "OH_PHASE4_007";' in M),
+   'ATROPINE revision is rev003 or approved rev004/rev005/rev006/rev007 descendant')
 ck('AERIS25_CHUNK_CULL_GUARD' in R and
    'TileMayIntersectPresentation(tile, projection)' in R,
    'dot-cap cull candidates receive projected presentation witness')
@@ -51,8 +52,9 @@ ck('runwayMapLockErrorPx=' in R and 'visualCoverage=' in R,
 ck(('REV003 CHUNK CULL GUARD' in U) or
    ('REV004 TEMPORAL FOUNDATION OVERSCAN' in U) or
    ('REV005 FOUNDATION CULL BYPASS' in U) or
-   ('REV006 RENDERABLE ENTRY GATE' in U),
-   'build identity exposes rev003 guard or approved rev004/rev005/rev006 descendant')
+   ('REV006 RENDERABLE ENTRY GATE' in U) or
+   ('REV007 GPU VERTEX REJECT DIAGNOSTICS' in U),
+   'build identity exposes rev003 guard or approved rev004/rev005/rev006/rev007 descendant')
 
 frozen = ['Source/AERISFlightControl/AA', 'Source/AERISFlightControl/Autopilot',
           'Source/AERISFlightControl/Protect', 'Source/AERISFlightControl/Landing']
