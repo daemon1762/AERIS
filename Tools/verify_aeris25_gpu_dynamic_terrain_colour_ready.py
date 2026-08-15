@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-sys.dont_write_bytecode = True
+sys.dont_writebytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 core = ROOT / "Tools/verify_aeris25_gpu_dynamic_terrain_colour.py"
 if not core.is_file():
@@ -18,8 +18,8 @@ def ck(v, name):
     checks.append((ok, name))
     print(("[PASS] " if ok else "[FAIL] ") + name)
 
-ck('packedTerrainSource.LongLength * (3L * 8L + 3L * 4L + 3L * 4L + 4L + 3L * 4L)' in R,
-   'AERIS-managed VRAM accounting includes persistent TEXCOORD2 float3 semantics')
+ck('packedTerrainSource.LongLength * (3L * 4L)) +' in R,
+   'AERIS-managed byte accounting includes independent TEXCOORD2 float3 semantics (+12 bytes/packed vertex)')
 ck('PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py"' in U,
    'build invokes hardened AERIS25 verifier')
 ck((ROOT / 'Tools/build_aeris25_gpu_shader_bundle.sh').is_file(),
