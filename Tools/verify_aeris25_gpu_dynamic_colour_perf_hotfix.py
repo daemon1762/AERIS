@@ -15,8 +15,9 @@ def ck(value, name):
     checks.append((ok, name))
     print(("[PASS] " if ok else "[FAIL] ") + name)
 
-ck('internal const string Revision = "OH_PHASE4_002";' in M,
-   'ATROPINE revision is OH_PHASE4_002')
+ck(('internal const string Revision = "OH_PHASE4_002";' in M) or
+   ('internal const string Revision = "OH_PHASE4_003";' in M),
+   'ATROPINE revision is rev002 or approved rev003 descendant')
 ck('AERIS25_DYNAMIC_COLOUR_MODE_SPLIT' in S,
    'dynamic-colour shader carries explicit mode-split marker')
 ck('if (_AerisTerrainDisplayMode > 0.5)' in S and
