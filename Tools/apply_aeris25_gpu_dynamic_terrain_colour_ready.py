@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-sys.dont_writebytecode = True
+sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS25_GPU_DYNAMIC_TERRAIN_COLOUR"
 CODENAME = "ATRO" + "PINE"
@@ -85,6 +85,15 @@ verifier = ROOT / "Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py"
 if not verifier.is_file():
     raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] hardened verifier missing")
 run(verifier)
+
+# Critical descendant-lineage gate: AERIS24 READY validates inherited Pass3 while the
+# tree still carries Phase 3 identity. Run the inherited suite again after AERIS25
+# promotion so stale predecessor-only identity assertions cannot escape branch CI.
+inherited_prebuild = ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"
+if not inherited_prebuild.is_file():
+    raise SystemExit("[AERIS25 GPU DYNAMIC COLOUR READY] inherited Pass3 prebuild missing")
+run(inherited_prebuild)
+
 subprocess.run(["git", "diff", "--check"], cwd=str(ROOT), check=True)
 print("[AERIS25 GPU DYNAMIC COLOUR READY] STATIC READY PASS")
 print("candidate=" + CANDIDATE)
