@@ -45,7 +45,7 @@ def static_candidate_ready():
         'oh_gpu_dynamic_colour=' in renderer,
         'GpuDynamicColourAttributesReady' in renderer,
         'SetUVs(2, gpuDynamicTerrainSemanticScratch)' in renderer,
-        'packedTerrainSource.LongLength * (3L * 8L + 3L * 4L + 3L * 4L + 4L + 3L * 4L)' in renderer,
+        'packedTerrainSource.LongLength * (3L * 4L)) +' in renderer,
         '_AerisTerrainSemanticMode' in backend,
         '_AerisTerrainSemanticMode' in shader,
         'AerisRelativeColour' in shader,
