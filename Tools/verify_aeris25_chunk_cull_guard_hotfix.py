@@ -19,8 +19,9 @@ def ck(value, name):
 
 ck(('internal const string Revision = "OH_PHASE4_003";' in M) or
    ('internal const string Revision = "OH_PHASE4_004";' in M) or
-   ('internal const string Revision = "OH_PHASE4_005";' in M),
-   'ATROPINE revision is rev003 or approved rev004/rev005 descendant')
+   ('internal const string Revision = "OH_PHASE4_005";' in M) or
+   ('internal const string Revision = "OH_PHASE4_006";' in M),
+   'ATROPINE revision is rev003 or approved rev004/rev005/rev006 descendant')
 ck('AERIS25_CHUNK_CULL_GUARD' in R and
    'TileMayIntersectPresentation(tile, projection)' in R,
    'dot-cap cull candidates receive projected presentation witness')
@@ -35,12 +36,12 @@ ck('return true;' in R[R.index('        bool TileMayIntersectPresentation'):R.in
 ck('operationHealthCulledEntries = Math.Max(0L,' in R and
    'operationHealthCullGuardVetoes++' in R and
    'operationHealthCullGuardConfirmed++' in R,
-   'veto restores visible/cull accounting while confirmed detail candidates still skip')
+   'veto restores visible/cull accounting while confirmed candidates still skip')
 ck('oh_cull_guard_veto=' in R and 'oh_cull_guard_confirm=' in R,
    'runtime publishes cull-guard veto and confirmation telemetry')
 ck('ShouldCullEntryOutsidePresentation(drawEntry,' in R and
    'operationHealthDotCapCullTests++' in R,
-   'accepted dot-cap remains the non-foundation broad phase')
+   'accepted dot-cap remains the broad phase')
 ck('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in R,
    'fixed 10 Hz ND authority remains unchanged')
 ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R,
@@ -49,8 +50,9 @@ ck('runwayMapLockErrorPx=' in R and 'visualCoverage=' in R,
    'Runway Map Lock and Golden coverage telemetry remain present')
 ck(('REV003 CHUNK CULL GUARD' in U) or
    ('REV004 TEMPORAL FOUNDATION OVERSCAN' in U) or
-   ('REV005 FOUNDATION CULL BYPASS' in U),
-   'build identity exposes rev003 guard or approved rev004/rev005 descendant')
+   ('REV005 FOUNDATION CULL BYPASS' in U) or
+   ('REV006 RENDERABLE ENTRY GATE' in U),
+   'build identity exposes rev003 guard or approved rev004/rev005/rev006 descendant')
 
 frozen = ['Source/AERISFlightControl/AA', 'Source/AERISFlightControl/Autopilot',
           'Source/AERISFlightControl/Protect', 'Source/AERISFlightControl/Landing']
