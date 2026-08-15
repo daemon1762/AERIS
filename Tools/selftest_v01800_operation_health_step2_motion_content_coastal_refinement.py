@@ -55,17 +55,19 @@ ck('BuildFromClassMask' in C and 'PresentationCrossingFraction' in C,'coastline 
 ck('BuildSparseCoastalCorrections(tile' in RA and 'coastalBoundaryField' in RA,'sparse land/water correction consumes same boundary field')
 ck('PresentationCrossingFraction(' in RA[RA.index('static CorrectionPoint CorrectionCrossing'):],'fill crossing consumes the same presentation crossing function')
 ck('HighDensityCoastlineSegments.Clone()' in RA,'persisted Candidate11 coastline remains safety fallback')
-ck('MaximumSparseCorrectionParentCells = 256' in RA,'Candidate11 sparse correction safety rail remains 256')
+ck('MaximumSparseCorrectionParentCells = 256' in RA,'Candidate11 sparse correction parent safety rail remains 256')
 ck('MaximumContourLevelsPerTile = 96' in RA,'Candidate11 contour authority remains 96 levels')
 ck('RenderTextureFormat.ARGB32' in R and 'FilterMode.Bilinear' in R,'render-target quality authority unchanged')
 ck('oh_content_tick=' in R and 'oh_motion_only=' in R and 'oh_content_capture=' in R and 'content_snapshot=' in R,'runtime content-split telemetry is published')
 ck(V.get('NAME') == name,'runtime identity is Operation Health Step 2')
 phase3='EPI'+'NEPHRINE'
 phase4='ATRO'+'PINE'
+phase5='ADE'+'NOSINE'
 ck(('OPERATION HEALTH STEP 2 MOTION CONTENT SPLIT COASTAL EDGE REFINEMENT' in B) or
    (('OPERATION HEALTH PHASE 3 '+phase3+' GPU VERTEX PROJECTION') in B) or
-   (('AERIS25 OPERATION HEALTH PHASE 4 '+phase4+' GPU DYNAMIC TERRAIN COLOUR') in B),
-   'Ubuntu build identifies Step 2 parent or approved Phase 3/4 successor')
+   (('AERIS25 OPERATION HEALTH PHASE 4 '+phase4+' GPU DYNAMIC TERRAIN COLOUR') in B) or
+   (('AERIS25 OPERATION HEALTH PHASE 5 '+phase5+' PERSISTENT PRESENTATION BATCHING') in B),
+   'Ubuntu build identifies Step 2 parent or approved Phase 3/4/5 successor')
 # Pure numerical guard for the presentation crossing contract. This mirrors the C# bounds
 # and proves every opposite-sign edge stays inside its source edge without a topology flip.
 def crossing(w0,w1,s0,s1):
