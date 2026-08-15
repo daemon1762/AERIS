@@ -44,7 +44,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: aeris25-gpu-dynamic-colour-static-log
-          path: aeris25_gpu_dynamic_colour_static.log
+          path: |
+            aeris25_gpu_dynamic_colour_static.log
+            Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+            Source/AERISFlightControl/Terrain/AERISNdGpuVertexProjectionBackend.cs
+            GpuAssets/Assets/AERISNdExactVertexProjection.shader
+            build_ubuntu.sh
           if-no-files-found: error
       - name: Fail if AERIS25 static gate failed
         if: steps.candidate.outcome == 'failure'
