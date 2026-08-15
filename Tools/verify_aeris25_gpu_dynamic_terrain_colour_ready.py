@@ -17,6 +17,8 @@ U = (ROOT / "build_ubuntu.sh").read_text()
 S = (ROOT / "Tools/build_aeris25_gpu_shader_bundle.sh").read_text()
 P = (ROOT / "Tools/prepare_aeris25_gpu_dynamic_terrain_colour_runtime.py").read_text()
 M = (ROOT / "GpuAssets/Packages/manifest.json").read_text()
+S_ACTIVE = [line.strip() for line in S.splitlines()
+            if line.strip() and not line.lstrip().startswith('#')]
 checks = []
 def ck(v, name):
     ok = bool(v)
@@ -51,9 +53,10 @@ ck((ROOT / 'Tools/apply_aeris25_assetbundle_compat_hotfix.py').is_file(),
    'AssetBundle compatibility hotfix is generated and repeatable')
 ck('"dependencies": {}' in M,
    'GpuAssets project has no Package Manager dependencies')
-ck('-noUpm' in S,
+ck(any('-noUpm' in line for line in S_ACTIVE),
    'Unity batch AssetBundle generation disables Package Manager')
-ck('-logFile "$log_file"' in S and '-logFile -' not in S,
+ck(any(line == '-logFile "$log_file"' for line in S_ACTIVE) and
+   not any(line == '-logFile -' for line in S_ACTIVE),
    'Unity/UPM logging is isolated from caller stdout to a real log file')
 ck('ERR_STREAM_DESTROYED' in S,
    'builder documents Unity 2019 Package Manager destroyed-stream failure containment')
