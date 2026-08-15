@@ -28,7 +28,7 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           LOG=aeris25_main_thread_commit_governor_static.log
 
           echo '=== AERIS25-1 ATROPINE LINEAGE ===' | tee "$LOG"
@@ -65,9 +65,23 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
           git diff --check
 
-          grep -Fq '[AERIS25 NOREPINEPHRINE PHASE6_001 MAIN THREAD COMMIT GOVERNOR] STATIC PASS' "$LOG"
-          grep -Fq 'measured-time commit governor already present' "$LOG"
-          grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' "$LOG"
+      - name: Assert Phase6 static marker
+        id: phase6_marker
+        if: always()
+        continue-on-error: true
+        run: grep -Fq '[AERIS25 NOREPINEPHRINE PHASE6_001 MAIN THREAD COMMIT GOVERNOR] STATIC PASS' aeris25_main_thread_commit_governor_static.log
+
+      - name: Assert Phase6 idempotent marker
+        id: idempotent_marker
+        if: always()
+        continue-on-error: true
+        run: grep -Fq 'measured-time commit governor already present' aeris25_main_thread_commit_governor_static.log
+
+      - name: Assert inherited 20-suite prebuild marker
+        id: prebuild_marker
+        if: always()
+        continue-on-error: true
+        run: grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' aeris25_main_thread_commit_governor_static.log
 
       - name: Upload NOREPINEPHRINE static diagnostic
         if: always()
@@ -85,8 +99,9 @@ jobs:
           if-no-files-found: error
 
       - name: Fail if NOREPINEPHRINE static gate failed
-        if: steps.candidate.outcome == 'failure'
+        if: steps.candidate.outcome == 'failure' || steps.phase6_marker.outcome == 'failure' || steps.idempotent_marker.outcome == 'failure' || steps.prebuild_marker.outcome == 'failure'
         shell: bash
         run: |
+          echo "candidate=${{ steps.candidate.outcome }} phase6=${{ steps.phase6_marker.outcome }} idempotent=${{ steps.idempotent_marker.outcome }} prebuild=${{ steps.prebuild_marker.outcome }}"
           tail -n 400 aeris25_main_thread_commit_governor_static.log || true
           exit 1
