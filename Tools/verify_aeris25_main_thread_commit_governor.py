@@ -137,6 +137,8 @@ failed = [name for ok, name in checks if not ok]
 print('\n[AERIS25 NOREPINEPHRINE PHASE6_001 MAIN THREAD COMMIT GOVERNOR] %d/%d PASS' %
       (len(checks) - len(failed), len(checks)))
 if failed:
-    print('FAILED: ' + '; '.join(failed))
+    message = '; '.join(failed)
+    print('FAILED: ' + message)
+    print('::error title=NOREPINEPHRINE Phase6 verifier::' + message)
     raise SystemExit(1)
 print('[AERIS25 NOREPINEPHRINE PHASE6_001 MAIN THREAD COMMIT GOVERNOR] STATIC PASS')
