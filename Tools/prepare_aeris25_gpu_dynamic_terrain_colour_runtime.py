@@ -10,7 +10,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = "AERIS25_GPU_DYNAMIC_TERRAIN_COLOUR"
 OH_CODENAME = "ATRO" + "PINE"
-OH_REVISION = "OH_PHASE4_001"
+OH_REVISION = "OH_PHASE4_002"
 EXPECTED_WINDOWS_PROBE_SHA = "6465e6dfa7c9809a734d5ce85b202b49ea6ee5fcaac19d55d4b75bd532a35f0d"
 
 
@@ -53,6 +53,8 @@ def static_candidate_ready():
         ('codename = ' + OH_CODENAME) in config,
         ('CANDIDATE_NAME="' + CANDIDATE + '"') in build,
         'oh_gpu_dynamic_colour=' in renderer,
+        'oh_gpu_dynamic_vertex_submit=' in renderer,
+        'oh_gpu_vertex_packed_mismatch=' in renderer,
         'GpuDynamicColourAttributesReady' in renderer,
         'SetUVs(2, gpuDynamicTerrainSemanticScratch)' in renderer,
         'packedTerrainSource.LongLength * (3L * 4L)) +' in renderer,
@@ -62,6 +64,7 @@ def static_candidate_ready():
         '_AerisTerrainSemanticMode' in shader,
         'AerisRelativeColour' in shader,
         'AerisTopographicColour' in shader,
+        'AERIS25_DYNAMIC_COLOUR_MODE_SPLIT' in shader,
         'verify_aeris25_gpu_dynamic_terrain_colour_ready.py' in build,
     ))
 
@@ -82,6 +85,7 @@ if not ksp.is_dir():
 if not static_candidate_ready():
     run([sys.executable, ROOT / "Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py"])
 run([sys.executable, ROOT / "Tools/verify_aeris25_gpu_dynamic_terrain_colour_ready.py"])
+run([sys.executable, ROOT / "Tools/verify_aeris25_gpu_dynamic_colour_perf_hotfix.py"])
 run([sys.executable, ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"])
 run(["git", "diff", "--check"])
 
@@ -129,7 +133,6 @@ print("[AERIS25_GPU_DYNAMIC_COLOUR_BUNDLE] mode=%s; name=%s; sha256=%s" %
 print("[AERIS25_GPU_DYNAMIC_COLOUR_PROBE] name=%s; sha256=%s" %
       (probe_name, source_probe_sha))
 
-# Only compatibility-gated bundles reach the KSP installation step.
 run(["bash", ROOT / "build_ubuntu.sh", ksp])
 
 source_dll = ROOT / "GameData" / "AERISFlightControl" / "Plugins" / "AERISFlightControl.dll"
@@ -176,6 +179,6 @@ print("gpu_shader_bundle=" + bundle_name)
 print("gpu_shader_bundle_sha256=" + installed_bundle_sha)
 print("gpu_probe_bundle=" + probe_name)
 print("gpu_probe_bundle_sha256=" + installed_probe_sha)
-print("Runtime gate: verify oh_gpu_dynamic_colour=ACTIVE, then TOPO/REL and all palettes while flying.")
-print("Semantic upload should converge; oh_gpu_dynamic_cpu_colour_bypass must rise without repeated mesh colour uploads.")
+print("Runtime gate: verify oh_gpu_dynamic_colour=ACTIVE and OH_PHASE4_002.")
+print("Observe oh_gpu_dynamic_vertex_submit and packed/contour/coast mismatch counters while flying.")
 print("Golden visualCoverage=1.000, Runway Map Lock, 10 Hz authority and warm OFF/ON behavior must remain unchanged.")
