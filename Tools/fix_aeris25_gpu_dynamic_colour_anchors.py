@@ -7,17 +7,23 @@ ROOT = Path(__file__).resolve().parents[1]
 path = ROOT / "Tools/apply_aeris25_gpu_dynamic_terrain_colour.py"
 text = path.read_text()
 
-old = '''    b = replace_once(b,
-''' + "'''" + '''                AERISLogger.Info("[AERIS24_GPU_VERTEX_PROJECTION] ACTIVE; shader=" +\n''' + "'''" + ''',
-''' + "'''" + '''                AERISLogger.Info("[AERIS25_GPU_DYNAMIC_COLOUR] ACTIVE; shader=" +\n''' + "'''" + ''', 'backend active log identity')'''
-new = '''    b = replace_once(b,
-''' + "'''" + '''                AERISLogger.Info("[AERIS24_GPU_VERTEX_PROJECTION] ACTIVE; requested=" +\n''' + "'''" + ''',
-''' + "'''" + '''                AERISLogger.Info("[AERIS25_GPU_DYNAMIC_COLOUR] ACTIVE; requested=" +\n''' + "'''" + ''', 'backend active log identity')'''
+pairs = [
+    ("[AERIS24_GPU_VERTEX_PROJECTION] ACTIVE; shader=",
+     "[AERIS24_GPU_VERTEX_PROJECTION] ACTIVE; requested="),
+    ("[AERIS25_GPU_DYNAMIC_COLOUR] ACTIVE; shader=",
+     "[AERIS25_GPU_DYNAMIC_COLOUR] ACTIVE; requested="),
+]
+changed = False
+for old, new in pairs:
+    if new in text:
+        continue
+    if text.count(old) != 1:
+        raise SystemExit("[AERIS25 ANCHORS] expected one applicator token: " + old)
+    text = text.replace(old, new, 1)
+    changed = True
 
-if new in text:
-    print("[AERIS25 ANCHORS] rev007 backend ACTIVE anchor already aligned")
-elif text.count(old) == 1:
-    path.write_text(text.replace(old, new, 1))
-    print("[AERIS25 ANCHORS] aligned backend ACTIVE anchor: shader -> requested")
+if changed:
+    path.write_text(text)
+    print("[AERIS25 ANCHORS] aligned backend ACTIVE applicator tokens: shader -> requested")
 else:
-    raise SystemExit("[AERIS25 ANCHORS] backend ACTIVE applicator anchor mismatch")
+    print("[AERIS25 ANCHORS] rev007 backend ACTIVE tokens already aligned")
