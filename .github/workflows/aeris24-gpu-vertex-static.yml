@@ -1,0 +1,66 @@
+name: AERIS24 GPU Vertex Static
+
+on:
+  push:
+    branches:
+      - agent/aeris24-gpu-vertex-projection-poc
+  pull_request:
+    branches:
+      - agent/aeris23-oh-penicillin
+
+jobs:
+  source-and-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Script syntax
+        run: |
+          python3 -m py_compile \
+            Tools/fix_aeris24_gpu_vertex_projection_poc_anchors.py \
+            Tools/apply_aeris24_gpu_vertex_projection_poc.py \
+            Tools/fix_aeris24_gpu_vertex_single_authority_selftest.py \
+            Tools/verify_aeris24_gpu_vertex_projection_poc.py \
+            Tools/fix_aeris24_nd_backend_reload_anchors.py \
+            Tools/apply_aeris24_nd_backend_reload.py \
+            Tools/verify_aeris24_nd_backend_reload.py \
+            Tools/apply_aeris24_nd_reload_snapshot_hotfix.py \
+            Tools/verify_aeris24_nd_reload_snapshot_hotfix.py \
+            Tools/apply_aeris24_system_options_residency_hotfix.py \
+            Tools/verify_aeris24_system_options_residency_hotfix.py \
+            Tools/apply_aeris24_warm_visibility_suspend_hotfix.py \
+            Tools/verify_aeris24_warm_visibility_suspend_hotfix.py \
+            Tools/promote_aeris24_oh_phase3.py \
+            Tools/verify_aeris24_oh_phase3.py \
+            Tools/apply_aeris24_gpu_vertex_projection_ready.py \
+            Tools/prepare_aeris24_gpu_vertex_runtime.py
+          bash -n Tools/build_aeris24_gpu_shader_bundle.sh
+      - name: Prepare and verify complete static candidate
+        id: candidate
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          echo '=== FIRST GENERATION ===' | tee aeris24_gpu_vertex_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris24_gpu_vertex_projection_ready.py \
+            2>&1 | tee -a aeris24_gpu_vertex_static.log
+          echo '=== IDEMPOTENT RE-ENTRY ===' | tee -a aeris24_gpu_vertex_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris24_gpu_vertex_projection_ready.py \
+            2>&1 | tee -a aeris24_gpu_vertex_static.log
+          grep -Fq 'STATIC CANDIDATE PASS (IDEMPOTENT RE-ENTRY)' aeris24_gpu_vertex_static.log
+      - name: Upload static candidate diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeris24-gpu-vertex-static-log
+          path: aeris24_gpu_vertex_static.log
+          if-no-files-found: error
+      - name: Fail if static candidate gate failed
+        if: steps.candidate.outcome == 'failure'
+        shell: bash
+        run: |
+          tail -n 80 aeris24_gpu_vertex_static.log || true
+          SUMMARY="$(tail -n 35 aeris24_gpu_vertex_static.log | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')"
+          echo "::error title=AERIS24 static candidate gate::${SUMMARY}"
+          exit 1
