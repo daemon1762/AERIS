@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OLD_OH = "PENI" + "CILLIN"
 NEW_OH = "EPI" + "NEPHRINE"
 CANDIDATE = "AERIS24_GPU_VERTEX_PROJECTION_POC"
-REVISION = "OH_PHASE3_006"
+REVISION = "OH_PHASE3_007"
 
 
 def run_step(label, script):
@@ -40,6 +40,9 @@ def generated_phase3_ready():
         ('codename = ' + NEW_OH) in config and
         'oh_gpu_vertex_requested=' in renderer and
         'oh_gpu_vertex_resident_suspend=' in renderer and
+        'oh_nd_warm_suspend_count=' in renderer and
+        'SuspendVisibilityWarm' in renderer and
+        'PruneWarmResume' in renderer and
         'oh_nd_reload_pct=' in renderer and
         'oh_nd_reload_snapshot=' in renderer and
         'reloadSnapshotCenterLatitudeDeg' in renderer and
@@ -49,6 +52,7 @@ def generated_phase3_ready():
         'AERISNdProjectionBackendMode' in settings and
         'TerrainGpuMode = AERISTerrainGpuMode.On' in settings and
         'RELOADING ND' in ui and
+        'SuspendVisibilityWarm();' in ui and
         'FormatProjectionBackend' in ui and
         'DrawProjectionBackendSelector' in window and
         'GUILayout.HorizontalSlider' in window
@@ -66,6 +70,8 @@ if generated_phase3_ready():
              ROOT / "Tools/verify_aeris24_nd_reload_snapshot_hotfix.py")
     run_step("revalidate SYSTEM options / GPU residency hotfix",
              ROOT / "Tools/verify_aeris24_system_options_residency_hotfix.py")
+    run_step("revalidate warm visibility suspend hotfix",
+             ROOT / "Tools/verify_aeris24_warm_visibility_suspend_hotfix.py")
     run_step("revalidate Operation Health Phase 3 identity",
              ROOT / "Tools/verify_aeris24_oh_phase3.py")
     run_step("rerun inherited Operation Health Pass3 prebuild suite",
@@ -75,7 +81,7 @@ if generated_phase3_ready():
     print("codename=" + NEW_OH)
     print("revision=" + REVISION)
     print("candidate=" + CANDIDATE)
-    print("Next runtime gate: toggle ND OFF/ALWAYS after GPU activation; activation count must stay flat while resident-suspend count rises.")
+    print("Next runtime gate: ND OFF/ALWAYS x3; require activation count flat, warm mesh-destroy delta near zero, and resume hitch <50 ms target.")
     raise SystemExit(0)
 
 config = ROOT / "GameData/AERISFlightControl/Config/AERISOperationHealth.cfg"
@@ -99,6 +105,8 @@ steps = [
     ("verify ND reload snapshot hotfix", ROOT / "Tools/verify_aeris24_nd_reload_snapshot_hotfix.py"),
     ("apply SYSTEM options / GPU residency hotfix", ROOT / "Tools/apply_aeris24_system_options_residency_hotfix.py"),
     ("verify SYSTEM options / GPU residency hotfix", ROOT / "Tools/verify_aeris24_system_options_residency_hotfix.py"),
+    ("apply warm visibility suspend hotfix", ROOT / "Tools/apply_aeris24_warm_visibility_suspend_hotfix.py"),
+    ("verify warm visibility suspend hotfix", ROOT / "Tools/verify_aeris24_warm_visibility_suspend_hotfix.py"),
     ("promote Operation Health Phase 3 identity", ROOT / "Tools/promote_aeris24_oh_phase3.py"),
     ("verify Operation Health Phase 3 identity", ROOT / "Tools/verify_aeris24_oh_phase3.py"),
     ("run inherited Operation Health Pass3 prebuild suite", ROOT / "Tools/run_v01800_operation_health_pass3_prebuild.py"),
@@ -111,4 +119,4 @@ print("codename=" + NEW_OH)
 print("revision=" + REVISION)
 print("candidate=" + CANDIDATE)
 print("Inherited Operation Health Pass3 prebuild must report 20/20 suites PASS above.")
-print("Next runtime gate: toggle ND OFF/ALWAYS after GPU activation; activation count must stay flat while resident-suspend count rises.")
+print("Next runtime gate: ND OFF/ALWAYS x3; require activation count flat, warm mesh-destroy delta near zero, and resume hitch <50 ms target.")
