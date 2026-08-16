@@ -180,7 +180,7 @@ ck('phase6_identity' in P5V and 'OH_PHASE6_002' in P5V and
    'verify_aeris25_staged_main_thread_commit_hotfix.py' in P5V,
    'ADENOSINE inherited verifier explicitly admits exact rev002 descendant')
 active = '\n'.join(line for line in U.splitlines()
-                   if line.strip().startswith('PYTHONDWRITEBYTECODE=1 python3'))
+                   if line.strip().startswith('PYTHONDONTWRITEBYTECODE=1 python3'))
 ck('verify_aeris25_staged_main_thread_commit_hotfix.py' in active and
    'verify_aeris25_main_thread_commit_governor.py' not in active,
    'rev002 build uses one final-tree staged-commit verifier')
