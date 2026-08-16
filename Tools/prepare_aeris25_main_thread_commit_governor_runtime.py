@@ -116,6 +116,10 @@ if state == 'phase6_1':
 else:
     print('[AERIS25 NOREPINEPHRINE RUNTIME] generated Phase6_002 tree already present; reconstruction skipped')
 
+# Step2 predecessor checks explicitly forbid any non-authoritative worker drain. Phase6_002
+# changes only that hidden commit contract, so patch exactly those two inherited assertions
+# before running the complete parent matrix. Re-running this fixer is idempotent.
+run([sys.executable, ROOT / 'Tools/fix_aeris25_phase6_002_inherited_selftests.py'])
 run([sys.executable, ROOT / 'Tools/verify_aeris25_staged_main_thread_commit_hotfix.py'])
 run([sys.executable, ROOT / 'Tools/verify_aeris25_persistent_presentation_batching.py'])
 run([sys.executable, ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'])
