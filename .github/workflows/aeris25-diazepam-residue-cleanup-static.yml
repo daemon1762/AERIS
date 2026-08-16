@@ -1,0 +1,79 @@
+name: AERIS25 DIAZEPAM Rejected Tree Cleanup Static
+
+on:
+  push:
+    branches:
+      - agent/aeris25-diazepam-resident-ram-reuse-rev006
+  pull_request:
+    branches:
+      - agent/aeris25-main-thread-commit-governor
+  workflow_dispatch:
+
+jobs:
+  residue-cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cleanup helper syntax
+        run: |
+          python3 -m py_compile \
+            Tools/fix_aeris25_diazepam_rejected_generated_tree_residue.py \
+            Tools/prepare_aeris25_diazepam_runtime.py
+
+      - name: Ambiguous local edit must be preserved
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET=Tools/apply_aeris23_single_authority_terrain_pack_successor.py
+          printf '\n# DIAZEPAM_CI_AMBIGUOUS_LOCAL_EDIT\n' >> "$TARGET"
+          set +e
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_diazepam_rejected_generated_tree_residue.py > ambiguous.log 2>&1
+          rc=$?
+          set -e
+          test "$rc" -eq 3
+          grep -Fq 'DIAZEPAM_CI_AMBIGUOUS_LOCAL_EDIT' "$TARGET"
+          grep -Fq 'REFUSE:' ambiguous.log
+          git restore --source=HEAD -- "$TARGET"
+
+      - name: Confirm rejected runtime residue is cleaned narrowly
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '\n# DIAZEPAM_CI_PHASE6_RESIDUE\n' >> Tools/apply_aeris23_single_authority_terrain_pack_successor.py
+          printf '\n// DIAZEPAM_CI_PHASE6_RESIDUE\n' >> Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs
+          printf '\n// DIAZEPAM_CI_PHASE6_RESIDUE\n' >> Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs
+
+          cat > GameData/AERISFlightControl/AERISCandidateBuildIdentity.txt <<'EOF'
+          candidate=AERIS25_MAIN_THREAD_COMMIT_GOVERNOR
+          oh_revision=OH_PHASE6_005
+          display=NONBLOCKING SPECULATIVE PREPARATION
+          EOF
+          printf '# generated residue\n' > Tools/selftest_v01800_operation_health_entry_terrain_mesh_packing.py
+          printf '# generated residue\n' > Tools/selftest_v01800_operation_health_staggered_exact_refresh.py
+          printf '# generated residue\n' > Tools/selftest_v01800_operation_health_witness_affine_projection.py
+          printf 'must survive\n' > .diazepam-unrelated-untracked-sentinel
+
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_diazepam_rejected_generated_tree_residue.py | tee cleanup.log
+
+          git diff --exit-code -- \
+            Tools/apply_aeris23_single_authority_terrain_pack_successor.py \
+            Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs \
+            Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs
+          test ! -e GameData/AERISFlightControl/AERISCandidateBuildIdentity.txt
+          test ! -e Tools/selftest_v01800_operation_health_entry_terrain_mesh_packing.py
+          test ! -e Tools/selftest_v01800_operation_health_staggered_exact_refresh.py
+          test ! -e Tools/selftest_v01800_operation_health_witness_affine_projection.py
+          test -f .diazepam-unrelated-untracked-sentinel
+          grep -Fq 'PASS: rejected/generated tracked residue cleared' cleanup.log
+          rm -f .diazepam-unrelated-untracked-sentinel ambiguous.log cleanup.log
+
+      - name: Working tree clean after scoped cleanup test
+        shell: bash
+        run: |
+          set -euo pipefail
+          find Tools -type d -name __pycache__ -prune -exec rm -rf {} +
+          git status --porcelain
+          test -z "$(git status --porcelain)"
