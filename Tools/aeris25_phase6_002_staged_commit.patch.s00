@@ -1,0 +1,60 @@
+--- Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
++++ Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+@@ -163,6 +163,57 @@
+             internal bool ExactDetailOverlay;
+         }
+ 
++        enum PendingEntryCommitStage
++        {
++            ClipTriangles,
++            PrepareSources,
++            PreparePackedTerrain,
++            UploadPackedTerrain,
++            UploadContour,
++            UploadCoastline,
++            GeographicPacked,
++            GeographicContour,
++            GeographicCoastline,
++            Finalize
++        }
++
++        sealed class PendingEntryCommit
++        {
++            internal string CacheKey;
++            internal AERISTerrainRenderReadyHeightField Result;
++            internal PendingEntryCommitStage Stage;
++            internal readonly SurfaceBuilder Land = new SurfaceBuilder();
++            internal readonly SurfaceBuilder Water = new SurfaceBuilder();
++            internal readonly SurfacePoint[] ClipScratch = new SurfacePoint[6];
++            internal int TriangleCursor;
++            internal Vector3[] LandSource;
++            internal Vector3[] WaterSource;
++            internal Vector3[] CoastalLandSource;
++            internal Vector3[] CoastalWaterSource;
++            internal Vector3[] PackedSource;
++            internal Color32[] PackedColours;
++            internal int[] PackedIndices;
++            internal int PackedWaterOffset, PackedWaterCount;
++            internal int PackedLandOffset, PackedLandCount;
++            internal int PackedCoastalWaterOffset, PackedCoastalWaterCount;
++            internal int PackedCoastalLandOffset, PackedCoastalLandCount;
++            internal int PackedSourceMeshCount;
++            internal Vector3[] ContourSource;
++            internal Vector3[] CoastlineSource;
++            internal Mesh PackedMesh;
++            internal Mesh ContourMesh;
++            internal Mesh CoastlineMesh;
++            internal GeographicUnitPoint[] PackedGeographic;
++            internal GeographicUnitPoint[] ContourGeographic;
++            internal GeographicUnitPoint[] CoastlineGeographic;
++            internal int GeographicCursor;
++            internal float[] LandElevation;
++            internal byte[] LandShade;
++            internal long Bytes;
++            internal long StartedTicks;
++            internal double AccumulatedMilliseconds;
++        }
++
+         struct SurfacePoint
+         {
+             internal float X;

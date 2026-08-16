@@ -1,0 +1,60 @@
++                Valid = (byte[])result.Valid.Clone(),
++                WaterColourPreset = AERISTerrainColourPreset.Standard,
++                CoverageFraction = TriangleCoverage(result),
++                Bytes = Math.Max(1L, bytes),
++                LastUse = 0L
++            };
++            CaptureAndMarkRenderReady(result, system);
++            Entry old;
++            if (entries.TryGetValue(pending.CacheKey, out old)) Remove(old);
++            if (entry.CoverageFraction >= 0.999f)
++                RemoveSupersededEntries(result.Key, pending.CacheKey);
++            AddEntry(entry);
++            usedEntryBytes += entry.Bytes;
++            if (entry.CoastlineResolution >=
++                AERISTerrainCoastlineExtractor.HighDensityResolution)
++                highDensityCoastlineEntries++;
++            if (entry.CoastalCorrectionParentCells > 0)
++            {
++                sparseCoastalCorrectionEntries++;
++                sparseCoastalCorrectionParentCells += entry.CoastalCorrectionParentCells;
++            }
++            uploaded++;
++            MarkGpuContentDirty();
++            MarkGpuReady(result);
++            if (performance != null)
++                performance.RecordGpuMeshPreparation(result.MeshMilliseconds,
++                    result.ContourMilliseconds, rasterizer.PendingCount > 0);
++            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
++            if (runtime != null)
++                runtime.RecordNavigationDisplayTextureUpload(
++                    pending.AccumulatedMilliseconds);
++            pending.PackedMesh = null;
++            pending.ContourMesh = null;
++            pending.CoastlineMesh = null;
++            return true;
++        }
++
++        void CancelPendingEntryCommit()
++        {
++            PendingEntryCommit pending = pendingEntryCommit;
++            if (pending == null) return;
++            RecycleMesh(ref pending.PackedMesh);
++            RecycleMesh(ref pending.ContourMesh);
++            RecycleMesh(ref pending.CoastlineMesh);
++            pendingEntryCommit = null;
+         }
+ 
+         void CaptureAndMarkRenderReady(AERISTerrainRenderReadyHeightField field,
+@@ -2621,52 +3038,12 @@
+             if (!renderReadyFields.TryGetValue(cacheKey, out field) || field == null)
+                 return false;
+             field.LastUseSequence = ++renderReadyUseSequence;
+-            long uploadStartTicks = Stopwatch.GetTimestamp();
+-            try
+-            {
+-                entry = BuildEntry(cacheKey, field);
+-                if (!HasRenderableTerrain(entry))
+-                {
+-                    operationHealthNonRenderableEntryRejects++;
+-                    // This immutable render-ready field cannot currently produce drawable

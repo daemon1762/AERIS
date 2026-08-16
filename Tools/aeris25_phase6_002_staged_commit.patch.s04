@@ -1,0 +1,60 @@
+-                        runtime.RecordNavigationDisplayTextureUpload(
+-                            (Stopwatch.GetTimestamp() - uploadStartTicks) *
+-                            1000.0 / Stopwatch.Frequency);
+-                }
+-            }
+-                processedThisWindow += completed.Count;
+-                operationHealthMainCommitProcessed += completed.Count;
+-                double elapsedMilliseconds = mainThreadCommitStopwatch.Elapsed.TotalMilliseconds;
+-                operationHealthMainCommitWindowMaxMilliseconds = Math.Max(
+-                    operationHealthMainCommitWindowMaxMilliseconds, elapsedMilliseconds);
+-                int remainingCompleted = Math.Max(0, rasterizer.CompletedCount);
+-                operationHealthMainCommitBacklog = remainingCompleted;
+-                operationHealthMainCommitBacklogPeak = Math.Max(
+-                    operationHealthMainCommitBacklogPeak, remainingCompleted);
+-                if (gpuFailed) break;
+-                if (elapsedMilliseconds >= budgetMilliseconds)
+-                {
+-                    if (remainingCompleted > 0) operationHealthMainCommitBudgetHits++;
+-                    if (elapsedMilliseconds > budgetMilliseconds)
+-                        operationHealthMainCommitOverbudget++;
+-                    break;
++                    publishedThisWindow++;
++                    operationHealthMainCommitProcessed++;
++                    operationHealthMainCommitPublishes++;
+                 }
++                if (!finished) break;
++                if (mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >=
++                    budgetMilliseconds) break;
+             }
++
+             mainThreadCommitStopwatch.Stop();
+-            int finalRemainingCompleted = Math.Max(0, rasterizer.CompletedCount);
++            double elapsedMilliseconds = mainThreadCommitStopwatch.Elapsed.TotalMilliseconds;
++            operationHealthMainCommitWindowMaxMilliseconds = Math.Max(
++                operationHealthMainCommitWindowMaxMilliseconds, elapsedMilliseconds);
++            int finalRemainingCompleted = Math.Max(0, rasterizer.CompletedCount) +
++                (pendingEntryCommit == null ? 0 : 1);
+             operationHealthMainCommitBacklog = finalRemainingCompleted;
+             operationHealthMainCommitBacklogPeak = Math.Max(
+                 operationHealthMainCommitBacklogPeak, finalRemainingCompleted);
+-            // Preserve ATROPINE rev009 count-cap telemetry as a hard-rail witness.
+-            if (finalRemainingCompleted > 0 && processedThisWindow >= hardMaximum)
++            operationHealthMainCommitPendingPeak = Math.Max(
++                operationHealthMainCommitPendingPeak, pendingEntryCommit == null ? 0 : 1);
++            if (finalRemainingCompleted > 0 && elapsedMilliseconds >= budgetMilliseconds)
++                operationHealthMainCommitBudgetHits++;
++            if (elapsedMilliseconds > budgetMilliseconds * 1.5)
++                operationHealthMainCommitOverbudget++;
++            if (finalRemainingCompleted > 0 && publishedThisWindow >= hardMaximum)
+                 operationHealthContentCommitBudgetHits++;
+             operationHealthContentCommitBacklogPeak = Math.Max(
+                 operationHealthContentCommitBacklogPeak, finalRemainingCompleted);
++        }
++
++        bool TryBeginPendingEntryCommit(AERISTerrainRenderReadyHeightField result)
++        {
++            if (!ValidResult(result)) return false;
++            if (result.Triangles.Length < 3)
++            {
++                operationHealthEmptyTriangleResults++;

@@ -1,0 +1,60 @@
++                return false;
++            }
++            string cacheKey = CacheKey(result.Key, result.TileCreatedUtcTicks,
++                result.StyleKey);
++            result.LastUseSequence = ++renderReadyUseSequence;
++            AERISTerrainRenderReadyHeightField existingRenderReady;
++            if (!renderReadyFields.TryGetValue(cacheKey, out existingRenderReady) ||
++                !ReferenceEquals(existingRenderReady, result))
++                StoreRenderReadyField(cacheKey, result);
++            if (result.Key.Lod == AERISTerrainTileLod.Far)
++            {
++                if (result.VirtualDetailLevel ==
++                    AERISTerrainVirtualDetailLevel.VirtualRoute) virtualRouteBuilds++;
++                else if (result.VirtualDetailLevel ==
++                    AERISTerrainVirtualDetailLevel.VirtualLocal) virtualLocalBuilds++;
++            }
++            pendingEntryCommit = new PendingEntryCommit
++            {
++                CacheKey = cacheKey,
++                Result = result,
++                Stage = PendingEntryCommitStage.ClipTriangles,
++                StartedTicks = Stopwatch.GetTimestamp()
++            };
++            return true;
++        }
++
++        bool AdvancePendingEntryCommit(AERISTerrainTileSystem system,
++            double budgetMilliseconds, out bool published)
++        {
++            published = false;
++            PendingEntryCommit pending = pendingEntryCommit;
++            if (pending == null || pending.Result == null) return true;
++            while (pendingEntryCommit != null)
++            {
++                double stageStart = mainThreadCommitStopwatch.Elapsed.TotalMilliseconds;
++                switch (pending.Stage)
++                {
++                    case PendingEntryCommitStage.ClipTriangles:
++                        if (!AdvancePendingClip(pending, budgetMilliseconds))
++                            return YieldPendingEntryCommit(stageStart, true);
++                        pending.Stage = PendingEntryCommitStage.PrepareSources;
++                        break;
++                    case PendingEntryCommitStage.PrepareSources:
++                        PreparePendingSources(pending);
++                        pending.Stage = PendingEntryCommitStage.PreparePackedTerrain;
++                        break;
++                    case PendingEntryCommitStage.PreparePackedTerrain:
++                        PreparePendingPackedTerrain(pending);
++                        pending.Stage = PendingEntryCommitStage.UploadPackedTerrain;
++                        break;
++                    case PendingEntryCommitStage.UploadPackedTerrain:
++                        pending.PackedMesh = UploadPreparedPackedTerrainMesh(
++                            "AERIS_TERRAIN_PACKED_" + pending.Result.Key.FileStem, pending);
++                        pending.Stage = PendingEntryCommitStage.UploadContour;
++                        break;
++                    case PendingEntryCommitStage.UploadContour:
++                        pending.ContourMesh = BuildLineMesh(
++                            "AERIS_TERRAIN_CONTOUR_" + pending.Result.Key.FileStem,
++                            pending.Result.ContourSegments,
++                            new Color32(255, 255, 255, 210), out pending.ContourSource);

@@ -1,0 +1,60 @@
++            if (source == null || source.Length == 0)
++            {
++                output = null;
++                cursor = 0;
++                return true;
++            }
++            if (output == null || output.Length != source.Length)
++                output = new GeographicUnitPoint[source.Length];
++            double latitudeSpan = result.NorthLatitudeDeg - result.SouthLatitudeDeg;
++            double longitudeSpan = PositiveLongitudeSpan(result.WestLongitudeDeg,
++                result.EastLongitudeDeg);
++            int iterations = 0;
++            while (cursor < source.Length)
++            {
++                double latitudeDeg = result.SouthLatitudeDeg + latitudeSpan * source[cursor].y;
++                double longitudeDeg = NormalizeLongitude(result.WestLongitudeDeg +
++                    longitudeSpan * source[cursor].x);
++                double latitudeRad = latitudeDeg * Math.PI / 180.0;
++                double longitudeRad = longitudeDeg * Math.PI / 180.0;
++                double cosineLatitude = Math.Cos(latitudeRad);
++                output[cursor] = new GeographicUnitPoint
++                {
++                    X = cosineLatitude * Math.Cos(longitudeRad),
++                    Y = cosineLatitude * Math.Sin(longitudeRad),
++                    Z = Math.Sin(latitudeRad)
++                };
++                cursor++;
++                iterations++;
++                if ((iterations & 31) == 0 &&
++                    mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >= budgetMilliseconds)
++                    return false;
++            }
++            return true;
++        }
+ 
++        bool FinalizePendingEntryCommit(PendingEntryCommit pending,
++            AERISTerrainTileSystem system)
++        {
++            AERISTerrainRenderReadyHeightField result = pending.Result;
++            if (pending.PackedMesh == null)
++            {
++                operationHealthNonRenderableEntryRejects++;
++                RemoveRenderReadyField(pending.CacheKey, result);
++                CancelPendingEntryCommit();
++                return false;
++            }
++            long projectedVertexBytes = (long)(
++                (pending.PackedSource == null ? 0 : pending.PackedSource.Length) +
++                (pending.ContourSource == null ? 0 : pending.ContourSource.Length) +
++                (pending.CoastlineSource == null ? 0 : pending.CoastlineSource.Length)) *
++                (3L * 8L + 3L * 4L);
++            long bytes = result.Valid.Length + projectedVertexBytes +
++                (pending.PackedSource == null ? 0L :
++                    pending.PackedSource.LongLength * (3L * 4L + 4L)) +
++                (pending.PackedIndices == null ? 0L : pending.PackedIndices.LongLength * 4L) +
++                (pending.PackedSource == null ? 0L :
++                    pending.PackedSource.LongLength * (3L * 4L)) +
++                pending.Land.Vertices.Count * (4L + 1L) +
++                (result.CoastalLandCorrectionElevationMeters == null ? 0L :
++                    result.CoastalLandCorrectionElevationMeters.LongLength * (4L + 1L));

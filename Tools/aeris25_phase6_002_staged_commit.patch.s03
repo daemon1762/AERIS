@@ -1,0 +1,60 @@
+-                    else if (result.VirtualDetailLevel ==
+-                        AERISTerrainVirtualDetailLevel.VirtualLocal) virtualLocalBuilds++;
++                    completed.Clear();
++                    if (rasterizer.Drain(completed, 1) <= 0) break;
++                    AERISTerrainGpuTileRasterResult result = completed[0];
++                    if (!TryBeginPendingEntryCommit(result)) continue;
+                 }
+-                long uploadStartTicks = Stopwatch.GetTimestamp();
+-                try
+-                {
+-                    Entry entry = BuildEntry(cacheKey, result);
+-                    if (!HasRenderableTerrain(entry))
+-                    {
+-                        operationHealthNonRenderableEntryRejects++;
+-                        RemoveRenderReadyField(cacheKey, result);
+-                        continue;
+-                    }
+-                    // Render-ready/RAM-resident authority is published only after the
+-                    // replacement proves that it can actually draw terrain.
+-                    CaptureAndMarkRenderReady(result, system);
+-                    Entry old;
+-                    if (entries.TryGetValue(cacheKey, out old)) Remove(old);
+-                    // A progressive 25/50/75% mesh overlays the last complete preview.
+-                    // Superseded entries are released only once the replacement itself
+-                    // spans the complete tile, preventing visible regression to holes.
+-                    if (entry.CoverageFraction >= 0.999f)
+-                        RemoveSupersededEntries(result.Key, cacheKey);
+-                    AddEntry(entry);
+-                    usedEntryBytes += entry.Bytes;
+-                    if (entry.CoastlineResolution >=
+-                        AERISTerrainCoastlineExtractor.HighDensityResolution)
+-                        highDensityCoastlineEntries++;
+-                    if (entry.CoastalCorrectionParentCells > 0)
+-                    {
+-                        sparseCoastalCorrectionEntries++;
+-                        sparseCoastalCorrectionParentCells +=
+-                            entry.CoastalCorrectionParentCells;
+-                    }
+-                    uploaded++;
+-                    MarkGpuContentDirty();
+-                    MarkGpuReady(result);
+-                    if (performance != null)
+-                        performance.RecordGpuMeshPreparation(
+-                            result.MeshMilliseconds, result.ContourMilliseconds,
+-                            rasterizer.PendingCount > 0);
+-                }
+-                catch (Exception ex)
++
++                bool published;
++                bool finished = AdvancePendingEntryCommit(system, budgetMilliseconds,
++                    out published);
++                if (published)
+                 {
+-                    FailGpuTerrain(ex);
+-                    break;
+-                }
+-                finally
+-                {
+-                    AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
+-                    if (runtime != null)

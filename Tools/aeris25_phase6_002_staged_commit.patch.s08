@@ -1,0 +1,60 @@
++                pending.PackedCoastalWaterCount + pending.PackedCoastalLandCount;
++            if (vertexCount < 3 || indexCount < 3 || pending.PackedSourceMeshCount <= 0)
++                return;
++            pending.PackedSource = new Vector3[vertexCount];
++            pending.PackedColours = new Color32[vertexCount];
++            pending.PackedIndices = new int[indexCount];
++            Color32 waterColour = ResolveWaterColour(AERISTerrainColourPreset.Standard);
++            Color32 landColour = new Color32(255, 255, 255, 255);
++            if (pending.PackedWaterCount > 0)
++                Array.Copy(waterSource, 0, pending.PackedSource, pending.PackedWaterOffset,
++                    pending.PackedWaterCount);
++            if (pending.PackedLandCount > 0)
++                Array.Copy(landSource, 0, pending.PackedSource, pending.PackedLandOffset,
++                    pending.PackedLandCount);
++            if (pending.PackedCoastalWaterCount > 0)
++                Array.Copy(coastalWaterSource, 0, pending.PackedSource,
++                    pending.PackedCoastalWaterOffset, pending.PackedCoastalWaterCount);
++            if (pending.PackedCoastalLandCount > 0)
++                Array.Copy(coastalLandSource, 0, pending.PackedSource,
++                    pending.PackedCoastalLandOffset, pending.PackedCoastalLandCount);
++            for (int i = 0; i < pending.PackedWaterCount; i++)
++                pending.PackedColours[pending.PackedWaterOffset + i] = waterColour;
++            for (int i = 0; i < pending.PackedLandCount; i++)
++                pending.PackedColours[pending.PackedLandOffset + i] = landColour;
++            for (int i = 0; i < pending.PackedCoastalWaterCount; i++)
++                pending.PackedColours[pending.PackedCoastalWaterOffset + i] = waterColour;
++            for (int i = 0; i < pending.PackedCoastalLandCount; i++)
++                pending.PackedColours[pending.PackedCoastalLandOffset + i] = landColour;
++            int index = 0;
++            for (int i = 0; i < pending.Water.Triangles.Count; i++)
++                pending.PackedIndices[index++] = pending.PackedWaterOffset +
++                    pending.Water.Triangles[i];
++            for (int i = 0; i < pending.Land.Triangles.Count; i++)
++                pending.PackedIndices[index++] = pending.PackedLandOffset +
++                    pending.Land.Triangles[i];
++            for (int i = 0; i < pending.PackedCoastalWaterCount; i++)
++                pending.PackedIndices[index++] = pending.PackedCoastalWaterOffset + i;
++            for (int i = 0; i < pending.PackedCoastalLandCount; i++)
++                pending.PackedIndices[index++] = pending.PackedCoastalLandOffset + i;
++        }
++
++        Mesh UploadPreparedPackedTerrainMesh(string name, PendingEntryCommit pending)
++        {
++            if (pending.PackedSource == null || pending.PackedIndices == null ||
++                pending.PackedSource.Length < 3 || pending.PackedIndices.Length < 3)
++                return null;
++            Mesh mesh = AcquireMesh(name, pending.PackedSource.Length);
++            mesh.vertices = pending.PackedSource;
++            mesh.colors32 = pending.PackedColours;
++            mesh.triangles = pending.PackedIndices;
++            mesh.bounds = NdPresentationBounds;
++            mesh.UploadMeshData(false);
++            operationHealthPackedTerrainBuilds++;
++            return mesh;
++        }
++
++        bool AdvancePendingGeographic(Vector3[] source,
++            ref GeographicUnitPoint[] output, ref int cursor,
++            AERISTerrainRenderReadyHeightField result, double budgetMilliseconds)
++        {

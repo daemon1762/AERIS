@@ -1,0 +1,60 @@
++
++        bool AdvancePendingClip(PendingEntryCommit pending, double budgetMilliseconds)
++        {
++            AERISTerrainRenderReadyHeightField result = pending.Result;
++            int iterations = 0;
++            while (pending.TriangleCursor + 2 < result.Triangles.Length)
++            {
++                int i = pending.TriangleCursor;
++                SurfacePoint a = Point(result, result.Triangles[i]);
++                SurfacePoint b = Point(result, result.Triangles[i + 1]);
++                SurfacePoint c = Point(result, result.Triangles[i + 2]);
++                AppendClippedTriangle(pending.Land, pending.ClipScratch, a, b, c, false);
++                AppendClippedTriangle(pending.Water, pending.ClipScratch, a, b, c, true);
++                pending.TriangleCursor += 3;
++                iterations++;
++                if ((iterations & 15) == 0 &&
++                    mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >= budgetMilliseconds)
++                    return false;
++            }
++            return true;
++        }
++
++        void PreparePendingSources(PendingEntryCommit pending)
++        {
++            pending.LandSource = pending.Land.Vertices.Count <= 0 ? null :
++                pending.Land.Vertices.ToArray();
++            pending.WaterSource = pending.Water.Vertices.Count <= 0 ? null :
++                pending.Water.Vertices.ToArray();
++            pending.LandElevation = pending.Land.Elevation.ToArray();
++            pending.LandShade = pending.Land.Shade.ToArray();
++            pending.CoastalLandSource = BuildTriangleSourceVertices(
++                pending.Result.CoastalLandCorrectionVertices);
++            pending.CoastalWaterSource = BuildTriangleSourceVertices(
++                pending.Result.CoastalWaterCorrectionVertices);
++            operationHealthSurfaceBuilderReuses++;
++        }
++
++        void PreparePendingPackedTerrain(PendingEntryCommit pending)
++        {
++            Vector3[] waterSource = pending.WaterSource;
++            Vector3[] landSource = pending.LandSource;
++            Vector3[] coastalWaterSource = pending.CoastalWaterSource;
++            Vector3[] coastalLandSource = pending.CoastalLandSource;
++            pending.PackedWaterCount = waterSource == null ? 0 : waterSource.Length;
++            pending.PackedLandCount = landSource == null ? 0 : landSource.Length;
++            pending.PackedCoastalWaterCount = coastalWaterSource == null ? 0 : coastalWaterSource.Length;
++            pending.PackedCoastalLandCount = coastalLandSource == null ? 0 : coastalLandSource.Length;
++            pending.PackedWaterOffset = 0;
++            pending.PackedLandOffset = pending.PackedWaterCount;
++            pending.PackedCoastalWaterOffset = pending.PackedLandOffset + pending.PackedLandCount;
++            pending.PackedCoastalLandOffset = pending.PackedCoastalWaterOffset +
++                pending.PackedCoastalWaterCount;
++            int vertexCount = pending.PackedCoastalLandOffset + pending.PackedCoastalLandCount;
++            pending.PackedSourceMeshCount = (pending.PackedWaterCount > 0 ? 1 : 0) +
++                (pending.PackedLandCount > 0 ? 1 : 0) +
++                (pending.PackedCoastalWaterCount > 0 ? 1 : 0) +
++                (pending.PackedCoastalLandCount > 0 ? 1 : 0);
++            int waterIndexCount = pending.Water.Triangles.Count;
++            int landIndexCount = pending.Land.Triangles.Count;
++            int indexCount = waterIndexCount + landIndexCount +

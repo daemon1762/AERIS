@@ -1,0 +1,60 @@
++            if (result.ContourSegments != null) bytes += result.ContourSegments.Length * 4L;
++            if (result.CoastlineSegments != null) bytes += result.CoastlineSegments.Length * 4L;
++            double boundCenterLatitudeDeg, boundCenterLongitudeDeg, boundAngularRadiusRad;
++            ResolveConservativeEntryBounds(result.SouthLatitudeDeg,
++                result.NorthLatitudeDeg, result.WestLongitudeDeg,
++                result.EastLongitudeDeg, out boundCenterLatitudeDeg,
++                out boundCenterLongitudeDeg, out boundAngularRadiusRad);
++            double boundCenterX = 0.0, boundCenterY = 0.0, boundCenterZ = 0.0;
++            double boundRadiusSin = 0.0, boundRadiusCos = -1.0;
++            ResolveSphericalCapFastData(boundCenterLatitudeDeg,
++                boundCenterLongitudeDeg, boundAngularRadiusRad,
++                out boundCenterX, out boundCenterY, out boundCenterZ,
++                out boundRadiusSin, out boundRadiusCos);
++            Entry entry = new Entry
++            {
++                CacheKey = pending.CacheKey,
++                TileKey = result.Key,
++                TileCreatedUtcTicks = result.TileCreatedUtcTicks,
++                StyleKey = result.StyleKey,
++                PackedTerrainMesh = pending.PackedMesh,
++                PackedTerrainGeographicPoints = pending.PackedGeographic,
++                PackedTerrainProjectedVertices = AllocateProjectedVertices(pending.PackedSource),
++                PackedTerrainColours = pending.PackedColours,
++                PackedWaterOffset = pending.PackedWaterOffset,
++                PackedWaterCount = pending.PackedWaterCount,
++                PackedLandOffset = pending.PackedLandOffset,
++                PackedLandCount = pending.PackedLandCount,
++                PackedCoastalWaterOffset = pending.PackedCoastalWaterOffset,
++                PackedCoastalWaterCount = pending.PackedCoastalWaterCount,
++                PackedCoastalLandOffset = pending.PackedCoastalLandOffset,
++                PackedCoastalLandCount = pending.PackedCoastalLandCount,
++                PackedTerrainSourceMeshCount = pending.PackedSourceMeshCount,
++                ContourMesh = pending.ContourMesh,
++                CoastlineMesh = pending.CoastlineMesh,
++                ContourGeographicPoints = pending.ContourGeographic,
++                CoastlineGeographicPoints = pending.CoastlineGeographic,
++                ContourProjectedVertices = AllocateProjectedVertices(pending.ContourSource),
++                CoastlineProjectedVertices = AllocateProjectedVertices(pending.CoastlineSource),
++                SouthLatitudeDeg = result.SouthLatitudeDeg,
++                NorthLatitudeDeg = result.NorthLatitudeDeg,
++                WestLongitudeDeg = result.WestLongitudeDeg,
++                EastLongitudeDeg = result.EastLongitudeDeg,
++                BoundCenterLatitudeDeg = boundCenterLatitudeDeg,
++                BoundCenterLongitudeDeg = boundCenterLongitudeDeg,
++                BoundAngularRadiusRad = boundAngularRadiusRad,
++                BoundCenterX = boundCenterX,
++                BoundCenterY = boundCenterY,
++                BoundCenterZ = boundCenterZ,
++                BoundRadiusSin = boundRadiusSin,
++                BoundRadiusCos = boundRadiusCos,
++                LandElevationMeters = pending.LandElevation,
++                LandShade = pending.LandShade,
++                CoastalLandCorrectionElevationMeters =
++                    result.CoastalLandCorrectionElevationMeters == null ? null :
++                    (float[])result.CoastalLandCorrectionElevationMeters.Clone(),
++                CoastalLandCorrectionShade = result.CoastalLandCorrectionShade == null ? null :
++                    (byte[])result.CoastalLandCorrectionShade.Clone(),
++                Resolution = result.Resolution,
++                CoastlineResolution = result.CoastlineResolution,
++                CoastalCorrectionParentCells = result.CoastalCorrectionParentCells,

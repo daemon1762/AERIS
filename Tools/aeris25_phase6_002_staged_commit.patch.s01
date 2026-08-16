@@ -1,0 +1,60 @@
+@@ -273,6 +324,8 @@
+         const int BootstrapContentCommitMaximumResults = 4;
+         const int NormalPruneMaximumRemovals = 4;
+         const float ContentPlanningHeadingStepDeg = 6f;
++        // AERIS25_STAGED_MAIN_THREAD_COMMIT: Phase6_002 keeps rev009 count ceilings and
++        // preserves the Phase6_001 time budget while making Entry commit resumable.
+         // AERIS25_MAIN_THREAD_COMMIT_GOVERNOR: preserve rev009 count ceilings as
+         // hard rails, but stop consuming completed raster results by measured
+         // main-thread wall-clock budget after guaranteed minimum forward progress.
+@@ -466,6 +519,11 @@
+         long operationHealthMainCommitOverbudget;
+         long operationHealthMainCommitProcessed;
+         double operationHealthMainCommitBudgetMilliseconds;
++        PendingEntryCommit pendingEntryCommit;
++        long operationHealthMainCommitStageYields;
++        long operationHealthMainCommitPublishes;
++        double operationHealthMainCommitStageMaxMilliseconds;
++        int operationHealthMainCommitPendingPeak;
+         long operationHealthMeshPoolHits;
+         long operationHealthMeshPoolMisses;
+         long operationHealthMeshPoolRecycles;
+@@ -878,6 +936,11 @@
+                 presentationNow >= nextAuthoritativePresentationTickRealtime;
+             if (!authoritativeTickDue)
+             {
++                if (pendingEntryCommit != null || rasterizer.CompletedCount > 0)
++                {
++                    residentCache = system.CurrentBodyResidentCache;
++                    PumpStagedCompletedCommit(system);
++                }
+                 if (Reloading)
+                 {
+                     operationHealthCoalescedBlankPolls++;
+@@ -975,7 +1038,7 @@
+             float contourInterval = ResolveContourInterval(rangeMeters);
+             string styleKey = BuildStyleKey(contourInterval, virtualDetail);
+ 
+-            bool workerResultReady = rasterizer.CompletedCount > 0;
++            bool workerResultReady = pendingEntryCommit != null || rasterizer.CompletedCount > 0;
+             bool contentGeometryChanged = NeedsContentRefresh(system, vessel,
+                 centerLatitudeDeg, centerLongitudeDeg, rangeMeters, mapHeadingDeg,
+                 trackUp, anchorV, orientation, styleKey);
+@@ -996,7 +1059,7 @@
+             {
+                 operationHealthContentTicks++;
+                 if (workerResultReady) operationHealthContentWorkerDrains++;
+-                DrainCompleted(system);
++                PumpStagedCompletedCommit(system);
+                 // CaptureVisible owns planner-generation updates and RAM tile selection.
+                 // Step 2 simply stops invoking this allocation/resolve path for pure motion.
+                 visible = system.CaptureVisible(centerLatitudeDeg,
+@@ -1370,6 +1433,7 @@
+             nextContentMaintenanceRealtime = 0f;
+             presentationPacketCount = 0;
+             presentationEntryPins.Clear();
++            CancelPendingEntryCommit();
+         }
+ 
+         void RefreshPresentationPackets(AERISTerrainHeightTile[] tiles, Entry[] drawEntries)
+@@ -2343,6 +2407,11 @@

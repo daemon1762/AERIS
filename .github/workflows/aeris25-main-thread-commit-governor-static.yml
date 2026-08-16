@@ -1,0 +1,164 @@
+name: AERIS25 Main Thread Commit Governor Static
+
+on:
+  push:
+    branches:
+      - agent/aeris25-main-thread-commit-governor
+  pull_request:
+    branches:
+      - agent/aeris25-persistent-presentation-batching
+
+jobs:
+  main-thread-commit-governor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: NOREPINEPHRINE script syntax
+        run: |
+          python3 -m py_compile \
+            Tools/apply_aeris25_main_thread_commit_governor.py \
+            Tools/verify_aeris25_main_thread_commit_governor.py \
+            Tools/prepare_aeris25_main_thread_commit_governor_runtime.py
+
+      - name: Reconstruct accepted ATROPINE rev009
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_main_thread_commit_governor_static.log
+          echo '=== AERIS25-1 ATROPINE LINEAGE ===' | tee "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_snapshot_mesh_lifetime_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_content_generation_burst_governor_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_content_generation_burst_governor_hotfix.py 2>&1 | tee -a "$LOG"
+          echo '=== ATROPINE REV009 ACCEPTED PRE-PROMOTION PASS ===' | tee -a "$LOG"
+
+      - name: Promote accepted ADENOSINE Phase5
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_main_thread_commit_governor_static.log
+          echo '=== AERIS25-2 ADENOSINE OH_PHASE5_001 ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          echo '=== ADENOSINE ACCEPTED PRE-PROMOTION PASS ===' | tee -a "$LOG"
+
+      - name: Apply NOREPINEPHRINE Phase6
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_main_thread_commit_governor_static.log
+          echo '=== AERIS25-3 NOREPINEPHRINE OH_PHASE6_001 ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
+
+      - name: Verify NOREPINEPHRINE Phase6
+        shell: bash
+        run: |
+          set -o pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_main_thread_commit_governor.py 2>&1 | tee -a aeris25_main_thread_commit_governor_static.log
+
+      - name: DIAG Phase6 identity and budgets
+        if: always()
+        continue-on-error: true
+        run: |
+          grep -Fq '[PASS] NOREPINEPHRINE OH_PHASE6_001 identity is authoritative' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] build/in-game identity is AERIS25-3 NOREPINEPHRINE' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] measured time budgets are 0.50 ms steady / 1.25 ms bootstrap' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] ATROPINE rev009 2/4 count ceilings remain hard safety rails' aeris25_main_thread_commit_governor_static.log
+
+      - name: DIAG Phase6 DrainCompleted mechanics
+        if: always()
+        continue-on-error: true
+        run: |
+          grep -Fq '[PASS] completed raster results are consumed one at a time' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] one resident Stopwatch measures the main-thread commit window' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] minimum one-result forward progress precedes any elapsed budget stop' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] measured budget remains subordinate to bounded hard result count' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] processed work and live/peak backlog are observable' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] elapsed-time budget stop and unavoidable single-result overrun are observable' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] rev009 count-cap telemetry remains as inherited hard-rail witness' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] Phase6 never pushes consumed results back into the worker queue' aeris25_main_thread_commit_governor_static.log
+
+      - name: DIAG Phase6 telemetry publication
+        if: always()
+        continue-on-error: true
+        run: |
+          for n in budget_hit backlog backlog_peak window_max_ms overbudget processed budget_ms; do
+            grep -Fq "[PASS] runtime telemetry publishes oh_main_commit_${n}" aeris25_main_thread_commit_governor_static.log
+          done
+
+      - name: DIAG inherited rendering contracts
+        if: always()
+        continue-on-error: true
+        run: |
+          grep -Fq '[PASS] accepted ATROPINE rev009 prune/heading governor remains intact' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] accepted ADENOSINE persistent packet and O(1) snapshot pin path remain intact' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] rev008 lifetime guard and rev007 rejection witness remain intact' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] NOREPINEPHRINE changes no shader equations or shader bytes' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] hard painter order remains terrain -> contour -> coastline inside every Entry' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] fixed 10 Hz visible ND authority remains unchanged' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] Golden ARGB32/Bilinear render target remains unchanged' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] Runway Map Lock and Golden coverage telemetry remain present' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] GPU Dynamic Terrain Colour authority remains present' aeris25_main_thread_commit_governor_static.log
+
+      - name: DIAG Phase6 lineage and frozen controls
+        if: always()
+        continue-on-error: true
+        run: |
+          grep -Fq '[PASS] Step2 inherited build lineage explicitly admits Phase6 NOREPINEPHRINE' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] ADENOSINE verifier explicitly admits the exact Phase6 descendant' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] Phase6 build uses one final-tree NOREPINEPHRINE verifier' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[PASS] AA/AP/PROTECT/LAND working-tree edits remain NONE' aeris25_main_thread_commit_governor_static.log
+
+      - name: Phase6 inherited contract matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_main_thread_commit_governor_static.log
+          echo '=== PHASE6 INHERITED CONTRACT MATRIX ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
+
+      - name: NOREPINEPHRINE idempotent re-entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_main_thread_commit_governor_static.log
+          echo '=== NOREPINEPHRINE IDEMPOTENT RE-ENTRY ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
+
+      - name: Generated tree diff check
+        run: git diff --check
+
+      - name: Assert final Phase6 markers
+        run: |
+          grep -Fq '[AERIS25 NOREPINEPHRINE PHASE6_001 MAIN THREAD COMMIT GOVERNOR] STATIC PASS' aeris25_main_thread_commit_governor_static.log
+          grep -Fq 'measured-time commit governor already present' aeris25_main_thread_commit_governor_static.log
+          grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' aeris25_main_thread_commit_governor_static.log
+
+      - name: Upload NOREPINEPHRINE static diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeris25-main-thread-commit-governor-static-log
+          path: |
+            aeris25_main_thread_commit_governor_static.log
+            Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+            Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs
+            GameData/AERISFlightControl/Config/AERISOperationHealth.cfg
+            Tools/verify_aeris25_persistent_presentation_batching.py
+            Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py
+            build_ubuntu.sh
+          if-no-files-found: error
