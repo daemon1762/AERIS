@@ -21,11 +21,11 @@ jobs:
           python3 -m py_compile \
             Tools/apply_aeris25_staged_main_thread_commit_hotfix.py \
             Tools/verify_aeris25_staged_main_thread_commit_hotfix.py \
+            Tools/fix_aeris25_phase6_002_inherited_selftests.py \
             Tools/prepare_aeris25_main_thread_commit_governor_runtime.py
-          test -s Tools/aeris25_phase6_002_staged_commit.patch.part00
-          test -s Tools/aeris25_phase6_002_staged_commit.patch.part01
-          test -s Tools/aeris25_phase6_002_staged_commit.patch.part02
-          test -s Tools/aeris25_phase6_002_staged_commit.patch.part03
+          for i in $(seq -w 0 12); do
+            test -s "Tools/aeris25_phase6_002_staged_commit.patch.s${i}"
+          done
 
       - name: Reconstruct accepted AERIS25 lineage through Phase6_001
         shell: bash
@@ -58,6 +58,7 @@ jobs:
           LOG=aeris25_phase6_002_staged_commit_static.log
           echo '=== NOREPINEPHRINE PHASE6_002 STAGED COMMIT ===' | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_staged_main_thread_commit_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_staged_main_thread_commit_hotfix.py 2>&1 | tee -a "$LOG"
 
       - name: Verify inherited contracts on rev002 tree
@@ -74,8 +75,10 @@ jobs:
           set -euo pipefail
           LOG=aeris25_phase6_002_staged_commit_static.log
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_staged_main_thread_commit_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_staged_main_thread_commit_hotfix.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
 
       - name: Generated C# structural sanity
         shell: bash
@@ -113,6 +116,8 @@ jobs:
           assert '<<<<<<<' not in s and '>>>>>>>' not in s
           assert 'AERIS25_STAGED_MAIN_THREAD_COMMIT' in s
           assert 'ElapsedMilliseconds(mainThreadCommitStopwatch)' not in s
+          assert 'internal readonly SurfaceBuilder Land = new SurfaceBuilder();' not in s
+          assert 'Land = landSurfaceScratch' in s
           print('[PHASE6_002 CSHARP STRUCTURE] PASS')
           PY
           git diff --check
@@ -121,6 +126,7 @@ jobs:
         run: |
           grep -Fq '[AERIS25 NOREPINEPHRINE PHASE6_002 STAGED MAIN THREAD COMMIT] STATIC PASS' aeris25_phase6_002_staged_commit_static.log
           grep -Fq 'staged renderer patch already present' aeris25_phase6_002_staged_commit_static.log
+          grep -Fq 'exact Phase6_002 Step2 successor contract already present' aeris25_phase6_002_staged_commit_static.log
           grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' aeris25_phase6_002_staged_commit_static.log
 
       - name: Upload rev002 static diagnostic
@@ -134,5 +140,6 @@ jobs:
             Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs
             GameData/AERISFlightControl/Config/AERISOperationHealth.cfg
             Tools/verify_aeris25_persistent_presentation_batching.py
+            Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py
             build_ubuntu.sh
           if-no-files-found: error
