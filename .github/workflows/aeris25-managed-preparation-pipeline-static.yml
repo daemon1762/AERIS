@@ -22,8 +22,10 @@ jobs:
             Tools/apply_aeris25_managed_preparation_pipeline_hotfix.py \
             Tools/fix_aeris25_phase6_004_inherited_selftests.py \
             Tools/verify_aeris25_managed_preparation_pipeline_hotfix.py \
+            Tools/verify_aeris25_rev004_install_identity_hotfix.py \
             Tools/prepare_aeris25_main_thread_commit_governor_rev004_runtime.py \
             Tools/prepare_aeris25_main_thread_commit_governor_runtime.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_rev004_install_identity_hotfix.py
 
       - name: Reconstruct accepted lineage through Phase6_003
         shell: bash
@@ -66,6 +68,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_managed_preparation_pipeline_hotfix.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_004_inherited_selftests.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_managed_preparation_pipeline_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_rev004_install_identity_hotfix.py 2>&1 | tee -a "$LOG"
 
       - name: Verify inherited contracts on rev004 tree
         shell: bash
@@ -83,6 +86,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_managed_preparation_pipeline_hotfix.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_004_inherited_selftests.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_managed_preparation_pipeline_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_rev004_install_identity_hotfix.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
 
@@ -126,6 +130,7 @@ jobs:
       - name: Assert final rev004 markers
         run: |
           grep -Fq '[AERIS25 NOREPINEPHRINE PHASE6_004 MANAGED PREPARATION PIPELINE] STATIC PASS' aeris25_phase6_004_managed_preparation_static.log
+          grep -Fq '[AERIS25 NOREPINEPHRINE REV004 INSTALL IDENTITY HOTFIX] STATIC PASS' aeris25_phase6_004_managed_preparation_static.log
           grep -Fq 'managed preparation renderer patch already present' aeris25_phase6_004_managed_preparation_static.log
           grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' aeris25_phase6_004_managed_preparation_static.log
 
@@ -140,5 +145,7 @@ jobs:
             Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs
             GameData/AERISFlightControl/Config/AERISOperationHealth.cfg
             Tools/verify_aeris25_persistent_presentation_batching.py
+            Tools/prepare_aeris25_main_thread_commit_governor_rev004_runtime.py
+            Tools/verify_aeris25_rev004_install_identity_hotfix.py
             build_ubuntu.sh
           if-no-files-found: error
