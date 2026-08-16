@@ -1,0 +1,55 @@
+-                    // terrain. Remove it so the normal scheduler may rebuild it, but retain
+-                    // any older renderable Entry/fallback already covering the viewport.
+-                    RemoveRenderReadyField(cacheKey, field);
+-                    entry = null;
+-                    return false;
+-                }
+-                Entry old;
+-                if (entries.TryGetValue(cacheKey, out old)) Remove(old);
+-                AddEntry(entry);
+-                usedEntryBytes += entry.Bytes;
+-                if (entry.CoastlineResolution >=
+-                    AERISTerrainCoastlineExtractor.HighDensityResolution)
+-                    highDensityCoastlineEntries++;
+-                if (entry.CoastalCorrectionParentCells > 0)
+-                {
+-                    sparseCoastalCorrectionEntries++;
+-                    sparseCoastalCorrectionParentCells +=
+-                        entry.CoastalCorrectionParentCells;
+-                }
+-                uploaded++;
+-                MarkGpuContentDirty();
+-                MarkGpuReady(field);
+-                return true;
+-            }
+-            catch (Exception ex)
+-            {
+-                FailGpuTerrain(ex);
+-                entry = null;
+-                return false;
+-            }
+-            finally
+-            {
+-                AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
+-                if (runtime != null)
+-                    runtime.RecordNavigationDisplayTextureUpload(
+-                        (Stopwatch.GetTimestamp() - uploadStartTicks) *
+-                        1000.0 / Stopwatch.Frequency);
+-            }
++            // Phase6_002: a render-ready RAM field is already the expensive worker product.
++            // Queue it into the same resumable main-thread commit path and suppress a
++            // duplicate raster worker request while the last complete Entry remains visible.
++            if (pendingEntryCommit == null)
++                TryBeginPendingEntryCommit(field);
++            return true;
+         }
+ 
+         long ResolveRenderReadyLimitBytes()
+@@ -4973,6 +5350,7 @@
+         {
+             if (disposed) return;
+             disposed = true;
++            CancelPendingEntryCommit();
+             rasterizer.Dispose();
+             ReleaseGpuResources();
+             gpuVertexProjection.Dispose();
