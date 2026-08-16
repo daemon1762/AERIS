@@ -144,7 +144,7 @@ jobs:
           set -euo pipefail
           LOG=aeris25_phase7_001_diazepam_static.log
           grep -Fq '[AERIS25 DIAZEPAM PHASE7_001 RESIDENT RAM REUSE REV006] STATIC PASS' "$LOG"
-          grep -Fq '[Operation Health Pass 3 PREBUILD] 17/17 suites PASS' "$LOG"
+          grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' "$LOG"
           grep -Fq 'patch already present' "$LOG"
           grep -Fq 'exact Phase7 Step2 build successor already present' "$LOG"
 
