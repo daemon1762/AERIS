@@ -1,0 +1,160 @@
+name: AERIS25 DIAZEPAM Resident RAM Reuse Static
+
+on:
+  push:
+    branches:
+      - agent/aeris25-diazepam-resident-ram-reuse-rev006
+  pull_request:
+    branches:
+      - agent/aeris25-main-thread-commit-governor
+  workflow_dispatch:
+
+jobs:
+  diazepam-resident-ram-reuse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: DIAZEPAM rev006 script syntax
+        run: |
+          python3 -m py_compile \
+            Tools/apply_aeris25_diazepam_resident_ram_reuse.py \
+            Tools/verify_aeris25_diazepam_resident_ram_reuse.py \
+            Tools/prepare_aeris25_diazepam_rev006_runtime.py \
+            Tools/prepare_aeris25_diazepam_runtime.py \
+            Tools/prepare_aeris25_main_thread_commit_governor_runtime.py
+
+      - name: Reconstruct accepted lineage through ADENOSINE
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_phase7_001_diazepam_static.log
+          echo '=== ATROPINE REV009 ===' | tee "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_snapshot_mesh_lifetime_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_content_generation_burst_governor_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_content_generation_burst_governor_hotfix.py 2>&1 | tee -a "$LOG"
+          echo '=== ADENOSINE ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+
+      - name: Reconstruct exact frozen REV003 parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_phase7_001_diazepam_static.log
+          echo '=== NOREPINEPHRINE REV001 ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
+          echo '=== NOREPINEPHRINE REV002 ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_staged_main_thread_commit_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_staged_main_thread_commit_hotfix.py 2>&1 | tee -a "$LOG"
+          echo '=== NOREPINEPHRINE REV003 FROZEN ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_authoritative_publication_lifetime_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_003_inherited_selftests.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_authoritative_publication_lifetime_hotfix.py 2>&1 | tee -a "$LOG"
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          m=Path('Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs').read_text()
+          assert 'AERIS25_PHASE6_003_AUTHORITATIVE_PUBLICATION' in r
+          assert 'AERIS25_PHASE6_004_MANAGED_PREPARATION_PIPELINE' not in r
+          assert 'AERIS25_PHASE6_005_NONBLOCKING_SPECULATIVE_PREPARATION' not in r
+          assert 'internal const string Revision = "OH_PHASE6_003";' in m
+          print('[FROZEN REV003 PARENT IDENTITY] PASS')
+          PY
+
+      - name: Apply and verify DIAZEPAM REV006
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_phase7_001_diazepam_static.log
+          echo '=== DIAZEPAM REV006 RESIDENT RAM REUSE ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_diazepam_resident_ram_reuse.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_diazepam_resident_ram_reuse.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
+
+      - name: DIAZEPAM idempotent re-entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_phase7_001_diazepam_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_diazepam_resident_ram_reuse.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_diazepam_resident_ram_reuse.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
+
+      - name: Generated C# DIAZEPAM structure sanity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          depth=0; state='code'; i=0; minimum=0
+          while i < len(s):
+              c=s[i]; n=s[i+1] if i+1<len(s) else ''
+              if state=='code':
+                  if c=='/' and n=='/': state='line'; i+=2; continue
+                  if c=='/' and n=='*': state='block'; i+=2; continue
+                  if c=='"': state='str'; i+=1; continue
+                  if c=="'": state='char'; i+=1; continue
+                  if c=='{': depth+=1
+                  elif c=='}': depth-=1; minimum=min(minimum,depth)
+                  i+=1; continue
+              if state=='line':
+                  if c=='\n': state='code'
+                  i+=1; continue
+              if state=='block':
+                  if c=='*' and n=='/': state='code'; i+=2; continue
+                  i+=1; continue
+              if state in ('str','char'):
+                  if c=='\\': i+=2; continue
+                  if (state=='str' and c=='"') or (state=='char' and c=="'"): state='code'
+                  i+=1
+          assert depth==0 and minimum==0,(depth,minimum)
+          assert 'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE' in s
+          assert 'sealed class ResidentPreparedPresentation' in s
+          assert 'WaitManagedPreparation' not in s
+          assert 'AERIS25_PHASE6_004_MANAGED_PREPARATION_PIPELINE' not in s
+          assert 'AERIS25_PHASE6_005_NONBLOCKING_SPECULATIVE_PREPARATION' not in s
+          assert 'oh_resident_prep_hit=' in s
+          print('[DIAZEPAM CSHARP STRUCTURE] PASS')
+          PY
+          git diff --check
+          test -z "$(git diff --name-only HEAD -- Source/AERISFlightControl/AA Source/AERISFlightControl/Autopilot Source/AERISFlightControl/Protect Source/AERISFlightControl/Landing)"
+
+      - name: Assert final DIAZEPAM markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_phase7_001_diazepam_static.log
+          grep -Fq '[AERIS25 DIAZEPAM PHASE7_001 RESIDENT RAM REUSE REV006] STATIC PASS' "$LOG"
+          grep -Fq '[Operation Health Pass 3 PREBUILD] 17/17 suites PASS' "$LOG"
+          grep -Fq 'patch already present' "$LOG"
+
+      - name: Upload DIAZEPAM static diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeris25-phase7-001-diazepam-resident-ram-reuse-static
+          path: |
+            aeris25_phase7_001_diazepam_static.log
+            Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+            Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs
+            GameData/AERISFlightControl/Config/AERISOperationHealth.cfg
+            Tools/verify_aeris25_diazepam_resident_ram_reuse.py
+            Tools/prepare_aeris25_diazepam_rev006_runtime.py
+            build_ubuntu.sh
+          if-no-files-found: error
