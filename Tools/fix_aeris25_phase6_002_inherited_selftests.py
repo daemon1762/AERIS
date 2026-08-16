@@ -6,6 +6,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 P = ROOT / 'Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py'
 P_RETAINED = ROOT / 'Tools/selftest_v01800_operation_health_retained_surface.py'
+P_PASS1 = ROOT / 'Tools/selftest_v01800_operation_health_pass1_zero_visual_cost.py'
 PREFIX = '[AERIS25 NOREPINEPHRINE PHASE6_002 SELFTEST]'
 
 
@@ -93,5 +94,21 @@ if any((r0, r1, r2, r3, r4)):
     print(PREFIX + ' exact Phase6_002 retained FRONT successor contract applied')
 else:
     print(PREFIX + ' exact Phase6_002 retained FRONT successor contract already present')
+
+# Pass1 only used DrainCompleted as a textual end anchor for the live Schedule method.
+# Phase6_002 renames that next method to PumpStagedCompletedCommit; the scheduling invariant
+# itself is unchanged. Select the exact successor method name only when the staged marker exists.
+pass1 = P_PASS1.read_text()
+old_schedule = "schedule=renderer[renderer.index('void Schedule('):renderer.index('void DrainCompleted(')]"
+new_schedule = """schedule_end = ('void PumpStagedCompletedCommit('
+    if 'AERIS25_STAGED_MAIN_THREAD_COMMIT' in renderer else 'void DrainCompleted(')
+schedule=renderer[renderer.index('void Schedule('):renderer.index(schedule_end)]"""
+pass1, p1 = replace_once(pass1, old_schedule, new_schedule,
+                         'Pass1 Schedule method boundary successor')
+if p1:
+    P_PASS1.write_text(pass1)
+    print(PREFIX + ' exact Phase6_002 Pass1 Schedule boundary successor applied')
+else:
+    print(PREFIX + ' exact Phase6_002 Pass1 Schedule boundary successor already present')
 
 print('Invariant: visible CaptureVisible/projection/BACK presentation remain authoritative-tick work; only staged commit may advance between ticks')
