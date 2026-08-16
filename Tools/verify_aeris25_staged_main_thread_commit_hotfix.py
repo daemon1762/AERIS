@@ -97,7 +97,9 @@ ck('ElapsedMilliseconds(mainThreadCommitStopwatch)' not in R,
    'undefined Phase6_001 elapsed helper cannot regress')
 
 non_tick_start = R.find('            if (!authoritativeTickDue)')
-non_tick_end = R.find('            residentCache = system.CurrentBodyResidentCache;', non_tick_start)
+# The rev002 pump intentionally contains residentCache assignment inside the non-tick gate,
+# so delimit the entire gate by the next authoritative-tick statement rather than that line.
+non_tick_end = R.find('            operationHealthAuthoritativeTicks++;', non_tick_start)
 non_tick = R[non_tick_start:non_tick_end] if non_tick_start >= 0 and non_tick_end > non_tick_start else ''
 ck('PumpStagedCompletedCommit(system);' in non_tick and
    'CaptureVisible(' not in non_tick and 'RenderBackBuffer(' not in non_tick,
