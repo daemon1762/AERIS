@@ -52,7 +52,50 @@ def apply_renderer_patch():
     return True
 
 
+def enforce_persistent_surface_scratch_reuse():
+    renderer = R.read_text()
+    old_fields = '''            internal readonly SurfaceBuilder Land = new SurfaceBuilder();
+            internal readonly SurfaceBuilder Water = new SurfaceBuilder();
+            internal readonly SurfacePoint[] ClipScratch = new SurfacePoint[6];'''
+    new_fields = '''            internal SurfaceBuilder Land;
+            internal SurfaceBuilder Water;
+            internal SurfacePoint[] ClipScratch;'''
+    renderer, c1 = replace_once(renderer, old_fields, new_fields,
+                                'pending SurfaceBuilder ownership')
+    old_begin = '''            pendingEntryCommit = new PendingEntryCommit
+            {
+                CacheKey = cacheKey,
+                Result = result,
+                Stage = PendingEntryCommitStage.ClipTriangles,
+                StartedTicks = Stopwatch.GetTimestamp()
+            };'''
+    new_begin = '''            // Reuse the renderer-resident SurfaceBuilder/List storage rather than
+            // allocating two new builders for every completed raster result. One pending
+            // staged commit exists at a time, so these scratch objects remain exclusively
+            // owned until Finalize/cancel and preserve the accepted GC-minimizing design.
+            landSurfaceScratch.Reset();
+            waterSurfaceScratch.Reset();
+            pendingEntryCommit = new PendingEntryCommit
+            {
+                CacheKey = cacheKey,
+                Result = result,
+                Stage = PendingEntryCommitStage.ClipTriangles,
+                Land = landSurfaceScratch,
+                Water = waterSurfaceScratch,
+                ClipScratch = surfaceClipScratch,
+                StartedTicks = Stopwatch.GetTimestamp()
+            };'''
+    renderer, c2 = replace_once(renderer, old_begin, new_begin,
+                                'pending persistent SurfaceBuilder assignment')
+    if c1 or c2:
+        R.write_text(renderer)
+        print(PREFIX + ' persistent SurfaceBuilder/clip scratch reuse enforced')
+    else:
+        print(PREFIX + ' persistent SurfaceBuilder/clip scratch reuse already present')
+
+
 apply_renderer_patch()
+enforce_persistent_surface_scratch_reuse()
 
 monitor = M.read_text()
 monitor, m1 = replace_once(monitor,
