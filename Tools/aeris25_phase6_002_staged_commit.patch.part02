@@ -1,0 +1,212 @@
++
++        bool AdvancePendingClip(PendingEntryCommit pending, double budgetMilliseconds)
++        {
++            AERISTerrainRenderReadyHeightField result = pending.Result;
++            int iterations = 0;
++            while (pending.TriangleCursor + 2 < result.Triangles.Length)
++            {
++                int i = pending.TriangleCursor;
++                SurfacePoint a = Point(result, result.Triangles[i]);
++                SurfacePoint b = Point(result, result.Triangles[i + 1]);
++                SurfacePoint c = Point(result, result.Triangles[i + 2]);
++                AppendClippedTriangle(pending.Land, pending.ClipScratch, a, b, c, false);
++                AppendClippedTriangle(pending.Water, pending.ClipScratch, a, b, c, true);
++                pending.TriangleCursor += 3;
++                iterations++;
++                if ((iterations & 15) == 0 &&
++                    mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >= budgetMilliseconds)
++                    return false;
++            }
++            return true;
++        }
++
++        void PreparePendingSources(PendingEntryCommit pending)
++        {
++            pending.LandSource = pending.Land.Vertices.Count <= 0 ? null :
++                pending.Land.Vertices.ToArray();
++            pending.WaterSource = pending.Water.Vertices.Count <= 0 ? null :
++                pending.Water.Vertices.ToArray();
++            pending.LandElevation = pending.Land.Elevation.ToArray();
++            pending.LandShade = pending.Land.Shade.ToArray();
++            pending.CoastalLandSource = BuildTriangleSourceVertices(
++                pending.Result.CoastalLandCorrectionVertices);
++            pending.CoastalWaterSource = BuildTriangleSourceVertices(
++                pending.Result.CoastalWaterCorrectionVertices);
++            operationHealthSurfaceBuilderReuses++;
++        }
++
++        void PreparePendingPackedTerrain(PendingEntryCommit pending)
++        {
++            Vector3[] waterSource = pending.WaterSource;
++            Vector3[] landSource = pending.LandSource;
++            Vector3[] coastalWaterSource = pending.CoastalWaterSource;
++            Vector3[] coastalLandSource = pending.CoastalLandSource;
++            pending.PackedWaterCount = waterSource == null ? 0 : waterSource.Length;
++            pending.PackedLandCount = landSource == null ? 0 : landSource.Length;
++            pending.PackedCoastalWaterCount = coastalWaterSource == null ? 0 : coastalWaterSource.Length;
++            pending.PackedCoastalLandCount = coastalLandSource == null ? 0 : coastalLandSource.Length;
++            pending.PackedWaterOffset = 0;
++            pending.PackedLandOffset = pending.PackedWaterCount;
++            pending.PackedCoastalWaterOffset = pending.PackedLandOffset + pending.PackedLandCount;
++            pending.PackedCoastalLandOffset = pending.PackedCoastalWaterOffset +
++                pending.PackedCoastalWaterCount;
++            int vertexCount = pending.PackedCoastalLandOffset + pending.PackedCoastalLandCount;
++            pending.PackedSourceMeshCount = (pending.PackedWaterCount > 0 ? 1 : 0) +
++                (pending.PackedLandCount > 0 ? 1 : 0) +
++                (pending.PackedCoastalWaterCount > 0 ? 1 : 0) +
++                (pending.PackedCoastalLandCount > 0 ? 1 : 0);
++            int waterIndexCount = pending.Water.Triangles.Count;
++            int landIndexCount = pending.Land.Triangles.Count;
++            int indexCount = waterIndexCount + landIndexCount +
++                pending.PackedCoastalWaterCount + pending.PackedCoastalLandCount;
++            if (vertexCount < 3 || indexCount < 3 || pending.PackedSourceMeshCount <= 0)
++                return;
++            pending.PackedSource = new Vector3[vertexCount];
++            pending.PackedColours = new Color32[vertexCount];
++            pending.PackedIndices = new int[indexCount];
++            Color32 waterColour = ResolveWaterColour(AERISTerrainColourPreset.Standard);
++            Color32 landColour = new Color32(255, 255, 255, 255);
++            if (pending.PackedWaterCount > 0)
++                Array.Copy(waterSource, 0, pending.PackedSource, pending.PackedWaterOffset,
++                    pending.PackedWaterCount);
++            if (pending.PackedLandCount > 0)
++                Array.Copy(landSource, 0, pending.PackedSource, pending.PackedLandOffset,
++                    pending.PackedLandCount);
++            if (pending.PackedCoastalWaterCount > 0)
++                Array.Copy(coastalWaterSource, 0, pending.PackedSource,
++                    pending.PackedCoastalWaterOffset, pending.PackedCoastalWaterCount);
++            if (pending.PackedCoastalLandCount > 0)
++                Array.Copy(coastalLandSource, 0, pending.PackedSource,
++                    pending.PackedCoastalLandOffset, pending.PackedCoastalLandCount);
++            for (int i = 0; i < pending.PackedWaterCount; i++)
++                pending.PackedColours[pending.PackedWaterOffset + i] = waterColour;
++            for (int i = 0; i < pending.PackedLandCount; i++)
++                pending.PackedColours[pending.PackedLandOffset + i] = landColour;
++            for (int i = 0; i < pending.PackedCoastalWaterCount; i++)
++                pending.PackedColours[pending.PackedCoastalWaterOffset + i] = waterColour;
++            for (int i = 0; i < pending.PackedCoastalLandCount; i++)
++                pending.PackedColours[pending.PackedCoastalLandOffset + i] = landColour;
++            int index = 0;
++            for (int i = 0; i < pending.Water.Triangles.Count; i++)
++                pending.PackedIndices[index++] = pending.PackedWaterOffset +
++                    pending.Water.Triangles[i];
++            for (int i = 0; i < pending.Land.Triangles.Count; i++)
++                pending.PackedIndices[index++] = pending.PackedLandOffset +
++                    pending.Land.Triangles[i];
++            for (int i = 0; i < pending.PackedCoastalWaterCount; i++)
++                pending.PackedIndices[index++] = pending.PackedCoastalWaterOffset + i;
++            for (int i = 0; i < pending.PackedCoastalLandCount; i++)
++                pending.PackedIndices[index++] = pending.PackedCoastalLandOffset + i;
++        }
++
++        Mesh UploadPreparedPackedTerrainMesh(string name, PendingEntryCommit pending)
++        {
++            if (pending.PackedSource == null || pending.PackedIndices == null ||
++                pending.PackedSource.Length < 3 || pending.PackedIndices.Length < 3)
++                return null;
++            Mesh mesh = AcquireMesh(name, pending.PackedSource.Length);
++            mesh.vertices = pending.PackedSource;
++            mesh.colors32 = pending.PackedColours;
++            mesh.triangles = pending.PackedIndices;
++            mesh.bounds = NdPresentationBounds;
++            mesh.UploadMeshData(false);
++            operationHealthPackedTerrainBuilds++;
++            return mesh;
++        }
++
++        bool AdvancePendingGeographic(Vector3[] source,
++            ref GeographicUnitPoint[] output, ref int cursor,
++            AERISTerrainRenderReadyHeightField result, double budgetMilliseconds)
++        {
++            if (source == null || source.Length == 0)
++            {
++                output = null;
++                cursor = 0;
++                return true;
++            }
++            if (output == null || output.Length != source.Length)
++                output = new GeographicUnitPoint[source.Length];
++            double latitudeSpan = result.NorthLatitudeDeg - result.SouthLatitudeDeg;
++            double longitudeSpan = PositiveLongitudeSpan(result.WestLongitudeDeg,
++                result.EastLongitudeDeg);
++            int iterations = 0;
++            while (cursor < source.Length)
++            {
++                double latitudeDeg = result.SouthLatitudeDeg + latitudeSpan * source[cursor].y;
++                double longitudeDeg = NormalizeLongitude(result.WestLongitudeDeg +
++                    longitudeSpan * source[cursor].x);
++                double latitudeRad = latitudeDeg * Math.PI / 180.0;
++                double longitudeRad = longitudeDeg * Math.PI / 180.0;
++                double cosineLatitude = Math.Cos(latitudeRad);
++                output[cursor] = new GeographicUnitPoint
++                {
++                    X = cosineLatitude * Math.Cos(longitudeRad),
++                    Y = cosineLatitude * Math.Sin(longitudeRad),
++                    Z = Math.Sin(latitudeRad)
++                };
++                cursor++;
++                iterations++;
++                if ((iterations & 31) == 0 &&
++                    mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >= budgetMilliseconds)
++                    return false;
++            }
++            return true;
++        }
+ 
++        bool FinalizePendingEntryCommit(PendingEntryCommit pending,
++            AERISTerrainTileSystem system)
++        {
++            AERISTerrainRenderReadyHeightField result = pending.Result;
++            if (pending.PackedMesh == null)
++            {
++                operationHealthNonRenderableEntryRejects++;
++                RemoveRenderReadyField(pending.CacheKey, result);
++                CancelPendingEntryCommit();
++                return false;
++            }
++            long projectedVertexBytes = (long)(
++                (pending.PackedSource == null ? 0 : pending.PackedSource.Length) +
++                (pending.ContourSource == null ? 0 : pending.ContourSource.Length) +
++                (pending.CoastlineSource == null ? 0 : pending.CoastlineSource.Length)) *
++                (3L * 8L + 3L * 4L);
++            long bytes = result.Valid.Length + projectedVertexBytes +
++                (pending.PackedSource == null ? 0L :
++                    pending.PackedSource.LongLength * (3L * 4L + 4L)) +
++                (pending.PackedIndices == null ? 0L : pending.PackedIndices.LongLength * 4L) +
++                (pending.PackedSource == null ? 0L :
++                    pending.PackedSource.LongLength * (3L * 4L)) +
++                pending.Land.Vertices.Count * (4L + 1L) +
++                (result.CoastalLandCorrectionElevationMeters == null ? 0L :
++                    result.CoastalLandCorrectionElevationMeters.LongLength * (4L + 1L));
++            if (result.ContourSegments != null) bytes += result.ContourSegments.Length * 4L;
++            if (result.CoastlineSegments != null) bytes += result.CoastlineSegments.Length * 4L;
++            double boundCenterLatitudeDeg, boundCenterLongitudeDeg, boundAngularRadiusRad;
++            ResolveConservativeEntryBounds(result.SouthLatitudeDeg,
++                result.NorthLatitudeDeg, result.WestLongitudeDeg,
++                result.EastLongitudeDeg, out boundCenterLatitudeDeg,
++                out boundCenterLongitudeDeg, out boundAngularRadiusRad);
++            double boundCenterX = 0.0, boundCenterY = 0.0, boundCenterZ = 0.0;
++            double boundRadiusSin = 0.0, boundRadiusCos = -1.0;
++            ResolveSphericalCapFastData(boundCenterLatitudeDeg,
++                boundCenterLongitudeDeg, boundAngularRadiusRad,
++                out boundCenterX, out boundCenterY, out boundCenterZ,
++                out boundRadiusSin, out boundRadiusCos);
++            Entry entry = new Entry
++            {
++                CacheKey = pending.CacheKey,
++                TileKey = result.Key,
++                TileCreatedUtcTicks = result.TileCreatedUtcTicks,
++                StyleKey = result.StyleKey,
++                PackedTerrainMesh = pending.PackedMesh,
++                PackedTerrainGeographicPoints = pending.PackedGeographic,
++                PackedTerrainProjectedVertices = AllocateProjectedVertices(pending.PackedSource),
++                PackedTerrainColours = pending.PackedColours,
++                PackedWaterOffset = pending.PackedWaterOffset,
++                PackedWaterCount = pending.PackedWaterCount,
++                PackedLandOffset = pending.PackedLandOffset,
++                PackedLandCount = pending.PackedLandCount,
++                PackedCoastalWaterOffset = pending.PackedCoastalWaterOffset,
++                PackedCoastalWaterCount = pending.PackedCoastalWaterCount,
++                PackedCoastalLandOffset = pending.PackedCoastalLandOffset,
++                PackedCoastalLandCount = pending.PackedCoastalLandCount,
++                PackedTerrainSourceMeshCount = pending.PackedSourceMeshCount,
