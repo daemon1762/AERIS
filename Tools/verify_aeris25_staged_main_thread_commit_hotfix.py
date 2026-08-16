@@ -77,6 +77,12 @@ ck(all(stage in R for stage in (
 ck('MainThreadCommitSteadyBudgetMilliseconds = 0.50' in R and
    'MainThreadCommitBootstrapBudgetMilliseconds = 1.25' in R,
    'Phase6 measured budgets remain 0.50 ms steady / 1.25 ms bootstrap')
+ck('internal SurfaceBuilder Land;' in R and 'internal SurfaceBuilder Water;' in R and
+   'internal SurfacePoint[] ClipScratch;' in R and
+   'Land = landSurfaceScratch' in R and 'Water = waterSurfaceScratch' in R and
+   'ClipScratch = surfaceClipScratch' in R and
+   'internal readonly SurfaceBuilder Land = new SurfaceBuilder();' not in R,
+   'staged commit reuses renderer-resident SurfaceBuilder/clip scratch instead of per-result builders')
 
 pump = method_body('        void PumpStagedCompletedCommit(AERISTerrainTileSystem system)')
 advance = method_body('        bool AdvancePendingEntryCommit(AERISTerrainTileSystem system,')
@@ -97,8 +103,6 @@ ck('ElapsedMilliseconds(mainThreadCommitStopwatch)' not in R,
    'undefined Phase6_001 elapsed helper cannot regress')
 
 non_tick_start = R.find('            if (!authoritativeTickDue)')
-# The rev002 pump intentionally contains residentCache assignment inside the non-tick gate,
-# so delimit the entire gate by the next authoritative-tick statement rather than that line.
 non_tick_end = R.find('            operationHealthAuthoritativeTicks++;', non_tick_start)
 non_tick = R[non_tick_start:non_tick_end] if non_tick_start >= 0 and non_tick_end > non_tick_start else ''
 ck('PumpStagedCompletedCommit(system);' in non_tick and
@@ -134,6 +138,12 @@ ck(cancel and 'RecycleMesh(ref pending.PackedMesh);' in cancel and
 ck('CancelPendingEntryCommit();' in method_body('        void ResetContentSnapshot()') and
    'CancelPendingEntryCommit();' in method_body('        public void Dispose()'),
    'snapshot reset and renderer disposal cancel partial commit state')
+ck('EnsureGpuDynamicTerrainColourAttributes(Entry entry)' in R and
+   'entry.PackedTerrainMesh.SetUVs(2, gpuDynamicTerrainSemanticScratch);' in R and
+   'LandElevationMeters = pending.LandElevation' in finalize and
+   'LandShade = pending.LandShade' in finalize and
+   'CoastalLandCorrectionElevationMeters =' in finalize,
+   'finalized staged Entry retains source arrays required by accepted GPU dynamic semantic upload')
 
 for field in (
     'oh_main_commit_pending=', 'oh_main_commit_pending_stage=',
@@ -170,7 +180,7 @@ ck('phase6_identity' in P5V and 'OH_PHASE6_002' in P5V and
    'verify_aeris25_staged_main_thread_commit_hotfix.py' in P5V,
    'ADENOSINE inherited verifier explicitly admits exact rev002 descendant')
 active = '\n'.join(line for line in U.splitlines()
-                   if line.strip().startswith('PYTHONDONTWRITEBYTECODE=1 python3'))
+                   if line.strip().startswith('PYTHONDWRITEBYTECODE=1 python3'))
 ck('verify_aeris25_staged_main_thread_commit_hotfix.py' in active and
    'verify_aeris25_main_thread_commit_governor.py' not in active,
    'rev002 build uses one final-tree staged-commit verifier')
