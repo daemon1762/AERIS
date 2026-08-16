@@ -10,7 +10,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = 'AERIS25_MAIN_THREAD_COMMIT_GOVERNOR'
 OH_CODENAME = 'NOREPINEPHRINE'
-OH_REVISION = 'OH_PHASE6_001'
+OH_REVISION = 'OH_PHASE6_002'
 EXPECTED_WINDOWS_PROBE_SHA = '6465e6dfa7c9809a734d5ce85b202b49ea6ee5fcaac19d55d4b75bd532a35f0d'
 
 
@@ -45,12 +45,19 @@ def identity_state():
     except OSError:
         return 'raw'
     if ('internal const string Codename = "NOREPINEPHRINE";' in m and
+        'internal const string Revision = "OH_PHASE6_002";' in m and
+        'internal const string Candidate = "AERIS25_MAIN_THREAD_COMMIT_GOVERNOR";' in m and
+        'codename = NOREPINEPHRINE' in c and
+        'AERIS25_STAGED_MAIN_THREAD_COMMIT' in r and
+        'verify_aeris25_staged_main_thread_commit_hotfix.py' in u):
+        return 'phase6_2'
+    if ('internal const string Codename = "NOREPINEPHRINE";' in m and
         'internal const string Revision = "OH_PHASE6_001";' in m and
         'internal const string Candidate = "AERIS25_MAIN_THREAD_COMMIT_GOVERNOR";' in m and
         'codename = NOREPINEPHRINE' in c and
         'AERIS25_MAIN_THREAD_COMMIT_GOVERNOR' in r and
         'verify_aeris25_main_thread_commit_governor.py' in u):
-        return 'phase6'
+        return 'phase6_1'
     if ('internal const string Codename = "ADENOSINE";' in m and
         'internal const string Revision = "OH_PHASE5_001";' in m and
         'internal const string Candidate = "AERIS25_PERSISTENT_PRESENTATION_BATCHING";' in m and
@@ -62,7 +69,7 @@ def identity_state():
 
 
 parser = argparse.ArgumentParser(
-    description='Prepare/install AERIS25-3 NOREPINEPHRINE OH_PHASE6_001 Main Thread Commit Governor.')
+    description='Prepare/install AERIS25-3 NOREPINEPHRINE OH_PHASE6_002 Staged Main Thread Commit Governor.')
 parser.add_argument('ksp_path')
 parser.add_argument('--rebuild-shader', action='store_true')
 parser.add_argument('--unity-editor', default=os.environ.get('UNITY_EDITOR', ''))
@@ -96,13 +103,20 @@ if state == 'raw':
 elif state == 'phase5':
     run([sys.executable, ROOT / 'Tools/verify_aeris25_persistent_presentation_batching.py'])
     print('[AERIS25 NOREPINEPHRINE RUNTIME] generated ADENOSINE parent already present=PASS')
-else:
-    print('[AERIS25 NOREPINEPHRINE RUNTIME] generated Phase6 tree already present; reconstruction skipped')
 
-if state != 'phase6':
+if state in ('raw', 'phase5'):
     run([sys.executable, ROOT / 'Tools/apply_aeris25_main_thread_commit_governor.py'])
+    state = 'phase6_1'
 
-run([sys.executable, ROOT / 'Tools/verify_aeris25_main_thread_commit_governor.py'])
+if state == 'phase6_1':
+    run([sys.executable, ROOT / 'Tools/verify_aeris25_main_thread_commit_governor.py'])
+    print('[AERIS25 NOREPINEPHRINE RUNTIME] historical Phase6_001 static parent=PASS; runtime design remains rejected')
+    run([sys.executable, ROOT / 'Tools/apply_aeris25_staged_main_thread_commit_hotfix.py'])
+    state = 'phase6_2'
+else:
+    print('[AERIS25 NOREPINEPHRINE RUNTIME] generated Phase6_002 tree already present; reconstruction skipped')
+
+run([sys.executable, ROOT / 'Tools/verify_aeris25_staged_main_thread_commit_hotfix.py'])
 run([sys.executable, ROOT / 'Tools/verify_aeris25_persistent_presentation_batching.py'])
 run([sys.executable, ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'])
 run(['git', 'diff', '--check'])
@@ -179,8 +193,7 @@ print('oh_revision=' + OH_REVISION)
 print('dll_sha256=' + sha256(installed_dll))
 print('gpu_shader_bundle=' + bundle_name)
 print('gpu_shader_bundle_sha256=' + sha256(installed_bundle))
-print('Runtime governor gate: budget_hit may rise under load; backlog must remain finite and drain in steady state.')
-print('Time budgets: steady 0.50 ms / bootstrap 1.25 ms, with one-result minimum progress and inherited 2/4 hard caps.')
-print('Lifetime gate: snapshot_stale_mesh=0, gpu_vertex_attr_fail=0, semantic_mesh_null=0.')
-print('Golden gate: packet reuse remains active, visualCoverage=1.000, Runway Map Lock ~0 px, fixed 10 Hz, no painter regression.')
-print('Key comparison: explicitly exercise 80->160 km, then strong 160 km Track-Up turn; compare spikes against accepted baselines.')
+print('Runtime gate: staged commit must publish while stage_yield rises and stage_max/window_max fall well below Phase6_001 38.753 ms.')
+print('Backlog gate: live backlog must remain bounded and drain in steady state; pending_stage must continue advancing.')
+print('Lifetime/Golden gate: snapshot_stale_mesh=0, GPU rejects=0, visualCoverage=1.000, Runway Map Lock ~0 px, fixed visible 10 Hz.')
+print('Test: 20 -> 40 -> 80 -> 160 km, then strong 160 km Track-Up turn and steady cruise.')
