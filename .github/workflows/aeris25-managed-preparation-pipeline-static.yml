@@ -1,0 +1,144 @@
+name: AERIS25 Managed Preparation Pipeline Static
+
+on:
+  push:
+    branches:
+      - agent/aeris25-main-thread-commit-governor
+  pull_request:
+    branches:
+      - agent/aeris25-persistent-presentation-batching
+
+jobs:
+  managed-preparation-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: NOREPINEPHRINE rev004 script syntax
+        run: |
+          python3 -m py_compile \
+            Tools/apply_aeris25_managed_preparation_pipeline_hotfix.py \
+            Tools/fix_aeris25_phase6_004_inherited_selftests.py \
+            Tools/verify_aeris25_managed_preparation_pipeline_hotfix.py \
+            Tools/prepare_aeris25_main_thread_commit_governor_rev004_runtime.py \
+            Tools/prepare_aeris25_main_thread_commit_governor_runtime.py
+
+      - name: Reconstruct accepted lineage through Phase6_003
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_phase6_004_managed_preparation_static.log
+          echo '=== ATROPINE REV009 ===' | tee "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_snapshot_mesh_lifetime_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_content_generation_burst_governor_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_content_generation_burst_governor_hotfix.py 2>&1 | tee -a "$LOG"
+          echo '=== ADENOSINE ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          echo '=== NOREPINEPHRINE REV001 ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
+          echo '=== NOREPINEPHRINE REV002 ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_staged_main_thread_commit_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_staged_main_thread_commit_hotfix.py 2>&1 | tee -a "$LOG"
+          echo '=== NOREPINEPHRINE REV003 ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_authoritative_publication_lifetime_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_003_inherited_selftests.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_authoritative_publication_lifetime_hotfix.py 2>&1 | tee -a "$LOG"
+
+      - name: Apply and verify NOREPINEPHRINE Phase6_004
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_phase6_004_managed_preparation_static.log
+          echo '=== NOREPINEPHRINE REV004 MANAGED PREPARATION ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_managed_preparation_pipeline_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_004_inherited_selftests.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_managed_preparation_pipeline_hotfix.py 2>&1 | tee -a "$LOG"
+
+      - name: Verify inherited contracts on rev004 tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_phase6_004_managed_preparation_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
+
+      - name: Rev004 idempotent re-entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris25_phase6_004_managed_preparation_static.log
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_managed_preparation_pipeline_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_004_inherited_selftests.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_managed_preparation_pipeline_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
+
+      - name: Generated C# managed-preparation sanity
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          depth=0; state='code'; i=0; minimum=0
+          while i < len(s):
+              c=s[i]; n=s[i+1] if i+1<len(s) else ''
+              if state=='code':
+                  if c=='/' and n=='/': state='line'; i+=2; continue
+                  if c=='/' and n=='*': state='block'; i+=2; continue
+                  if c=='"': state='str'; i+=1; continue
+                  if c=="'": state='char'; i+=1; continue
+                  if c=='{': depth+=1
+                  elif c=='}': depth-=1; minimum=min(minimum,depth)
+                  i+=1; continue
+              if state=='line':
+                  if c=='\n': state='code'
+                  i+=1; continue
+              if state=='block':
+                  if c=='*' and n=='/': state='code'; i+=2; continue
+                  i+=1; continue
+              if state in ('str','char'):
+                  if c=='\\': i+=2; continue
+                  if (state=='str' and c=='"') or (state=='char' and c=="'"): state='code'
+                  i+=1
+          assert depth==0 and minimum==0,(depth,minimum)
+          assert 'AERIS25_PHASE6_004_MANAGED_PREPARATION_PIPELINE' in s
+          assert 'runtime.Scheduler.SubmitRequired(' in s
+          assert 'Task.Run' not in s
+          assert 'PackedTerrainGeographicPoints = null' in s
+          assert 'oh_managed_prep_bytes_total=' in s
+          print('[PHASE6_004 CSHARP STRUCTURE] PASS')
+          PY
+          git diff --check
+
+      - name: Assert final rev004 markers
+        run: |
+          grep -Fq '[AERIS25 NOREPINEPHRINE PHASE6_004 MANAGED PREPARATION PIPELINE] STATIC PASS' aeris25_phase6_004_managed_preparation_static.log
+          grep -Fq 'managed preparation renderer patch already present' aeris25_phase6_004_managed_preparation_static.log
+          grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' aeris25_phase6_004_managed_preparation_static.log
+
+      - name: Upload rev004 static diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeris25-phase6-004-managed-preparation-static
+          path: |
+            aeris25_phase6_004_managed_preparation_static.log
+            Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+            Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs
+            GameData/AERISFlightControl/Config/AERISOperationHealth.cfg
+            Tools/verify_aeris25_persistent_presentation_batching.py
+            build_ubuntu.sh
+          if-no-files-found: error
