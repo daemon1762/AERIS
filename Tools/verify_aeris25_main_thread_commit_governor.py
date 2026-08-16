@@ -83,8 +83,9 @@ ck('rasterizer.Drain(completed, 1)' in drain and
 ck('readonly Stopwatch mainThreadCommitStopwatch = new Stopwatch();' in R and
    'mainThreadCommitStopwatch.Reset();' in drain and
    'mainThreadCommitStopwatch.Start();' in drain and
-   'ElapsedMilliseconds(mainThreadCommitStopwatch)' in drain,
-   'one resident Stopwatch measures the main-thread commit window')
+   'mainThreadCommitStopwatch.Elapsed.TotalMilliseconds' in drain and
+   'ElapsedMilliseconds(mainThreadCommitStopwatch)' not in drain,
+   'one resident Stopwatch measures elapsed milliseconds directly without an undefined helper')
 first_drain = drain.find('rasterizer.Drain(completed, 1)')
 first_budget_check = drain.find('elapsedMilliseconds >= budgetMilliseconds')
 ck(0 <= first_drain < first_budget_check and
