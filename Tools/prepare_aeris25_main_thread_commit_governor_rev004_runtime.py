@@ -131,8 +131,10 @@ if not phase6_4_present():
 else:
     print(PREFIX + ' generated Phase6_004 tree already present; rev003 parent reconstruction skipped')
 
-run([sys.executable, ROOT / 'Tools/fix_aeris25_phase6_002_inherited_selftests.py'])
-run([sys.executable, ROOT / 'Tools/fix_aeris25_phase6_003_inherited_selftests.py'])
+# The rev003 parent preparer has already applied the exact Phase6_002 and Phase6_003
+# inherited-selftest successor transforms. Re-running those historical one-way fixers after
+# rev004 source generation is invalid: Phase6_003 intentionally rewrites the Phase6_002
+# anchor, so the older fixer must see old=0. Apply only the exact rev004 successor here.
 run([sys.executable, ROOT / 'Tools/fix_aeris25_phase6_004_inherited_selftests.py'])
 run([sys.executable, ROOT / 'Tools/verify_aeris25_managed_preparation_pipeline_hotfix.py'])
 run([sys.executable, ROOT / 'Tools/verify_aeris25_persistent_presentation_batching.py'])
