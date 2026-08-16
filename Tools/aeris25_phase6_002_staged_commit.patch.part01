@@ -1,0 +1,210 @@
+-                        AERISTerrainCoastlineExtractor.HighDensityResolution)
+-                        highDensityCoastlineEntries++;
+-                    if (entry.CoastalCorrectionParentCells > 0)
+-                    {
+-                        sparseCoastalCorrectionEntries++;
+-                        sparseCoastalCorrectionParentCells +=
+-                            entry.CoastalCorrectionParentCells;
+-                    }
+-                    uploaded++;
+-                    MarkGpuContentDirty();
+-                    MarkGpuReady(result);
+-                    if (performance != null)
+-                        performance.RecordGpuMeshPreparation(
+-                            result.MeshMilliseconds, result.ContourMilliseconds,
+-                            rasterizer.PendingCount > 0);
+-                }
+-                catch (Exception ex)
++
++                bool published;
++                bool finished = AdvancePendingEntryCommit(system, budgetMilliseconds,
++                    out published);
++                if (published)
+                 {
+-                    FailGpuTerrain(ex);
+-                    break;
+-                }
+-                finally
+-                {
+-                    AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
+-                    if (runtime != null)
+-                        runtime.RecordNavigationDisplayTextureUpload(
+-                            (Stopwatch.GetTimestamp() - uploadStartTicks) *
+-                            1000.0 / Stopwatch.Frequency);
+-                }
+-            }
+-                processedThisWindow += completed.Count;
+-                operationHealthMainCommitProcessed += completed.Count;
+-                double elapsedMilliseconds = mainThreadCommitStopwatch.Elapsed.TotalMilliseconds;
+-                operationHealthMainCommitWindowMaxMilliseconds = Math.Max(
+-                    operationHealthMainCommitWindowMaxMilliseconds, elapsedMilliseconds);
+-                int remainingCompleted = Math.Max(0, rasterizer.CompletedCount);
+-                operationHealthMainCommitBacklog = remainingCompleted;
+-                operationHealthMainCommitBacklogPeak = Math.Max(
+-                    operationHealthMainCommitBacklogPeak, remainingCompleted);
+-                if (gpuFailed) break;
+-                if (elapsedMilliseconds >= budgetMilliseconds)
+-                {
+-                    if (remainingCompleted > 0) operationHealthMainCommitBudgetHits++;
+-                    if (elapsedMilliseconds > budgetMilliseconds)
+-                        operationHealthMainCommitOverbudget++;
+-                    break;
++                    publishedThisWindow++;
++                    operationHealthMainCommitProcessed++;
++                    operationHealthMainCommitPublishes++;
+                 }
++                if (!finished) break;
++                if (mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >=
++                    budgetMilliseconds) break;
+             }
++
+             mainThreadCommitStopwatch.Stop();
+-            int finalRemainingCompleted = Math.Max(0, rasterizer.CompletedCount);
++            double elapsedMilliseconds = mainThreadCommitStopwatch.Elapsed.TotalMilliseconds;
++            operationHealthMainCommitWindowMaxMilliseconds = Math.Max(
++                operationHealthMainCommitWindowMaxMilliseconds, elapsedMilliseconds);
++            int finalRemainingCompleted = Math.Max(0, rasterizer.CompletedCount) +
++                (pendingEntryCommit == null ? 0 : 1);
+             operationHealthMainCommitBacklog = finalRemainingCompleted;
+             operationHealthMainCommitBacklogPeak = Math.Max(
+                 operationHealthMainCommitBacklogPeak, finalRemainingCompleted);
+-            // Preserve ATROPINE rev009 count-cap telemetry as a hard-rail witness.
+-            if (finalRemainingCompleted > 0 && processedThisWindow >= hardMaximum)
++            operationHealthMainCommitPendingPeak = Math.Max(
++                operationHealthMainCommitPendingPeak, pendingEntryCommit == null ? 0 : 1);
++            if (finalRemainingCompleted > 0 && elapsedMilliseconds >= budgetMilliseconds)
++                operationHealthMainCommitBudgetHits++;
++            if (elapsedMilliseconds > budgetMilliseconds * 1.5)
++                operationHealthMainCommitOverbudget++;
++            if (finalRemainingCompleted > 0 && publishedThisWindow >= hardMaximum)
+                 operationHealthContentCommitBudgetHits++;
+             operationHealthContentCommitBacklogPeak = Math.Max(
+                 operationHealthContentCommitBacklogPeak, finalRemainingCompleted);
++        }
++
++        bool TryBeginPendingEntryCommit(AERISTerrainRenderReadyHeightField result)
++        {
++            if (!ValidResult(result)) return false;
++            if (result.Triangles.Length < 3)
++            {
++                operationHealthEmptyTriangleResults++;
++                return false;
++            }
++            string cacheKey = CacheKey(result.Key, result.TileCreatedUtcTicks,
++                result.StyleKey);
++            result.LastUseSequence = ++renderReadyUseSequence;
++            AERISTerrainRenderReadyHeightField existingRenderReady;
++            if (!renderReadyFields.TryGetValue(cacheKey, out existingRenderReady) ||
++                !ReferenceEquals(existingRenderReady, result))
++                StoreRenderReadyField(cacheKey, result);
++            if (result.Key.Lod == AERISTerrainTileLod.Far)
++            {
++                if (result.VirtualDetailLevel ==
++                    AERISTerrainVirtualDetailLevel.VirtualRoute) virtualRouteBuilds++;
++                else if (result.VirtualDetailLevel ==
++                    AERISTerrainVirtualDetailLevel.VirtualLocal) virtualLocalBuilds++;
++            }
++            pendingEntryCommit = new PendingEntryCommit
++            {
++                CacheKey = cacheKey,
++                Result = result,
++                Stage = PendingEntryCommitStage.ClipTriangles,
++                StartedTicks = Stopwatch.GetTimestamp()
++            };
++            return true;
++        }
++
++        bool AdvancePendingEntryCommit(AERISTerrainTileSystem system,
++            double budgetMilliseconds, out bool published)
++        {
++            published = false;
++            PendingEntryCommit pending = pendingEntryCommit;
++            if (pending == null || pending.Result == null) return true;
++            while (pendingEntryCommit != null)
++            {
++                double stageStart = mainThreadCommitStopwatch.Elapsed.TotalMilliseconds;
++                switch (pending.Stage)
++                {
++                    case PendingEntryCommitStage.ClipTriangles:
++                        if (!AdvancePendingClip(pending, budgetMilliseconds))
++                            return YieldPendingEntryCommit(stageStart, true);
++                        pending.Stage = PendingEntryCommitStage.PrepareSources;
++                        break;
++                    case PendingEntryCommitStage.PrepareSources:
++                        PreparePendingSources(pending);
++                        pending.Stage = PendingEntryCommitStage.PreparePackedTerrain;
++                        break;
++                    case PendingEntryCommitStage.PreparePackedTerrain:
++                        PreparePendingPackedTerrain(pending);
++                        pending.Stage = PendingEntryCommitStage.UploadPackedTerrain;
++                        break;
++                    case PendingEntryCommitStage.UploadPackedTerrain:
++                        pending.PackedMesh = UploadPreparedPackedTerrainMesh(
++                            "AERIS_TERRAIN_PACKED_" + pending.Result.Key.FileStem, pending);
++                        pending.Stage = PendingEntryCommitStage.UploadContour;
++                        break;
++                    case PendingEntryCommitStage.UploadContour:
++                        pending.ContourMesh = BuildLineMesh(
++                            "AERIS_TERRAIN_CONTOUR_" + pending.Result.Key.FileStem,
++                            pending.Result.ContourSegments,
++                            new Color32(255, 255, 255, 210), out pending.ContourSource);
++                        pending.Stage = PendingEntryCommitStage.UploadCoastline;
++                        break;
++                    case PendingEntryCommitStage.UploadCoastline:
++                        pending.CoastlineMesh = BuildLineMesh(
++                            "AERIS_TERRAIN_COAST_" + pending.Result.Key.FileStem,
++                            pending.Result.CoastlineSegments,
++                            new Color32(185, 225, 255, 245), out pending.CoastlineSource);
++                        pending.Stage = PendingEntryCommitStage.GeographicPacked;
++                        pending.GeographicCursor = 0;
++                        break;
++                    case PendingEntryCommitStage.GeographicPacked:
++                        if (!AdvancePendingGeographic(pending.PackedSource,
++                            ref pending.PackedGeographic, ref pending.GeographicCursor,
++                            pending.Result, budgetMilliseconds))
++                            return YieldPendingEntryCommit(stageStart, true);
++                        pending.Stage = PendingEntryCommitStage.GeographicContour;
++                        pending.GeographicCursor = 0;
++                        break;
++                    case PendingEntryCommitStage.GeographicContour:
++                        if (!AdvancePendingGeographic(pending.ContourSource,
++                            ref pending.ContourGeographic, ref pending.GeographicCursor,
++                            pending.Result, budgetMilliseconds))
++                            return YieldPendingEntryCommit(stageStart, true);
++                        pending.Stage = PendingEntryCommitStage.GeographicCoastline;
++                        pending.GeographicCursor = 0;
++                        break;
++                    case PendingEntryCommitStage.GeographicCoastline:
++                        if (!AdvancePendingGeographic(pending.CoastlineSource,
++                            ref pending.CoastlineGeographic, ref pending.GeographicCursor,
++                            pending.Result, budgetMilliseconds))
++                            return YieldPendingEntryCommit(stageStart, true);
++                        pending.Stage = PendingEntryCommitStage.Finalize;
++                        break;
++                    case PendingEntryCommitStage.Finalize:
++                        published = FinalizePendingEntryCommit(pending, system);
++                        pendingEntryCommit = null;
++                        return true;
++                }
++                double stageElapsed = mainThreadCommitStopwatch.Elapsed.TotalMilliseconds -
++                    stageStart;
++                pending.AccumulatedMilliseconds += Math.Max(0.0, stageElapsed);
++                operationHealthMainCommitStageMaxMilliseconds = Math.Max(
++                    operationHealthMainCommitStageMaxMilliseconds, stageElapsed);
++                if (mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >= budgetMilliseconds)
++                    return YieldPendingEntryCommit(stageStart, false);
++            }
++            return true;
++        }
++
++        bool YieldPendingEntryCommit(double stageStartMilliseconds, bool accountElapsed)
++        {
++            double stageElapsed = mainThreadCommitStopwatch.Elapsed.TotalMilliseconds -
++                stageStartMilliseconds;
++            if (accountElapsed && pendingEntryCommit != null)
++                pendingEntryCommit.AccumulatedMilliseconds += Math.Max(0.0, stageElapsed);
++            operationHealthMainCommitStageMaxMilliseconds = Math.Max(
++                operationHealthMainCommitStageMaxMilliseconds, stageElapsed);
++            operationHealthMainCommitStageYields++;
++            return false;
++        }
