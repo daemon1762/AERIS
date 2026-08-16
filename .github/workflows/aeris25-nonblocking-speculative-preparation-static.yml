@@ -1,6 +1,7 @@
 name: AERIS25 Non-Blocking Speculative Preparation Static
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - agent/aeris25-nonblocking-speculative-preparation
