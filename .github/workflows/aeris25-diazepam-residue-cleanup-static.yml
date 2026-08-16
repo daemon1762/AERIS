@@ -71,5 +71,9 @@ jobs:
           rm -f .diazepam-unrelated-untracked-sentinel ambiguous.log cleanup.log
 
       - name: Working tree clean after scoped cleanup test
+        shell: bash
         run: |
+          set -euo pipefail
+          find Tools -type d -name __pycache__ -prune -exec rm -rf {} +
+          git status --porcelain
           test -z "$(git status --porcelain)"
