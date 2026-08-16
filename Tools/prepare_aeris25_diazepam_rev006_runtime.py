@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import argparse, hashlib, os, subprocess, sys
-sys.dont_writebytecode=True
+sys.dont_write_bytecode=True
 ROOT=Path(__file__).resolve().parents[1]
 CANDIDATE='AERIS25_RESIDENT_RAM_REUSE_STRENGTHENING'
 OH_CODENAME='DIAZEPAM'
