@@ -10,8 +10,10 @@ M = ROOT / 'Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin
 C = ROOT / 'GameData/AERISFlightControl/Config/AERISOperationHealth.cfg'
 U = ROOT / 'build_ubuntu.sh'
 P5V = ROOT / 'Tools/verify_aeris25_persistent_presentation_batching.py'
-PARTS = [ROOT / ('Tools/aeris25_phase6_002_staged_commit.patch.part%02d' % i)
-         for i in range(4)]
+# Keep the canonical unified diff in small exact fragments. Large manually copied
+# fragments previously lost context lines and produced a malformed patch in CI.
+PARTS = [ROOT / ('Tools/aeris25_phase6_002_staged_commit.patch.s%02d' % i)
+         for i in range(13)]
 PREFIX = '[AERIS25 NOREPINEPHRINE PHASE6_002]'
 MARKER = 'AERIS25_STAGED_MAIN_THREAD_COMMIT'
 
