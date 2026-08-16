@@ -1,0 +1,145 @@
++                PackedCoastalLandCount = pending.PackedCoastalLandCount,
++                PackedTerrainSourceMeshCount = pending.PackedSourceMeshCount,
++                ContourMesh = pending.ContourMesh,
++                CoastlineMesh = pending.CoastlineMesh,
++                ContourGeographicPoints = pending.ContourGeographic,
++                CoastlineGeographicPoints = pending.CoastlineGeographic,
++                ContourProjectedVertices = AllocateProjectedVertices(pending.ContourSource),
++                CoastlineProjectedVertices = AllocateProjectedVertices(pending.CoastlineSource),
++                SouthLatitudeDeg = result.SouthLatitudeDeg,
++                NorthLatitudeDeg = result.NorthLatitudeDeg,
++                WestLongitudeDeg = result.WestLongitudeDeg,
++                EastLongitudeDeg = result.EastLongitudeDeg,
++                BoundCenterLatitudeDeg = boundCenterLatitudeDeg,
++                BoundCenterLongitudeDeg = boundCenterLongitudeDeg,
++                BoundAngularRadiusRad = boundAngularRadiusRad,
++                BoundCenterX = boundCenterX,
++                BoundCenterY = boundCenterY,
++                BoundCenterZ = boundCenterZ,
++                BoundRadiusSin = boundRadiusSin,
++                BoundRadiusCos = boundRadiusCos,
++                LandElevationMeters = pending.LandElevation,
++                LandShade = pending.LandShade,
++                CoastalLandCorrectionElevationMeters =
++                    result.CoastalLandCorrectionElevationMeters == null ? null :
++                    (float[])result.CoastalLandCorrectionElevationMeters.Clone(),
++                CoastalLandCorrectionShade = result.CoastalLandCorrectionShade == null ? null :
++                    (byte[])result.CoastalLandCorrectionShade.Clone(),
++                Resolution = result.Resolution,
++                CoastlineResolution = result.CoastlineResolution,
++                CoastalCorrectionParentCells = result.CoastalCorrectionParentCells,
++                Valid = (byte[])result.Valid.Clone(),
++                WaterColourPreset = AERISTerrainColourPreset.Standard,
++                CoverageFraction = TriangleCoverage(result),
++                Bytes = Math.Max(1L, bytes),
++                LastUse = 0L
++            };
++            CaptureAndMarkRenderReady(result, system);
++            Entry old;
++            if (entries.TryGetValue(pending.CacheKey, out old)) Remove(old);
++            if (entry.CoverageFraction >= 0.999f)
++                RemoveSupersededEntries(result.Key, pending.CacheKey);
++            AddEntry(entry);
++            usedEntryBytes += entry.Bytes;
++            if (entry.CoastlineResolution >=
++                AERISTerrainCoastlineExtractor.HighDensityResolution)
++                highDensityCoastlineEntries++;
++            if (entry.CoastalCorrectionParentCells > 0)
++            {
++                sparseCoastalCorrectionEntries++;
++                sparseCoastalCorrectionParentCells += entry.CoastalCorrectionParentCells;
++            }
++            uploaded++;
++            MarkGpuContentDirty();
++            MarkGpuReady(result);
++            if (performance != null)
++                performance.RecordGpuMeshPreparation(result.MeshMilliseconds,
++                    result.ContourMilliseconds, rasterizer.PendingCount > 0);
++            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
++            if (runtime != null)
++                runtime.RecordNavigationDisplayTextureUpload(
++                    pending.AccumulatedMilliseconds);
++            pending.PackedMesh = null;
++            pending.ContourMesh = null;
++            pending.CoastlineMesh = null;
++            return true;
++        }
++
++        void CancelPendingEntryCommit()
++        {
++            PendingEntryCommit pending = pendingEntryCommit;
++            if (pending == null) return;
++            RecycleMesh(ref pending.PackedMesh);
++            RecycleMesh(ref pending.ContourMesh);
++            RecycleMesh(ref pending.CoastlineMesh);
++            pendingEntryCommit = null;
+         }
+ 
+         void CaptureAndMarkRenderReady(AERISTerrainRenderReadyHeightField field,
+@@ -2621,52 +3038,12 @@
+             if (!renderReadyFields.TryGetValue(cacheKey, out field) || field == null)
+                 return false;
+             field.LastUseSequence = ++renderReadyUseSequence;
+-            long uploadStartTicks = Stopwatch.GetTimestamp();
+-            try
+-            {
+-                entry = BuildEntry(cacheKey, field);
+-                if (!HasRenderableTerrain(entry))
+-                {
+-                    operationHealthNonRenderableEntryRejects++;
+-                    // This immutable render-ready field cannot currently produce drawable
+-                    // terrain. Remove it so the normal scheduler may rebuild it, but retain
+-                    // any older renderable Entry/fallback already covering the viewport.
+-                    RemoveRenderReadyField(cacheKey, field);
+-                    entry = null;
+-                    return false;
+-                }
+-                Entry old;
+-                if (entries.TryGetValue(cacheKey, out old)) Remove(old);
+-                AddEntry(entry);
+-                usedEntryBytes += entry.Bytes;
+-                if (entry.CoastlineResolution >=
+-                    AERISTerrainCoastlineExtractor.HighDensityResolution)
+-                    highDensityCoastlineEntries++;
+-                if (entry.CoastalCorrectionParentCells > 0)
+-                {
+-                    sparseCoastalCorrectionEntries++;
+-                    sparseCoastalCorrectionParentCells +=
+-                        entry.CoastalCorrectionParentCells;
+-                }
+-                uploaded++;
+-                MarkGpuContentDirty();
+-                MarkGpuReady(field);
+-                return true;
+-            }
+-            catch (Exception ex)
+-            {
+-                FailGpuTerrain(ex);
+-                entry = null;
+-                return false;
+-            }
+-            finally
+-            {
+-                AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
+-                if (runtime != null)
+-                    runtime.RecordNavigationDisplayTextureUpload(
+-                        (Stopwatch.GetTimestamp() - uploadStartTicks) *
+-                        1000.0 / Stopwatch.Frequency);
+-            }
++            // Phase6_002: a render-ready RAM field is already the expensive worker product.
++            // Queue it into the same resumable main-thread commit path and suppress a
++            // duplicate raster worker request while the last complete Entry remains visible.
++            if (pendingEntryCommit == null)
++                TryBeginPendingEntryCommit(field);
++            return true;
+         }
+ 
+         long ResolveRenderReadyLimitBytes()
+@@ -4973,6 +5350,7 @@
+         {
+             if (disposed) return;
+             disposed = true;
++            CancelPendingEntryCommit();
+             rasterizer.Dispose();
+             ReleaseGpuResources();
+             gpuVertexProjection.Dispose();
