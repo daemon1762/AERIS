@@ -1,0 +1,60 @@
++                        pending.Stage = PendingEntryCommitStage.UploadCoastline;
++                        break;
++                    case PendingEntryCommitStage.UploadCoastline:
++                        pending.CoastlineMesh = BuildLineMesh(
++                            "AERIS_TERRAIN_COAST_" + pending.Result.Key.FileStem,
++                            pending.Result.CoastlineSegments,
++                            new Color32(185, 225, 255, 245), out pending.CoastlineSource);
++                        pending.Stage = PendingEntryCommitStage.GeographicPacked;
++                        pending.GeographicCursor = 0;
++                        break;
++                    case PendingEntryCommitStage.GeographicPacked:
++                        if (!AdvancePendingGeographic(pending.PackedSource,
++                            ref pending.PackedGeographic, ref pending.GeographicCursor,
++                            pending.Result, budgetMilliseconds))
++                            return YieldPendingEntryCommit(stageStart, true);
++                        pending.Stage = PendingEntryCommitStage.GeographicContour;
++                        pending.GeographicCursor = 0;
++                        break;
++                    case PendingEntryCommitStage.GeographicContour:
++                        if (!AdvancePendingGeographic(pending.ContourSource,
++                            ref pending.ContourGeographic, ref pending.GeographicCursor,
++                            pending.Result, budgetMilliseconds))
++                            return YieldPendingEntryCommit(stageStart, true);
++                        pending.Stage = PendingEntryCommitStage.GeographicCoastline;
++                        pending.GeographicCursor = 0;
++                        break;
++                    case PendingEntryCommitStage.GeographicCoastline:
++                        if (!AdvancePendingGeographic(pending.CoastlineSource,
++                            ref pending.CoastlineGeographic, ref pending.GeographicCursor,
++                            pending.Result, budgetMilliseconds))
++                            return YieldPendingEntryCommit(stageStart, true);
++                        pending.Stage = PendingEntryCommitStage.Finalize;
++                        break;
++                    case PendingEntryCommitStage.Finalize:
++                        published = FinalizePendingEntryCommit(pending, system);
++                        pendingEntryCommit = null;
++                        return true;
++                }
++                double stageElapsed = mainThreadCommitStopwatch.Elapsed.TotalMilliseconds -
++                    stageStart;
++                pending.AccumulatedMilliseconds += Math.Max(0.0, stageElapsed);
++                operationHealthMainCommitStageMaxMilliseconds = Math.Max(
++                    operationHealthMainCommitStageMaxMilliseconds, stageElapsed);
++                if (mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >= budgetMilliseconds)
++                    return YieldPendingEntryCommit(stageStart, false);
++            }
++            return true;
++        }
++
++        bool YieldPendingEntryCommit(double stageStartMilliseconds, bool accountElapsed)
++        {
++            double stageElapsed = mainThreadCommitStopwatch.Elapsed.TotalMilliseconds -
++                stageStartMilliseconds;
++            if (accountElapsed && pendingEntryCommit != null)
++                pendingEntryCommit.AccumulatedMilliseconds += Math.Max(0.0, stageElapsed);
++            operationHealthMainCommitStageMaxMilliseconds = Math.Max(
++                operationHealthMainCommitStageMaxMilliseconds, stageElapsed);
++            operationHealthMainCommitStageYields++;
++            return false;
++        }
