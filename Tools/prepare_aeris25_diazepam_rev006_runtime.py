@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import argparse, hashlib, os, subprocess, sys
-sys.dont_write_bytecode=True
+sys.dont_writebytecode=True
 ROOT=Path(__file__).resolve().parents[1]
 CANDIDATE='AERIS25_RESIDENT_RAM_REUSE_STRENGTHENING'
 OH_CODENAME='DIAZEPAM'
@@ -100,6 +100,7 @@ if state=='phase6_3':
  print(PREFIX+' frozen REV003 reconstruction=PASS')
  run([sys.executable,ROOT/'Tools/apply_aeris25_diazepam_resident_ram_reuse.py']); state='phase7_1'
 if state!='phase7_1': raise SystemExit(PREFIX+' could not reach DIAZEPAM generated tree; state='+state)
+run([sys.executable,ROOT/'Tools/fix_aeris25_phase7_001_inherited_selftests.py'])
 run([sys.executable,ROOT/'Tools/verify_aeris25_diazepam_resident_ram_reuse.py'])
 run([sys.executable,ROOT/'Tools/verify_aeris25_persistent_presentation_batching.py'])
 run([sys.executable,ROOT/'Tools/run_v01800_operation_health_pass3_prebuild.py'])
