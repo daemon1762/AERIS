@@ -45,6 +45,13 @@ ck("if installed_dll.is_file():\n            installed_dll.unlink()" in P and
    'failed final identity gate removes bad DLL before any KSP test')
 ck("print('oh_revision=' + OH_REVISION)" in P,
    'success output reports the verified rev004 revision')
+ck("Tools/fix_aeris25_phase6_004_inherited_selftests.py" in P,
+   'rev004 runtime preparer applies exact rev004 inherited-selftest successor')
+ck("Tools/fix_aeris25_phase6_002_inherited_selftests.py" not in P and
+   "Tools/fix_aeris25_phase6_003_inherited_selftests.py" not in P,
+   'rev004 final stage does not rerun historical one-way Phase6_002/003 selftest fixers')
+ck('The rev003 parent preparer has already applied the exact Phase6_002 and Phase6_003' in P,
+   'runtime preparer documents historical fixer ownership/order contract')
 
 failed = [name for ok, name in checks if not ok]
 print('\n[AERIS25 NOREPINEPHRINE REV004 INSTALL IDENTITY HOTFIX] %d/%d PASS' %
