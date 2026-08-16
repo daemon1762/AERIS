@@ -39,4 +39,37 @@ if new_call not in text:
 else:
     print(PREFIX + ' Step2 authoritative publication successor already present')
 
+# Retained FRONT keeps the same visual no-work contract. Phase6_003 changes only the hidden
+# staged-pump call to allowPublication=false. Admit either the historical rev002 no-argument
+# call or this exact rev003 false call; do not admit a true/publication call in the retained path.
+text = RETAINED.read_text()
+replacements = [
+    (
+        "((not phase6_staged) or 'PumpStagedCompletedCommit(system);' in fast)",
+        "((not phase6_staged) or ('PumpStagedCompletedCommit(system);' in fast) or\n   ('PumpStagedCompletedCommit(system, false);' in fast))",
+        'retained hidden-pump existence'),
+    (
+        "fast.index('PumpStagedCompletedCommit(system);') <",
+        "min([i for i in (fast.find('PumpStagedCompletedCommit(system);'),\n                         fast.find('PumpStagedCompletedCommit(system, false);')) if i >= 0]) <",
+        'retained hidden-pump ordering'),
+    (
+        "((not phase6_staged) or fast.count('PumpStagedCompletedCommit(system);') == 1)",
+        "((not phase6_staged) or\n    (fast.count('PumpStagedCompletedCommit(system);') +\n     fast.count('PumpStagedCompletedCommit(system, false);')) == 1)",
+        'retained hidden-pump count'),
+]
+changed = False
+for old, new, label in replacements:
+    if new in text:
+        continue
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit('%s %s anchor count=%d' % (PREFIX, label, count))
+    text = text.replace(old, new, 1)
+    changed = True
+if changed:
+    RETAINED.write_text(text)
+    print(PREFIX + ' Retained FRONT exact hidden false-call successor admitted')
+else:
+    print(PREFIX + ' Retained FRONT hidden-call successor already present')
+
 print('Invariant: hidden staged preparation may advance between visible ticks; Finalize/publication remains authoritative-only under rev003')
