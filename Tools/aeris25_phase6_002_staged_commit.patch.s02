@@ -1,0 +1,60 @@
+                 "; oh_main_commit_overbudget=" + operationHealthMainCommitOverbudget +
+                 "; oh_main_commit_processed=" + operationHealthMainCommitProcessed +
+                 "; oh_main_commit_budget_ms=" + operationHealthMainCommitBudgetMilliseconds.ToString("F2", CultureInfo.InvariantCulture) +
++                "; oh_main_commit_pending=" + (pendingEntryCommit == null ? 0 : 1) +
++                "; oh_main_commit_pending_stage=" + (pendingEntryCommit == null ? "NONE" : pendingEntryCommit.Stage.ToString()) +
++                "; oh_main_commit_stage_yield=" + operationHealthMainCommitStageYields +
++                "; oh_main_commit_stage_max_ms=" + operationHealthMainCommitStageMaxMilliseconds.ToString("F3", CultureInfo.InvariantCulture) +
++                "; oh_main_commit_publish=" + operationHealthMainCommitPublishes +
+                 "; oh_nd_reload=" + (Reloading ? "BLACK" : "READY") +
+                 "; oh_nd_reload_pct=" + ReloadProgressPercent +
+                 "; oh_nd_reload_generation=" + ndReloadGeneration +
+@@ -2456,14 +2525,11 @@
+             });
+         }
+ 
+-        void DrainCompleted(AERISTerrainTileSystem system)
++        void PumpStagedCompletedCommit(AERISTerrainTileSystem system)
+         {
+-            // AERIS25_MAIN_THREAD_COMMIT_GOVERNOR: consume one completed raster
+-            // result at a time. The first result always runs; only subsequent work is
+-            // deferred when the measured window reaches the profile budget.
+             int profileMaximum = performance == null ? 2 :
+                 Math.Max(1, performance.ActiveProfile.MaximumConcurrentTileIo * 2);
+-            bool steadyCommitProfile = frontBufferValid && requestedViewReady;
++            bool steadyCommitProfile = frontBufferValid && requestedViewReady && !Reloading;
+             int burstMaximum = steadyCommitProfile ?
+                 SteadyContentCommitMaximumResults : BootstrapContentCommitMaximumResults;
+             int hardMaximum = Math.Max(1, Math.Min(profileMaximum, burstMaximum));
+@@ -2471,115 +2537,466 @@
+                 MainThreadCommitSteadyBudgetMilliseconds :
+                 MainThreadCommitBootstrapBudgetMilliseconds;
+             operationHealthMainCommitBudgetMilliseconds = budgetMilliseconds;
+-            int processedThisWindow = 0;
++            int publishedThisWindow = 0;
+             mainThreadCommitStopwatch.Reset();
+             mainThreadCommitStopwatch.Start();
+-            while (processedThisWindow < hardMaximum)
+-            {
+-                completed.Clear();
+-                if (rasterizer.Drain(completed, 1) <= 0) break;
+-            for (int i = 0; i < completed.Count; i++)
++
++            while (publishedThisWindow < hardMaximum)
+             {
+-                AERISTerrainGpuTileRasterResult result = completed[i];
+-                if (!ValidResult(result)) continue;
+-                if (result.Triangles.Length < 3)
+-                {
+-                    operationHealthEmptyTriangleResults++;
+-                    continue;
+-                }
+-                string cacheKey = CacheKey(result.Key, result.TileCreatedUtcTicks,
+-                    result.StyleKey);
+-                result.LastUseSequence = ++renderReadyUseSequence;
+-                StoreRenderReadyField(cacheKey, result);
+-                if (result.Key.Lod == AERISTerrainTileLod.Far)
++                if (pendingEntryCommit == null)
+                 {
+-                    if (result.VirtualDetailLevel ==
+-                        AERISTerrainVirtualDetailLevel.VirtualRoute) virtualRouteBuilds++;
