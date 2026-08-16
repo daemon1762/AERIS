@@ -108,7 +108,9 @@ ck('AdvancePendingLinePreparation' in advance and
    'contour/coast CPU source+index preparation is resumable')
 ck('UploadPreparedPackedTerrainMesh(' not in advance and 'BuildLineMesh(' not in advance,
    'rev002 monolithic mesh upload helpers are no longer used by staged commit')
-ck('mesh.UploadMeshData(false);' in advance and
+ck('pending.PackedMesh.UploadMeshData(false);' in advance and
+   'pending.ContourMesh.UploadMeshData(false);' in advance and
+   'pending.CoastlineMesh.UploadMeshData(false);' in advance and
    'pending.PackedMesh.vertices = pending.PackedSource;' in advance and
    'pending.ContourMesh.SetIndices' in advance and
    'pending.CoastlineMesh.SetIndices' in advance,
