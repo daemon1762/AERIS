@@ -21,6 +21,7 @@ jobs:
         run: |
           python3 -m py_compile \
             Tools/apply_aeris25_diazepam_resident_ram_reuse.py \
+            Tools/fix_aeris25_phase7_001_inherited_selftests.py \
             Tools/verify_aeris25_diazepam_resident_ram_reuse.py \
             Tools/prepare_aeris25_diazepam_rev006_runtime.py \
             Tools/prepare_aeris25_diazepam_runtime.py \
@@ -81,6 +82,7 @@ jobs:
           LOG=aeris25_phase7_001_diazepam_static.log
           echo '=== DIAZEPAM REV006 RESIDENT RAM REUSE ===' | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_diazepam_resident_ram_reuse.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase7_001_inherited_selftests.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_diazepam_resident_ram_reuse.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
@@ -91,6 +93,7 @@ jobs:
           set -euo pipefail
           LOG=aeris25_phase7_001_diazepam_static.log
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_diazepam_resident_ram_reuse.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase7_001_inherited_selftests.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_diazepam_resident_ram_reuse.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
@@ -143,6 +146,7 @@ jobs:
           grep -Fq '[AERIS25 DIAZEPAM PHASE7_001 RESIDENT RAM REUSE REV006] STATIC PASS' "$LOG"
           grep -Fq '[Operation Health Pass 3 PREBUILD] 17/17 suites PASS' "$LOG"
           grep -Fq 'patch already present' "$LOG"
+          grep -Fq 'exact Phase7 Step2 build successor already present' "$LOG"
 
       - name: Upload DIAZEPAM static diagnostic
         if: always()
