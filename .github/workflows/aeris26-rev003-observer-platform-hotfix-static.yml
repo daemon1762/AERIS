@@ -21,6 +21,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "KSP.x86_64" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "KSP_x64_Data/Managed/Assembly-CSharp.dll" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "KSP_x86_64_Data/Managed/Assembly-CSharp.dll" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "KSP_Data/Managed/Assembly-CSharp.dll" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "KSP_x64.exe" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
@@ -38,15 +39,16 @@ jobs:
               ksp = Path(td)
               (ksp / 'KSP.x86_64').write_text('linux')
               (ksp / 'KSP_x64.exe').write_text('windows residue')
-              managed = ksp / 'KSP_x86_64_Data/Managed'
+              managed = ksp / 'KSP_x64_Data/Managed'
               managed.mkdir(parents=True)
               (managed / 'Assembly-CSharp.dll').write_text('managed')
-              linux_managed = ((ksp / 'KSP_x86_64_Data/Managed/Assembly-CSharp.dll').is_file() or
+              linux_managed = ((ksp / 'KSP_x64_Data/Managed/Assembly-CSharp.dll').is_file() or
+                               (ksp / 'KSP_x86_64_Data/Managed/Assembly-CSharp.dll').is_file() or
                                (ksp / 'KSP_Data/Managed/Assembly-CSharp.dll').is_file())
               native_linux = (ksp / 'KSP.x86_64').is_file() and linux_managed
               assert native_linux
               assert (ksp / 'KSP_x64.exe').is_file()
-              print('[REV003 OBSERVER PLATFORM HOTFIX] dual-layout model PASS')
+              print('[REV003 OBSERVER PLATFORM HOTFIX] KSP_x64_Data dual-layout model PASS')
           PY
 
       - name: No bytecode residue
