@@ -1,0 +1,56 @@
+name: AERIS26 REV003 Observer Platform Hotfix Static
+
+on:
+  push:
+    branches:
+      - agent/aeris26-rev003-observer
+  pull_request:
+    branches:
+      - agent/aeris25-diazepam-resident-ram-reuse-rev006
+  workflow_dispatch:
+
+jobs:
+  platform-hotfix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wrapper syntax and contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "KSP.x86_64" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "KSP_x86_64_Data/Managed/Assembly-CSharp.dll" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "KSP_Data/Managed/Assembly-CSharp.dll" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "KSP_x64.exe" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "runpy.run_path" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+
+      - name: Dual-layout detection model
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import tempfile
+
+          with tempfile.TemporaryDirectory() as td:
+              ksp = Path(td)
+              (ksp / 'KSP.x86_64').write_text('linux')
+              (ksp / 'KSP_x64.exe').write_text('windows residue')
+              managed = ksp / 'KSP_x86_64_Data/Managed'
+              managed.mkdir(parents=True)
+              (managed / 'Assembly-CSharp.dll').write_text('managed')
+              linux_managed = ((ksp / 'KSP_x86_64_Data/Managed/Assembly-CSharp.dll').is_file() or
+                               (ksp / 'KSP_Data/Managed/Assembly-CSharp.dll').is_file())
+              native_linux = (ksp / 'KSP.x86_64').is_file() and linux_managed
+              assert native_linux
+              assert (ksp / 'KSP_x64.exe').is_file()
+              print('[REV003 OBSERVER PLATFORM HOTFIX] dual-layout model PASS')
+          PY
+
+      - name: No bytecode residue
+        shell: bash
+        run: |
+          rm -rf Tools/__pycache__
+          test -z "$(git status --porcelain)"
