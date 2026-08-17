@@ -1,0 +1,100 @@
+name: AERIS27 R001 Compile Hotfix1 Gate
+
+on:
+  push:
+    branches:
+      - agent/aeris27-rev3-5-salbutamol-resumable-prepare-r001
+  workflow_dispatch:
+
+jobs:
+  compile-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            Tools/apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r001_compile_hotfix1_runtime.py
+          rm -rf Tools/__pycache__
+
+      - name: Reconstruct accepted lineage through ADENOSINE
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_content_generation_burst_governor_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py >/dev/null
+
+      - name: Reconstruct frozen REV003 Observer parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_staged_main_thread_commit_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_authoritative_publication_lifetime_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_003_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris26_rev003_observer.py >/dev/null
+
+      - name: Apply R001 Compile Hotfix1 from clean REV003
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_resumable_prepare.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris26_rev003_observer.py
+
+      - name: Exact REV003 yield contract guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s = Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          bad = 'return YieldPendingEntryCommit(stageStart, true);'
+          good = 'return YieldPendingEntryCommit(executedStage, stageStart, true);'
+          assert bad not in s, 'two-argument YieldPendingEntryCommit survived'
+          for stage, advance in (
+              ('PrepareSources', 'AdvancePendingSources'),
+              ('PreparePackedTerrain', 'AdvancePendingPackedTerrain'),
+          ):
+              pat = re.compile(
+                  r'case PendingEntryCommitStage\.' + stage + r':.*?if \(!' + advance +
+                  r'\(pending, budgetMilliseconds\)\).*?' + re.escape(good), re.S)
+              assert pat.search(s), stage + ' missing three-argument REV003 yield'
+          assert 'pending.Stage = PendingEntryCommitStage.AcquirePackedTerrainMesh;' in s
+          assert 'pending.Stage = PendingEntryCommitStage.UploadPackedTerrain;' not in s
+          print('[AERIS27 R001 COMPILE HOTFIX1] EXACT CALL CONTRACT PASS')
+          PY
+          git diff --check
+
+      - name: Rejected mechanism guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          R=Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+          ! grep -Fq 'AERIS25_PHASE6_004_MANAGED_PREPARATION_PIPELINE' "$R"
+          ! grep -Fq 'AERIS25_PHASE6_005_NONBLOCKING_SPECULATIVE_PREPARATION' "$R"
+          ! grep -Fq 'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE' "$R"
+          ! grep -Fq 'WaitManagedPreparation' "$R"
+          ! grep -Fq 'ResidentPreparedPresentation' "$R"
+
+      - name: No tool residue
+        shell: bash
+        run: |
+          rm -rf Tools/__pycache__
+          test -z "$(git status --porcelain | grep '__pycache__' || true)"
