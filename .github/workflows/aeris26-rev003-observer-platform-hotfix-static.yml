@@ -20,14 +20,17 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
-          grep -Fq "KSP.x86_64" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "KSP_x64_Data/Managed/Assembly-CSharp.dll" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "KSP_x86_64_Data/Managed/Assembly-CSharp.dll" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "KSP_Data/Managed/Assembly-CSharp.dll" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
-          grep -Fq "KSP_x64.exe" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "authoritative layout=windows/proton" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "seeded accepted" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "installed_shader_dir" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "shutil.copy2" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "6465e6dfa7c9809a734d5ce85b202b49ea6ee5fcaac19d55d4b75bd532a35f0d" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "runpy.run_path" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
 
-      - name: Dual-layout detection model
+      - name: Platform authority model
         shell: bash
         run: |
           set -euo pipefail
@@ -35,20 +38,35 @@ jobs:
           from pathlib import Path
           import tempfile
 
+          # Windows/Proton layout wins when KSP_x64_Data is the Managed authority,
+          # even if unrelated Linux executables coexist.
           with tempfile.TemporaryDirectory() as td:
               ksp = Path(td)
-              (ksp / 'KSP.x86_64').write_text('linux')
-              (ksp / 'KSP_x64.exe').write_text('windows residue')
+              (ksp / 'KSP.x86_64').write_text('co-resident')
+              (ksp / 'KSP_x64.exe').write_text('windows')
               managed = ksp / 'KSP_x64_Data/Managed'
               managed.mkdir(parents=True)
               (managed / 'Assembly-CSharp.dll').write_text('managed')
-              linux_managed = ((ksp / 'KSP_x64_Data/Managed/Assembly-CSharp.dll').is_file() or
-                               (ksp / 'KSP_x86_64_Data/Managed/Assembly-CSharp.dll').is_file() or
-                               (ksp / 'KSP_Data/Managed/Assembly-CSharp.dll').is_file())
-              native_linux = (ksp / 'KSP.x86_64').is_file() and linux_managed
-              assert native_linux
-              assert (ksp / 'KSP_x64.exe').is_file()
-              print('[REV003 OBSERVER PLATFORM HOTFIX] KSP_x64_Data dual-layout model PASS')
+              windows_layout = (ksp / 'KSP_x64_Data/Managed/Assembly-CSharp.dll').is_file()
+              linux_layout = ((ksp / 'KSP_x86_64_Data/Managed/Assembly-CSharp.dll').is_file() or
+                              (ksp / 'KSP_Data/Managed/Assembly-CSharp.dll').is_file())
+              shader_mode = 'windows' if windows_layout else ('linux' if linux_layout else 'unknown')
+              assert shader_mode == 'windows'
+
+          # Native Linux layout remains Linux even if a stale Windows exe exists.
+          with tempfile.TemporaryDirectory() as td:
+              ksp = Path(td)
+              (ksp / 'KSP_x64.exe').write_text('stale')
+              managed = ksp / 'KSP_Data/Managed'
+              managed.mkdir(parents=True)
+              (managed / 'Assembly-CSharp.dll').write_text('managed')
+              windows_layout = (ksp / 'KSP_x64_Data/Managed/Assembly-CSharp.dll').is_file()
+              linux_layout = ((ksp / 'KSP_x86_64_Data/Managed/Assembly-CSharp.dll').is_file() or
+                              (ksp / 'KSP_Data/Managed/Assembly-CSharp.dll').is_file())
+              shader_mode = 'windows' if windows_layout else ('linux' if linux_layout else 'unknown')
+              assert shader_mode == 'linux'
+
+          print('[REV003 OBSERVER PLATFORM HOTFIX] platform authority model PASS')
           PY
 
       - name: No bytecode residue
