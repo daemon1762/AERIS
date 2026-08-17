@@ -6,6 +6,10 @@ on:
       - agent/aeris27-rev3-5-salbutamol-r006-managed-buffer-reuse-foundation-observer
   workflow_dispatch:
 
+permissions:
+  contents: read
+  statuses: write
+
 jobs:
   r006-contract:
     runs-on: ubuntu-latest
@@ -152,5 +156,46 @@ jobs:
       - name: No tool residue
         shell: bash
         run: |
+          set -euo pipefail
           rm -rf Tools/__pycache__
           test -z "$(git status --porcelain | grep '__pycache__' || true)"
+
+      - name: Publish R006 final gate status
+        if: ${{ always() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRIOR_JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          export AERIS_GATE_STATE=failure
+          if [ "$PRIOR_JOB_STATUS" = "success" ]; then
+            export AERIS_GATE_STATE=success
+          fi
+          python3 - <<'PY'
+          import json, os, urllib.request
+          repo = os.environ['GITHUB_REPOSITORY']
+          sha = os.environ['GITHUB_SHA']
+          token = os.environ['GH_TOKEN']
+          state = os.environ['AERIS_GATE_STATE']
+          payload = json.dumps({
+              'state': state,
+              'context': 'AERIS27/R006-FINAL-GATE',
+              'description': 'R006 final generated-tree contract ' + state.upper(),
+          }).encode('utf-8')
+          req = urllib.request.Request(
+              'https://api.github.com/repos/%s/statuses/%s' % (repo, sha),
+              data=payload,
+              method='POST',
+              headers={
+                  'Authorization': 'Bearer ' + token,
+                  'Accept': 'application/vnd.github+json',
+                  'X-GitHub-Api-Version': '2022-11-28',
+                  'User-Agent': 'AERIS27-R006-Gate',
+                  'Content-Type': 'application/json',
+              })
+          with urllib.request.urlopen(req, timeout=30) as response:
+              body = json.loads(response.read().decode('utf-8'))
+          print('[AERIS27 R006] commit status receipt:', body.get('state'),
+                body.get('context'))
+          PY
