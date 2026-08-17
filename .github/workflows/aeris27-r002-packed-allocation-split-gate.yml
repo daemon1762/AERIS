@@ -1,0 +1,109 @@
+name: AERIS27 R002 Packed Allocation Split Gate
+
+on:
+  push:
+    branches:
+      - agent/aeris27-rev3-5-salbutamol-r002-packed-allocation-split
+  workflow_dispatch:
+
+jobs:
+  r002-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            Tools/apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py \
+            Tools/apply_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py \
+            Tools/verify_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r002_runtime.py
+          rm -rf Tools/__pycache__
+
+      - name: Reconstruct accepted lineage through ADENOSINE
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_content_generation_burst_governor_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py >/dev/null
+
+      - name: Reconstruct frozen REV003 Observer parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_staged_main_thread_commit_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_authoritative_publication_lifetime_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_003_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris26_rev003_observer.py >/dev/null
+
+      - name: Apply R001 Compile Hotfix1
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_resumable_prepare.py >/dev/null
+
+      - name: Apply and verify R002
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py
+          git diff --check
+
+      - name: Exact split contract guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s = Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          a = s.index('bool AdvancePendingPackedTerrain(PendingEntryCommit pending,')
+          b = s.index('Mesh UploadPreparedPackedTerrainMesh', a)
+          m = s[a:b]
+          for case, alloc in ((1, 'PackedSource = new Vector3[count]'),
+                              (2, 'PackedColours = new Color32[count]'),
+                              (3, 'PackedIndices = new int[count]')):
+              p = re.compile(r'case %d:.*?%s.*?operationHealthRev35PreparePackedYields\+\+;.*?return false;' %
+                             (case, re.escape(alloc)), re.S)
+              assert p.search(m), (case, alloc)
+          assert 'PackedSource = new Vector3[vertexCount]' not in m
+          assert 'PackedColours = new Color32[vertexCount]' not in m
+          assert 'PackedIndices = new int[indexCount]' not in m
+          assert 'pending.Stage = PendingEntryCommitStage.AcquirePackedTerrainMesh;' in s
+          assert 'return YieldPendingEntryCommit(stageStart, true);' not in s
+          print('[AERIS27 R002] ALLOCATION SPLIT CONTRACT PASS')
+          PY
+
+      - name: Rejected mechanism guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          R=Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+          ! grep -Fq 'AERIS25_PHASE6_004_MANAGED_PREPARATION_PIPELINE' "$R"
+          ! grep -Fq 'AERIS25_PHASE6_005_NONBLOCKING_SPECULATIVE_PREPARATION' "$R"
+          ! grep -Fq 'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE' "$R"
+          ! grep -Fq 'WaitManagedPreparation' "$R"
+          ! grep -Fq 'ResidentPreparedPresentation' "$R"
+
+      - name: No tool residue
+        shell: bash
+        run: |
+          rm -rf Tools/__pycache__
+          test -z "$(git status --porcelain | grep '__pycache__' || true)"
