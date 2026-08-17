@@ -1,0 +1,69 @@
+name: AERIS27 R006 Generated Tree Audit
+
+on:
+  push:
+    branches:
+      - agent/aeris27-rev3-5-salbutamol-r006-managed-buffer-reuse-foundation-observer
+  workflow_dispatch:
+
+jobs:
+  r006-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct accepted lineage through ADENOSINE
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_content_generation_burst_governor_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py >/dev/null
+
+      - name: Reconstruct frozen REV003 Observer parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_staged_main_thread_commit_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_authoritative_publication_lifetime_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_003_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris26_rev003_observer.py >/dev/null
+
+      - name: Apply R001 through R005
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r005_split_weight_flow_lanes.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_resumable_prepare.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r005_split_weight_flow_lanes.py >/dev/null
+
+      - name: Audit R005 generated tree for R006
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/audit_aeris27_rev3_5_salbutamol_r006_generated_tree.py
+          git diff --check
+
+      - name: No tool residue
+        shell: bash
+        run: |
+          rm -rf Tools/__pycache__
+          test -z "$(git status --porcelain | grep '__pycache__' || true)"
