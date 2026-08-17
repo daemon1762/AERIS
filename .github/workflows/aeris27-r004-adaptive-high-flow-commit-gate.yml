@@ -20,6 +20,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile \
             Tools/apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py \
+            Tools/verify_aeris27_rev3_5_salbutamol_resumable_prepare.py \
             Tools/apply_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py \
             Tools/verify_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py \
             Tools/apply_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py \
@@ -66,11 +67,14 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py >/dev/null
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py >/dev/null
 
-      - name: Apply and verify R004
+      - name: Apply and verify R004 final tree
         shell: bash
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_resumable_prepare.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py
           PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py
           git diff --check
 
