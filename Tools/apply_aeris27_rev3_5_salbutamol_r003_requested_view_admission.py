@@ -87,13 +87,8 @@ new_window = '''            int publishedThisWindow = 0;
 renderer, _ = replace_once(renderer, old_window, new_window,
                            'R003 pending anti-HOL admission')
 
-old_begin = '''                    AERISTerrainGpuTileRasterResult result = completed[0];
-                    if (!TryBeginPendingEntryCommit(result)) continue;
-                }
-
-                bool published;'''
-new_begin = '''                    AERISTerrainGpuTileRasterResult result = completed[0];
-                    if (!TryBeginPendingEntryCommit(result)) continue;
+old_begin = '                    if (!TryBeginPendingEntryCommit(result)) continue;\n'
+new_begin = '''                    if (!TryBeginPendingEntryCommit(result)) continue;
                     // TryBegin stores the immutable render-ready field first. If this result
                     // belongs to a tile/style no longer requested, retain that RAM ingredient
                     // for possible later reuse but do not spend staged GPU commit time on it.
@@ -108,9 +103,7 @@ new_begin = '''                    AERISTerrainGpuTileRasterResult result = comp
                         continue;
                     }
                     operationHealthRev35R003RelevantAdmissions++;
-                }
-
-                bool published;'''
+'''
 renderer, _ = replace_once(renderer, old_begin, new_begin,
                            'R003 completed-result admission')
 
