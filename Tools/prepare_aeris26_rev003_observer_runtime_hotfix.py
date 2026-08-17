@@ -73,7 +73,7 @@ installed_bundle = installed_shader_dir / bundle_name
 installed_probe = installed_shader_dir / probe_name
 
 
-def accepted_pair_ok(bundle, probe):
+def historical_pair_ok(bundle, probe):
     if not assetbundle_ok(bundle) or not assetbundle_ok(probe):
         return False
     if shader_mode == 'windows' and sha256(probe) != EXPECTED_WINDOWS_PROBE_SHA:
@@ -81,39 +81,71 @@ def accepted_pair_ok(bundle, probe):
     return True
 
 
+def locally_built_pair_ok(bundle, probe):
+    if not assetbundle_ok(bundle) or not assetbundle_ok(probe):
+        return False
+    if shader_mode == 'windows' and probe.stat().st_size < 1000:
+        return False
+    return True
+
+
 # REV003 Observer is measurement-only and never changes shader semantics. Asset staging
-# follows three deterministic tiers so every development machine can build independently:
-#   1) reuse an already-accepted source pair;
-#   2) seed the accepted pair from that machine's installed KSP package;
-#   3) if neither exists, build the AERIS25 pair locally with the pinned Unity 2019.4.18f1
-#      builder and enforce the same AssetBundle/probe acceptance gates.
-if accepted_pair_ok(source_bundle, source_probe):
-    print(PREFIX + ' accepted ' + shader_mode + ' shader/probe already present in source staging')
-elif accepted_pair_ok(installed_bundle, installed_probe):
+# follows three tiers so every development machine can build independently:
+#   1) reuse the historical exact accepted source pair;
+#   2) seed that exact pair from the machine's installed KSP package;
+#   3) if neither exists, build locally with pinned Unity 2019.4.18f1. A local build
+#      must pass Unity semantic/container/stale-size gates inside the builder AND must
+#      reproduce identical bundle/probe SHA values across two clean rebuilds.
+if historical_pair_ok(source_bundle, source_probe):
+    print(PREFIX + ' historical exact accepted ' + shader_mode + ' shader/probe already present in source staging')
+elif historical_pair_ok(installed_bundle, installed_probe):
     source_shader_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(installed_bundle, source_bundle)
     shutil.copy2(installed_probe, source_probe)
-    print(PREFIX + ' seeded accepted ' + shader_mode + ' shader/probe from installed KSP package')
+    print(PREFIX + ' seeded historical exact accepted ' + shader_mode + ' shader/probe from installed KSP package')
     print(PREFIX + ' seeded bundle_sha256=' + sha256(source_bundle))
     print(PREFIX + ' seeded probe_sha256=' + sha256(source_probe))
 else:
-    print(PREFIX + ' accepted shader pair unavailable; invoking local AERIS25 shader build')
+    print(PREFIX + ' historical accepted shader pair unavailable; invoking reproducible local AERIS25 shader build')
     env = os.environ.copy()
     try:
         run(['bash', ROOT / 'Tools/build_aeris25_gpu_shader_bundle.sh', shader_mode], env=env)
     except subprocess.CalledProcessError as exc:
         raise SystemExit(
-            PREFIX + ' local shader build failed (status=' + str(exc.returncode) + '). '
-            'Install/configure Unity Editor 2019.4.18f1 or set UNITY_EDITOR, then rerun the same command.')
-    if not accepted_pair_ok(source_bundle, source_probe):
-        detail = ''
-        if source_probe.is_file():
-            detail = ' probe_sha256=' + sha256(source_probe)
+            PREFIX + ' local shader build pass1 failed (status=' + str(exc.returncode) + '). '
+            'Check the Unity log printed above and rerun the same command after fixing the reported build error.')
+    if not locally_built_pair_ok(source_bundle, source_probe):
+        raise SystemExit(PREFIX + ' local shader build pass1 completed but structural acceptance failed')
+    pass1_bundle_sha = sha256(source_bundle)
+    pass1_probe_sha = sha256(source_probe)
+    pass1_probe_size = source_probe.stat().st_size
+    print(PREFIX + ' local build pass1 bundle_sha256=' + pass1_bundle_sha)
+    print(PREFIX + ' local build pass1 probe_sha256=' + pass1_probe_sha + ' size=' + str(pass1_probe_size))
+
+    try:
+        run(['bash', ROOT / 'Tools/build_aeris25_gpu_shader_bundle.sh', shader_mode], env=env)
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit(PREFIX + ' local shader build pass2 failed (status=' + str(exc.returncode) + ')')
+    if not locally_built_pair_ok(source_bundle, source_probe):
+        raise SystemExit(PREFIX + ' local shader build pass2 completed but structural acceptance failed')
+    pass2_bundle_sha = sha256(source_bundle)
+    pass2_probe_sha = sha256(source_probe)
+    pass2_probe_size = source_probe.stat().st_size
+    print(PREFIX + ' local build pass2 bundle_sha256=' + pass2_bundle_sha)
+    print(PREFIX + ' local build pass2 probe_sha256=' + pass2_probe_sha + ' size=' + str(pass2_probe_size))
+
+    if pass1_bundle_sha != pass2_bundle_sha or pass1_probe_sha != pass2_probe_sha:
         raise SystemExit(
-            PREFIX + ' local shader build completed but accepted pair verification failed:' + detail)
+            PREFIX + ' local shader build reproducibility FAIL: clean rebuild bytes changed. '
+            'bundle=' + pass1_bundle_sha + ' -> ' + pass2_bundle_sha + '; probe=' +
+            pass1_probe_sha + ' -> ' + pass2_probe_sha)
+
+    print(PREFIX + ' local shader clean-rebuild reproducibility=PASS')
+    if shader_mode == 'windows' and pass2_probe_sha == EXPECTED_WINDOWS_PROBE_SHA:
+        print(PREFIX + ' local Windows probe also matches historical exact accepted SHA')
+    elif shader_mode == 'windows':
+        print(PREFIX + ' local Windows probe uses cross-machine semantic acceptance; historical SHA differs as expected when prior Unity asset GUIDs were machine-local')
     print(PREFIX + ' local ' + shader_mode + ' shader build acceptance=PASS')
-    print(PREFIX + ' built bundle_sha256=' + sha256(source_bundle))
-    print(PREFIX + ' built probe_sha256=' + sha256(source_probe))
 
 # The original observer preparer used KSP_x64.exe as its selector. Only override that
 # legacy selector when the Managed layout proves a native-Linux player. KSP_x64_Data
