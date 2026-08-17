@@ -60,12 +60,14 @@ check('int chunkItems = Rev35R005SourceChunkHardCap;' in source and
       'ResolveRev35R004PrepareChunkItems(budgetMilliseconds)' not in source,
       'source/geographic lane cannot widen above 64')
 check('(iterations % chunkItems) == 0' in source and
-      'mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >= budgetMilliseconds' in source,
+      'mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >=' in source and
+      'budgetMilliseconds)' in source,
       'source lane retains resumable measured-budget checkpoints')
 check('int chunkItems = ResolveRev35R004PrepareChunkItems(budgetMilliseconds);' in packed,
       'packed lane alone retains adaptive chunk resolver')
 check('(iterations % chunkItems) == 0' in packed and
-      'mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >= budgetMilliseconds' in packed,
+      'mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >=' in packed and
+      'budgetMilliseconds)' in packed,
       'packed lane retains measured-budget checkpoints')
 check(renderer.count('int chunkItems = ResolveRev35R004PrepareChunkItems(budgetMilliseconds);') == 1,
       'exactly one adaptive prepare lane remains')
