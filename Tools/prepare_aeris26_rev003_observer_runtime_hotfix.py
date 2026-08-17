@@ -13,6 +13,7 @@ if len(sys.argv) < 2:
 
 ksp = Path(sys.argv[1]).expanduser().resolve()
 linux_managed = (
+    (ksp / 'KSP_x64_Data/Managed/Assembly-CSharp.dll').is_file() or
     (ksp / 'KSP_x86_64_Data/Managed/Assembly-CSharp.dll').is_file() or
     (ksp / 'KSP_Data/Managed/Assembly-CSharp.dll').is_file()
 )
