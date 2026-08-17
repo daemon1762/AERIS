@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import hashlib
+import os
 import runpy
 import shutil
+import subprocess
 import sys
 
 sys.dont_write_bytecode = True
@@ -31,6 +33,12 @@ def assetbundle_ok(path):
     return len(data) > 16 and data.startswith(b'UnityFS\x00') and b'AssetBundle' in data
 
 
+def run(args, env=None):
+    args = [str(x) for x in args]
+    print(PREFIX + ' $ ' + ' '.join(args))
+    subprocess.run(args, cwd=str(ROOT), env=env, check=True)
+
+
 ksp = Path(sys.argv[1]).expanduser().resolve()
 windows_layout = (ksp / 'KSP_x64_Data/Managed/Assembly-CSharp.dll').is_file()
 linux_layout = (
@@ -50,9 +58,6 @@ else:
     shader_mode = 'windows' if _original_is_file(windows_exe) else 'linux'
     print(PREFIX + ' layout fallback=' + shader_mode)
 
-# REV003 Observer is measurement-only and must not rebuild or mutate accepted shader
-# semantics. If the repository staging directory lacks the already-accepted bundle/probe,
-# seed the exact platform pair from the currently installed AERIS package in this KSP.
 if shader_mode == 'windows':
     bundle_name = 'aeris25_nd_gpu_dynamic_terrain_colour_windows.bundle'
     probe_name = 'aeris25_gpu_dynamic_colour_probe_windows.bundle'
@@ -67,16 +72,24 @@ source_probe = source_shader_dir / probe_name
 installed_bundle = installed_shader_dir / bundle_name
 installed_probe = installed_shader_dir / probe_name
 
-source_pair_ok = assetbundle_ok(source_bundle) and assetbundle_ok(source_probe)
-if not source_pair_ok:
-    if not assetbundle_ok(installed_bundle) or not assetbundle_ok(installed_probe):
-        raise SystemExit(
-            PREFIX + ' accepted shader staging missing and installed platform pair is unavailable/invalid: ' +
-            str(installed_shader_dir))
-    if shader_mode == 'windows' and sha256(installed_probe) != EXPECTED_WINDOWS_PROBE_SHA:
-        raise SystemExit(
-            PREFIX + ' installed Windows probe SHA is not the accepted compatibility probe: ' +
-            sha256(installed_probe))
+
+def accepted_pair_ok(bundle, probe):
+    if not assetbundle_ok(bundle) or not assetbundle_ok(probe):
+        return False
+    if shader_mode == 'windows' and sha256(probe) != EXPECTED_WINDOWS_PROBE_SHA:
+        return False
+    return True
+
+
+# REV003 Observer is measurement-only and never changes shader semantics. Asset staging
+# follows three deterministic tiers so every development machine can build independently:
+#   1) reuse an already-accepted source pair;
+#   2) seed the accepted pair from that machine's installed KSP package;
+#   3) if neither exists, build the AERIS25 pair locally with the pinned Unity 2019.4.18f1
+#      builder and enforce the same AssetBundle/probe acceptance gates.
+if accepted_pair_ok(source_bundle, source_probe):
+    print(PREFIX + ' accepted ' + shader_mode + ' shader/probe already present in source staging')
+elif accepted_pair_ok(installed_bundle, installed_probe):
     source_shader_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(installed_bundle, source_bundle)
     shutil.copy2(installed_probe, source_probe)
@@ -84,11 +97,23 @@ if not source_pair_ok:
     print(PREFIX + ' seeded bundle_sha256=' + sha256(source_bundle))
     print(PREFIX + ' seeded probe_sha256=' + sha256(source_probe))
 else:
-    if shader_mode == 'windows' and sha256(source_probe) != EXPECTED_WINDOWS_PROBE_SHA:
+    print(PREFIX + ' accepted shader pair unavailable; invoking local AERIS25 shader build')
+    env = os.environ.copy()
+    try:
+        run(['bash', ROOT / 'Tools/build_aeris25_gpu_shader_bundle.sh', shader_mode], env=env)
+    except subprocess.CalledProcessError as exc:
         raise SystemExit(
-            PREFIX + ' staged Windows probe SHA is not the accepted compatibility probe: ' +
-            sha256(source_probe))
-    print(PREFIX + ' accepted ' + shader_mode + ' shader/probe already present in source staging')
+            PREFIX + ' local shader build failed (status=' + str(exc.returncode) + '). '
+            'Install/configure Unity Editor 2019.4.18f1 or set UNITY_EDITOR, then rerun the same command.')
+    if not accepted_pair_ok(source_bundle, source_probe):
+        detail = ''
+        if source_probe.is_file():
+            detail = ' probe_sha256=' + sha256(source_probe)
+        raise SystemExit(
+            PREFIX + ' local shader build completed but accepted pair verification failed:' + detail)
+    print(PREFIX + ' local ' + shader_mode + ' shader build acceptance=PASS')
+    print(PREFIX + ' built bundle_sha256=' + sha256(source_bundle))
+    print(PREFIX + ' built probe_sha256=' + sha256(source_probe))
 
 # The original observer preparer used KSP_x64.exe as its selector. Only override that
 # legacy selector when the Managed layout proves a native-Linux player. KSP_x64_Data
