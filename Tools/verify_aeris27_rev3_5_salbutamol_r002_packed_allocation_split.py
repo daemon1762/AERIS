@@ -52,8 +52,8 @@ check('pending.PackedSource = new Vector3[vertexCount];' not in method and
       'pending.PackedColours = new Color32[vertexCount];' not in method and
       'pending.PackedIndices = new int[indexCount];' not in method,
       'R001 three-allocation atomic block removed')
-check('case 12:' in method and 'pending.PrepareSubstage = 12;' in method,
-      'shifted R001 copy/index state machine reaches final substage 12')
+check('case 11:' in method and 'pending.PrepareSubstage = 12;' in method,
+      'shifted R001 copy/index state machine reaches final state 12 from case 11')
 for name in ('operationHealthRev35PackedSourceAllocMaxMs',
              'operationHealthRev35PackedColourAllocMaxMs',
              'operationHealthRev35PackedIndexAllocMaxMs'):
