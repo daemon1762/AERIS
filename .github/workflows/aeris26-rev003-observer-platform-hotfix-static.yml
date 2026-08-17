@@ -20,20 +20,32 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          bash -n Tools/build_aeris25_gpu_shader_bundle.sh
           grep -Fq "KSP_x64_Data/Managed/Assembly-CSharp.dll" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "KSP_x86_64_Data/Managed/Assembly-CSharp.dll" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "KSP_Data/Managed/Assembly-CSharp.dll" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "authoritative layout=windows/proton" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
-          grep -Fq "seeded accepted" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
-          grep -Fq "accepted shader pair unavailable; invoking local AERIS25 shader build" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
-          grep -Fq "Tools/build_aeris25_gpu_shader_bundle.sh" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
-          grep -Fq "shader build acceptance=PASS" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
-          grep -Fq "Unity Editor 2019.4.18f1" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
-          grep -Fq "installed_shader_dir" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
-          grep -Fq "shutil.copy2" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "seeded historical exact accepted" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "historical accepted shader pair unavailable; invoking reproducible local AERIS25 shader build" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "local shader clean-rebuild reproducibility=PASS" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "cross-machine semantic acceptance" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "6465e6dfa7c9809a734d5ce85b202b49ea6ee5fcaac19d55d4b75bd532a35f0d" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "runpy.run_path" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
-          bash -n Tools/build_aeris25_gpu_shader_bundle.sh
+
+      - name: Shader builder semantic and canonical-GUID contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'CANONICAL_PROBE_GUID="d318663ef084a5e9960e7476d58db45d"' Tools/build_aeris25_gpu_shader_bundle.sh
+          grep -Fq 'CANONICAL_SHADER_GUID="04426e32c204037dfe8a8e8172b2da8b"' Tools/build_aeris25_gpu_shader_bundle.sh
+          grep -Fq 'canonical asset GUIDs applied' Tools/build_aeris25_gpu_shader_bundle.sh
+          grep -Fq 'probe semantic validation PASS' Tools/build_aeris25_gpu_shader_bundle.sh
+          grep -Fq 'PROBE_SIZE' Tools/build_aeris25_gpu_shader_bundle.sh
+          grep -Fq 'historical SHA differs; semantic/reproducibility gate required' Tools/build_aeris25_gpu_shader_bundle.sh
+          grep -Fq 'ProbeExpectedText = "AERIS24_GPU_BUNDLE_PROBE_V1"' GpuAssets/Assets/Editor/BuildAERISGpuAssets.cs
+          grep -Fq 'AssetBundle.LoadFromFile(path)' GpuAssets/Assets/Editor/BuildAERISGpuAssets.cs
+          grep -Fq 'LoadAllAssets<TextAsset>()' GpuAssets/Assets/Editor/BuildAERISGpuAssets.cs
+          grep -Fq 'probe semantic validation PASS' GpuAssets/Assets/Editor/BuildAERISGpuAssets.cs
 
       - name: Platform authority model
         shell: bash
@@ -43,8 +55,6 @@ jobs:
           from pathlib import Path
           import tempfile
 
-          # Windows/Proton layout wins when KSP_x64_Data is the Managed authority,
-          # even if unrelated Linux executables coexist.
           with tempfile.TemporaryDirectory() as td:
               ksp = Path(td)
               (ksp / 'KSP.x86_64').write_text('co-resident')
@@ -58,7 +68,6 @@ jobs:
               shader_mode = 'windows' if windows_layout else ('linux' if linux_layout else 'unknown')
               assert shader_mode == 'windows'
 
-          # Native Linux layout remains Linux even if a stale Windows exe exists.
           with tempfile.TemporaryDirectory() as td:
               ksp = Path(td)
               (ksp / 'KSP_x64.exe').write_text('stale')
@@ -74,22 +83,24 @@ jobs:
           print('[REV003 OBSERVER PLATFORM HOTFIX] platform authority model PASS')
           PY
 
-      - name: Local shader build fallback contract
+      - name: Local shader build fallback ordering and reproducibility contract
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           text = Path('Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py').read_text()
-          source = text.index('if accepted_pair_ok(source_bundle, source_probe):')
-          installed = text.index('elif accepted_pair_ok(installed_bundle, installed_probe):')
-          local = text.index("run(['bash', ROOT / 'Tools/build_aeris25_gpu_shader_bundle.sh', shader_mode]")
-          verify = text.index("if not accepted_pair_ok(source_bundle, source_probe):", local)
+          source = text.index('if historical_pair_ok(source_bundle, source_probe):')
+          installed = text.index('elif historical_pair_ok(installed_bundle, installed_probe):')
+          first = text.index("run(['bash', ROOT / 'Tools/build_aeris25_gpu_shader_bundle.sh', shader_mode]")
+          second = text.index("run(['bash', ROOT / 'Tools/build_aeris25_gpu_shader_bundle.sh', shader_mode]", first + 1)
+          reproducible = text.index("local shader clean-rebuild reproducibility=PASS", second)
           delegate = text.index("runpy.run_path(str(TARGET), run_name='__main__')")
-          assert source < installed < local < verify < delegate
-          assert 'EXPECTED_WINDOWS_PROBE_SHA' in text
-          assert 'local shader build failed' in text
-          print('[REV003 OBSERVER PLATFORM HOTFIX] source -> installed -> local-build fallback ordering PASS')
+          assert source < installed < first < second < reproducible < delegate
+          assert 'pass1_bundle_sha != pass2_bundle_sha' in text
+          assert 'pass1_probe_sha != pass2_probe_sha' in text
+          assert 'probe.stat().st_size < 1000' in text
+          print('[REV003 OBSERVER PLATFORM HOTFIX] historical -> installed -> two-pass local reproducibility ordering PASS')
           PY
 
       - name: No bytecode residue
