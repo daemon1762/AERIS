@@ -16,6 +16,7 @@ R003 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R003_REQUESTED_VIEW_ADMISSION'
 R004 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R004_ADAPTIVE_HIGH_FLOW_COMMIT'
 R005 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R005_SPLIT_WEIGHT_FLOW_LANES'
 R006 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_MANAGED_BUFFER_REUSE_FOUNDATION_OBSERVER'
+R006_HF1 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_RESOURCE_RELEASE_HOTFIX1'
 TTY = sys.stdout.isatty()
 GREEN = '\033[1;32m' if TTY else ''
 RED = '\033[1;31m' if TTY else ''
@@ -94,7 +95,7 @@ def reconstruct_r005_parent():
 
 
 parser = argparse.ArgumentParser(
-    description='Prepare/install AERIS27 REV3.5 SALBUTAMOL SULFATE R006. R006 keeps R005/R004 behavior, reuses only snapshot-safe retired bare GeographicUnitPoint arrays, transfers already-complete source Vector3 arrays into CPU fallback projected ownership, and adds measurement-only foundation/finalize/GPU-scratch observers. No foundation admission or publication semantics are changed.')
+    description='Prepare/install AERIS27 REV3.5 SALBUTAMOL SULFATE R006 + Resource Release Hotfix1. R006 keeps R005/R004 behavior, reuses only snapshot-safe retired bare GeographicUnitPoint arrays, transfers already-complete source Vector3 arrays into CPU fallback projected ownership, and adds measurement-only foundation/finalize/GPU-scratch observers. Hotfix1 clears the new managed pool on full terrain OFF/suspend/dispose resource release. No foundation admission or publication semantics are changed.')
 parser.add_argument('ksp_path')
 args = parser.parse_args()
 ksp = Path(args.ksp_path).expanduser().resolve()
@@ -108,6 +109,11 @@ if not marker_present(R006):
          ROOT / 'Tools/apply_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py'])
 else:
     info('existing R006 generated tree detected')
+if not marker_present(R006_HF1):
+    run([sys.executable,
+         ROOT / 'Tools/apply_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py'])
+else:
+    info('existing R006 resource-release Hotfix1 detected')
 
 verifiers = (
     'verify_aeris25_authoritative_publication_lifetime_hotfix.py',
@@ -117,6 +123,7 @@ verifiers = (
     'verify_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py',
     'verify_aeris27_rev3_5_salbutamol_r005_split_weight_flow_lanes.py',
     'verify_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py',
+    'verify_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py',
 )
 for verifier in verifiers:
     run([sys.executable, ROOT / 'Tools' / verifier])
@@ -149,6 +156,8 @@ checks = [
     (('rev3_5_r004_variant=' + R004) in identity_text, 'R004 parent identity retained'),
     (('rev3_5_r005_variant=' + R005) in identity_text, 'R005 parent identity retained'),
     (('rev3_5_r006_variant=' + R006) in identity_text, 'R006 identity marker'),
+    (('rev3_5_r006_hotfix1=' + R006_HF1) in identity_text,
+     'R006 resource-release Hotfix1 identity marker'),
     (('git=' + git_head) in identity_text, 'identity git HEAD'),
     (marker_in_bytes(dll, R001), 'DLL embeds R001 parent'),
     (marker_in_bytes(dll, R002), 'DLL embeds R002 parent'),
@@ -156,6 +165,7 @@ checks = [
     (marker_in_bytes(dll, R004), 'DLL embeds R004 parent'),
     (marker_in_bytes(dll, R005), 'DLL embeds R005 parent'),
     (marker_in_bytes(dll, R006), 'DLL embeds R006 marker'),
+    (marker_in_bytes(dll, R006_HF1), 'DLL embeds R006 Hotfix1 marker'),
     (marker_in_bytes(dll, 'oh_rev35_r006_geo_pool_hit=') and
      marker_in_bytes(dll, 'oh_rev35_r006_missing_upstream=') and
      marker_in_bytes(dll, 'oh_rev35_r006_foundation_wait_max_ms=') and
@@ -183,8 +193,10 @@ print('parent_r003=' + R003)
 print('parent_r004=' + R004)
 print('parent_r005=' + R005)
 print('r006=' + R006)
+print('r006_hotfix1=' + R006_HF1)
 print('git=' + git_head)
 print('dll_sha256=' + sha256(installed_dll))
 print(CYAN + 'R006 ACTIVE:' + RESET + ' snapshot-safe exact-length geographic managed-array reuse (8 MiB / 16 arrays) + duplicate projected-array ownership transfer.')
 print(MAGENTA + 'R006 OBSERVERS:' + RESET + ' foundation missing path, contour-only fallback, true Finalize wait, geographic miss allocation, GPU attribute scratch growth.')
+print(YELLOW + 'R006 RESOURCE RELEASE:' + RESET + ' ordinary Entry retirement may reuse bounded bare arrays; terrain OFF/suspend/dispose clears the pool.')
 print(YELLOW + 'R006 FROZEN:' + RESET + ' R004 adaptive commit + R005 lanes; foundation admission unchanged; publication authority unchanged; worker_count_change=0 quality_change=0 10Hz_change=0 160km_change=0.')
