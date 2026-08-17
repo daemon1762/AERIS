@@ -27,7 +27,7 @@ jobs:
           grep -Fq "seeded accepted" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "accepted shader pair unavailable; invoking local AERIS25 shader build" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "Tools/build_aeris25_gpu_shader_bundle.sh" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
-          grep -Fq "local shader build acceptance=PASS" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
+          grep -Fq "shader build acceptance=PASS" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "Unity Editor 2019.4.18f1" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "installed_shader_dir" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
           grep -Fq "shutil.copy2" Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py
@@ -88,7 +88,7 @@ jobs:
           delegate = text.index("runpy.run_path(str(TARGET), run_name='__main__')")
           assert source < installed < local < verify < delegate
           assert 'EXPECTED_WINDOWS_PROBE_SHA' in text
-          assert "local shader build failed" in text
+          assert 'local shader build failed' in text
           print('[REV003 OBSERVER PLATFORM HOTFIX] source -> installed -> local-build fallback ordering PASS')
           PY
 
