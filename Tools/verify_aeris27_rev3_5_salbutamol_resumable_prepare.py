@@ -9,6 +9,7 @@ R = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs'
 OH = ROOT / 'Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs'
 B = ROOT / 'build_ubuntu.sh'
 MARKER = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R001'
+R004 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R004_ADAPTIVE_HIGH_FLOW_COMMIT'
 PREFIX = '[AERIS27 OH REV3.5 SALBUTAMOL SULFATE R001 VERIFY]'
 
 checks = []
@@ -134,8 +135,18 @@ packed_match = re.search(
 packed_text = packed_match.group(0) if packed_match else ''
 check('Array.Copy(' not in packed_text,
       'managed packed preparation no longer uses atomic Array.Copy')
-check('Rev35PrepareChunkItems' in packed_text,
-      'managed packed preparation has repeated budget checkpoints')
+
+if R004 in renderer:
+    adaptive_checkpoints = (
+        'int chunkItems = ResolveRev35R004PrepareChunkItems(budgetMilliseconds);' in packed_text and
+        packed_text.count('(iterations % chunkItems) == 0') >= 2 and
+        'mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >=' in packed_text and
+        'budgetMilliseconds' in packed_text)
+    check(adaptive_checkpoints,
+          'managed packed preparation has repeated adaptive budget checkpoints')
+else:
+    check('Rev35PrepareChunkItems' in packed_text,
+          'managed packed preparation has repeated budget checkpoints')
 
 failed = [label for ok, label in checks if not ok]
 if failed:
