@@ -9,6 +9,7 @@ B = ROOT / 'build_ubuntu.sh'
 PREFIX = '[AERIS27 R006 RESOURCE RELEASE HOTFIX1 VERIFY]'
 R006 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_MANAGED_BUFFER_REUSE_FOUNDATION_OBSERVER'
 HF1 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_RESOURCE_RELEASE_HOTFIX1'
+HF2 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_RESOURCE_RELEASE_ORDER_HOTFIX2'
 checks = []
 
 
@@ -49,13 +50,14 @@ check('DestroyMeshPool();' in release and
 check(release.find('DestroyMeshPool();') <
       release.find('ClearRev35R006GeographicPool();') <
       release.find('identityIndexCache.Clear();'),
-      'R006 pool clear is inside existing full-release boundary')
+      'HF1 pre-reset pool clear remains inside existing full-release boundary')
 recycle = method(r,
     '        void RecycleRev35R006GeographicBuffer(ref GeographicUnitPoint[] buffer)')
 check(recycle and 'stack.Push(buffer)' in recycle,
       'ordinary Entry retirement still retains bounded reuse')
-check(r.count('ClearRev35R006GeographicPool();') == 1,
-      'managed pool is cleared only by full resource release')
+clear_count = r.count('ClearRev35R006GeographicPool();')
+check(clear_count == (2 if HF2 in r else 1),
+      'managed pool clear count matches active resource-release lineage')
 check('REV3_5_R006_HOTFIX1="' + HF1 + '"' in b,
       'build HF1 identity present')
 check('verify_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py' in b,
