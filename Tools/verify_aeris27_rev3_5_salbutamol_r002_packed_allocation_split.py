@@ -10,6 +10,7 @@ B = ROOT / 'build_ubuntu.sh'
 PREFIX = '[AERIS27 OH REV3.5 SALBUTAMOL SULFATE R002 VERIFY]'
 R001 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R001'
 R002 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R002_PACKED_ALLOCATION_SPLIT'
+R004 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R004_ADAPTIVE_HIGH_FLOW_COMMIT'
 checks = []
 
 
@@ -36,12 +37,28 @@ start = renderer.find('bool AdvancePendingPackedTerrain(PendingEntryCommit pendi
 end = renderer.find('Mesh UploadPreparedPackedTerrainMesh', start)
 method = renderer[start:end] if start >= 0 and end > start else ''
 check(bool(method), 'packed prepare method resolved')
+r004_adaptive = R004 in renderer
 for case, alloc in ((1, 'pending.PackedSource = new Vector3[count];'),
                     (2, 'pending.PackedColours = new Color32[count];'),
                     (3, 'pending.PackedIndices = new int[count];')):
-    pattern = re.compile(r'case %d:.*?%s.*?operationHealthRev35PreparePackedYields\+\+;.*?return false;' %
-                         (case, re.escape(alloc)), re.S)
-    check(bool(pattern.search(method)), 'allocation case %d is isolated and forced-yield' % case)
+    block_start = method.find('case %d:' % case)
+    block_end = method.find('case %d:' % (case + 1), block_start + 1)
+    block = method[block_start:block_end] if block_start >= 0 and block_end > block_start else ''
+    if r004_adaptive:
+        adaptive = (
+            alloc in block and
+            'mainThreadCommitStopwatch.Elapsed.TotalMilliseconds >=' in block and
+            'budgetMilliseconds' in block and
+            'operationHealthRev35PreparePackedYields++' in block and
+            'return false;' in block and
+            'operationHealthRev35R004AllocationContinues++' in block)
+        check(adaptive,
+              'allocation case %d is isolated and budget-aware under R004' % case)
+    else:
+        pattern = re.compile(r'case %d:.*?%s.*?operationHealthRev35PreparePackedYields\+\+;.*?return false;' %
+                             (case, re.escape(alloc)), re.S)
+        check(bool(pattern.search(method)),
+              'allocation case %d is isolated and forced-yield' % case)
 check(method.count('pending.PackedSource = new Vector3[count];') == 1,
       'exactly one packed source allocation')
 check(method.count('pending.PackedColours = new Color32[count];') == 1,
