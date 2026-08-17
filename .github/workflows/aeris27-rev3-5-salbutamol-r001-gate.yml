@@ -1,0 +1,97 @@
+name: AERIS27 REV3.5 SALBUTAMOL SULFATE R001 Gate
+
+on:
+  push:
+    branches:
+      - agent/aeris27-rev3-5-salbutamol-resumable-prepare-r001
+  workflow_dispatch:
+
+jobs:
+  rev35-r001-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            Tools/apply_aeris27_rev3_5_salbutamol_resumable_prepare.py \
+            Tools/apply_aeris27_rev3_5_salbutamol_resumable_prepare_r001.py \
+            Tools/verify_aeris27_rev3_5_salbutamol_resumable_prepare.py \
+            Tools/prepare_aeris27_rev3_5_salbutamol_runtime.py \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r001_runtime.py
+          rm -rf Tools/__pycache__
+
+      - name: Reconstruct accepted lineage through ADENOSINE
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_snapshot_mesh_lifetime_guard_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_content_generation_burst_governor_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_content_generation_burst_governor_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py
+
+      - name: Reconstruct frozen NOREPINEPHRINE REV003
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_main_thread_commit_governor.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_staged_main_thread_commit_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_staged_main_thread_commit_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_authoritative_publication_lifetime_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_003_inherited_selftests.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_authoritative_publication_lifetime_hotfix.py
+
+      - name: Apply Observer M1 and REV3.5 R001
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris26_rev003_observer.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris26_rev003_observer.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_resumable_prepare_r001.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_resumable_prepare.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris26_rev003_observer.py
+          git diff --check
+
+      - name: Contract guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          R=Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+          grep -Fq 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R001' "$R"
+          grep -Fq 'AdvancePendingSources(pending, budgetMilliseconds)' "$R"
+          grep -Fq 'AdvancePendingPackedTerrain(pending, budgetMilliseconds)' "$R"
+          grep -Fq 'PendingEntryCommitStage.AcquirePackedTerrainMesh' "$R"
+          grep -Fq 'PendingEntryCommitStage.UploadPackedTerrainVertices' "$R"
+          ! grep -Fq 'AERIS25_PHASE6_004_MANAGED_PREPARATION_PIPELINE' "$R"
+          ! grep -Fq 'AERIS25_PHASE6_005_NONBLOCKING_SPECULATIVE_PREPARATION' "$R"
+          ! grep -Fq 'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE' "$R"
+          ! grep -Fq 'WaitManagedPreparation' "$R"
+          ! grep -Fq 'ResidentPreparedPresentation' "$R"
+          test "$(grep -Fc 'internal int PrepareSubstage;' "$R")" -eq 1
+          test "$(grep -Fc 'internal int PrepareCursor;' "$R")" -eq 1
+          test "$(grep -Fc 'internal int PackedIndexWriteCursor;' "$R")" -eq 1
+
+      - name: No tool residue
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf Tools/__pycache__
+          test -z "$(git diff -- Tools/apply_aeris27_rev3_5_salbutamol_resumable_prepare.py)"
+          test -z "$(git status --porcelain | grep '__pycache__' || true)"
