@@ -11,6 +11,7 @@ R001 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R001'
 R002 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R002_PACKED_ALLOCATION_SPLIT'
 R003 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R003_REQUESTED_VIEW_ADMISSION'
 R004 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R004_ADAPTIVE_HIGH_FLOW_COMMIT'
+R005 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R005_SPLIT_WEIGHT_FLOW_LANES'
 checks = []
 
 
@@ -26,6 +27,7 @@ if not R.is_file() or not B.is_file():
     raise SystemExit(1)
 renderer = R.read_text()
 build = B.read_text()
+r005_descendant = R005 in renderer
 for marker, label in ((R001, 'R001 parent retained'),
                       (R002, 'R002 parent retained'),
                       (R003, 'R003 parent retained'),
@@ -39,7 +41,7 @@ check('Rev35R004FrameGuardMediumMilliseconds = 15.0' in renderer and
       'frame guard thresholds are 15/20/25 ms')
 check('Rev35R004PrepareChunkMedium = 128' in renderer and
       'Rev35R004PrepareChunkHigh = 256' in renderer,
-      'adaptive prepare chunks are 64/128/256')
+      'adaptive packed prepare chunks remain 64/128/256')
 check('ResolveRev35R004CommitBudget(steadyCommitProfile)' in renderer,
       'pump uses adaptive budget resolver')
 check('Time.unscaledDeltaTime * 1000.0' in renderer,
@@ -48,10 +50,16 @@ check('backlog >= 24 || generationLag >= 8L' in renderer and
       'backlog >= 12 || generationLag >= 4L' in renderer and
       'backlog >= 4 || generationLag >= 2L' in renderer,
       'flow tiers respond to backlog and generation lag')
-check(renderer.count('int chunkItems = ResolveRev35R004PrepareChunkItems(budgetMilliseconds);') == 2,
-      'source and packed loops resolve adaptive chunk width')
+
+if r005_descendant:
+    check(renderer.count('int chunkItems = ResolveRev35R004PrepareChunkItems(budgetMilliseconds);') == 1 and
+          'int chunkItems = Rev35R005SourceChunkHardCap;' in renderer,
+          'approved R005 descendant keeps adaptive packed lane and hard-caps source lane')
+else:
+    check(renderer.count('int chunkItems = ResolveRev35R004PrepareChunkItems(budgetMilliseconds);') == 2,
+          'source and packed loops resolve adaptive chunk width')
 check('(iterations % Rev35PrepareChunkItems) == 0' not in renderer,
-      'R001/R002 prepare loops no longer use fixed 64-item cadence')
+      'prepare loops use explicit lane chunk variable')
 check(renderer.count('operationHealthRev35R004AllocationContinues++;') == 3,
       'all three R002 allocation stops are budget-aware')
 check('pending.PackedSource = new Vector3[count];' in renderer and
