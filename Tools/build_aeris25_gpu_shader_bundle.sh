@@ -110,6 +110,11 @@ run_target(){
   echo "[AERIS25 GPU DYNAMIC COLOUR] Package Manager=DISABLED (-noUpm; GpuAssets has no package dependencies)"
   echo "[AERIS25 GPU DYNAMIC COLOUR] Unity log=$log_file"
 
+  # Unity 2019.4's Package Manager server is an external Node process. On modern
+  # Linux it can throw ERR_STREAM_DESTROYED while Winston writes to stdout after
+  # Unity has already closed the shared stream. This project has no Package Manager
+  # dependencies, so -noUpm removes that process from the build path and -logFile
+  # writes Editor output to a real file rather than sharing the caller terminal.
   set +e
   "$UNITY" -batchmode -nographics -quit -noUpm \
     -buildTarget "$build_target" \
