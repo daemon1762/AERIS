@@ -1,0 +1,182 @@
+name: AERIS27 R006 Hotfix2 Authoritative Final Gate
+
+on:
+  push:
+    branches:
+      - agent/aeris27-rev3-5-salbutamol-r006-managed-buffer-reuse-foundation-observer
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  r006-hf2-final:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            Tools/apply_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py \
+            Tools/verify_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py \
+            Tools/apply_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py \
+            Tools/verify_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py \
+            Tools/apply_aeris27_rev3_5_salbutamol_r006_resource_release_order_hotfix2.py \
+            Tools/verify_aeris27_rev3_5_salbutamol_r006_resource_release_order_hotfix2.py \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r006_runtime.py
+          rm -rf Tools/__pycache__
+
+      - name: Reconstruct accepted lineage through R005
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_content_generation_burst_governor_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_staged_main_thread_commit_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_authoritative_publication_lifetime_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_003_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris26_rev003_observer.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r005_split_weight_flow_lanes.py >/dev/null
+
+      - name: Apply R006 plus teardown Hotfix1 and Hotfix2
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_resource_release_order_hotfix2.py
+
+      - name: Verify inherited safety and R006 final tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_authoritative_publication_lifetime_hotfix.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_resumable_prepare.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r005_split_weight_flow_lanes.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r006_resource_release_order_hotfix2.py
+          git diff --check
+
+      - name: Exact final memory and teardown contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          for marker in (
+              'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_MANAGED_BUFFER_REUSE_FOUNDATION_OBSERVER',
+              'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_RESOURCE_RELEASE_HOTFIX1',
+              'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_RESOURCE_RELEASE_ORDER_HOTFIX2'):
+              assert marker in s
+          assert 'Rev35R006GeographicPoolMaximumBytes = 8L * 1024L * 1024L' in s
+          assert 'Rev35R006GeographicPoolMaximumArrays = 16' in s
+          gs = s.index('bool AdvancePendingGeographic(Vector3[] source,')
+          ge = s.index('bool FinalizePendingEntryCommit(PendingEntryCommit pending,', gs)
+          geo = s[gs:ge]
+          assert 'AcquireRev35R006GeographicBuffer(source.Length)' in geo
+          assert 'output = new GeographicUnitPoint[source.Length]' not in geo
+          for value in ('PackedTerrainProjectedVertices = pending.PackedSource',
+                        'ContourProjectedVertices = pending.ContourSource',
+                        'CoastlineProjectedVertices = pending.CoastlineSource'):
+              assert value in s
+          rs = s.index('void ResetContentSnapshot()')
+          re = s.index('void RefreshPresentationPackets(', rs)
+          reset = s[rs:re]
+          assert 'CancelPendingEntryCommit();' in reset
+          assert 'ReleaseDeferredEntryRetirements(true);' in reset
+          ls = s.index('void ReleaseGpuResources()')
+          le = s.index('public void Dispose()', ls)
+          release = s[ls:le]
+          reset_pos = release.index('ResetContentSnapshot();')
+          assert release.rfind('DestroyMeshPool();') > reset_pos
+          assert release.rfind('ClearRev35R006GeographicPool();') > reset_pos
+          assert release.rfind('DestroyMeshPool();') < release.rfind('ClearRev35R006GeographicPool();')
+          assert release.rfind('ClearRev35R006GeographicPool();') < release.index('DestroyRenderTargets();')
+          assert 'presentationNow + 0.10f' in s
+          assert 'foundationComplete = rendered && visible.FoundationComplete &&' in s
+          assert 'lastBackFoundationCoverage >= 0.999f' in s
+          assert 'readyFar >= visible.FarFoundationCount' in s
+          print('[AERIS27 R006 HF2] FINAL MEMORY/TEARDOWN CONTRACT PASS')
+          PY
+
+      - name: Rejected mechanism guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          R=Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+          ! grep -Fq 'Task.Run(' "$R"
+          ! grep -Fq 'new Thread(' "$R"
+          ! grep -Fq 'ThreadPool.' "$R"
+          ! grep -Fq 'AERIS25_PHASE6_004_MANAGED_PREPARATION_PIPELINE' "$R"
+          ! grep -Fq 'AERIS25_PHASE6_005_NONBLOCKING_SPECULATIVE_PREPARATION' "$R"
+          ! grep -Fq 'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE' "$R"
+          ! grep -Fq 'WaitManagedPreparation' "$R"
+          ! grep -Fq 'ResidentPreparedPresentation' "$R"
+
+      - name: No tool residue
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf Tools/__pycache__
+          test -z "$(git status --porcelain | grep '__pycache__' || true)"
+
+      - name: Publish authoritative R006 HF2 gate status
+        if: ${{ always() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRIOR_JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          export AERIS_GATE_STATE=failure
+          if [ "$PRIOR_JOB_STATUS" = "success" ]; then
+            export AERIS_GATE_STATE=success
+          fi
+          python3 - <<'PY'
+          import json, os, urllib.request
+          repo = os.environ['GITHUB_REPOSITORY']
+          sha = os.environ['GITHUB_SHA']
+          token = os.environ['GH_TOKEN']
+          state = os.environ['AERIS_GATE_STATE']
+          data = json.dumps({
+              'state': state,
+              'context': 'AERIS27/R006-HF2-FINAL-GATE',
+              'description': 'R006 + teardown HF1/HF2 ' + state.upper(),
+          }).encode()
+          req = urllib.request.Request(
+              'https://api.github.com/repos/%s/statuses/%s' % (repo, sha),
+              data=data, method='POST', headers={
+                  'Authorization': 'Bearer ' + token,
+                  'Accept': 'application/vnd.github+json',
+                  'X-GitHub-Api-Version': '2022-11-28',
+                  'User-Agent': 'AERIS27-R006-HF2-Gate',
+                  'Content-Type': 'application/json'})
+          with urllib.request.urlopen(req, timeout=30) as response:
+              body = json.loads(response.read().decode())
+          print('[AERIS27 R006 HF2] status receipt:', body.get('state'), body.get('context'))
+          PY
