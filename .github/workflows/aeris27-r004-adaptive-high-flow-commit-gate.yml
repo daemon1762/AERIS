@@ -1,0 +1,115 @@
+name: AERIS27 R004 Adaptive High Flow Commit Gate
+
+on:
+  push:
+    branches:
+      - agent/aeris27-rev3-5-salbutamol-r004-adaptive-high-flow-commit
+  workflow_dispatch:
+
+jobs:
+  r004-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            Tools/apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py \
+            Tools/apply_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py \
+            Tools/verify_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py \
+            Tools/apply_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py \
+            Tools/verify_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py \
+            Tools/apply_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py \
+            Tools/verify_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r004_runtime.py
+          rm -rf Tools/__pycache__
+
+      - name: Reconstruct accepted lineage through ADENOSINE
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_content_generation_burst_governor_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py >/dev/null
+
+      - name: Reconstruct frozen REV003 Observer parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_staged_main_thread_commit_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_authoritative_publication_lifetime_hotfix.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_003_inherited_selftests.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris26_rev003_observer.py >/dev/null
+
+      - name: Apply R001 through R003
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_resumable_prepare.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py >/dev/null
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py >/dev/null
+
+      - name: Apply and verify R004
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py
+          git diff --check
+
+      - name: Exact R004 high-flow contract guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          assert 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R004_ADAPTIVE_HIGH_FLOW_COMMIT' in s
+          assert 'Rev35R004BudgetMaximumMilliseconds = 2.00' in s
+          assert 'ResolveRev35R004CommitBudget(steadyCommitProfile)' in s
+          assert 'Time.unscaledDeltaTime * 1000.0' in s
+          assert 'Rev35R004PrepareChunkMedium = 128' in s
+          assert 'Rev35R004PrepareChunkHigh = 256' in s
+          assert s.count('operationHealthRev35R004AllocationContinues++;') == 3
+          assert '(iterations % Rev35PrepareChunkItems) == 0' not in s
+          assert 'FinalizePendingEntryCommit(pending, system)' in s
+          assert 'presentationNow + 0.10f' in s
+          print('[AERIS27 R004] ADAPTIVE HIGH-FLOW CONTRACT PASS')
+          PY
+
+      - name: Rejected mechanism guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          R=Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+          ! grep -Fq 'Task.Run(' "$R"
+          ! grep -Fq 'new Thread(' "$R"
+          ! grep -Fq 'ThreadPool.' "$R"
+          ! grep -Fq 'AERIS25_PHASE6_004_MANAGED_PREPARATION_PIPELINE' "$R"
+          ! grep -Fq 'AERIS25_PHASE6_005_NONBLOCKING_SPECULATIVE_PREPARATION' "$R"
+          ! grep -Fq 'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE' "$R"
+          ! grep -Fq 'WaitManagedPreparation' "$R"
+          ! grep -Fq 'ResidentPreparedPresentation' "$R"
+
+      - name: No tool residue
+        shell: bash
+        run: |
+          rm -rf Tools/__pycache__
+          test -z "$(git status --porcelain | grep '__pycache__' || true)"
