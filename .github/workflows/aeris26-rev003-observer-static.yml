@@ -1,0 +1,154 @@
+name: AERIS26 REV003 Observer Measurement Static
+
+on:
+  push:
+    branches:
+      - agent/aeris26-rev003-observer
+  pull_request:
+    branches:
+      - agent/aeris25-diazepam-resident-ram-reuse-rev006
+  workflow_dispatch:
+
+jobs:
+  rev003-observer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Observer script syntax
+        run: |
+          python3 -m py_compile \
+            Tools/apply_aeris26_rev003_observer.py \
+            Tools/verify_aeris26_rev003_observer.py \
+            Tools/prepare_aeris26_rev003_observer_runtime.py \
+            Tools/fix_aeris25_diazepam_rejected_generated_tree_residue.py
+          rm -rf Tools/__pycache__
+
+      - name: Reconstruct accepted lineage through ADENOSINE
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris26_rev003_observer_static.log
+          echo '=== ATROPINE REV009 ===' | tee "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_dynamic_terrain_colour_ready.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_chunk_cull_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_temporal_foundation_overscan_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_foundation_cull_bypass_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_renderable_entry_gate_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_gpu_vertex_reject_diagnostics_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_snapshot_mesh_lifetime_guard_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_content_generation_burst_governor_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_content_generation_burst_governor_hotfix.py 2>&1 | tee -a "$LOG"
+          echo '=== ADENOSINE ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+
+      - name: Reconstruct exact frozen REV003
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris26_rev003_observer_static.log
+          echo '=== NOREPINEPHRINE REV001 ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_main_thread_commit_governor.py 2>&1 | tee -a "$LOG"
+          echo '=== NOREPINEPHRINE REV002 ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_staged_main_thread_commit_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_002_inherited_selftests.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_staged_main_thread_commit_hotfix.py 2>&1 | tee -a "$LOG"
+          echo '=== NOREPINEPHRINE REV003 FROZEN ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris25_authoritative_publication_lifetime_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/fix_aeris25_phase6_003_inherited_selftests.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_authoritative_publication_lifetime_hotfix.py 2>&1 | tee -a "$LOG"
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          m=Path('Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs').read_text()
+          assert 'AERIS25_PHASE6_003_AUTHORITATIVE_PUBLICATION' in r
+          assert 'AERIS25_PHASE6_004_MANAGED_PREPARATION_PIPELINE' not in r
+          assert 'AERIS25_PHASE6_005_NONBLOCKING_SPECULATIVE_PREPARATION' not in r
+          assert 'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE' not in r
+          assert 'internal const string Codename = "NOREPINEPHRINE";' in m
+          assert 'internal const string Revision = "OH_PHASE6_003";' in m
+          assert 'internal const string Candidate = "AERIS25_MAIN_THREAD_COMMIT_GOVERNOR";' in m
+          print('[FROZEN REV003 IDENTITY] PASS')
+          PY
+
+      - name: Snapshot behavior-frozen source hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs > /tmp/rev003_renderer.sha
+          for d in AA Autopilot Protect Landing; do
+            find "Source/AERISFlightControl/$d" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum > "/tmp/rev003_${d}.sha"
+          done
+
+      - name: Apply measurement-only observer
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris26_rev003_observer_static.log
+          echo '=== REV003 OBSERVER M1 ===' | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris26_rev003_observer.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris26_rev003_observer.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_authoritative_publication_lifetime_hotfix.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris25_persistent_presentation_batching.py 2>&1 | tee -a "$LOG"
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/run_v01800_operation_health_pass3_prebuild.py 2>&1 | tee -a "$LOG"
+          git diff --check
+
+      - name: Assert no behavior source delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -c /tmp/rev003_renderer.sha
+          for d in AA Autopilot Protect Landing; do
+            find "Source/AERISFlightControl/$d" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum > "/tmp/after_${d}.sha"
+            cmp "/tmp/rev003_${d}.sha" "/tmp/after_${d}.sha"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          assert 'WaitManagedPreparation' not in r
+          assert 'ResidentPreparedPresentation' not in r
+          assert 'AERIS25_PHASE6_004_MANAGED_PREPARATION_PIPELINE' not in r
+          assert 'AERIS25_PHASE6_005_NONBLOCKING_SPECULATIVE_PREPARATION' not in r
+          assert 'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE' not in r
+          print('[REV003 OBSERVER BEHAVIOR FROZEN] PASS')
+          PY
+
+      - name: Observer idempotent re-entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris26_rev003_observer.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/verify_aeris26_rev003_observer.py
+          git diff --check
+
+      - name: Assert final observer markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=aeris26_rev003_observer_static.log
+          grep -Fq '[AERIS26 REV003 OBSERVER M1] APPLY PASS' "$LOG"
+          grep -Fq '[AERIS26 REV003 OBSERVER M1] STATIC PASS' "$LOG"
+          grep -Fq '[Operation Health Pass 3 PREBUILD] 20/20 suites PASS' "$LOG"
+          grep -Fq 'control_delta=0' "$LOG"
+
+      - name: Upload observer diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aeris26-rev003-observer-m1-static
+          path: |
+            aeris26_rev003_observer_static.log
+            Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs
+            Source/AERISFlightControl/Terrain/AERISCurrentBodyResidentCache.cs
+            Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+            Tools/apply_aeris26_rev003_observer.py
+            Tools/verify_aeris26_rev003_observer.py
+            Tools/prepare_aeris26_rev003_observer_runtime.py
+            build_ubuntu.sh
+          if-no-files-found: error

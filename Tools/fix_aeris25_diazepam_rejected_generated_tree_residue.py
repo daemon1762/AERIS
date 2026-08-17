@@ -5,11 +5,12 @@ import sys
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
-PREFIX = '[AERIS25 DIAZEPAM REV006 RESIDUE CLEANUP]'
+PREFIX = '[AERIS26 REV003 OBSERVER GENERATED TREE CLEANUP]'
 
 # Exact tracked files observed to be rewritten by historical AERIS23/24/25 runtime
-# preparers.  These are generated/reconstructed build inputs, not user-authored
-# project documents.  Only paths in this allow-list may be restored automatically.
+# preparers plus the measurement-only REV003 observer overlay. These are generated/
+# reconstructed build inputs, not user-authored project documents. Only paths in this
+# allow-list may be restored automatically.
 TRACKED_GENERATED = [
     'GameData/AERISFlightControl/Config/AERISOperationHealth.cfg',
     'GameData/AERISFlightControl/Config/AERISSettings.cfg',
@@ -22,6 +23,7 @@ TRACKED_GENERATED = [
     'Source/AERISFlightControl/Performance/AERISPerformanceRuntime.cs',
     'Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs',
     'Source/AERISFlightControl/Settings/AERISSettings.cs',
+    'Source/AERISFlightControl/Terrain/AERISCurrentBodyResidentCache.cs',
     'Source/AERISFlightControl/Terrain/AERISNdGpuVertexProjectionBackend.cs',
     'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs',
     'Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs',
@@ -47,7 +49,7 @@ TRACKED_GENERATED = [
     'build_ubuntu.sh',
 ]
 
-# Exact untracked files emitted by the historical reconstruction chain.  Do not
+# Exact untracked files emitted by the historical reconstruction chain. Do not
 # recursively clean directories: shader bundles / Unity Library are intentionally
 # left intact so an accepted bundle can be reused and unrelated untracked work is safe.
 UNTRACKED_GENERATED = [
@@ -65,14 +67,18 @@ EVIDENCE_FILES = [
     'GameData/AERISFlightControl/Config/AERISOperationHealth.cfg',
 ]
 EVIDENCE_MARKERS = (
+    'OH_PHASE6_003',
     'OH_PHASE6_004',
     'OH_PHASE6_005',
+    'OH_PHASE7_001',
     'MANAGED PREPARATION PIPELINE',
     'MANAGED_PREPARATION_PIPELINE',
     'NONBLOCKING SPECULATIVE PREPARATION',
     'NONBLOCKING_SPECULATIVE_PREPARATION',
     'AERIS25_MAIN_THREAD_COMMIT_GOVERNOR',
     'NOREPINEPHRINE',
+    'DIAZEPAM',
+    'AERIS26_REV003_OBSERVER_M1',
 )
 
 
@@ -88,7 +94,8 @@ def tracked_dirty(path):
 
 
 def is_tracked(path):
-    return run(['git', 'ls-files', '--error-unmatch', path], check=False, capture=True).returncode == 0
+    return run(['git', 'ls-files', '--error-unmatch', path], check=False,
+               capture=True).returncode == 0
 
 
 def read_text(path):
@@ -102,7 +109,8 @@ def residue_evidence(dirty):
     if not dirty:
         return False
     identity = ROOT / 'GameData/AERISFlightControl/AERISCandidateBuildIdentity.txt'
-    if identity.is_file() and not is_tracked('GameData/AERISFlightControl/AERISCandidateBuildIdentity.txt'):
+    if identity.is_file() and not is_tracked(
+            'GameData/AERISFlightControl/AERISCandidateBuildIdentity.txt'):
         return True
     for path in UNTRACKED_GENERATED[1:]:
         p = ROOT / path
@@ -121,13 +129,13 @@ if not dirty:
     raise SystemExit(0)
 
 if not residue_evidence(dirty):
-    print(PREFIX + ' REFUSE: generated allow-list files are dirty but no rejected/runtime-generated identity evidence was found.')
+    print(PREFIX + ' REFUSE: generated allow-list files are dirty but no runtime-generated identity evidence was found.')
     print(PREFIX + ' This guard prevents overwriting an ambiguous local edit. Inspect git status before continuing.')
     for path in dirty:
         print('  DIRTY ' + path)
     raise SystemExit(3)
 
-print(PREFIX + ' rejected/runtime-generated residue confirmed; restoring exact allow-list paths only')
+print(PREFIX + ' runtime-generated residue confirmed; restoring exact allow-list paths only')
 for path in dirty:
     print('  RESTORE ' + path)
 run(['git', 'restore', '--source=HEAD', '--'] + dirty)
@@ -146,4 +154,4 @@ if remaining:
         print('  REMAINS ' + path)
     raise SystemExit(4)
 
-print(PREFIX + ' PASS: rejected/generated tracked residue cleared without reset --hard and without recursive clean')
+print(PREFIX + ' PASS: generated tracked residue cleared without reset --hard and without recursive clean')

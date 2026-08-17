@@ -19,6 +19,8 @@ P = (ROOT / "Tools/prepare_aeris25_gpu_dynamic_terrain_colour_runtime.py").read_
 M = (ROOT / "GpuAssets/Packages/manifest.json").read_text()
 SH = (ROOT / "GpuAssets/Assets/AERISNdExactVertexProjection.shader").read_text()
 MON = (ROOT / "Source/AERISFlightControl/Performance/AERISOperationHealthPenicillin.cs").read_text()
+OBSERVER_WRAPPER_PATH = ROOT / "Tools/prepare_aeris26_rev003_observer_runtime_hotfix.py"
+OW = OBSERVER_WRAPPER_PATH.read_text() if OBSERVER_WRAPPER_PATH.is_file() else ""
 checks = []
 def ck(v, name):
     ok = bool(v)
@@ -45,10 +47,14 @@ ck('aeris25_gpu_dynamic_colour_probe_windows.bundle' in E and
 ck('rm -rf "$PROJECT/Library" "$PROJECT/Temp" "$PROJECT/obj"' in S,
    'deliberate shader rebuild clears stale Unity import/build caches')
 ck('6465e6dfa7c9809a734d5ce85b202b49ea6ee5fcaac19d55d4b75bd532a35f0d' in S and
-   'Windows probe compatibility gate PASS' in S,
-   'Windows bundle generation is gated by the accepted 1203-byte probe SHA')
+   'Windows probe historical exact-SHA gate PASS' in S and
+   'probe semantic validation PASS' in S and
+   'historical SHA differs; semantic/reproducibility gate required' in S and
+   'CANONICAL_PROBE_GUID' in S and
+   'local shader clean-rebuild reproducibility=PASS' in OW,
+   'Windows bundle generation preserves historical exact-SHA acceptance and adds reproducible semantic cross-machine acceptance')
 ck('b"AssetBundle"' in P and 'EXPECTED_WINDOWS_PROBE_SHA' in P,
-   'runtime preparation rejects malformed/unaccepted bundle containers before install')
+   'legacy AERIS25 runtime preparation still rejects malformed/unaccepted historical bundle containers')
 ck((ROOT / 'Tools/apply_aeris25_assetbundle_compat_hotfix.py').is_file(),
    'AssetBundle compatibility hotfix is generated and repeatable')
 ck('"dependencies": {}' in M,

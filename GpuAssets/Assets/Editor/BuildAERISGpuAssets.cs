@@ -10,6 +10,7 @@ namespace AERIS.Editor
     {
         const string ShaderAssetPath = "Assets/AERISNdExactVertexProjection.shader";
         const string ProbeAssetPath = "Assets/AERISBundleProbe.txt";
+        const string ProbeExpectedText = "AERIS24_GPU_BUNDLE_PROBE_V1";
         const string ShaderBundleName = "aeris_nd_gpu_vertex_projection";
         const string ProbeBundleName = "aeris_gpu_bundle_probe";
         const string KspBtShaderBundleName = "aeris_nd_gpu_vertex_projection_kspbt";
@@ -51,7 +52,7 @@ namespace AERIS.Editor
                     BuildTarget.StandaloneWindows64, false);
                 PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64,
                     new[] { GraphicsDeviceType.OpenGLCore, GraphicsDeviceType.Direct3D11 });
-                Debug.Log("[AERIS24 GPU VERTEX] Windows graphics APIs=OpenGLCore,Direct3D11 (KSPBuildTools parity)");
+                Debug.Log("[AERIS25 GPU DYNAMIC COLOUR] Windows graphics APIs=OpenGLCore,Direct3D11 (KSPBuildTools parity)");
             }
 
             string projectRoot = Directory.GetParent(Application.dataPath).FullName;
@@ -91,6 +92,7 @@ namespace AERIS.Editor
                     Path.Combine(destinationDirectory, installedShaderName), "Linux shader");
                 CopyRequired(Path.Combine(diagnosticOutput, ProbeBundleName),
                     Path.Combine(destinationDirectory, installedProbeName), "Linux probe");
+                ValidateProbeBundle(Path.Combine(destinationDirectory, installedProbeName));
                 return;
             }
 
@@ -142,7 +144,29 @@ namespace AERIS.Editor
             CopyRequired(Path.Combine(kspBtProbeOutput, KspBtProbeBundleName),
                 Path.Combine(destinationDirectory, installedProbeName),
                 "KSPBuildTools parity PRIMARY probe");
-            Debug.Log("[AERIS24 GPU VERTEX] A/B arm=KSPBuildTools; options=ChunkBasedCompression only; runtime primary replaced");
+            ValidateProbeBundle(Path.Combine(destinationDirectory, installedProbeName));
+            Debug.Log("[AERIS25 GPU DYNAMIC COLOUR] A/B arm=KSPBuildTools; options=ChunkBasedCompression only; runtime primary replaced");
+        }
+
+        static void ValidateProbeBundle(string path)
+        {
+            AssetBundle bundle = AssetBundle.LoadFromFile(path);
+            if (bundle == null)
+                throw new InvalidOperationException("Probe AssetBundle could not be reopened: " + path);
+            try
+            {
+                TextAsset[] probes = bundle.LoadAllAssets<TextAsset>();
+                if (probes == null || probes.Length != 1 || probes[0] == null)
+                    throw new InvalidOperationException("Probe AssetBundle must contain exactly one TextAsset: " + path);
+                string actual = (probes[0].text ?? string.Empty).TrimEnd('\r', '\n');
+                if (!string.Equals(actual, ProbeExpectedText, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Probe semantic content mismatch: " + actual);
+                Debug.Log("[AERIS25 GPU DYNAMIC COLOUR] probe semantic validation PASS");
+            }
+            finally
+            {
+                bundle.Unload(true);
+            }
         }
 
         static void RecreateDirectory(string path)
@@ -165,7 +189,7 @@ namespace AERIS.Editor
                 throw new FileNotFoundException("Expected " + label +
                     " AssetBundle was not emitted", source);
             File.Copy(source, destination, true);
-            Debug.Log("[AERIS24 GPU VERTEX] built " + label + ": " + destination);
+            Debug.Log("[AERIS25 GPU DYNAMIC COLOUR] built " + label + ": " + destination);
         }
     }
 }
