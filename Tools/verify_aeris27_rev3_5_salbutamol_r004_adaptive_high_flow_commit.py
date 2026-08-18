@@ -12,6 +12,7 @@ R002 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R002_PACKED_ALLOCATION_SPLIT'
 R003 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R003_REQUESTED_VIEW_ADMISSION'
 R004 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R004_ADAPTIVE_HIGH_FLOW_COMMIT'
 R005 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R005_SPLIT_WEIGHT_FLOW_LANES'
+HF4 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_PACKED_MANAGED_BUFFER_REUSE_HOTFIX4'
 checks = []
 
 
@@ -28,6 +29,7 @@ if not R.is_file() or not B.is_file():
 renderer = R.read_text()
 build = B.read_text()
 r005_descendant = R005 in renderer
+hf4_descendant = HF4 in renderer
 for marker, label in ((R001, 'R001 parent retained'),
                       (R002, 'R002 parent retained'),
                       (R003, 'R003 parent retained'),
@@ -61,11 +63,19 @@ else:
 check('(iterations % Rev35PrepareChunkItems) == 0' not in renderer,
       'prepare loops use explicit lane chunk variable')
 check(renderer.count('operationHealthRev35R004AllocationContinues++;') == 3,
-      'all three R002 allocation stops are budget-aware')
-check('pending.PackedSource = new Vector3[count];' in renderer and
-      'pending.PackedColours = new Color32[count];' in renderer and
-      'pending.PackedIndices = new int[count];' in renderer,
-      'R002 split allocation identity remains')
+      'all three R002 allocation/acquire stops are budget-aware')
+if hf4_descendant:
+    check('pending.PackedSource = new Vector3[count];' in renderer and
+          'AcquireRev35R006Hf4ColourBuffer(count)' in renderer and
+          'AcquireRev35R006Hf4IndexBuffer(count)' in renderer and
+          'pending.PackedColours = new Color32[count];' not in renderer and
+          'pending.PackedIndices = new int[count];' not in renderer,
+          'HF4 descendant preserves split stages while pooling only colour/index buffers')
+else:
+    check('pending.PackedSource = new Vector3[count];' in renderer and
+          'pending.PackedColours = new Color32[count];' in renderer and
+          'pending.PackedIndices = new int[count];' in renderer,
+          'R002 split allocation identity remains')
 for token in ('oh_rev35_r004_variant=',
               'oh_rev35_r004_budget_050=',
               'oh_rev35_r004_budget_100=',
