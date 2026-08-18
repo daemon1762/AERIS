@@ -1,0 +1,91 @@
+name: AERIS27 R007 Verifier Tail Diagnostic
+
+on:
+  push:
+    branches:
+      - agent/aeris27-rev3-5-salbutamol-r007-foundation-chained-admission
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Reconstruct and apply
+        run: |
+          set -euo pipefail
+          for s in \
+            apply_aeris25_gpu_dynamic_terrain_colour_ready.py apply_aeris25_chunk_cull_guard_hotfix.py \
+            apply_aeris25_temporal_foundation_overscan_hotfix.py apply_aeris25_foundation_cull_bypass_hotfix.py \
+            apply_aeris25_renderable_entry_gate_hotfix.py apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
+            apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py apply_aeris25_content_generation_burst_governor_hotfix.py \
+            apply_aeris25_persistent_presentation_batching.py apply_aeris25_main_thread_commit_governor.py \
+            apply_aeris25_staged_main_thread_commit_hotfix.py fix_aeris25_phase6_002_inherited_selftests.py \
+            apply_aeris25_authoritative_publication_lifetime_hotfix.py fix_aeris25_phase6_002_inherited_selftests.py \
+            fix_aeris25_phase6_003_inherited_selftests.py apply_aeris26_rev003_observer.py \
+            apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py apply_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py \
+            apply_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py apply_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py \
+            apply_aeris27_rev3_5_salbutamol_r005_split_weight_flow_lanes.py apply_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py \
+            apply_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py apply_aeris27_rev3_5_salbutamol_r006_resource_release_order_hotfix2.py \
+            apply_aeris27_rev3_5_salbutamol_r006_complete_coverage_contract_hotfix3.py apply_aeris27_rev3_5_salbutamol_r006_packed_managed_buffer_reuse_hotfix4.py \
+            apply_aeris27_rev3_5_salbutamol_r007_foundation_chained_admission.py; do
+              PYTHONDONTWRITEBYTECODE=1 python3 "Tools/$s" >/dev/null
+          done
+      - name: Release cluster
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          s=r.index('void ReleaseGpuResources()')
+          e=r.index('public void Dispose()',s)
+          rel=r[s:e]
+          assert 'ResetRev35R007FoundationQueue();' in rel
+          PY
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" -f state=success -f context='AERIS27/R007-V-RELEASE'
+      - name: Telemetry cluster
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          for x in ('oh_rev35_r007_variant=','oh_rev35_r007_queue=','oh_rev35_r007_queue_peak=',
+                    'oh_rev35_r007_queued=','oh_rev35_r007_chain=','oh_rev35_r007_immediate=',
+                    'oh_rev35_r007_duplicate=','oh_rev35_r007_stale=','oh_rev35_r007_already=',
+                    'oh_rev35_r007_missing=','oh_rev35_r007_overflow=','oh_rev35_r007_reset='):
+              assert x in r, x
+          PY
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" -f state=success -f context='AERIS27/R007-V-TELEM'
+      - name: Build cluster
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          b=Path('build_ubuntu.sh').read_text()
+          assert 'REV3_5_R007_VARIANT="AERIS27_REV3_5_SALBUTAMOL_SULFATE_R007_FOUNDATION_CHAINED_ADMISSION"' in b
+          assert 'verify_aeris27_rev3_5_salbutamol_r007_foundation_chained_admission.py' in b
+          assert 'rev3_5_r007_variant=%s' in b
+          PY
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" -f state=success -f context='AERIS27/R007-V-BUILD'
+      - name: Helper forbidden cluster
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          qs=r.index('void QueueRev35R007FoundationField('); qe=r.index('bool TryBeginRev35R007QueuedFoundationCommit()',qs)
+          cs=qe; ce=r.index('bool TryUploadRenderReadyField(',cs)
+          q=r[qs:qe]; c=r[cs:ce]
+          for x in ('new PendingEntryCommit','BuildEntry(','Task.Run(','new Thread(','ThreadPool.'):
+              assert x not in q and x not in c, x
+          PY
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" -f state=success -f context='AERIS27/R007-V-HELPER'
