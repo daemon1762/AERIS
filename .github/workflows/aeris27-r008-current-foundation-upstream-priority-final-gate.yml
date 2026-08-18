@@ -24,8 +24,19 @@ jobs:
           set -euo pipefail
           python3 -m py_compile \
             Tools/apply_aeris27_rev3_5_salbutamol_r008_current_foundation_upstream_priority.py \
-            Tools/verify_aeris27_rev3_5_salbutamol_r008_current_foundation_upstream_priority.py
+            Tools/verify_aeris27_rev3_5_salbutamol_r008_current_foundation_upstream_priority.py \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r007_runtime.py \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r008_runtime.py
           rm -rf Tools/__pycache__
+
+      - name: Legacy runtime command routes forward
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "prepare_aeris27_rev3_5_salbutamol_r008_runtime.py" \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r007_runtime.py
+          grep -Fq "legacy R007 command redirected to R008 CURRENT FOUNDATION UPSTREAM PRIORITY" \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r007_runtime.py
 
       - name: Reconstruct accepted lineage through R005
         shell: bash
