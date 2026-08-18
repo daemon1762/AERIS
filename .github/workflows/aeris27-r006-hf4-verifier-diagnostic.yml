@@ -1,0 +1,78 @@
+name: AERIS27 R006 HF4 Verifier Diagnostic
+
+on:
+  push:
+    branches:
+      - agent/aeris27-rev3-5-salbutamol-r006-hf4-packed-managed-buffer-reuse
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  diagnose-verifiers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconstruct and apply HF4
+        run: |
+          set -euo pipefail
+          for s in \
+            apply_aeris25_gpu_dynamic_terrain_colour_ready.py \
+            apply_aeris25_chunk_cull_guard_hotfix.py \
+            apply_aeris25_temporal_foundation_overscan_hotfix.py \
+            apply_aeris25_foundation_cull_bypass_hotfix.py \
+            apply_aeris25_renderable_entry_gate_hotfix.py \
+            apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
+            apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py \
+            apply_aeris25_content_generation_burst_governor_hotfix.py \
+            apply_aeris25_persistent_presentation_batching.py \
+            apply_aeris25_main_thread_commit_governor.py \
+            apply_aeris25_staged_main_thread_commit_hotfix.py \
+            fix_aeris25_phase6_002_inherited_selftests.py \
+            apply_aeris25_authoritative_publication_lifetime_hotfix.py \
+            fix_aeris25_phase6_002_inherited_selftests.py \
+            fix_aeris25_phase6_003_inherited_selftests.py \
+            apply_aeris26_rev003_observer.py \
+            apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py \
+            apply_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py \
+            apply_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py \
+            apply_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py \
+            apply_aeris27_rev3_5_salbutamol_r005_split_weight_flow_lanes.py \
+            apply_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py \
+            apply_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py \
+            apply_aeris27_rev3_5_salbutamol_r006_resource_release_order_hotfix2.py \
+            apply_aeris27_rev3_5_salbutamol_r006_complete_coverage_contract_hotfix3.py \
+            apply_aeris27_rev3_5_salbutamol_r006_packed_managed_buffer_reuse_hotfix4.py; do
+              PYTHONDONTWRITEBYTECODE=1 python3 "Tools/$s" >/dev/null
+          done
+      - name: Run verifiers with per-verifier receipts
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          set -u
+          for item in \
+            'PUB:verify_aeris25_authoritative_publication_lifetime_hotfix.py' \
+            'R001:verify_aeris27_rev3_5_salbutamol_resumable_prepare.py' \
+            'R002:verify_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py' \
+            'R003:verify_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py' \
+            'R004:verify_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py' \
+            'R005:verify_aeris27_rev3_5_salbutamol_r005_split_weight_flow_lanes.py' \
+            'R006:verify_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py' \
+            'HF1:verify_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py' \
+            'HF2:verify_aeris27_rev3_5_salbutamol_r006_resource_release_order_hotfix2.py' \
+            'HF3:verify_aeris27_rev3_5_salbutamol_r006_complete_coverage_contract_hotfix3.py' \
+            'HF4:verify_aeris27_rev3_5_salbutamol_r006_packed_managed_buffer_reuse_hotfix4.py'; do
+              label="${item%%:*}"
+              file="${item#*:}"
+              if PYTHONDONTWRITEBYTECODE=1 python3 "Tools/$file"; then
+                gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+                  -f state=success -f context="AERIS27/HF4-V-$label"
+              else
+                gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+                  -f state=failure -f context="AERIS27/HF4-V-$label"
+                exit 1
+              fi
+          done
