@@ -24,7 +24,9 @@ jobs:
           set -euo pipefail
           python3 -m py_compile \
             Tools/apply_aeris27_rev3_5_salbutamol_r007_foundation_chained_admission.py \
-            Tools/verify_aeris27_rev3_5_salbutamol_r007_foundation_chained_admission.py
+            Tools/verify_aeris27_rev3_5_salbutamol_r007_foundation_chained_admission.py \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r006_hf4_runtime.py \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r007_runtime.py
           rm -rf Tools/__pycache__
 
       - name: Reconstruct accepted lineage through R005
@@ -117,6 +119,23 @@ jobs:
           assert 'RenderTextureFormat.ARGB32' in r and 'FilterMode.Bilinear' in r
           assert 'Task.Run(' not in r and 'new Thread(' not in r and 'ThreadPool.' not in r
           print('[AERIS27 R007] NO-WIDENING FOUNDATION CHAIN CONTRACT PASS')
+          PY
+
+      - name: Runtime tooling routing contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          old = Path('Tools/prepare_aeris27_rev3_5_salbutamol_r006_hf4_runtime.py').read_text()
+          new = Path('Tools/prepare_aeris27_rev3_5_salbutamol_r007_runtime.py').read_text()
+          assert "TARGET = ROOT / 'Tools/prepare_aeris27_rev3_5_salbutamol_r007_runtime.py'" in old
+          assert 'legacy HF4 command redirected to R007 FOUNDATION CHAINED ADMISSION' in old
+          assert 'apply_aeris27_rev3_5_salbutamol_r007_foundation_chained_admission.py' in new
+          assert 'verify_aeris27_rev3_5_salbutamol_r007_foundation_chained_admission.py' in new
+          assert 'rev3_5_r007_variant=' in new
+          assert 'oh_rev35_r007_chain=' in new
+          print('[AERIS27 R007] RUNTIME TOOLING ROUTING CONTRACT PASS')
           PY
 
       - name: Rejected mechanism guard
