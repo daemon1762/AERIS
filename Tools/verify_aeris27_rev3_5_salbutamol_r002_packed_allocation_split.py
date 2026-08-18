@@ -11,6 +11,7 @@ PREFIX = '[AERIS27 OH REV3.5 SALBUTAMOL SULFATE R002 VERIFY]'
 R001 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R001'
 R002 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R002_PACKED_ALLOCATION_SPLIT'
 R004 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R004_ADAPTIVE_HIGH_FLOW_COMMIT'
+HF4 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_PACKED_MANAGED_BUFFER_REUSE_HOTFIX4'
 checks = []
 
 
@@ -38,9 +39,16 @@ end = renderer.find('Mesh UploadPreparedPackedTerrainMesh', start)
 method = renderer[start:end] if start >= 0 and end > start else ''
 check(bool(method), 'packed prepare method resolved')
 r004_adaptive = R004 in renderer
-for case, alloc in ((1, 'pending.PackedSource = new Vector3[count];'),
-                    (2, 'pending.PackedColours = new Color32[count];'),
-                    (3, 'pending.PackedIndices = new int[count];')):
+hf4_pooled = HF4 in renderer
+expected = {
+    1: 'pending.PackedSource = new Vector3[count];',
+    2: ('AcquireRev35R006Hf4ColourBuffer(count)' if hf4_pooled else
+        'pending.PackedColours = new Color32[count];'),
+    3: ('AcquireRev35R006Hf4IndexBuffer(count)' if hf4_pooled else
+        'pending.PackedIndices = new int[count];'),
+}
+for case in (1, 2, 3):
+    alloc = expected[case]
     block_start = method.find('case %d:' % case)
     block_end = method.find('case %d:' % (case + 1), block_start + 1)
     block = method[block_start:block_end] if block_start >= 0 and block_end > block_start else ''
@@ -53,18 +61,27 @@ for case, alloc in ((1, 'pending.PackedSource = new Vector3[count];'),
             'return false;' in block and
             'operationHealthRev35R004AllocationContinues++' in block)
         check(adaptive,
-              'allocation case %d is isolated and budget-aware under R004' % case)
+              'allocation/acquire case %d is isolated and budget-aware under R004' % case)
     else:
-        pattern = re.compile(r'case %d:.*?%s.*?operationHealthRev35PreparePackedYields\+\+;.*?return false;' %
-                             (case, re.escape(alloc)), re.S)
+        pattern = re.compile(
+            r'case %d:.*?%s.*?operationHealthRev35PreparePackedYields\+\+;.*?return false;' %
+            (case, re.escape(alloc)), re.S)
         check(bool(pattern.search(method)),
-              'allocation case %d is isolated and forced-yield' % case)
+              'allocation/acquire case %d is isolated and forced-yield' % case)
 check(method.count('pending.PackedSource = new Vector3[count];') == 1,
-      'exactly one packed source allocation')
-check(method.count('pending.PackedColours = new Color32[count];') == 1,
-      'exactly one packed colour allocation')
-check(method.count('pending.PackedIndices = new int[count];') == 1,
-      'exactly one packed index allocation')
+      'exactly one packed source allocation remains')
+if hf4_pooled:
+    check(method.count('pending.PackedColours = new Color32[count];') == 0 and
+          method.count('AcquireRev35R006Hf4ColourBuffer(count)') == 1,
+          'HF4 replaces recurring packed colour allocation with one bounded acquire')
+    check(method.count('pending.PackedIndices = new int[count];') == 0 and
+          method.count('AcquireRev35R006Hf4IndexBuffer(count)') == 1,
+          'HF4 replaces recurring packed index allocation with one bounded acquire')
+else:
+    check(method.count('pending.PackedColours = new Color32[count];') == 1,
+          'exactly one packed colour allocation')
+    check(method.count('pending.PackedIndices = new int[count];') == 1,
+          'exactly one packed index allocation')
 check('pending.PackedSource = new Vector3[vertexCount];' not in method and
       'pending.PackedColours = new Color32[vertexCount];' not in method and
       'pending.PackedIndices = new int[indexCount];' not in method,
