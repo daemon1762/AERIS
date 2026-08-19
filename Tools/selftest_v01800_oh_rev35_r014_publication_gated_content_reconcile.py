@@ -161,6 +161,16 @@ check(reconciled > measure,
 check(draw.count('system.CaptureVisible(') == 1,
       'single CaptureVisible authority retained')
 
+# Phase6_003's packet refresh -> deferred retirement ordering is a byte-stable inherited
+# lifetime contract. R014 wraps the block but must not re-indent or rewrite this sequence.
+phase6_packet_refresh = '''                RefreshPresentationPackets(tiles, drawEntriesScratch);
+                // Phase6_003: publication may detach the previously published Entry, but
+                // Mesh recycling is delayed until the authoritative packet refresh proves
+                // that the old Entry is no longer referenced by the persistent snapshot.
+                ReleaseDeferredEntryRetirements(false);'''
+check(phase6_packet_refresh in renderer,
+      'Phase6_003 packet refresh -> deferred retirement textual contract retained')
+
 # Warm Visibility already owns the complete prune implementation. R014 may only gate that
 # block; it must not collapse it back to the historical two-call prune shape.
 ensure = draw.find('EnsureResources(plot, effectiveMode, currentPreset, virtualDetail);')
