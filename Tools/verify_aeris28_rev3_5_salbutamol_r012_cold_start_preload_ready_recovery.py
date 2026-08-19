@@ -10,18 +10,17 @@ P = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs'
 N = ROOT / 'Source/AERISFlightControl/UI/AERISNavigationDisplay.cs'
 B = ROOT / 'build_ubuntu.sh'
 PRE = ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'
-STEP2 = ROOT / 'Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py'
 R010 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R010_CONTINUOUS_COMMIT_STREAM'
 R011 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R011_TURNING_VIEW_CHURN_OBSERVER'
 R012 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R012_COLD_START_PRELOAD_READY_RECOVERY'
 PREFIX = '[AERIS28 REV3.5 R012 VERIFY]'
 
-for path in (R, O, P, N, B, PRE, STEP2):
+for path in (R, O, P, N, B, PRE):
     if not path.is_file():
         raise SystemExit(PREFIX + ' FAIL missing ' + str(path.relative_to(ROOT)))
 
 renderer = R.read_text(); observer = O.read_text(); preload = P.read_text()
-nav = N.read_text(); build = B.read_text(); prebuild = PRE.read_text(); step2 = STEP2.read_text()
+nav = N.read_text(); build = B.read_text(); prebuild = PRE.read_text()
 checks = [
     (R010 in renderer, 'R010 formal rendering parent retained'),
     ('[OH_REV3_5_R011_TURN_CHURN]' in observer, 'R011 observer retained'),
@@ -40,12 +39,17 @@ checks = [
      'stale first non-Flight Tick cannot apply last Flight point-set'),
     ('flightSuspended || HighLogic.LoadedSceneIsFlight' not in preload,
      'stale flightSuspended latch excluded from scene classification'),
-    ('"RELOADING ND " + percent + "%"' in nav,
-     'explicit cold-start reload label present'),
+    ('bool solidBodyColdInit = !hazardOnly && tileSystem != null &&' in nav,
+     'pre-render cold-init gate present'),
+    ('!tileSystem.BodySupported' in nav and
+     'AERISTerrainTileSystem.BodyHasSolidSurface(vessel.mainBody)' in nav,
+     'cold-init gate distinguishes expected terrain from unsupported body'),
+    ('"RELOADING ND\\nTERRAIN INIT"' in nav,
+     'unique R012 terrain-init reload presentation present'),
+    ('"TERRAIN GPU BUILDING " + percent + "%"' in nav,
+     'ordinary renderer Partial/BUILDING presentation preserved'),
     ('new Color(0.015f, 0.025f, 0.035f, 1f)' in nav,
      'near-black standby backdrop present'),
-    ("(('TERRAIN GPU BUILDING ' in N) or ('RELOADING ND ' in N))" in step2,
-     'inherited Step2 gate accepts R012 reload wording successor'),
     ('REV3_5_R012_VARIANT="' + R012 + '"' in build,
      'R012 build identity variable'),
     ('rev3_5_r012_variant=%s' in build,
@@ -57,7 +61,7 @@ checks = [
 ]
 for token in ('ndReloadGeneration++;', 'frontReloadGeneration = ndReloadGeneration;',
               'if (Reloading) return false;', 'oh_nd_reload='):
-    checks.append((token in renderer, 'black-reload successor preserved: ' + token))
+    checks.append((token in renderer, 'AERIS24 black-reload successor preserved: ' + token))
 for forbidden in ('Task.Run(', 'new Thread(', 'ThreadPool.', 'WaitManagedPreparation',
                   'ResidentPreparedPresentation',
                   'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE'):
@@ -67,8 +71,7 @@ for forbidden in ('Task.Run(', 'new Thread(', 'ThreadPool.', 'WaitManagedPrepara
 failed = []
 for ok, label in checks:
     print(('[PASS] ' if ok else '[FAIL] ') + label)
-    if not ok:
-        failed.append(label)
+    if not ok: failed.append(label)
 if failed:
     raise SystemExit(PREFIX + ' FAIL: ' + ', '.join(failed))
 
