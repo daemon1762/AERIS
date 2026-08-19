@@ -79,6 +79,8 @@ jobs:
           anchors=[
             ('IDENTITY','        const string Rev35R009Variant = "AERIS27_REV3_5_SALBUTAMOL_SULFATE_R009_GHOST_PENDING_BACKPRESSURE";\n',r),
             ('FIELD','        long operationHealthRev35R008FoundationScheduleFirst;\n',r),
+            ('WAKECOND','                if (pendingEntryCommit != null || rasterizer.CompletedCount > 0)\n',r),
+            ('RESIDENT','                {\n                    residentCache = system.CurrentBodyResidentCache;\n                    PumpStagedCompletedCommit(system);\n',r),
             ('BUDGET','            int backlog = Math.Max(0, rasterizer.CompletedCount) +\n                (pendingEntryCommit == null ? 0 : 1);',r),
             ('FINAL','            int finalRemainingCompleted = Math.Max(0, rasterizer.CompletedCount) +\n                (pendingEntryCommit == null ? 0 : 1);',r),
             ('TELEMETRY','                "; oh_rev35_r009_terminal_null=" + rasterizer.Rev35R009TerminalNull +\n',r),
@@ -91,3 +93,19 @@ jobs:
               if count != 1: raise SystemExit('ANCHOR_'+name+'_COUNT_'+str(count))
               subprocess.run(['python3','/tmp/r010_mark.py','ANCHOR-'+name],check=True)
           PY
+
+      - name: Apply R010
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 Tools/apply_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py
+          python3 /tmp/r010_mark.py APPLY
+
+      - name: Verify R010
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 Tools/verify_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py
+          python3 /tmp/r010_mark.py VERIFY
