@@ -1,0 +1,72 @@
+name: AERIS27 R010 Temporary Diagnostic
+
+on:
+  push:
+    branches:
+      - agent/aeris27-rev3-5-salbutamol-r010-continuous-commit-stream
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install diagnostic status helper
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > /tmp/r010_mark.py <<'PY'
+          import json, os, sys, urllib.request
+          ctx=sys.argv[1]
+          repo=os.environ['GITHUB_REPOSITORY']; sha=os.environ['GITHUB_SHA']; token=os.environ['GH_TOKEN']
+          data=json.dumps({'state':'success','context':'AERIS27/R010-DIAG-'+ctx,'description':ctx+' passed'}).encode()
+          req=urllib.request.Request('https://api.github.com/repos/%s/statuses/%s'%(repo,sha),data=data,method='POST',headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'AERIS27-R010-DIAG','Content-Type':'application/json'})
+          urllib.request.urlopen(req,timeout=30).read()
+          PY
+          python3 -m py_compile Tools/apply_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py Tools/verify_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py Tools/prepare_aeris27_rev3_5_salbutamol_r010_runtime.py
+          python3 /tmp/r010_mark.py SYNTAX
+
+      - name: Reconstruct through R005
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for s in apply_aeris25_gpu_dynamic_terrain_colour_ready.py apply_aeris25_chunk_cull_guard_hotfix.py apply_aeris25_temporal_foundation_overscan_hotfix.py apply_aeris25_foundation_cull_bypass_hotfix.py apply_aeris25_renderable_entry_gate_hotfix.py apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py apply_aeris25_content_generation_burst_governor_hotfix.py apply_aeris25_persistent_presentation_batching.py apply_aeris25_main_thread_commit_governor.py apply_aeris25_staged_main_thread_commit_hotfix.py fix_aeris25_phase6_002_inherited_selftests.py apply_aeris25_authoritative_publication_lifetime_hotfix.py fix_aeris25_phase6_002_inherited_selftests.py fix_aeris25_phase6_003_inherited_selftests.py apply_aeris26_rev003_observer.py apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py apply_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py apply_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py apply_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py apply_aeris27_rev3_5_salbutamol_r005_split_weight_flow_lanes.py; do PYTHONDONTWRITEBYTECODE=1 python3 "Tools/$s" >/dev/null; done
+          python3 /tmp/r010_mark.py LINEAGE
+
+      - name: Apply R006 through R009
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py >/dev/null
+          python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py >/dev/null
+          python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_resource_release_order_hotfix2.py >/dev/null
+          python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_complete_coverage_contract_hotfix3.py >/dev/null
+          python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_packed_managed_buffer_reuse_hotfix4.py >/dev/null
+          python3 Tools/apply_aeris27_rev3_5_salbutamol_r007_foundation_chained_admission.py >/dev/null
+          python3 Tools/apply_aeris27_rev3_5_salbutamol_r008_current_foundation_upstream_priority.py >/dev/null
+          python3 Tools/apply_aeris27_rev3_5_salbutamol_r009_ghost_pending_backpressure.py >/dev/null
+          python3 /tmp/r010_mark.py R009
+
+      - name: Apply R010
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 Tools/apply_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py
+          python3 /tmp/r010_mark.py APPLY
+
+      - name: Verify R010
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 Tools/verify_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py
+          python3 /tmp/r010_mark.py VERIFY
