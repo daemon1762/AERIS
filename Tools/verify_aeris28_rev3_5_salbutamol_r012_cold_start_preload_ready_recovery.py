@@ -10,31 +10,42 @@ P = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs'
 N = ROOT / 'Source/AERISFlightControl/UI/AERISNavigationDisplay.cs'
 B = ROOT / 'build_ubuntu.sh'
 PRE = ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'
+STEP2 = ROOT / 'Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py'
 R010 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R010_CONTINUOUS_COMMIT_STREAM'
 R011 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R011_TURNING_VIEW_CHURN_OBSERVER'
 R012 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R012_COLD_START_PRELOAD_READY_RECOVERY'
 PREFIX = '[AERIS28 REV3.5 R012 VERIFY]'
 
-for path in (R, O, P, N, B, PRE):
+for path in (R, O, P, N, B, PRE, STEP2):
     if not path.is_file():
         raise SystemExit(PREFIX + ' FAIL missing ' + str(path.relative_to(ROOT)))
 
 renderer = R.read_text(); observer = O.read_text(); preload = P.read_text()
-nav = N.read_text(); build = B.read_text(); prebuild = PRE.read_text()
+nav = N.read_text(); build = B.read_text(); prebuild = PRE.read_text(); step2 = STEP2.read_text()
 checks = [
     (R010 in renderer, 'R010 formal rendering parent retained'),
     ('[OH_REV3_5_R011_TURN_CHURN]' in observer, 'R011 observer retained'),
     (R012 not in renderer, 'R012 renderer hot path unchanged'),
+    ('string appliedPointSetSignature = string.Empty;' in preload,
+     'applied point-set signature tracked separately'),
     ('bool deferredPointSetInvalidation;' in preload,
      'Flight point-set completion invalidation deferral present'),
-    ('if (flightSuspended || HighLogic.LoadedSceneIsFlight)' in preload,
-     'Flight and first-frame scene guard present'),
-    ('ApplyDeferredPointSetInvalidation();' in preload,
-     'non-Flight deferred invalidation drain present'),
+    ('bool flight = HighLogic.LoadedSceneIsFlight;' in preload,
+     'current scene is sole Flight authority for UpdatePoints'),
+    ('deferredPointSetInvalidation = !string.Equals(' in preload,
+     'Flight churn coalesces against applied signature'),
+    ('ApplyPointSetInvalidationLocked(pointSetSignature);' in preload,
+     'non-Flight refresh performs single coalesced invalidation'),
+    ('ApplyDeferredPointSetInvalidation' not in preload,
+     'stale first non-Flight Tick cannot apply last Flight point-set'),
+    ('flightSuspended || HighLogic.LoadedSceneIsFlight' not in preload,
+     'stale flightSuspended latch excluded from scene classification'),
     ('"RELOADING ND " + percent + "%"' in nav,
      'explicit cold-start reload label present'),
     ('new Color(0.015f, 0.025f, 0.035f, 1f)' in nav,
      'near-black standby backdrop present'),
+    ("(('TERRAIN GPU BUILDING ' in N) or ('RELOADING ND ' in N))" in step2,
+     'inherited Step2 gate accepts R012 reload wording successor'),
     ('REV3_5_R012_VARIANT="' + R012 + '"' in build,
      'R012 build identity variable'),
     ('rev3_5_r012_variant=%s' in build,
