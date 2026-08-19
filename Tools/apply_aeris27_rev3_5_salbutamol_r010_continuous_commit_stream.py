@@ -34,7 +34,6 @@ if R010 in renderer:
     print(PREFIX + ' already present')
     raise SystemExit(0)
 
-# Identity only; no new lane, queue, worker, Entry, Mesh or finished-product cache.
 renderer, _ = replace_once(
     renderer,
     '        const string Rev35R009Variant = "' + R009 + '";\n',
@@ -48,45 +47,22 @@ renderer, _ = replace_once(
     renderer,
     '        long operationHealthRev35R008FoundationScheduleFirst;\n',
     '        long operationHealthRev35R008FoundationScheduleFirst;\n'
-    '        long operationHealthRev35R010QueueOnlyRepaintKicks;\n'
     '        long operationHealthRev35R010QueueBacklogBudgetSamples;\n'
     '        int operationHealthRev35R010QueueBacklogPeak;\n',
     'R010 telemetry fields')
 
-# Phase6_002 historically woke the staged engine on non-authoritative Repaint only when
-# a staged commit was already active or the rasterizer completed FIFO was non-empty.
-# R007 added a distinct current-FAR RenderReady handoff FIFO, but that FIFO was omitted
-# from this wake condition. Patch only the condition line so inherited comments/diagnostics
-# around the block remain untouched.
+# Keep all inherited non-authoritative block internals untouched. Only widen the existing
+# wake predicate so an already-RenderReady R007 FAR FIFO cannot sleep until the next 10 Hz
+# authoritative tick after pendingEntryCommit becomes null at the frame budget boundary.
 old_wake_condition = (
     '                if (pendingEntryCommit != null || rasterizer.CompletedCount > 0)\n')
 new_wake_condition = (
-    '                bool rev35R010QueueOnlyKick = pendingEntryCommit == null &&\n'
-    '                    rasterizer.CompletedCount <= 0 &&\n'
-    '                    rev35R007FoundationQueue.Count > 0;\n'
     '                if (pendingEntryCommit != null || rasterizer.CompletedCount > 0 ||\n'
     '                    rev35R007FoundationQueue.Count > 0)\n')
 renderer, _ = replace_once(renderer, old_wake_condition, new_wake_condition,
                            'R010 non-authoritative queue wake condition')
 
-# Count only queue-only wakeups. Insert immediately before the inherited resident-cache
-# assignment inside that same non-authoritative block without replacing the whole block.
-old_resident = (
-    '                {\n'
-    '                    residentCache = system.CurrentBodyResidentCache;\n'
-    '                    PumpStagedCompletedCommit(system);\n')
-new_resident = (
-    '                {\n'
-    '                    if (rev35R010QueueOnlyKick)\n'
-    '                        operationHealthRev35R010QueueOnlyRepaintKicks++;\n'
-    '                    residentCache = system.CurrentBodyResidentCache;\n'
-    '                    PumpStagedCompletedCommit(system);\n')
-renderer, _ = replace_once(renderer, old_resident, new_resident,
-                           'R010 non-authoritative queue wake telemetry')
-
-# R004 adaptive budgeting also predates R007 and therefore did not count the R007 FIFO.
-# Count the actual current-FAR handoff backlog so a 40-90 tile ready burst receives the
-# already-approved adaptive 2 ms ceiling instead of being mistaken for an idle pipeline.
+# R004 adaptive budgeting predates R007 and did not count the current-FAR handoff FIFO.
 old_budget = '''            int backlog = Math.Max(0, rasterizer.CompletedCount) +
                 (pendingEntryCommit == null ? 0 : 1);'''
 new_budget = '''            int r010QueueBacklog = Math.Max(0, rev35R007FoundationQueue.Count);
@@ -114,7 +90,6 @@ telemetry_anchor = (
     '                "; oh_rev35_r009_terminal_null=" + rasterizer.Rev35R009TerminalNull +\n')
 telemetry_new = telemetry_anchor + (
     '                "; oh_rev35_r010_variant=" + Rev35R010Variant +\n'
-    '                "; oh_rev35_r010_queue_kick=" + operationHealthRev35R010QueueOnlyRepaintKicks +\n'
     '                "; oh_rev35_r010_queue_budget_samples=" + operationHealthRev35R010QueueBacklogBudgetSamples +\n'
     '                "; oh_rev35_r010_queue_backlog_peak=" + operationHealthRev35R010QueueBacklogPeak +\n')
 renderer, _ = replace_once(renderer, telemetry_anchor, telemetry_new,
@@ -129,9 +104,9 @@ if 'REV3_5_R010_VARIANT="' + R010 + '"' not in build:
         'build R010 identity')
     build, _ = replace_once(
         build,
-        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutamol_r009_ghost_pending_backpressure.py"\n',
-        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutamol_r009_ghost_pending_backpressure.py"\n'
-        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py"\n',
+        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutam_r009_ghost_pending_backpressure.py"\n',
+        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutam_r009_ghost_pending_backpressure.py"\n'
+        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutam_r010_continuous_commit_stream.py"\n',
         'build R010 verifier')
     build, _ = replace_once(
         build,
