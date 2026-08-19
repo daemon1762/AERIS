@@ -11,6 +11,7 @@ N = ROOT / 'Source/AERISFlightControl/UI/AERISNavigationDisplay.cs'
 B = ROOT / 'build_ubuntu.sh'
 PRE = ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'
 S = ROOT / 'Source/AERISFlightControl/Settings/AERISSettings.cs'
+STEP2 = ROOT / 'Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py'
 PREFIX = '[OH REV3.5 R014 PUBLICATION GATED CONTENT RECONCILE]'
 R010 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R010_CONTINUOUS_COMMIT_STREAM'
 R013 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R013_STABLE_CONTENT_SNAPSHOT_RECONCILE'
@@ -57,12 +58,13 @@ def method_bounds(text, signature):
     return (start, end) if end > op else (-1, -1)
 
 
-for path in (R, O, P, N, B, PRE, S):
+for path in (R, O, P, N, B, PRE, S, STEP2):
     if not path.is_file():
         raise SystemExit(PREFIX + ' FAIL missing ' + str(path.relative_to(ROOT)))
 
 renderer = R.read_text(); observer = O.read_text(); preload = P.read_text()
 nav = N.read_text(); build = B.read_text(); prebuild = PRE.read_text(); settings = S.read_text()
+step2 = STEP2.read_text()
 checks = []
 
 def check(value, label):
@@ -189,6 +191,11 @@ for token, label in (
     check(token in prune_block, label)
 check('if (contentTickRequired)' not in prune_block,
       'worker-only content tick no longer admits warm/normal prune block')
+
+check("r014_prune_successor = ('AERIS28_REV3_5_SALBUTAMOL_SULFATE_R014_PUBLICATION_GATED_CONTENT_RECONCILE' in R and" in step2 and
+      "(r014_prune_successor and 'if (rev35R014ReconcileRan)' in post)" in step2 and
+      "'pruning remains content/full-reconcile-only work'" in step2,
+      'inherited Step2 selftest admits only exact R014 full-reconcile prune successor')
 
 check('const float ContentPlanningHeadingStepDeg = 6f;' in renderer,
       'REV009 cumulative 6 degree hidden heading planner retained')
