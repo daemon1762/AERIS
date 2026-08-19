@@ -75,7 +75,7 @@ mkdir -p "$TARGET" "$TARGET/FlightPlans" "$TARGET/Airfields"
 rm -rf "$TARGET/Plugins" "$TARGET/Icons" "$TARGET/FlightPlans/Defaults" "$TARGET/Airfields/Defaults"
 cp -a "$ROOT/GameData/AERISFlightControl/." "$TARGET/"
 for USER_CONFIG in AERISSettings.cfg NavigationDisplayProfiles.cfg; do
-  if test -f "$PRESERVE_DIR/Config/$USER_CONFIG" ]; then
+  if test -f "$PRESERVE_DIR/Config/$USER_CONFIG"; then
     cp -a "$PRESERVE_DIR/Config/$USER_CONFIG" "$TARGET/Config/"
   fi
 done
