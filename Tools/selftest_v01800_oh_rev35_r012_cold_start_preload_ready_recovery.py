@@ -70,10 +70,8 @@ check('stateDirty' not in flight_slice,
 standby_start = nav.find('static void DrawTerrainStandbyBackground(Rect rect)')
 standby_end = nav.find('static void DrawCleanBackground(Rect rect)', standby_start)
 standby_slice = nav[standby_start:standby_end] if standby_start >= 0 and standby_end > standby_start else ''
-check('new Color(0.015f, 0.025f, 0.035f, 1f)' in standby_slice,
-      'cold-start standby uses near-black reload backdrop')
-check('new Color(0.025f, 0.145f, 0.285f, 1f)' not in standby_slice,
-      'valid water-map blue is not used as uncommitted standby')
+check('new Color(0.025f, 0.145f, 0.285f, 1f)' in standby_slice,
+      'ordinary historical blue standby remains unchanged outside R012 cold-init')
 check('bool terrainPresentationRequested = settings == null ||' in nav and
       'settings.TerrainGpuMode != AERISTerrainGpuMode.Off' in nav and
       'settings.PerformanceGpuAccelerationEnabled' in nav,
@@ -85,7 +83,12 @@ check('!tileSystem.BodySupported' in nav and
       'cold-init gate distinguishes expected solid terrain from unsupported body')
 check('"RELOADING ND\\nTERRAIN INIT"' in nav,
       'pre-render cold-init has unique explicit reload presentation')
-check('if (solidBodyColdInit)' in nav and nav.find('if (solidBodyColdInit)') < nav.find('terrainTileRenderer.Draw('),
+cold_start = nav.find('if (solidBodyColdInit)')
+cold_end = nav.find('AERISTerrainGpuDrawState gpuState', cold_start)
+cold_slice = nav[cold_start:cold_end] if cold_start >= 0 and cold_end > cold_start else ''
+check('DrawCleanBackground(plot);' in cold_slice,
+      'only R012 cold-init explicitly overwrites standby with clean black background')
+check(cold_start >= 0 and cold_start < nav.find('terrainTileRenderer.Draw('),
       'cold-init presentation occurs before renderer admission')
 check('"TERRAIN GPU BUILDING " + percent + "%"' in nav,
       'ordinary renderer Partial/BUILDING presentation remains unchanged')
