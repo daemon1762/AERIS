@@ -47,13 +47,13 @@ for x in (source,dllp,identity):
 ident=identity.read_text(errors='replace'); dll=dllp.read_bytes(); head=subprocess.check_output(['git','-C',str(ROOT),'rev-parse','HEAD'],text=True).strip()
 ids=((R001,'rev3_5_variant'),(R002,'rev3_5_r002_variant'),(R003,'rev3_5_r003_variant'),(R004,'rev3_5_r004_variant'),(R005,'rev3_5_r005_variant'),(R006,'rev3_5_r006_variant'),(HF1,'rev3_5_r006_hotfix1'),(HF2,'rev3_5_r006_hotfix2'),(HF3,'rev3_5_r006_hotfix3'),(HF4,'rev3_5_r006_hotfix4'),(R007,'rev3_5_r007_variant'),(R008,'rev3_5_r008_variant'),(R009,'rev3_5_r009_variant'),(R010,'rev3_5_r010_variant'))
 checks=[(sha256(source)==sha256(dllp),'built/installed DLL SHA')]+[((key+'='+m) in ident,key+' identity') for m,key in ids]
-checks += [(('git='+head) in ident,'identity git HEAD'),(marker_in_bytes(dll,R010),'DLL embeds R010 marker'),(marker_in_bytes(dll,'oh_rev35_r010_queue_kick=') and marker_in_bytes(dll,'oh_rev35_r010_queue_backlog_peak='),'DLL embeds R010 telemetry'),(marker_in_bytes(dll,R009) and marker_in_bytes(dll,'oh_rev35_r009_admit_reject='),'DLL retains R009'),(marker_in_bytes(dll,R007) and marker_in_bytes(dll,'oh_rev35_r007_chain='),'DLL retains R007'),(not marker_in_bytes(dll,'WaitManagedPreparation') and not marker_in_bytes(dll,'ResidentPreparedPresentation') and not marker_in_bytes(dll,'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE'),'DLL excludes rejected mechanisms')]
+checks += [(('git='+head) in ident,'identity git HEAD'),(marker_in_bytes(dll,R010),'DLL embeds R010 marker'),(marker_in_bytes(dll,'oh_rev35_r010_queue_budget_samples=') and marker_in_bytes(dll,'oh_rev35_r010_queue_backlog_peak='),'DLL embeds R010 telemetry'),(marker_in_bytes(dll,R009) and marker_in_bytes(dll,'oh_rev35_r009_admit_reject='),'DLL retains R009'),(marker_in_bytes(dll,R007) and marker_in_bytes(dll,'oh_rev35_r007_chain='),'DLL retains R007'),(not marker_in_bytes(dll,'WaitManagedPreparation') and not marker_in_bytes(dll,'ResidentPreparedPresentation') and not marker_in_bytes(dll,'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE'),'DLL excludes rejected mechanisms')]
 failed=[]
 for ok,label in checks:
     print((GREEN if ok else RED)+('[PASS] ' if ok else '[FAIL] ')+label+RESET)
     if not ok: failed.append(label)
 if failed: raise SystemExit(RED+PREFIX+' INSTALL IDENTITY FAIL: '+', '.join(failed)+RESET)
 print(GREEN+PREFIX+' INSTALL IDENTITY MATCH=YES'+RESET); print('r010='+R010); print('git='+head); print('dll_sha256='+sha256(dllp))
-print(CYAN+'R010 ACTIVE:'+RESET+' existing single staged commit engine wakes on R007 current-FAR FIFO and consumes it continuously across non-authoritative Repaints under the existing adaptive budget.')
-print(MAGENTA+'R010 OBSERVERS:'+RESET+' queue_kick/queue_budget_samples/queue_backlog_peak.')
+print(CYAN+'R010 ACTIVE:'+RESET+' existing single staged commit engine wakes on the R007 current-FAR FIFO and keeps draining it across non-authoritative Repaints under the existing adaptive budget.')
+print(MAGENTA+'R010 OBSERVERS:'+RESET+' queue_budget_samples/queue_backlog_peak.')
 print(YELLOW+'R010 FROZEN:'+RESET+' one pending lane, R004 max2ms/count rails, R009 backpressure, R008/R007/HF4/HF3/R003, R005 source64, 10Hz, exact range and Golden quality retained.')
