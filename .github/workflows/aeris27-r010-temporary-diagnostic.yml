@@ -55,6 +55,35 @@ jobs:
           python3 Tools/apply_aeris27_rev3_5_salbutamol_r009_ghost_pending_backpressure.py >/dev/null
           python3 /tmp/r010_mark.py R009
 
+      - name: R010 anchor preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          r=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          b=Path('build_ubuntu.sh').read_text()
+          anchors=[
+            ('IDENTITY','        const string Rev35R009Variant = "AERIS27_REV3_5_SALBUTAMOL_SULFATE_R009_GHOST_PENDING_BACKPRESSURE";\n',r),
+            ('FIELD','        long operationHealthRev35R008FoundationScheduleFirst;\n',r),
+            ('WAKE','                if (pendingEntryCommit != null || rasterizer.CompletedCount > 0)\n                {\n                    residentCache = system.CurrentBodyResidentCache;\n                    PumpStagedCompletedCommit(system);\n                }',r),
+            ('BUDGET','            int backlog = Math.Max(0, rasterizer.CompletedCount) +\n                (pendingEntryCommit == null ? 0 : 1);',r),
+            ('FINAL','            int finalRemainingCompleted = Math.Max(0, rasterizer.CompletedCount) +\n                (pendingEntryCommit == null ? 0 : 1);',r),
+            ('TELEMETRY','                "; oh_rev35_r009_terminal_null=" + rasterizer.Rev35R009TerminalNull +\n',r),
+            ('BUILDID','REV3_5_R009_VARIANT="AERIS27_REV3_5_SALBUTAMOL_SULFATE_R009_GHOST_PENDING_BACKPRESSURE"\n',b),
+            ('BUILDVERIFY','PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutamol_r009_ghost_pending_backpressure.py"\n',b),
+            ('BUILDEMIT','printf \'rev3_5_r009_variant=%s\\n\' "$REV3_5_R009_VARIANT" >> "$ROOT/GameData/AERISFlightControl/AERISCandidateBuildIdentity.txt"\n',b),
+          ]
+          for name,anchor,text in anchors:
+              count=text.count(anchor)
+              print(name,count)
+              if count != 1:
+                  raise SystemExit('ANCHOR_'+name+'_COUNT_'+str(count))
+              subprocess.run(['python3','/tmp/r010_mark.py','ANCHOR-'+name],check=True)
+          PY
+
       - name: Apply R010
         env:
           GH_TOKEN: ${{ github.token }}
