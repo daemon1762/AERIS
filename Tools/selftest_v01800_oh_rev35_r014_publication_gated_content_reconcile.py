@@ -87,15 +87,13 @@ check(finalize.count('MarkGpuContentDirty();') == 1,
 check(finalize.count('rev35R014PublicationSerial++;') == 1,
       'successful Finalize advances R014 publication serial exactly once')
 check(finalize.count('operationHealthRev35R014PublicationEvents++;') == 1,
-      'successful Finalize records publication event exactly once')
+      'successful Finalize records publication exactly once')
 add_pos = finalize.find('AddEntry(entry);')
 dirty_pos = finalize.find('MarkGpuContentDirty();')
 serial_pos = finalize.find('rev35R014PublicationSerial++;')
 check(add_pos >= 0 and dirty_pos > add_pos and serial_pos > dirty_pos,
       'publication serial follows actual AddEntry + dirty authority')
 
-# Phase6_003 safety authority must remain: hidden/non-authoritative staged work may prepare,
-# but Finalize/publication is not promoted into a second lane by R014.
 check('AERIS25_PHASE6_003_AUTHORITATIVE_PUBLICATION' in renderer,
       'Phase6_003 authoritative publication marker retained')
 check(renderer.count('PendingEntryCommit pendingEntryCommit;') == 1,
@@ -106,35 +104,37 @@ check('rev35R007FoundationQueue.Count > 0' in renderer,
 start, end = method_bounds(renderer, '        internal AERISTerrainGpuDrawState Draw(Rect plot,')
 draw = renderer[start:end] if start >= 0 and end > start else ''
 check(bool(draw), 'Draw method resolved')
-check('bool contentTickRequired = contentGeometryChanged || workerResultReady ||' in draw,
-      'Step2 content tick wake authority retained')
 check('const float ContentMaintenanceRetrySeconds = 0.20f;' in renderer,
-      'bounded 0.20 second safety retry retained')
+      'inherited 0.20 second / 5 Hz content cadence retained')
+check('bool rev35R014PublicationPendingBeforeTick =' in draw and
+      'rev35R014PublicationSerial != rev35R014ReconciledPublicationSerial;' in draw,
+      'deferred publication remains an explicit content wake')
+check('bool contentTickRequired = contentGeometryChanged || workerResultReady ||' in draw and
+      'contentRetryDue || rev35R014PublicationPendingBeforeTick;' in draw,
+      'worker/retry/geometry/publication wake authority retained')
 check('PumpStagedCompletedCommit(system,' in draw,
       'R010 staged pump retained in content path')
-check('bool rev35R014ProgressOutstanding = pendingEntryCommit != null ||' in draw,
-      'R014 progress-outstanding gate present')
-for token in ('rasterizer.PendingCount > 0', 'rasterizer.CompletedCount > 0',
-              'rev35R007FoundationQueue.Count > 0'):
-    check(token in draw, 'progress gate includes ' + token)
-check('rev35R014PublicationSerial != rev35R014ReconciledPublicationSerial' in draw,
-      'full reconcile observes unreconciled publication serial')
-check('bool rev35R014RetryNeedsReconcile = contentRetryDue &&' in draw and
-      '!rev35R014ProgressOutstanding;' in draw,
-      'retry escalates only when staged/raster progress is empty')
-check('bool rev35R014ReconcileRequired = contentGeometryChanged ||' in draw,
-      'geometry/publication/safety retry full-reconcile gate present')
+check('bool rev35R014PublicationPending =' in draw,
+      'post-pump publication state is re-evaluated')
+check('bool rev35R014ContentCadenceDue =' in draw and
+      'presentationNow >= nextContentMaintenanceRealtime;' in draw,
+      'full reconcile is tied to inherited content-maintenance deadline')
+check('bool rev35R014ReconcileRequired = contentGeometryChanged ||' in draw and
+      '(rev35R014PublicationPending || contentRetryDue)' in draw,
+      'full reconcile is geometry-immediate or cadence-batched publication/retry')
 check('operationHealthRev35R014WorkerOnlySkips++;' in draw,
       'worker-only content tick skip is observable')
-check('operationHealthRev35R014RetryProgressSkips++;' in draw,
-      'retry-with-progress skip is observable')
+check('operationHealthRev35R014PublicationDeferrals++;' in draw,
+      'publication batching deferral is observable')
 check('operationHealthRev35R014FullReconciles++;' in draw,
       'full reconcile is observable')
+check('operationHealthRev35R014PublicationReconciles++;' in draw,
+      'batched publication reconcile is observable')
 check('operationHealthRev35R014RetryReconciles++;' in draw,
-      'no-progress retry reconcile is observable')
+      'safety retry reconcile is observable')
 
 pump = draw.find('PumpStagedCompletedCommit(system,')
-gate = draw.find('bool rev35R014ProgressOutstanding =', pump)
+gate = draw.find('bool rev35R014PublicationPending =', pump)
 reconcile_if = draw.find('if (!rev35R014ReconcileRequired)', gate)
 capture = draw.find('visible = system.CaptureVisible(', reconcile_if)
 requested = draw.find('requested.Clear();', capture)
@@ -144,15 +144,15 @@ resolve = draw.find('ResolveRenderableEntries(', far_first)
 measure = draw.find('contentFoundationCoverage = MeasureFoundationGpuReadiness(', resolve)
 reconciled = draw.find('rev35R014ReconciledPublicationSerial =', measure)
 check(pump >= 0 and gate > pump,
-      'staged progress pump executes before full-reconcile decision')
+      'staged progress pump executes before publication/full-reconcile decision')
 check(capture > reconcile_if,
-      'CaptureVisible is behind R014 full-reconcile gate')
+      'CaptureVisible is behind R014 batching gate')
 check(requested > capture and r008 > requested,
-      'requested rebuild and R008 reconcile are behind R014 gate')
+      'requested rebuild and R008 reconcile are behind R014 batching gate')
 check(far_first > r008 and resolve > far_first and measure > resolve,
       'R008 FAR-first resolve/foundation chain remains inside full reconcile')
 check(reconciled > measure,
-      'publication serial is acknowledged only after full reconcile')
+      'newest publication serial is acknowledged only after full reconcile')
 check(draw.count('system.CaptureVisible(') == 1,
       'single CaptureVisible authority retained')
 
@@ -173,7 +173,8 @@ check('160000f' in settings, 'exact 160 km authority retained')
 for token in ('oh_rev35_r014_variant=', 'oh_rev35_r014_pub_serial=',
               'oh_rev35_r014_reconciled_serial=', 'oh_rev35_r014_publications=',
               'oh_rev35_r014_full_reconcile=', 'oh_rev35_r014_worker_only_skip=',
-              'oh_rev35_r014_retry_progress_skip=', 'oh_rev35_r014_retry_reconcile='):
+              'oh_rev35_r014_publication_defer=', 'oh_rev35_r014_publication_reconcile=',
+              'oh_rev35_r014_retry_reconcile='):
     check(token in renderer, 'runtime telemetry ' + token)
 check('REV3_5_R014_VARIANT="' + R014 + '"' in build,
       'R014 build identity variable')
@@ -189,21 +190,21 @@ for forbidden in ('Task.Run(', 'new Thread(', 'ThreadPool.', 'WaitManagedPrepara
                   'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE'):
     check(forbidden not in renderer, 'R014 renderer excludes ' + forbidden)
 
-# Admission truth table: geometry always reconciles; publication always reconciles;
-# a retry reconciles only if no work capable of making progress remains.
-def full_reconcile(geometry, publication, retry, progress):
-    return geometry or publication or (retry and not progress)
+# Truth table for the full-reconcile admission decision. Geometry is the sole immediate
+# bypass. Publication/retry work waits for the inherited 0.20 s maintenance deadline.
+def full_reconcile(geometry, publication, retry, cadence_due):
+    return geometry or (cadence_due and (publication or retry))
 
-check(full_reconcile(True, False, False, True),
-      'truth table: geometry forces reconcile')
+check(full_reconcile(True, False, False, False),
+      'truth table: geometry forces immediate reconcile')
+check(not full_reconcile(False, True, False, False),
+      'truth table: publication before cadence is batched/deferred')
 check(full_reconcile(False, True, False, True),
-      'truth table: actual publication forces reconcile')
+      'truth table: batched publication reconciles when cadence is due')
 check(not full_reconcile(False, False, False, True),
-      'truth table: worker-only progress skips reconcile')
-check(not full_reconcile(False, False, True, True),
-      'truth table: retry with progress skips reconcile')
-check(full_reconcile(False, False, True, False),
-      'truth table: no-progress retry performs safety reconcile')
+      'truth table: worker-only wake never causes full reconcile')
+check(full_reconcile(False, False, True, True),
+      'truth table: inherited retry reconciles when due')
 
 failed = []
 for ok, label in checks:
