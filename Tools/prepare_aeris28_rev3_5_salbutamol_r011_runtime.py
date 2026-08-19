@@ -6,6 +6,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 R = ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs'
 T = ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs'
+B = ROOT/'build_ubuntu.sh'
 PREFIX = '[AERIS28 REV3.5 SALBUTAMOL SULFATE R011 RUNTIME]'
 R005='AERIS27_REV3_5_SALBUTAMOL_SULFATE_R005_SPLIT_WEIGHT_FLOW_LANES'
 R006='AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_MANAGED_BUFFER_REUSE_FOUNDATION_OBSERVER'
@@ -18,6 +19,7 @@ R008='AERIS27_REV3_5_SALBUTAMOL_SULFATE_R008_CURRENT_FOUNDATION_UPSTREAM_PRIORIT
 R009='AERIS27_REV3_5_SALBUTAMOL_SULFATE_R009_GHOST_PENDING_BACKPRESSURE'
 R010='AERIS27_REV3_5_SALBUTAMOL_SULFATE_R010_CONTINUOUS_COMMIT_STREAM'
 R011='AERIS28_REV3_5_SALBUTAMOL_SULFATE_R011_TURNING_VIEW_CHURN_OBSERVER'
+LEGACY_INSTALL_ANCHOR='echo "[AERIS] Installed $DISPLAY: $KSP/GameData/AERISFlightControl/Plugins/AERISFlightControl.dll"\n'
 
 TTY=sys.stdout.isatty(); GREEN='\033[1;32m' if TTY else ''; RED='\033[1;31m' if TTY else ''; CYAN='\033[1;36m' if TTY else ''; YELLOW='\033[1;33m' if TTY else ''; RESET='\033[0m' if TTY else ''
 def info(m): print(CYAN+PREFIX+RESET+' '+m)
@@ -64,7 +66,15 @@ p=argparse.ArgumentParser(description='Reconstruct R010 formal runtime, overlay 
 p.add_argument('ksp_path'); a=p.parse_args(); ksp=Path(a.ksp_path).expanduser().resolve()
 if not ksp.is_dir(): raise SystemExit(RED+PREFIX+' KSP path not found: '+str(ksp)+RESET)
 
-if not has(R,R005): reconstruct_r005()
+if not has(R,R005):
+    try:
+        base_build=B.read_text()
+    except OSError:
+        raise SystemExit(RED+PREFIX+' build_ubuntu.sh missing before R005 reconstruction'+RESET)
+    if base_build.count(LEGACY_INSTALL_ANCHOR) != 1:
+        raise SystemExit(RED+PREFIX+' PRECHECK FAIL: legacy AERIS23 installed-DLL identity anchor is not byte-exact. Restore generated residue / update branch before reconstruction.'+RESET)
+    info('legacy AERIS23 installed-DLL identity anchor PRECHECK PASS')
+    reconstruct_r005()
 lineage=(
  (R006,'apply_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py',R),
  (HF1,'apply_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py',R),
