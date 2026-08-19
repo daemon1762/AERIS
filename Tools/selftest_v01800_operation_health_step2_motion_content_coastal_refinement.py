@@ -42,9 +42,7 @@ ck('bool preserveCadenceAndContent = false' in reset,'front reset exposes explic
 ck('if (!preserveCadenceAndContent)' in reset and 'nextAuthoritativePresentationTickRealtime = 0f;' in reset and 'nextBackRefreshRealtime = 0f;' in reset and 'ResetContentSnapshot();' in reset,'full lifecycle reset still clears cadence and content')
 ensure_rt=R[R.index('void EnsureRenderTarget('):R.index('float MeasureViewportCoverage(')]
 ck('DestroyRenderTargets(true);' in ensure_rt and 'ResetFrontBufferState(true);' in ensure_rt,'render-target resize preserves 10 Hz clock and Step 2 content snapshot')
-destroy_rt=R[R.index('void DestroyRenderTexture('):] if 'void DestroyRenderTarget(' not in R else R[R.index('void DestroyRenderTarget('):R.index('static void DestroyRenderTexture(')]
-if 'void DestroyRenderTarget(' not in R:
-    destroy_rt=R[R.index('void DestroyRenderTargets('):R.index('static void DestroyRenderTexture(')]
+destroy_rt=R[R.index('void DestroyRenderTargets('):R.index('static void DestroyRenderTexture(')]
 ck('bool preserveCadenceAndContent = false' in destroy_rt and 'ResetFrontBufferState(preserveCadenceAndContent);' in destroy_rt,'render-target destruction forwards lifecycle preservation authority')
 ck('if (!preserveCadenceAndContent)\n                lastBackFoundationCoverage = 0f;' in reset,'resize retains current foundation readiness while full reset clears it')
 ck('present && requestedViewReady' in R and 'TERRAIN GPU BUILDING ' in N,'Hotfix4 stale-FRONT loading contract remains intact')
