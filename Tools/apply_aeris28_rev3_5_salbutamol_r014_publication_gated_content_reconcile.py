@@ -107,11 +107,6 @@ def statement_end(text, start):
     fail('statement terminator missing')
 
 
-def indent_block(text, spaces=4):
-    prefix = ' ' * spaces
-    return ''.join(prefix + line if line.strip() else line for line in text.splitlines(True))
-
-
 for path in (R, O, P, N, B, PRE):
     if not path.is_file():
         fail('required file missing: ' + str(path.relative_to(ROOT)))
@@ -250,7 +245,10 @@ if R014 not in renderer:
                     if (contentRetryDue)
                         operationHealthRev35R014RetryReconciles++;
 '''
-    gated_expensive = gate + indent_block(expensive, 4) + (
+    # Preserve the inherited expensive block byte-for-byte. Phase6_003 intentionally
+    # verifies the packet-refresh -> deferred-retirement sequence as an exact textual
+    # contract; C# block scope does not require re-indenting the wrapped statements.
+    gated_expensive = gate + expensive + (
         '                    rev35R014ReconciledPublicationSerial =\n'
         '                        rev35R014PublicationSerial;\n'
         '                }\n')
@@ -356,6 +354,7 @@ print('publication_authority=successful FinalizePendingEntryCommit serial')
 print('publication_batching=inherited ContentMaintenanceRetrySeconds 0.20s maximum 5Hz')
 print('geometry_change=immediate full reconcile')
 print('deferred_publication=wakes content path until newest serial is reconciled')
+print('phase6_003_packet_retirement_text=PRESERVED_BYTE_FOR_BYTE')
 print('warm_visibility_prune=existing rich block retained; admission changed only')
 print('r008_current_request_and_far_first=retained inside full reconcile')
 print('rev009_heading_planner=6deg cumulative retained')
