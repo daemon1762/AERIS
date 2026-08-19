@@ -56,27 +56,33 @@ renderer, _ = replace_once(
 # Phase6_002 historically woke the staged engine on non-authoritative Repaint only when
 # a staged commit was already active or the rasterizer completed FIFO was non-empty.
 # R007 added a distinct current-FAR RenderReady handoff FIFO, but that FIFO was omitted
-# from this wake condition. After a tile Finalize consumed the frame budget, pending became
-# null and the engine slept until the next 10 Hz authoritative tick even with dozens of
-# already-RenderReady FAR tiles waiting. Wake on that existing FIFO as well.
-old_wake = '''                if (pendingEntryCommit != null || rasterizer.CompletedCount > 0)
-                {
-                    residentCache = system.CurrentBodyResidentCache;
-                    PumpStagedCompletedCommit(system);
-                }'''
-new_wake = '''                bool rev35R010QueueOnlyKick = pendingEntryCommit == null &&
-                    rasterizer.CompletedCount <= 0 &&
-                    rev35R007FoundationQueue.Count > 0;
-                if (pendingEntryCommit != null || rasterizer.CompletedCount > 0 ||
-                    rev35R007FoundationQueue.Count > 0)
-                {
-                    if (rev35R010QueueOnlyKick)
-                        operationHealthRev35R010QueueOnlyRepaintKicks++;
-                    residentCache = system.CurrentBodyResidentCache;
-                    PumpStagedCompletedCommit(system);
-                }'''
-renderer, _ = replace_once(renderer, old_wake, new_wake,
-                           'R010 non-authoritative queue wake')
+# from this wake condition. Patch only the condition line so inherited comments/diagnostics
+# around the block remain untouched.
+old_wake_condition = (
+    '                if (pendingEntryCommit != null || rasterizer.CompletedCount > 0)\n')
+new_wake_condition = (
+    '                bool rev35R010QueueOnlyKick = pendingEntryCommit == null &&\n'
+    '                    rasterizer.CompletedCount <= 0 &&\n'
+    '                    rev35R007FoundationQueue.Count > 0;\n'
+    '                if (pendingEntryCommit != null || rasterizer.CompletedCount > 0 ||\n'
+    '                    rev35R007FoundationQueue.Count > 0)\n')
+renderer, _ = replace_once(renderer, old_wake_condition, new_wake_condition,
+                           'R010 non-authoritative queue wake condition')
+
+# Count only queue-only wakeups. Insert immediately before the inherited resident-cache
+# assignment inside that same non-authoritative block without replacing the whole block.
+old_resident = (
+    '                {\n'
+    '                    residentCache = system.CurrentBodyResidentCache;\n'
+    '                    PumpStagedCompletedCommit(system);\n')
+new_resident = (
+    '                {\n'
+    '                    if (rev35R010QueueOnlyKick)\n'
+    '                        operationHealthRev35R010QueueOnlyRepaintKicks++;\n'
+    '                    residentCache = system.CurrentBodyResidentCache;\n'
+    '                    PumpStagedCompletedCommit(system);\n')
+renderer, _ = replace_once(renderer, old_resident, new_resident,
+                           'R010 non-authoritative queue wake telemetry')
 
 # R004 adaptive budgeting also predates R007 and therefore did not count the R007 FIFO.
 # Count the actual current-FAR handoff backlog so a 40-90 tile ready burst receives the
