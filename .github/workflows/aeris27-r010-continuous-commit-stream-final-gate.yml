@@ -1,0 +1,164 @@
+name: AERIS27 R010 Continuous Commit Stream Final Gate
+
+on:
+  push:
+    branches:
+      - agent/aeris27-rev3-5-salbutamol-r010-continuous-commit-stream
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  r010-final:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Python syntax
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            Tools/apply_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py \
+            Tools/verify_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r010_runtime.py
+          rm -rf Tools/__pycache__
+
+      - name: Reconstruct accepted lineage through R005
+        run: |
+          set -euo pipefail
+          for s in \
+            apply_aeris25_gpu_dynamic_terrain_colour_ready.py \
+            apply_aeris25_chunk_cull_guard_hotfix.py \
+            apply_aeris25_temporal_foundation_overscan_hotfix.py \
+            apply_aeris25_foundation_cull_bypass_hotfix.py \
+            apply_aeris25_renderable_entry_gate_hotfix.py \
+            apply_aeris25_gpu_vertex_reject_diagnostics_hotfix.py \
+            apply_aeris25_snapshot_mesh_lifetime_guard_hotfix.py \
+            apply_aeris25_content_generation_burst_governor_hotfix.py \
+            apply_aeris25_persistent_presentation_batching.py \
+            apply_aeris25_main_thread_commit_governor.py \
+            apply_aeris25_staged_main_thread_commit_hotfix.py \
+            fix_aeris25_phase6_002_inherited_selftests.py \
+            apply_aeris25_authoritative_publication_lifetime_hotfix.py \
+            fix_aeris25_phase6_002_inherited_selftests.py \
+            fix_aeris25_phase6_003_inherited_selftests.py \
+            apply_aeris26_rev003_observer.py \
+            apply_aeris27_rev3_5_salbutamol_r001_compile_hotfix1.py \
+            apply_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py \
+            apply_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py \
+            apply_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py \
+            apply_aeris27_rev3_5_salbutamol_r005_split_weight_flow_lanes.py; do
+              PYTHONDONTWRITEBYTECODE=1 python3 "Tools/$s" >/dev/null
+          done
+
+      - name: Apply R006 through R009 accepted descendants
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_resource_release_order_hotfix2.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_complete_coverage_contract_hotfix3.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r006_packed_managed_buffer_reuse_hotfix4.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r007_foundation_chained_admission.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r008_current_foundation_upstream_priority.py
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r009_ghost_pending_backpressure.py
+          sha256sum Source/AERISFlightControl/Performance/AERISWorkerScheduler.cs > /tmp/r010_scheduler_parent.sha
+          sha256sum Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs > /tmp/r010_raster_parent.sha
+
+      - name: Apply R010
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 Tools/apply_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py
+
+      - name: R009 scheduler and rasterizer implementation unchanged
+        run: |
+          set -euo pipefail
+          sha256sum -c /tmp/r010_scheduler_parent.sha
+          sha256sum -c /tmp/r010_raster_parent.sha
+
+      - name: Verify inherited safety and R010
+        run: |
+          set -euo pipefail
+          for v in \
+            verify_aeris25_authoritative_publication_lifetime_hotfix.py \
+            verify_aeris27_rev3_5_salbutamol_resumable_prepare.py \
+            verify_aeris27_rev3_5_salbutamol_r002_packed_allocation_split.py \
+            verify_aeris27_rev3_5_salbutamol_r003_requested_view_admission.py \
+            verify_aeris27_rev3_5_salbutamol_r004_adaptive_high_flow_commit.py \
+            verify_aeris27_rev3_5_salbutamol_r005_split_weight_flow_lanes.py \
+            verify_aeris27_rev3_5_salbutamol_r006_managed_buffer_reuse_foundation_observer.py \
+            verify_aeris27_rev3_5_salbutamol_r006_resource_release_hotfix1.py \
+            verify_aeris27_rev3_5_salbutamol_r006_resource_release_order_hotfix2.py \
+            verify_aeris27_rev3_5_salbutamol_r006_complete_coverage_contract_hotfix3.py \
+            verify_aeris27_rev3_5_salbutamol_r006_packed_managed_buffer_reuse_hotfix4.py \
+            verify_aeris27_rev3_5_salbutamol_r007_foundation_chained_admission.py \
+            verify_aeris27_rev3_5_salbutamol_r008_current_foundation_upstream_priority.py \
+            verify_aeris27_rev3_5_salbutamol_r009_ghost_pending_backpressure.py \
+            verify_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py; do
+              PYTHONDONTWRITEBYTECODE=1 python3 "Tools/$v"
+          done
+          git diff --check
+
+      - name: Exact continuous serial contract
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
+          m='AERIS27_REV3_5_SALBUTAMOL_SULFATE_R010_CONTINUOUS_COMMIT_STREAM'
+          assert m in r
+          assert 'rev35R007FoundationQueue.Count > 0' in r
+          assert 'bool rev35R010QueueOnlyKick' in r
+          assert 'int r010QueueBacklog = Math.Max(0, rev35R007FoundationQueue.Count);' in r
+          assert r.count('PendingEntryCommit pendingEntryCommit;') == 1
+          assert 'List<PendingEntryCommit>' not in r
+          assert 'Queue<PendingEntryCommit>' not in r
+          assert 'const double Rev35R004BudgetMaximumMilliseconds = 2.00;' in r
+          assert 'const int Rev35R005SourceChunkHardCap = 64;' in r
+          assert 'const int Rev35R007FoundationQueueMaximum = 128;' in r
+          assert 'presentationNow + 0.10f' in r
+          assert 'RenderTextureFormat.ARGB32' in r and 'FilterMode.Bilinear' in r
+          assert 'foundationComplete = rendered && visible.FoundationComplete &&' in r
+          assert 'lastBackFoundationCoverage >= 0.999f' in r
+          print('[AERIS27 R010] CONTINUOUS SERIAL CONTRACT PASS')
+          PY
+
+      - name: Rejected mechanism guard
+        run: |
+          set -euo pipefail
+          R=Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs
+          Z=Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRasterizer.cs
+          ! grep -Fq 'Task.Run(' "$R" "$Z"
+          ! grep -Fq 'WaitManagedPreparation' "$R" "$Z"
+          ! grep -Fq 'ResidentPreparedPresentation' "$R" "$Z"
+          ! grep -Fq 'AERIS25_PHASE6_004_MANAGED_PREPARATION_PIPELINE' "$R" "$Z"
+          ! grep -Fq 'AERIS25_PHASE6_005_NONBLOCKING_SPECULATIVE_PREPARATION' "$R" "$Z"
+          ! grep -Fq 'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE' "$R" "$Z"
+
+      - name: Publish authoritative R010 gate status
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRIOR_JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          export AERIS_GATE_STATE=failure
+          if [ "$PRIOR_JOB_STATUS" = "success" ]; then export AERIS_GATE_STATE=success; fi
+          python3 - <<'PY'
+          import json, os, urllib.request
+          repo=os.environ['GITHUB_REPOSITORY']; sha=os.environ['GITHUB_SHA']
+          token=os.environ['GH_TOKEN']; state=os.environ['AERIS_GATE_STATE']
+          data=json.dumps({'state':state,'context':'AERIS27/R010-FINAL-GATE',
+                           'description':'R010 continuous commit stream '+state.upper()}).encode()
+          req=urllib.request.Request('https://api.github.com/repos/%s/statuses/%s'%(repo,sha),
+              data=data,method='POST',headers={'Authorization':'Bearer '+token,
+              'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',
+              'User-Agent':'AERIS27-R010-Gate','Content-Type':'application/json'})
+          with urllib.request.urlopen(req,timeout=30) as response:
+              body=json.loads(response.read().decode())
+          print('[AERIS27 R010] status receipt:',body.get('state'),body.get('context'))
+          PY
