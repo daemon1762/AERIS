@@ -47,7 +47,11 @@ if '[OH_REV3_5_R011_TURN_CHURN]' not in observer:
 for token in ('ndReloadGeneration++;', 'frontReloadGeneration = ndReloadGeneration;',
               'if (Reloading) return false;', 'oh_nd_reload='):
     if token not in renderer:
-        fail('black-reload successor contract missing before R012 overlay: ' + token)
+        fail('black-reload renderer successor missing before R012 overlay: ' + token)
+for token in ('bool ndReloading =', 'terrainTileRenderer.Reloading',
+              'RELOADING ND\\n', 'FormatProjectionBackend'):
+    if token not in nav:
+        fail('AERIS24 black-reload UI successor missing before R012 overlay: ' + token)
 
 # R012-A: distinguish the latest observed point-set from the point-set whose completion
 # state was actually applied. Flight can update the former freely without revoking READY.
@@ -81,7 +85,7 @@ nav, _ = replace_once(nav, standby_old, standby_new,
                       'R012 cold-start black standby backdrop')
 
 cold_init_anchor = '''            AERISTerrainTileSystem tileSystem = terrain == null ? null :\n                terrain.DisplayTiles;\n            AERISTerrainGpuDrawState gpuState = AERISTerrainGpuDrawState.None;\n'''
-cold_init_new = '''            AERISTerrainTileSystem tileSystem = terrain == null ? null :\n                terrain.DisplayTiles;\n            bool solidBodyColdInit = !hazardOnly && tileSystem != null &&\n                !tileSystem.BodySupported && vessel != null && vessel.mainBody != null &&\n                AERISTerrainTileSystem.BodyHasSolidSurface(vessel.mainBody);\n            if (solidBodyColdInit)\n            {\n                DrawLabel(plot, "RELOADING ND\\nTERRAIN INIT", centerStyle,\n                    new Color(0.72f, 0.86f, 0.92f, 1f));\n                return;\n            }\n            AERISTerrainGpuDrawState gpuState = AERISTerrainGpuDrawState.None;\n'''
+cold_init_new = '''            AERISTerrainTileSystem tileSystem = terrain == null ? null :\n                terrain.DisplayTiles;\n            bool terrainPresentationRequested = settings == null ||\n                (settings.TerrainGpuMode != AERISTerrainGpuMode.Off &&\n                 settings.PerformanceGpuAccelerationEnabled);\n            bool solidBodyColdInit = !hazardOnly && terrainPresentationRequested &&\n                tileSystem != null && !tileSystem.BodySupported && vessel != null &&\n                vessel.mainBody != null &&\n                AERISTerrainTileSystem.BodyHasSolidSurface(vessel.mainBody);\n            if (solidBodyColdInit)\n            {\n                DrawLabel(plot, "RELOADING ND\\nTERRAIN INIT", centerStyle,\n                    new Color(0.72f, 0.86f, 0.92f, 1f));\n                return;\n            }\n            AERISTerrainGpuDrawState gpuState = AERISTerrainGpuDrawState.None;\n'''
 nav, _ = replace_once(nav, cold_init_anchor, cold_init_new,
                       'R012 pre-render solid-body terrain init state')
 
@@ -122,6 +126,7 @@ print('r012=' + R012)
 print('preload_flight_point_updates=RAM-only latest snapshot; completion remains applied-signature stable')
 print('preload_nonflight_refresh=invalidates once only when latest signature differs from applied signature')
 print('nd_cold_start=near-black standby + explicit RELOADING ND / TERRAIN INIT before renderer admission')
-print('ordinary_partial_building=unchanged')
+print('cold_init_eligibility=solid body + terrain presentation requested + BodySupported pending')
+print('ordinary_partial_building=unchanged; AERIS24 black reload preserved')
 print('renderer_change=0 worker_change=0 scheduler_change=0 rasterizer_change=0')
 print('quality_change=0 10Hz_change=0 exact_range_change=0 publication_authority_change=0')
