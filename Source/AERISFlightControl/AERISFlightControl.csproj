@@ -137,7 +137,6 @@
     <Compile Include="Terrain\AERISTerrainVirtualDetail.cs" />
     <Compile Include="Terrain\AERISTerrainGpuTileRasterizer.cs" />
     <Compile Include="Terrain\AERISTerrainGpuTileRenderer.cs" />
-    <Compile Include="Terrain\AERISR011TurningViewChurnObserver.cs" />
     <Compile Include="Terrain\AERISTerrainAwareness.cs" />
     <Compile Include="FlightState\VirtualAttitudeInstrument.cs" />
     <Compile Include="FlightState\AERISFlightStateApi.cs" />
