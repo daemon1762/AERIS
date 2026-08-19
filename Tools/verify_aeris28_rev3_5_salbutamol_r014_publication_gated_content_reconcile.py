@@ -39,11 +39,14 @@ check(('const string Rev35R014Variant = "' + R014 + '";') in renderer,
 check('rev35R014PublicationSerial++;' in renderer,
       'R014 successful-publication serial present')
 check('rev35R014PublicationSerial != rev35R014ReconciledPublicationSerial' in renderer,
-      'R014 unreconciled-publication gate present')
-check('bool rev35R014ProgressOutstanding = pendingEntryCommit != null ||' in renderer,
-      'R014 staged-progress gate present')
-check('bool rev35R014RetryNeedsReconcile = contentRetryDue &&' in renderer,
-      'R014 no-progress retry safety gate present')
+      'R014 deferred-publication state present')
+check('contentRetryDue || rev35R014PublicationPendingBeforeTick;' in renderer,
+      'deferred publication keeps content path awake')
+check('bool rev35R014ContentCadenceDue =' in renderer and
+      'presentationNow >= nextContentMaintenanceRealtime;' in renderer,
+      'R014 full reconcile uses inherited content deadline')
+check('const float ContentMaintenanceRetrySeconds = 0.20f;' in renderer,
+      'R014 preserves inherited 0.20 second / 5 Hz cadence')
 check('if (rev35R014ReconcileRan)' in renderer,
       'R014 prune/full-reconcile witness present')
 check('rasterizer.ReconcileCurrentRequests(requested);' in renderer,
@@ -60,15 +63,14 @@ check(renderer.count('PendingEntryCommit pendingEntryCommit;') == 1,
       'single pending commit lane retained')
 for token in ('oh_rev35_r014_variant=', 'oh_rev35_r014_publications=',
               'oh_rev35_r014_full_reconcile=', 'oh_rev35_r014_worker_only_skip=',
-              'oh_rev35_r014_retry_progress_skip=', 'oh_rev35_r014_retry_reconcile='):
+              'oh_rev35_r014_publication_defer=', 'oh_rev35_r014_publication_reconcile=',
+              'oh_rev35_r014_retry_reconcile='):
     check(token in renderer, 'telemetry ' + token)
 check('REV3_5_R014_VARIANT="' + R014 + '"' in build,
       'R014 build identity present')
 check('rev3_5_r014_variant=%s' in build,
       'R014 candidate identity emission present')
 
-# R014 remains a renderer scheduling/reconcile overlay. It must not create a new worker,
-# scheduler, rasterizer, preload, or navigation-display implementation authority.
 check('AERISTerrainGpuTileRasterizer.cs' not in applicator,
       'R014 applicator does not patch Rasterizer source file')
 check('AERISWorkerScheduler.cs' not in applicator,
@@ -92,5 +94,5 @@ subprocess.run([
     str(ROOT / 'Tools/selftest_v01800_oh_rev35_r014_publication_gated_content_reconcile.py')
 ], cwd=str(ROOT), check=True)
 print(PREFIX + ' PASS')
-print('contract=R010 staged progress first; full Capture/requested/resolve/foundation/prune only after geometry, actual Entry publication, or no-progress safety retry')
+print('contract=R010 staged progress remains immediate; actual publications are batched into inherited 0.20s/5Hz full Capture/requested/R008 FAR-first resolve/foundation/prune; geometry stays immediate')
 print('authority=R012 safe baseline; rejected R013 absent; REV009 6deg + R010 single lane + fixed 10Hz/160km retained')
