@@ -51,9 +51,6 @@ renderer, _ = replace_once(
     '        int operationHealthRev35R010QueueBacklogPeak;\n',
     'R010 telemetry fields')
 
-# Keep all inherited non-authoritative block internals untouched. Only widen the existing
-# wake predicate so an already-RenderReady R007 FAR FIFO cannot sleep until the next 10 Hz
-# authoritative tick after pendingEntryCommit becomes null at the frame budget boundary.
 old_wake_condition = (
     '                if (pendingEntryCommit != null || rasterizer.CompletedCount > 0)\n')
 new_wake_condition = (
@@ -62,7 +59,6 @@ new_wake_condition = (
 renderer, _ = replace_once(renderer, old_wake_condition, new_wake_condition,
                            'R010 non-authoritative queue wake condition')
 
-# R004 adaptive budgeting predates R007 and did not count the current-FAR handoff FIFO.
 old_budget = '''            int backlog = Math.Max(0, rasterizer.CompletedCount) +
                 (pendingEntryCommit == null ? 0 : 1);'''
 new_budget = '''            int r010QueueBacklog = Math.Max(0, rev35R007FoundationQueue.Count);
@@ -77,7 +73,6 @@ new_budget = '''            int r010QueueBacklog = Math.Max(0, rev35R007Foundati
 renderer, _ = replace_once(renderer, old_budget, new_budget,
                            'R010 R004 real backlog accounting')
 
-# Main-commit backlog telemetry/hard-rail witness must report the same real queue depth.
 old_final = '''            int finalRemainingCompleted = Math.Max(0, rasterizer.CompletedCount) +
                 (pendingEntryCommit == null ? 0 : 1);'''
 new_final = '''            int finalRemainingCompleted = Math.Max(0, rasterizer.CompletedCount) +
@@ -104,9 +99,9 @@ if 'REV3_5_R010_VARIANT="' + R010 + '"' not in build:
         'build R010 identity')
     build, _ = replace_once(
         build,
-        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutam_r009_ghost_pending_backpressure.py"\n',
-        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutam_r009_ghost_pending_backpressure.py"\n'
-        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutam_r010_continuous_commit_stream.py"\n',
+        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutamol_r009_ghost_pending_backpressure.py"\n',
+        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutamol_r009_ghost_pending_backpressure.py"\n'
+        'PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT/Tools/verify_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py"\n',
         'build R010 verifier')
     build, _ = replace_once(
         build,
