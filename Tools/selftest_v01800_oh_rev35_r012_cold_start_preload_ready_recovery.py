@@ -37,33 +37,36 @@ def check(value, label):
 check(R010 in renderer, 'R010 renderer lineage retained')
 check('[OH_REV3_5_R011_TURN_CHURN]' in observer, 'R011 measurement observer retained')
 check(R012 not in renderer, 'R012 does not modify renderer hot path')
+check('string appliedPointSetSignature = string.Empty;' in preload,
+      'applied preload point-set signature is tracked separately')
 check('bool deferredPointSetInvalidation;' in preload,
       'deferred Flight point-set invalidation field present')
-check('if (flightSuspended || HighLogic.LoadedSceneIsFlight)' in preload,
-      'first-frame and latched Flight point updates are deferred')
-check('deferredPointSetInvalidation = true;' in preload,
-      'Flight point update records deferred reevaluation')
+check('bool flight = HighLogic.LoadedSceneIsFlight;' in preload,
+      'current KSP scene is sole UpdatePoints Flight authority')
+check('if (flight)' in preload and 'deferredPointSetInvalidation = !string.Equals(' in preload,
+      'Flight point churn records only deferred applied-signature difference')
 check('points.Clear();' in preload and 'points.AddRange(next);' in preload,
-      'latest point snapshot is still retained during Flight')
-check('void ApplyPointSetInvalidationLocked()' in preload,
+      'latest point snapshot is retained during Flight')
+check('void ApplyPointSetInvalidationLocked(string signature)' in preload,
       'single point invalidation implementation exists')
-check('void ApplyDeferredPointSetInvalidation()' in preload,
-      'deferred point invalidation drain exists')
-check('ApplyDeferredPointSetInvalidation();' in preload,
-      'non-Flight Tick drains deferred invalidation')
-
-apply_index = preload.find('ApplyDeferredPointSetInvalidation();')
-resume_index = preload.find('flightSuspended = false;', apply_index)
-check(apply_index >= 0 and resume_index > apply_index,
-      'deferred invalidation applies before non-Flight production resume')
+check('appliedPointSetSignature = signature ?? string.Empty;' in preload,
+      'successful invalidation advances applied signature')
+check('string.Equals(appliedPointSetSignature, pointSetSignature' in preload,
+      'non-Flight refresh can clear reverted Flight churn without rebuild')
+check('ApplyPointSetInvalidationLocked(pointSetSignature);' in preload,
+      'non-Flight changed point-set invalidates exactly through single helper')
+check('ApplyDeferredPointSetInvalidation' not in preload,
+      'stale first non-Flight Tick cannot apply last Flight point-set')
+check('flightSuspended || HighLogic.LoadedSceneIsFlight' not in preload,
+      'stale flightSuspended latch is not used for scene classification')
 
 update_start = preload.find('internal void UpdatePoints(')
 update_end = preload.find('static int ComparePreloadPoints', update_start)
 update_slice = preload[update_start:update_end] if update_start >= 0 and update_end > update_start else ''
 check('InvalidateAutomaticCompletion(plan);' not in update_slice,
-      'UpdatePoints no longer revokes completion directly during Flight-sensitive update')
-check('ApplyPointSetInvalidationLocked();' in update_slice,
-      'non-Flight UpdatePoints still invalidates immediately')
+      'UpdatePoints never directly revokes completion')
+check('ApplyPointSetInvalidationLocked(pointSetSignature);' in update_slice,
+      'UpdatePoints uses coalesced non-Flight invalidation helper')
 
 standby_start = nav.find('static void DrawTerrainStandbyBackground(Rect rect)')
 standby_end = nav.find('static void DrawCleanBackground(Rect rect)', standby_start)
