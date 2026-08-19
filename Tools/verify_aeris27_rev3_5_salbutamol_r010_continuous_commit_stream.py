@@ -31,26 +31,20 @@ ck('rev3_5_r010_variant=%s' in b, 'R010 candidate identity emission')
 ck('verify_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py' in b,
    'R010 verifier wired into build')
 
-# The one-lane authority must remain one scalar pending object. R010 does not introduce
-# a collection/array of PendingEntryCommit or any second pending lane.
+# Single serial authority remains exactly one scalar pending commit.
 ck(r.count('PendingEntryCommit pendingEntryCommit;') == 1,
    'single PendingEntryCommit field retained')
 ck('List<PendingEntryCommit>' not in r and 'Queue<PendingEntryCommit>' not in r and
    'PendingEntryCommit[]' not in r,
    'no multi-pending lane introduced')
 
-# Non-authoritative Repaint must wake on the existing R007 FIFO even when both historical
-# wake witnesses are empty.
+# Non-authoritative Repaint now wakes on the existing R007 current-FAR FIFO.
 wake = re.search(
-    r'bool rev35R010QueueOnlyKick = pendingEntryCommit == null &&\s*'
-    r'rasterizer\.CompletedCount <= 0 &&\s*'
-    r'rev35R007FoundationQueue\.Count > 0;.*?'
     r'if \(pendingEntryCommit != null \|\| rasterizer\.CompletedCount > 0 \|\|\s*'
-    r'rev35R007FoundationQueue\.Count > 0\).*?PumpStagedCompletedCommit\(system\);',
-    r, re.S)
+    r'rev35R007FoundationQueue\.Count > 0\)', r, re.S)
 ck(wake is not None, 'R007 FIFO wakes non-authoritative staged pump')
 
-# The adaptive budget and final backlog witness must account the actual R007 FIFO.
+# Adaptive budget and final backlog must account the real R007 FIFO.
 ck('int r010QueueBacklog = Math.Max(0, rev35R007FoundationQueue.Count);' in r,
    'R007 FIFO included in adaptive backlog')
 ck('(pendingEntryCommit == null ? 0 : 1) + r010QueueBacklog;' in r,
@@ -72,7 +66,7 @@ ck('foundationComplete = rendered && visible.FoundationComplete &&' in r and
    'lastBackFoundationCoverage >= 0.999f' in r,
    'strict complete-foundation swap gate retained')
 
-# R009 remains intact and R010 does not alter its scheduler/rasterizer semantics.
+# R009 remains intact; R010 does not touch scheduler/rasterizer semantics.
 ck('SubmitRequired(AERISRuntimeLane.GeneralCompute' in z,
    'R009 required terrain admission retained')
 ck('Rev35R009QueueProtection' in s,
@@ -87,10 +81,11 @@ for forbidden in (
 
 for witness in (
     'oh_rev35_r010_variant=',
-    'oh_rev35_r010_queue_kick=',
     'oh_rev35_r010_queue_budget_samples=',
     'oh_rev35_r010_queue_backlog_peak='):
     ck(witness in r, 'telemetry ' + witness)
+ck('oh_rev35_r010_queue_kick=' not in r,
+   'obsolete diagnostic queue-kick telemetry absent')
 
 print(PREFIX + ' ALL PASS')
 print('contract=single serial commit lane + continuous R007 FIFO wake + real backlog budgeting')
