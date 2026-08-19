@@ -76,16 +76,11 @@ preload, _ = replace_once(preload, helper_anchor, helper_new,
                           'R012 point invalidation apply helper')
 
 # R012-B: before the tile system has admitted the current solid body, renderer.Draw is not
-# called at all. The old blue standby therefore looked like a valid all-water map even while
-# the inherited AERIS24 black-reload authority could not yet run. Make that pre-render cold
-# init state explicit without changing ordinary Partial/BUILDING or renderer semantics.
-standby_old = '''        static void DrawTerrainStandbyBackground(Rect rect)\n        {\n            // Gate 5 Candidate 2: an explicit OFF->ON rebuild may legitimately have no\n            // reusable GPU FRONT because Terrain OFF must release presentation resources.\n            // Use the normal water-map background instead of flashing the near-black LAND\n            // focus background while the first exact FRONT is rebuilt.\n            FillRect(rect, new Color(0.025f, 0.145f, 0.285f, 1f));\n        }\n'''
-standby_new = '''        static void DrawTerrainStandbyBackground(Rect rect)\n        {\n            // R012 cold-start recovery: a blue water-map surface is valid cartography and\n            // must never stand in for an uncommitted/pre-render terrain state. Exact or\n            // continuity FRONT textures still draw over this neutral reload backdrop.\n            FillRect(rect, new Color(0.015f, 0.025f, 0.035f, 1f));\n        }\n'''
-nav, _ = replace_once(nav, standby_old, standby_new,
-                      'R012 cold-start black standby backdrop')
-
+# called at all. The inherited AERIS24 black-reload overlay therefore cannot yet run. Keep
+# the ordinary blue standby contract unchanged, but explicitly overwrite only this cold-init
+# state with the same clean black reload surface used by AERIS24.
 cold_init_anchor = '''            AERISTerrainTileSystem tileSystem = terrain == null ? null :\n                terrain.DisplayTiles;\n            AERISTerrainGpuDrawState gpuState = AERISTerrainGpuDrawState.None;\n'''
-cold_init_new = '''            AERISTerrainTileSystem tileSystem = terrain == null ? null :\n                terrain.DisplayTiles;\n            bool terrainPresentationRequested = settings == null ||\n                (settings.TerrainGpuMode != AERISTerrainGpuMode.Off &&\n                 settings.PerformanceGpuAccelerationEnabled);\n            bool solidBodyColdInit = !hazardOnly && terrainPresentationRequested &&\n                tileSystem != null && !tileSystem.BodySupported && vessel != null &&\n                vessel.mainBody != null &&\n                AERISTerrainTileSystem.BodyHasSolidSurface(vessel.mainBody);\n            if (solidBodyColdInit)\n            {\n                DrawLabel(plot, "RELOADING ND\\nTERRAIN INIT", centerStyle,\n                    new Color(0.72f, 0.86f, 0.92f, 1f));\n                return;\n            }\n            AERISTerrainGpuDrawState gpuState = AERISTerrainGpuDrawState.None;\n'''
+cold_init_new = '''            AERISTerrainTileSystem tileSystem = terrain == null ? null :\n                terrain.DisplayTiles;\n            bool terrainPresentationRequested = settings == null ||\n                (settings.TerrainGpuMode != AERISTerrainGpuMode.Off &&\n                 settings.PerformanceGpuAccelerationEnabled);\n            bool solidBodyColdInit = !hazardOnly && terrainPresentationRequested &&\n                tileSystem != null && !tileSystem.BodySupported && vessel != null &&\n                vessel.mainBody != null &&\n                AERISTerrainTileSystem.BodyHasSolidSurface(vessel.mainBody);\n            if (solidBodyColdInit)\n            {\n                DrawCleanBackground(plot);\n                DrawLabel(plot, "RELOADING ND\\nTERRAIN INIT", centerStyle,\n                    new Color(0.72f, 0.86f, 0.92f, 1f));\n                return;\n            }\n            AERISTerrainGpuDrawState gpuState = AERISTerrainGpuDrawState.None;\n'''
 nav, _ = replace_once(nav, cold_init_anchor, cold_init_new,
                       'R012 pre-render solid-body terrain init state')
 
@@ -125,8 +120,8 @@ print('observer_r011=' + R011)
 print('r012=' + R012)
 print('preload_flight_point_updates=RAM-only latest snapshot; completion remains applied-signature stable')
 print('preload_nonflight_refresh=invalidates once only when latest signature differs from applied signature')
-print('nd_cold_start=near-black standby + explicit RELOADING ND / TERRAIN INIT before renderer admission')
+print('nd_cold_start=DrawCleanBackground + explicit RELOADING ND / TERRAIN INIT before renderer admission')
 print('cold_init_eligibility=solid body + terrain presentation requested + BodySupported pending')
-print('ordinary_partial_building=unchanged; AERIS24 black reload preserved')
+print('ordinary_standby_and_partial_building=unchanged; AERIS24 black reload preserved')
 print('renderer_change=0 worker_change=0 scheduler_change=0 rasterizer_change=0')
 print('quality_change=0 10Hz_change=0 exact_range_change=0 publication_authority_change=0')
