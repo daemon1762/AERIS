@@ -74,8 +74,12 @@ check('new Color(0.015f, 0.025f, 0.035f, 1f)' in standby_slice,
       'cold-start standby uses near-black reload backdrop')
 check('new Color(0.025f, 0.145f, 0.285f, 1f)' not in standby_slice,
       'valid water-map blue is not used as uncommitted standby')
-check('bool solidBodyColdInit = !hazardOnly && tileSystem != null &&' in nav,
-      'pre-render cold-init gate is explicit')
+check('bool terrainPresentationRequested = settings == null ||' in nav and
+      'settings.TerrainGpuMode != AERISTerrainGpuMode.Off' in nav and
+      'settings.PerformanceGpuAccelerationEnabled' in nav,
+      'cold-init requires terrain GPU presentation to be requested')
+check('bool solidBodyColdInit = !hazardOnly && terrainPresentationRequested &&' in nav,
+      'pre-render cold-init gate is explicit and excludes hazard-only path')
 check('!tileSystem.BodySupported' in nav and
       'AERISTerrainTileSystem.BodyHasSolidSurface(vessel.mainBody)' in nav,
       'cold-init gate distinguishes expected solid terrain from unsupported body')
@@ -85,6 +89,8 @@ check('if (solidBodyColdInit)' in nav and nav.find('if (solidBodyColdInit)') < n
       'cold-init presentation occurs before renderer admission')
 check('"TERRAIN GPU BUILDING " + percent + "%"' in nav,
       'ordinary renderer Partial/BUILDING presentation remains unchanged')
+check('bool ndReloading =' in nav and 'terrainTileRenderer.Reloading' in nav,
+      'inherited AERIS24 renderer black-reload UI remains present')
 
 for token in ('ndReloadGeneration++;', 'frontReloadGeneration = ndReloadGeneration;',
               'if (Reloading) return false;', 'oh_nd_reload='):
