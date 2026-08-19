@@ -63,13 +63,11 @@ ck(V.get('NAME') == name,'runtime identity is Operation Health Step 2')
 phase3='EPI'+'NEPHRINE'
 phase4='ATRO'+'PINE'
 phase5='ADE'+'NOSINE'
-r011='OH REV3.5 SALBUTAMOL SULFATE R011 TURNING VIEW CHURN OBSERVER'
 ck(('OPERATION HEALTH STEP 2 MOTION CONTENT SPLIT COASTAL EDGE REFINEMENT' in B) or
    (('OPERATION HEALTH PHASE 3 '+phase3+' GPU VERTEX PROJECTION') in B) or
    (('AERIS25 OPERATION HEALTH PHASE 4 '+phase4+' GPU DYNAMIC TERRAIN COLOUR') in B) or
-   (('AERIS25 OPERATION HEALTH PHASE 5 '+phase5+' PERSISTENT PRESENTATION BATCHING') in B) or
-   (r011 in B),
-   'Ubuntu build identifies Step 2 parent or approved Phase 3/4/5/R011 successor')
+   (('AERIS25 OPERATION HEALTH PHASE 5 '+phase5+' PERSISTENT PRESENTATION BATCHING') in B),
+   'Ubuntu build identifies Step 2 parent or approved Phase 3/4/5 successor')
 # Pure numerical guard for the presentation crossing contract. This mirrors the C# bounds
 # and proves every opposite-sign edge stays inside its source edge without a topology flip.
 def crossing(w0,w1,s0,s1):
