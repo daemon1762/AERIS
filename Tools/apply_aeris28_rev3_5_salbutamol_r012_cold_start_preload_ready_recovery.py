@@ -10,6 +10,7 @@ P = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs'
 N = ROOT / 'Source/AERISFlightControl/UI/AERISNavigationDisplay.cs'
 B = ROOT / 'build_ubuntu.sh'
 PRE = ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'
+STEP2 = ROOT / 'Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py'
 PREFIX = '[AERIS28 REV3.5 SALBUTAMOL SULFATE R012 COLD START PRELOAD READY RECOVERY]'
 R010 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R010_CONTINUOUS_COMMIT_STREAM'
 R011 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R011_TURNING_VIEW_CHURN_OBSERVER'
@@ -29,7 +30,7 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1), True
 
 
-for path in (R, O, P, N, B, PRE):
+for path in (R, O, P, N, B, PRE, STEP2):
     if not path.is_file():
         fail('required file missing: ' + str(path.relative_to(ROOT)))
 
@@ -39,6 +40,7 @@ preload = P.read_text()
 nav = N.read_text()
 build = B.read_text()
 prebuild = PRE.read_text()
+step2 = STEP2.read_text()
 
 if R010 not in renderer:
     fail('R010 generated parent required before R012 overlay')
@@ -86,6 +88,15 @@ standby_new = '''        static void DrawTerrainStandbyBackground(Rect rect)\n  
 nav, _ = replace_once(nav, standby_old, standby_new,
                       'R012 cold-start black standby backdrop')
 
+# The inherited Step2 gate encoded the old presentation wording as if it were part of the
+# safety contract. R012 changes only the diagnostic/backdrop semantics; the real contract
+# remains present && requestedViewReady. Accept either the historical wording or R012's
+# explicit reload wording so older parent reconstruction stays verifiable.
+step2_old = "ck('present && requestedViewReady' in R and 'TERRAIN GPU BUILDING ' in N,'Hotfix4 stale-FRONT loading contract remains intact')\n"
+step2_new = "ck('present && requestedViewReady' in R and (('TERRAIN GPU BUILDING ' in N) or ('RELOADING ND ' in N)),'Hotfix4/R012 stale-FRONT loading contract remains intact')\n"
+step2, _ = replace_once(step2, step2_old, step2_new,
+                        'R012 inherited Step2 reload wording successor')
+
 r011_var = 'REV3_5_R011_VARIANT="' + R011 + '"\n'
 r012_var = r011_var + 'REV3_5_R012_VARIANT="' + R012 + '"\n'
 build, _ = replace_once(build, r011_var, r012_var,
@@ -116,6 +127,7 @@ P.write_text(preload)
 N.write_text(nav)
 B.write_text(build)
 PRE.write_text(prebuild)
+STEP2.write_text(step2)
 print(PREFIX + ' APPLY PASS')
 print('parent_r010=' + R010)
 print('observer_r011=' + R011)
@@ -123,5 +135,6 @@ print('r012=' + R012)
 print('preload_flight_point_updates=latest snapshot retained; invalidation deferred/coalesced')
 print('preload_nonflight_resume=one deferred completion reevaluation before production resumes')
 print('nd_cold_start=near-black standby + explicit RELOADING ND label')
+print('inherited_step2_gate=accepts historical BUILDING or explicit R012 RELOADING wording')
 print('renderer_change=0 worker_change=0 scheduler_change=0 rasterizer_change=0')
 print('quality_change=0 10Hz_change=0 exact_range_change=0 publication_authority_change=0')
