@@ -18,13 +18,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Python syntax
+      - name: Python syntax and compatibility router
         run: |
           set -euo pipefail
           python3 -m py_compile \
             Tools/apply_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py \
             Tools/verify_aeris27_rev3_5_salbutamol_r010_continuous_commit_stream.py \
-            Tools/prepare_aeris27_rev3_5_salbutamol_r010_runtime.py
+            Tools/prepare_aeris27_rev3_5_salbutamol_r010_runtime.py \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r009_runtime.py
+          grep -Fq 'prepare_aeris27_rev3_5_salbutamol_r010_runtime.py' \
+            Tools/prepare_aeris27_rev3_5_salbutamol_r009_runtime.py
           rm -rf Tools/__pycache__
 
       - name: Reconstruct accepted lineage through R005
