@@ -10,7 +10,6 @@ P = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs'
 N = ROOT / 'Source/AERISFlightControl/UI/AERISNavigationDisplay.cs'
 B = ROOT / 'build_ubuntu.sh'
 PRE = ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'
-STEP2 = ROOT / 'Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py'
 PREFIX = '[AERIS28 REV3.5 SALBUTAMOL SULFATE R012 COLD START PRELOAD READY RECOVERY]'
 R010 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R010_CONTINUOUS_COMMIT_STREAM'
 R011 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R011_TURNING_VIEW_CHURN_OBSERVER'
@@ -30,7 +29,7 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1), True
 
 
-for path in (R, O, P, N, B, PRE, STEP2):
+for path in (R, O, P, N, B, PRE):
     if not path.is_file():
         fail('required file missing: ' + str(path.relative_to(ROOT)))
 
@@ -40,7 +39,6 @@ preload = P.read_text()
 nav = N.read_text()
 build = B.read_text()
 prebuild = PRE.read_text()
-step2 = STEP2.read_text()
 
 if R010 not in renderer:
     fail('R010 generated parent required before R012 overlay')
@@ -73,26 +71,19 @@ helper_new = '''        void ApplyPointSetInvalidationLocked(string signature)\n
 preload, _ = replace_once(preload, helper_anchor, helper_new,
                           'R012 point invalidation apply helper')
 
-# R012-B: the renderer already owns exact FRONT/READY authority. The ND standby surface
-# must therefore communicate an unavailable/reloading presentation, not masquerade as a
-# valid all-water map. Complete or latched FRONT textures still draw over this backdrop.
-partial_old = '''                DrawLabel(plot, "TERRAIN GPU BUILDING " + percent + "%", centerStyle,\n                    new Color(0.58f, 0.76f, 0.82f, 1f));\n'''
-partial_new = '''                DrawLabel(plot, "RELOADING ND " + percent + "%", centerStyle,\n                    new Color(0.58f, 0.76f, 0.82f, 1f));\n'''
-nav, _ = replace_once(nav, partial_old, partial_new,
-                      'R012 explicit ND reload label')
-
+# R012-B: before the tile system has admitted the current solid body, renderer.Draw is not
+# called at all. The old blue standby therefore looked like a valid all-water map even while
+# the inherited AERIS24 black-reload authority could not yet run. Make that pre-render cold
+# init state explicit without changing ordinary Partial/BUILDING or renderer semantics.
 standby_old = '''        static void DrawTerrainStandbyBackground(Rect rect)\n        {\n            // Gate 5 Candidate 2: an explicit OFF->ON rebuild may legitimately have no\n            // reusable GPU FRONT because Terrain OFF must release presentation resources.\n            // Use the normal water-map background instead of flashing the near-black LAND\n            // focus background while the first exact FRONT is rebuilt.\n            FillRect(rect, new Color(0.025f, 0.145f, 0.285f, 1f));\n        }\n'''
-standby_new = '''        static void DrawTerrainStandbyBackground(Rect rect)\n        {\n            // R012 cold-start recovery: a blue water-map surface is valid cartography and\n            // must never stand in for an uncommitted requested view. Until an exact or\n            // continuity FRONT is presented, use the explicit near-black reload backdrop.\n            // The renderer's complete-coverage and FRONT publication authority is unchanged.\n            FillRect(rect, new Color(0.015f, 0.025f, 0.035f, 1f));\n        }\n'''
+standby_new = '''        static void DrawTerrainStandbyBackground(Rect rect)\n        {\n            // R012 cold-start recovery: a blue water-map surface is valid cartography and\n            // must never stand in for an uncommitted/pre-render terrain state. Exact or\n            // continuity FRONT textures still draw over this neutral reload backdrop.\n            FillRect(rect, new Color(0.015f, 0.025f, 0.035f, 1f));\n        }\n'''
 nav, _ = replace_once(nav, standby_old, standby_new,
                       'R012 cold-start black standby backdrop')
 
-# The inherited Step2 gate encoded the old presentation wording as if it were part of the
-# safety contract. R012 changes only diagnostic/backdrop semantics; the actual safety
-# contract remains present && requestedViewReady.
-step2_old = "ck('present && requestedViewReady' in R and 'TERRAIN GPU BUILDING ' in N,'Hotfix4 stale-FRONT loading contract remains intact')\n"
-step2_new = "ck('present && requestedViewReady' in R and (('TERRAIN GPU BUILDING ' in N) or ('RELOADING ND ' in N)),'Hotfix4/R012 stale-FRONT loading contract remains intact')\n"
-step2, _ = replace_once(step2, step2_old, step2_new,
-                        'R012 inherited Step2 reload wording successor')
+cold_init_anchor = '''            AERISTerrainTileSystem tileSystem = terrain == null ? null :\n                terrain.DisplayTiles;\n            AERISTerrainGpuDrawState gpuState = AERISTerrainGpuDrawState.None;\n'''
+cold_init_new = '''            AERISTerrainTileSystem tileSystem = terrain == null ? null :\n                terrain.DisplayTiles;\n            bool solidBodyColdInit = !hazardOnly && tileSystem != null &&\n                !tileSystem.BodySupported && vessel != null && vessel.mainBody != null &&\n                AERISTerrainTileSystem.BodyHasSolidSurface(vessel.mainBody);\n            if (solidBodyColdInit)\n            {\n                DrawLabel(plot, "RELOADING ND\\nTERRAIN INIT", centerStyle,\n                    new Color(0.72f, 0.86f, 0.92f, 1f));\n                return;\n            }\n            AERISTerrainGpuDrawState gpuState = AERISTerrainGpuDrawState.None;\n'''
+nav, _ = replace_once(nav, cold_init_anchor, cold_init_new,
+                      'R012 pre-render solid-body terrain init state')
 
 r011_var = 'REV3_5_R011_VARIANT="' + R011 + '"\n'
 r012_var = r011_var + 'REV3_5_R012_VARIANT="' + R012 + '"\n'
@@ -124,14 +115,13 @@ P.write_text(preload)
 N.write_text(nav)
 B.write_text(build)
 PRE.write_text(prebuild)
-STEP2.write_text(step2)
 print(PREFIX + ' APPLY PASS')
 print('parent_r010=' + R010)
 print('observer_r011=' + R011)
 print('r012=' + R012)
 print('preload_flight_point_updates=RAM-only latest snapshot; completion remains applied-signature stable')
 print('preload_nonflight_refresh=invalidates once only when latest signature differs from applied signature')
-print('nd_cold_start=near-black standby + explicit RELOADING ND label')
-print('inherited_step2_gate=accepts historical BUILDING or explicit R012 RELOADING wording')
+print('nd_cold_start=near-black standby + explicit RELOADING ND / TERRAIN INIT before renderer admission')
+print('ordinary_partial_building=unchanged')
 print('renderer_change=0 worker_change=0 scheduler_change=0 rasterizer_change=0')
 print('quality_change=0 10Hz_change=0 exact_range_change=0 publication_authority_change=0')
