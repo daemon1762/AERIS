@@ -49,41 +49,29 @@ def block_bounds(text, op, label):
         c = text[i]
         n = text[i + 1] if i + 1 < len(text) else ''
         if state == 'code':
-            if c == '/' and n == '/':
-                state = 'line'; i += 2; continue
-            if c == '/' and n == '*':
-                state = 'block'; i += 2; continue
-            if c == '"':
-                state = 'string'; i += 1; continue
-            if c == "'":
-                state = 'char'; i += 1; continue
-            if c == '{':
-                depth += 1
+            if c == '/' and n == '/': state = 'line'; i += 2; continue
+            if c == '/' and n == '*': state = 'block'; i += 2; continue
+            if c == '"': state = 'string'; i += 1; continue
+            if c == "'": state = 'char'; i += 1; continue
+            if c == '{': depth += 1
             elif c == '}':
                 depth -= 1
-                if depth == 0:
-                    return op, i + 1
-            i += 1
-            continue
+                if depth == 0: return op, i + 1
+            i += 1; continue
         if state == 'line':
             if c == '\n': state = 'code'
-            i += 1
-            continue
+            i += 1; continue
         if state == 'block':
-            if c == '*' and n == '/':
-                state = 'code'; i += 2; continue
-            i += 1
-            continue
+            if c == '*' and n == '/': state = 'code'; i += 2; continue
+            i += 1; continue
         if state == 'string':
             if c == '\\': i += 2; continue
             if c == '"': state = 'code'
-            i += 1
-            continue
+            i += 1; continue
         if state == 'char':
             if c == '\\': i += 2; continue
             if c == "'": state = 'code'
-            i += 1
-            continue
+            i += 1; continue
     fail('block close missing: ' + label)
 
 
@@ -93,8 +81,6 @@ def indent_block(text, spaces=4):
 
 
 def statement_end(text, start):
-    # PumpStagedCompletedCommit is an ordinary C# invocation. Find its terminating
-    # semicolon while respecting nested parentheses and strings.
     depth = 0
     state = 'code'
     i = start
@@ -106,12 +92,9 @@ def statement_end(text, start):
             if c == '/' and n == '*': state = 'block'; i += 2; continue
             if c == '"': state = 'string'; i += 1; continue
             if c == "'": state = 'char'; i += 1; continue
-            if c == '(':
-                depth += 1
-            elif c == ')':
-                depth = max(0, depth - 1)
-            elif c == ';' and depth == 0:
-                return i + 1
+            if c == '(': depth += 1
+            elif c == ')': depth = max(0, depth - 1)
+            elif c == ';' and depth == 0: return i + 1
             i += 1; continue
         if state == 'line':
             if c == '\n': state = 'code'
@@ -157,8 +140,8 @@ if not already:
     identity_old = '        const string Rev35R010Variant = "' + R010 + '";\n'
     identity_new = identity_old + (
         '        // ' + R014 + ': worker completion advances the existing single staged\n'
-        '        // commit lane first; full content reconcile follows only real Entry\n'
-        '        // publication, true geometry change, or a no-progress safety retry.\n'
+        '        // commit lane immediately; published Entries are coalesced into the\n'
+        '        // inherited 0.20 s content-maintenance cadence before full reconcile.\n'
         '        const string Rev35R014Variant = "' + R014 + '";\n')
     renderer, _ = replace_once(renderer, identity_old, identity_new,
                                'R014 renderer identity')
@@ -171,16 +154,16 @@ if not already:
         long operationHealthRev35R014PublicationEvents;
         long operationHealthRev35R014FullReconciles;
         long operationHealthRev35R014WorkerOnlySkips;
-        long operationHealthRev35R014RetryProgressSkips;
+        long operationHealthRev35R014PublicationDeferrals;
+        long operationHealthRev35R014PublicationReconciles;
         long operationHealthRev35R014RetryReconciles;
 '''
     renderer, _ = replace_once(renderer, field_old, field_new,
                                'R014 publication/reconcile fields')
 
-    # Publication authority: Phase6_003 permits Finalize only on authoritative content work.
-    # Increment the R014 serial only on the already successful AddEntry/dirty path. This is
-    # deliberately independent of gpuContentRevision because dirty batches coalesce until
-    # a FRONT swap clears gpuContentDirty.
+    # Phase6_003 already owns publication legality. Observe only a successful Finalize path;
+    # do not create a second publication route. A dedicated serial is used instead of
+    # gpuContentRevision because the latter intentionally coalesces dirty signals until FRONT.
     f0, f1 = method_bounds(renderer, '        bool FinalizePendingEntryCommit(')
     finalize = renderer[f0:f1]
     if finalize.count('AddEntry(entry);') != 1:
@@ -209,14 +192,19 @@ if not already:
     if draw.count('system.CaptureVisible(') != 1:
         fail('R014 expected exactly one CaptureVisible before overlay')
 
-    # Declare a per-Draw witness so later prune work follows only a real full reconcile.
-    tick_decl = '''            bool contentTickRequired = contentGeometryChanged || workerResultReady ||
+    # A publication that was deferred by the 0.20 s batching rail must itself keep the
+    # authoritative content block awake even after rasterizer workerResultReady goes false.
+    tick_old = '''            bool contentTickRequired = contentGeometryChanged || workerResultReady ||
                 contentRetryDue;
 '''
-    tick_decl_new = tick_decl + (
-        '            bool rev35R014ReconcileRan = false;\n')
-    draw, _ = replace_once(draw, tick_decl, tick_decl_new,
-                           'R014 reconcile witness declaration')
+    tick_new = '''            bool rev35R014PublicationPendingBeforeTick =
+                rev35R014PublicationSerial != rev35R014ReconciledPublicationSerial;
+            bool contentTickRequired = contentGeometryChanged || workerResultReady ||
+                contentRetryDue || rev35R014PublicationPendingBeforeTick;
+            bool rev35R014ReconcileRan = false;
+'''
+    draw, _ = replace_once(draw, tick_old, tick_new,
+                           'R014 publication wake + reconcile witness')
 
     content_if = draw.find('            if (contentTickRequired)\n            {')
     if content_if < 0:
@@ -238,32 +226,33 @@ if not already:
             fail('R014 full reconcile token missing downstream: ' + token)
 
     gate = '''
-                // R014 publication gate: worker readiness is permission to advance the
-                // existing R010 staged lane, not permission to rescan the entire visible
-                // tile set. A completed Entry publication is the normal full-reconcile
-                // trigger. The historical 0.20 s retry remains a fail-safe only when no
-                // staged/raster/FAR-queue progress is outstanding.
-                bool rev35R014ProgressOutstanding = pendingEntryCommit != null ||
-                    rasterizer.PendingCount > 0 || rasterizer.CompletedCount > 0 ||
-                    rev35R007FoundationQueue.Count > 0;
+                // R014 publication batching: worker readiness advances only the existing
+                // R010 staged lane. Full geographic/request/resolve/foundation work is
+                // immediate for a true geometry change, otherwise it is capped by the
+                // inherited 0.20 s content-maintenance deadline. Multiple Entry publications
+                // inside that window collapse into one reconcile without losing the newest
+                // publication serial.
                 bool rev35R014PublicationPending =
                     rev35R014PublicationSerial != rev35R014ReconciledPublicationSerial;
-                bool rev35R014RetryNeedsReconcile = contentRetryDue &&
-                    !rev35R014ProgressOutstanding;
+                bool rev35R014ContentCadenceDue =
+                    presentationNow >= nextContentMaintenanceRealtime;
                 bool rev35R014ReconcileRequired = contentGeometryChanged ||
-                    rev35R014PublicationPending || rev35R014RetryNeedsReconcile;
+                    (rev35R014ContentCadenceDue &&
+                     (rev35R014PublicationPending || contentRetryDue));
 
                 if (!rev35R014ReconcileRequired)
                 {
                     operationHealthRev35R014WorkerOnlySkips++;
-                    if (contentRetryDue)
-                        operationHealthRev35R014RetryProgressSkips++;
+                    if (rev35R014PublicationPending)
+                        operationHealthRev35R014PublicationDeferrals++;
                 }
                 else
                 {
                     rev35R014ReconcileRan = true;
                     operationHealthRev35R014FullReconciles++;
-                    if (rev35R014RetryNeedsReconcile)
+                    if (rev35R014PublicationPending)
+                        operationHealthRev35R014PublicationReconciles++;
+                    if (contentRetryDue)
                         operationHealthRev35R014RetryReconciles++;
 '''
     gated_expensive = gate + indent_block(expensive, 4) + (
@@ -273,7 +262,8 @@ if not already:
     content_block = content_block[:pump_end] + gated_expensive
     draw = draw[:cb0 + 1] + content_block + draw[cb1 - 1:]
 
-    # Pruning is part of full content reconciliation, not staged-progress pumping.
+    # Pruning belongs to a full content reconcile. Worker-only staged progress must not pay
+    # the old full prune cost at every authoritative tick.
     prune_old = '''            EnsureResources(plot, effectiveMode, currentPreset, virtualDetail);
             if (contentTickRequired)
             {
@@ -289,7 +279,7 @@ if not already:
             }
 '''
     draw, _ = replace_once(draw, prune_old, prune_new,
-                           'R014 prune publication gate')
+                           'R014 prune batching gate')
     renderer = renderer[:d0] + draw + renderer[d1:]
 
     telemetry_old = (
@@ -302,7 +292,8 @@ if not already:
         '                "; oh_rev35_r014_publications=" + operationHealthRev35R014PublicationEvents +\n'
         '                "; oh_rev35_r014_full_reconcile=" + operationHealthRev35R014FullReconciles +\n'
         '                "; oh_rev35_r014_worker_only_skip=" + operationHealthRev35R014WorkerOnlySkips +\n'
-        '                "; oh_rev35_r014_retry_progress_skip=" + operationHealthRev35R014RetryProgressSkips +\n'
+        '                "; oh_rev35_r014_publication_defer=" + operationHealthRev35R014PublicationDeferrals +\n'
+        '                "; oh_rev35_r014_publication_reconcile=" + operationHealthRev35R014PublicationReconciles +\n'
         '                "; oh_rev35_r014_retry_reconcile=" + operationHealthRev35R014RetryReconciles +\n')
     renderer, _ = replace_once(renderer, telemetry_old, telemetry_new,
                                'R014 telemetry publication')
@@ -361,10 +352,11 @@ print('observer_r011=' + R011)
 print('bugfix_parent_r012=' + R012)
 print('rejected_r013_inherited=0')
 print('r014=' + R014)
-print('worker_completion=R010 staged pump only until real Entry publication')
+print('worker_completion=R010 staged pump immediate; full reconcile not worker-triggered')
 print('publication_authority=successful FinalizePendingEntryCommit serial')
-print('full_reconcile=geometry OR publication OR no-progress 0.20s safety retry')
-print('retry_progress=skip full requested/resolve/foundation/prune while work is outstanding')
+print('publication_batching=inherited ContentMaintenanceRetrySeconds 0.20s maximum 5Hz')
+print('geometry_change=immediate full reconcile')
+print('deferred_publication=wakes content path until newest serial is reconciled')
 print('r008_current_request_and_far_first=retained inside full reconcile')
 print('rev009_heading_planner=6deg cumulative retained')
 print('worker_change=0 scheduler_change=0 rasterizer_change=0 commit_lane_change=0')
