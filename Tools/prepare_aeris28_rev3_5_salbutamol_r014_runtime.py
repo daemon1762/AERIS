@@ -94,7 +94,7 @@ def reconstruct_r005():
 
 
 parser = argparse.ArgumentParser(
-    description='Reconstruct R010 formal runtime, retain R011/R012, skip rejected R013, overlay R014 publication-gated content reconcile, verify, build and install.')
+    description='Reconstruct R010 formal runtime, retain R011/R012, skip rejected R013, overlay R014 publication-gated 5Hz content reconcile, verify, build and install.')
 parser.add_argument('ksp_path')
 args = parser.parse_args()
 ksp = Path(args.ksp_path).expanduser().resolve()
@@ -139,8 +139,8 @@ run([sys.executable, ROOT / 'Tools/verify_aeris28_rev3_5_salbutamol_r011_turning
 run([sys.executable, ROOT / 'Tools/apply_aeris28_rev3_5_salbutamol_r012_cold_start_preload_ready_recovery.py'])
 run([sys.executable, ROOT / 'Tools/verify_aeris28_rev3_5_salbutamol_r012_cold_start_preload_ready_recovery.py'])
 
-# R013 was a measurement experiment whose CaptureVisible reduction did not reduce the
-# dominant per-content-tick resolve/reconcile work. It is deliberately not reconstructed.
+# R013 proved CaptureVisible itself was not the dominant cost: 386 snapshot reuses still
+# left the ~150-entry Resolve/reconcile pass on each content tick. Do not inherit it.
 if has(R, R013) or 'REV3_5_R013_VARIANT=' in B.read_text():
     raise SystemExit(RED + PREFIX + ' R013 REJECTED EXPERIMENT LEAKED INTO R014 PARENT' + RESET)
 
@@ -178,7 +178,8 @@ checks = [
     (not marker_in_bytes(dll, R013), 'DLL excludes rejected R013 marker'),
     (marker_in_bytes(dll, 'oh_rev35_r014_publications='), 'DLL embeds R014 publication telemetry'),
     (marker_in_bytes(dll, 'oh_rev35_r014_full_reconcile='), 'DLL embeds R014 reconcile telemetry'),
-    (marker_in_bytes(dll, 'oh_rev35_r014_worker_only_skip='), 'DLL embeds R014 worker-only telemetry'),
+    (marker_in_bytes(dll, 'oh_rev35_r014_publication_defer='), 'DLL embeds R014 batching telemetry'),
+    (marker_in_bytes(dll, 'oh_rev35_r014_publication_reconcile='), 'DLL embeds R014 publication-reconcile telemetry'),
     (not marker_in_bytes(dll, 'WaitManagedPreparation') and
      not marker_in_bytes(dll, 'ResidentPreparedPresentation') and
      not marker_in_bytes(dll, 'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE'),
@@ -199,4 +200,4 @@ print('r013=REJECTED_NOT_INHERITED')
 print('r014=' + R014)
 print('dll_sha256=' + sha256(installed))
 print(YELLOW + 'R014 CONTRACT:' + RESET +
-      ' worker completion first advances the existing R010 single staged commit lane; full CaptureVisible/requested/R008 FAR-first resolve/foundation/prune runs only for true geometry change, successful Entry publication, or a 0.20s no-progress safety retry. R012 fixes, REV009 cumulative 6deg planning, fixed 10Hz/160km, complete coverage and Golden painter order remain unchanged.')
+      ' worker completion advances the existing R010 single staged commit lane immediately; actual Entry publications remain pending and are coalesced into the inherited ContentMaintenanceRetrySeconds=0.20s (maximum 5Hz) full CaptureVisible/requested/R008 FAR-first resolve/foundation/prune path. Geometry change is immediate. R012 fixes, REV009 cumulative 6deg planning, fixed 10Hz/160km, complete coverage and Golden painter order remain unchanged.')
