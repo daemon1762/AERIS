@@ -51,29 +51,27 @@ for token in ('ndReloadGeneration++;', 'frontReloadGeneration = ndReloadGenerati
     if token not in renderer:
         fail('black-reload successor contract missing before R012 overlay: ' + token)
 
-# R012-A: Flight must not revoke a completed non-Flight preload target merely because
-# the live current-position point moves. Keep the latest point snapshot, but defer the
-# expensive completion/generation invalidation until the first non-Flight Tick. Repeated
-# Flight updates coalesce into one reevaluation of the newest point set.
+# R012-A: distinguish the latest observed point-set from the point-set whose completion
+# state was actually applied. Flight can update the former freely without revoking READY.
+signature_old = '''        string pointSetSignature = string.Empty;\n        AERISTerrainPreloadMode mode;\n'''
+signature_new = '''        string pointSetSignature = string.Empty;\n        // R012: the latest observed registry/current-position signature is independent\n        // from the signature that last invalidated automatic completion.\n        string appliedPointSetSignature = string.Empty;\n        AERISTerrainPreloadMode mode;\n'''
+preload, _ = replace_once(preload, signature_old, signature_new,
+                          'R012 applied point signature field')
+
 field_old = '''        bool stateDirty;\n        bool flightSuspended;\n        bool operationInFlight;\n'''
-field_new = '''        bool stateDirty;\n        bool flightSuspended;\n        // R012: live Flight point updates are remembered immediately, while automatic\n        // completion invalidation is coalesced until non-Flight terrain production resumes.\n        bool deferredPointSetInvalidation;\n        bool operationInFlight;\n'''
+field_new = '''        bool stateDirty;\n        bool flightSuspended;\n        // Flight point churn is coalesced until an authoritative non-Flight point\n        // snapshot is observed. No preload generation is advanced while Flight is active.\n        bool deferredPointSetInvalidation;\n        bool operationInFlight;\n'''
 preload, _ = replace_once(preload, field_old, field_new,
                           'R012 deferred point invalidation field')
 
-points_old = '''                pointSetSignature = signature;\n                points.Clear();\n                points.AddRange(next);\n                foreach (BodyPlan plan in plans.Values)\n                {\n                    plan.PointCursor = 0;\n                    plan.PointScannedWithoutMiss = 0;\n                    plan.EstimatedTargetTiles = 0L;\n                    InvalidateAutomaticCompletion(plan);\n                    plan.Generation++;\n                }\n                stateDirty = true;\n'''
-points_new = '''                pointSetSignature = signature;\n                points.Clear();\n                points.AddRange(next);\n                // R012: Flight has strict read priority and cannot service preload work.\n                // Do not turn a genuinely completed preload status into 99.x% merely\n                // because the moving current-position point changes while production is\n                // suspended. Preserve the newest points and reevaluate once on return to\n                // a non-Flight scene. HighLogic covers the first Flight frame before\n                // Tick() has had a chance to latch flightSuspended.\n                if (flightSuspended || HighLogic.LoadedSceneIsFlight)\n                {\n                    deferredPointSetInvalidation = true;\n                    stateDirty = true;\n                    return;\n                }\n                ApplyPointSetInvalidationLocked();\n'''
+points_old = '''            lock (sync)\n            {\n                // Registry snapshots are refreshed periodically. Replaying an identical set\n                // must not advance Builder generations or cancel a slow in-progress tile.\n                if (string.Equals(pointSetSignature, signature,\n                    StringComparison.Ordinal)) return;\n                pointSetSignature = signature;\n                points.Clear();\n                points.AddRange(next);\n                foreach (BodyPlan plan in plans.Values)\n                {\n                    plan.PointCursor = 0;\n                    plan.PointScannedWithoutMiss = 0;\n                    plan.EstimatedTargetTiles = 0L;\n                    InvalidateAutomaticCompletion(plan);\n                    plan.Generation++;\n                }\n                stateDirty = true;\n            }\n'''
+points_new = '''            lock (sync)\n            {\n                bool flight = HighLogic.LoadedSceneIsFlight;\n                bool sameLatest = string.Equals(pointSetSignature, signature,\n                    StringComparison.Ordinal);\n                if (!sameLatest)\n                {\n                    pointSetSignature = signature;\n                    points.Clear();\n                    points.AddRange(next);\n                }\n\n                // R012: Flight terrain reads have strict priority and the preload builder\n                // cannot service newly introduced point targets. Remember only the newest\n                // snapshot; do not revoke a legitimately completed READY state in Flight.\n                if (flight)\n                {\n                    deferredPointSetInvalidation = !string.Equals(\n                        appliedPointSetSignature, pointSetSignature,\n                        StringComparison.Ordinal);\n                    if (!sameLatest) stateDirty = true;\n                    return;\n                }\n\n                // A non-Flight registry refresh is now authoritative. If Flight churn\n                // returned to the exact point-set that was already completed, clear the\n                // deferred signal without rebuilding anything. Otherwise invalidate once.\n                if (string.Equals(appliedPointSetSignature, pointSetSignature,\n                    StringComparison.Ordinal))\n                {\n                    deferredPointSetInvalidation = false;\n                    return;\n                }\n                ApplyPointSetInvalidationLocked(pointSetSignature);\n            }\n'''
 preload, _ = replace_once(preload, points_old, points_new,
-                          'R012 Flight point update deferral')
+                          'R012 Flight point update defer/coalesce')
 
 helper_anchor = '''        static int ComparePreloadPoints(AERISTerrainPreloadPoint a,\n            AERISTerrainPreloadPoint b)\n'''
-helper_new = '''        void ApplyPointSetInvalidationLocked()\n        {\n            foreach (BodyPlan plan in plans.Values)\n            {\n                plan.PointCursor = 0;\n                plan.PointScannedWithoutMiss = 0;\n                plan.EstimatedTargetTiles = 0L;\n                InvalidateAutomaticCompletion(plan);\n                plan.Generation++;\n            }\n            deferredPointSetInvalidation = false;\n            stateDirty = true;\n        }\n\n        void ApplyDeferredPointSetInvalidation()\n        {\n            lock (sync)\n            {\n                if (!deferredPointSetInvalidation) return;\n                ApplyPointSetInvalidationLocked();\n            }\n        }\n\n''' + helper_anchor
+helper_new = '''        void ApplyPointSetInvalidationLocked(string signature)\n        {\n            foreach (BodyPlan plan in plans.Values)\n            {\n                plan.PointCursor = 0;\n                plan.PointScannedWithoutMiss = 0;\n                plan.EstimatedTargetTiles = 0L;\n                InvalidateAutomaticCompletion(plan);\n                plan.Generation++;\n            }\n            appliedPointSetSignature = signature ?? string.Empty;\n            deferredPointSetInvalidation = false;\n            stateDirty = true;\n        }\n\n''' + helper_anchor
 preload, _ = replace_once(preload, helper_anchor, helper_new,
-                          'R012 coalesced point invalidation helpers')
-
-nonflight_old = '''            }\n            flightSuspended = false;\n            ApplyStandardSchedulerState(true);\n'''
-nonflight_new = '''            }\n            // R012: the latest Flight point set is now actionable. Apply exactly one\n            // completion/generation invalidation before non-Flight production resumes.\n            ApplyDeferredPointSetInvalidation();\n            flightSuspended = false;\n            ApplyStandardSchedulerState(true);\n'''
-preload, _ = replace_once(preload, nonflight_old, nonflight_new,
-                          'R012 non-Flight deferred invalidation apply')
+                          'R012 point invalidation apply helper')
 
 # R012-B: the renderer already owns exact FRONT/READY authority. The ND standby surface
 # must therefore communicate an unavailable/reloading presentation, not masquerade as a
@@ -89,9 +87,8 @@ nav, _ = replace_once(nav, standby_old, standby_new,
                       'R012 cold-start black standby backdrop')
 
 # The inherited Step2 gate encoded the old presentation wording as if it were part of the
-# safety contract. R012 changes only the diagnostic/backdrop semantics; the real contract
-# remains present && requestedViewReady. Accept either the historical wording or R012's
-# explicit reload wording so older parent reconstruction stays verifiable.
+# safety contract. R012 changes only diagnostic/backdrop semantics; the actual safety
+# contract remains present && requestedViewReady.
 step2_old = "ck('present && requestedViewReady' in R and 'TERRAIN GPU BUILDING ' in N,'Hotfix4 stale-FRONT loading contract remains intact')\n"
 step2_new = "ck('present && requestedViewReady' in R and (('TERRAIN GPU BUILDING ' in N) or ('RELOADING ND ' in N)),'Hotfix4/R012 stale-FRONT loading contract remains intact')\n"
 step2, _ = replace_once(step2, step2_old, step2_new,
@@ -132,8 +129,8 @@ print(PREFIX + ' APPLY PASS')
 print('parent_r010=' + R010)
 print('observer_r011=' + R011)
 print('r012=' + R012)
-print('preload_flight_point_updates=latest snapshot retained; invalidation deferred/coalesced')
-print('preload_nonflight_resume=one deferred completion reevaluation before production resumes')
+print('preload_flight_point_updates=latest snapshot retained; completion remains applied-signature stable')
+print('preload_nonflight_refresh=invalidates once only when latest signature differs from applied signature')
 print('nd_cold_start=near-black standby + explicit RELOADING ND label')
 print('inherited_step2_gate=accepts historical BUILDING or explicit R012 RELOADING wording')
 print('renderer_change=0 worker_change=0 scheduler_change=0 rasterizer_change=0')
