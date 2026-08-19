@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import sys
-sys.dont_write_bytecode = True
+sys.dont_writebytecode = True
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / 'Source' / 'AERISFlightControl'
@@ -11,6 +11,8 @@ nav_path = SRC / 'UI' / 'AERISNavigationDisplay.cs'
 bootstrap_path = SRC / 'Core' / 'AERISBootstrap.cs'
 csproj_path = SRC / 'AERISFlightControl.csproj'
 build_path = ROOT / 'build_ubuntu.sh'
+R010 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R010_CONTINUOUS_COMMIT_STREAM'
+R011 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R011_TURNING_VIEW_CHURN_OBSERVER'
 
 checks = []
 def ck(value, name):
@@ -26,10 +28,18 @@ bootstrap = bootstrap_path.read_text()
 csproj = csproj_path.read_text()
 build = build_path.read_text()
 
+ck(R010 in renderer, 'R011 observer runs only on generated R010 renderer parent')
+ck('ndReloadGeneration++;' in renderer and
+   'frontReloadGeneration = ndReloadGeneration;' in renderer and
+   'if (Reloading) return false;' in renderer,
+   'AERIS24 black-reload successor remains present before observer')
 ck('AERISR011TurningViewChurnObserver.cs' in csproj,
    'R011 observer is explicitly compiled by legacy xbuild project')
-ck('OH REV3.5 SALBUTAMOL SULFATE R011 TURNING VIEW CHURN OBSERVER' in build,
-   'Ubuntu build identity names R011 observer candidate')
+ck(('REV3_5_R011_VARIANT="' + R011 + '"') in build and
+   'rev3_5_r011_variant=%s' in build,
+   'reconstruction overlay publishes R011 candidate identity without replacing lineage display')
+ck('OPERATION HEALTH' in build,
+   'existing Operation Health build lineage identity remains intact')
 ck('const float SampleIntervalSeconds = 0.10f;' in observer,
    'observer samples at nominal 10 Hz')
 ck('const float LogIntervalSeconds = 5.0f;' in observer,
@@ -105,8 +115,8 @@ ck('RequestedViewReady' in observer and 'RequestedViewReady' in renderer,
    'observer reads existing requested-view readiness without owning it')
 ck('AERISLogger.Info("[OH_REV3_5_R011_TURN_CHURN]' in observer,
    'five-second telemetry uses existing bounded logger')
-ck('R011' not in renderer,
-   'R011 diagnostic marker is absent from R010 renderer implementation')
+ck(R011 not in renderer,
+   'R011 diagnostic identity is absent from R010 renderer implementation')
 
 failed = [name for ok, name in checks if not ok]
 print('\n[OH REV3.5 R011 TURNING VIEW CHURN OBSERVER] %d/%d PASS' %
