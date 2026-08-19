@@ -114,9 +114,11 @@ jobs:
           r=Path('Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs').read_text()
           m='AERIS27_REV3_5_SALBUTAMOL_SULFATE_R010_CONTINUOUS_COMMIT_STREAM'
           assert m in r
-          assert 'rev35R007FoundationQueue.Count > 0' in r
-          assert 'bool rev35R010QueueOnlyKick' in r
+          assert 'if (pendingEntryCommit != null || rasterizer.CompletedCount > 0 ||\n                    rev35R007FoundationQueue.Count > 0)' in r
           assert 'int r010QueueBacklog = Math.Max(0, rev35R007FoundationQueue.Count);' in r
+          assert 'oh_rev35_r010_queue_budget_samples=' in r
+          assert 'oh_rev35_r010_queue_backlog_peak=' in r
+          assert 'oh_rev35_r010_queue_kick=' not in r
           assert r.count('PendingEntryCommit pendingEntryCommit;') == 1
           assert 'List<PendingEntryCommit>' not in r
           assert 'Queue<PendingEntryCommit>' not in r
