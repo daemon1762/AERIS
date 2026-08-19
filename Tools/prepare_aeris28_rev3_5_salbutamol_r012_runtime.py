@@ -132,7 +132,8 @@ checks=[
  (('rev3_5_r012_variant='+R012) in ident,'R012 identity installed'),
  (marker_in_bytes(dll,R010),'DLL embeds R010 marker'),
  (marker_in_bytes(dll,'OH_REV3_5_R011_TURN_CHURN'),'DLL embeds R011 observer marker'),
- (marker_in_bytes(dll,'RELOADING ND'),'DLL embeds R012 explicit reload presentation'),
+ (marker_in_bytes(dll,'TERRAIN INIT'),'DLL embeds R012 terrain-init presentation marker'),
+ (marker_in_bytes(dll,'appliedPointSetSignature'),'DLL embeds R012 applied point signature field'),
  (marker_in_bytes(dll,'deferredPointSetInvalidation'),'DLL embeds R012 preload deferral field'),
  (not marker_in_bytes(dll,'WaitManagedPreparation') and
   not marker_in_bytes(dll,'ResidentPreparedPresentation') and
@@ -146,4 +147,4 @@ if failed: raise SystemExit(RED+PREFIX+' INSTALL IDENTITY FAIL: '+', '.join(fail
 print(GREEN+PREFIX+' INSTALL IDENTITY MATCH=YES'+RESET)
 print('r010='+R010); print('r011='+R011); print('r012='+R012)
 print('dll_sha256='+sha256(installed))
-print(YELLOW+'R012 CONTRACT:'+RESET+' Flight point-set completion invalidation is deferred/coalesced until non-Flight; cold-start uncommitted ND uses near-black RELOADING backdrop; renderer/worker/publication authority unchanged.')
+print(YELLOW+'R012 CONTRACT:'+RESET+' Flight point-set churn is RAM-only and coalesced against the last applied signature; non-Flight point refresh invalidates only a real final difference; solid-body pre-render cold init uses explicit black RELOADING ND / TERRAIN INIT; ordinary standby/Partial plus renderer/worker/publication authority remain unchanged.')
