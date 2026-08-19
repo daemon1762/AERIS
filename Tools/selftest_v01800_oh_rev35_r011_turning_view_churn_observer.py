@@ -77,10 +77,11 @@ for field in [
     ck(('RendererField("%s")' % field) in observer and field in renderer,
        'observer binding resolves existing renderer field: ' + field)
 
+flight_instrument = (SRC / 'UI' / 'AERISFlightInstrument.cs').read_text()
 for field in ['navigationDisplay', 'terrainTileRenderer', 'planMode',
               'planCenterLatitudeDeg', 'planCenterLongitudeDeg',
               'cachedFallbackMapHeading']:
-    owner = nav if field != 'navigationDisplay' else (ROOT / 'Source' / 'AERISFlightControl' / 'UI' / 'AERISFlightInstrument.cs').read_text()
+    owner = nav if field != 'navigationDisplay' else flight_instrument
     ck(('GetField("%s"' % field) in observer and field in owner,
        'observer binding resolves existing ND field: ' + field)
 ck('GetField("flightInstrument"' in observer and 'flightInstrument' in bootstrap,
