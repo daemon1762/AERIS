@@ -31,16 +31,6 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1), True
 
 
-def method_bounds(text, signature):
-    start = text.find(signature)
-    if start < 0:
-        fail('method missing: ' + signature)
-    op = text.find('{', start)
-    if op < 0:
-        fail('method open missing: ' + signature)
-    return block_bounds(text, op, signature)
-
-
 def block_bounds(text, op, label):
     depth = 0
     state = 'code'
@@ -75,9 +65,13 @@ def block_bounds(text, op, label):
     fail('block close missing: ' + label)
 
 
-def indent_block(text, spaces=4):
-    prefix = ' ' * spaces
-    return ''.join(prefix + line if line.strip() else line for line in text.splitlines(True))
+def method_bounds(text, signature):
+    start = text.find(signature)
+    if start < 0: fail('method missing: ' + signature)
+    op = text.find('{', start)
+    if op < 0: fail('method open missing: ' + signature)
+    _, end = block_bounds(text, op, signature)
+    return start, end
 
 
 def statement_end(text, start):
@@ -113,6 +107,11 @@ def statement_end(text, start):
     fail('statement terminator missing')
 
 
+def indent_block(text, spaces=4):
+    prefix = ' ' * spaces
+    return ''.join(prefix + line if line.strip() else line for line in text.splitlines(True))
+
+
 for path in (R, O, P, N, B, PRE):
     if not path.is_file():
         fail('required file missing: ' + str(path.relative_to(ROOT)))
@@ -135,8 +134,7 @@ if 'RELOADING ND\\nTERRAIN INIT' not in nav:
 if R013 in renderer or R013 in build or 'r013_stable_content_snapshot_reconcile' in prebuild:
     fail('rejected R013 experiment must not be inherited by R014')
 
-already = R014 in renderer
-if not already:
+if R014 not in renderer:
     identity_old = '        const string Rev35R010Variant = "' + R010 + '";\n'
     identity_new = identity_old + (
         '        // ' + R014 + ': worker completion advances the existing single staged\n'
@@ -161,21 +159,20 @@ if not already:
     renderer, _ = replace_once(renderer, field_old, field_new,
                                'R014 publication/reconcile fields')
 
-    # Phase6_003 already owns publication legality. Observe only a successful Finalize path;
-    # do not create a second publication route. A dedicated serial is used instead of
-    # gpuContentRevision because the latter intentionally coalesces dirty signals until FRONT.
+    # Observe only the already-authoritative Phase6_003 successful publication path.
     f0, f1 = method_bounds(renderer, '        bool FinalizePendingEntryCommit(')
     finalize = renderer[f0:f1]
     if finalize.count('AddEntry(entry);') != 1:
         fail('R014 Finalize AddEntry authority mismatch')
     if finalize.count('MarkGpuContentDirty();') != 1:
         fail('R014 Finalize dirty authority mismatch')
-    publication_old = '            MarkGpuContentDirty();\n'
-    publication_new = publication_old + (
+    finalize, _ = replace_once(
+        finalize,
+        '            MarkGpuContentDirty();\n',
+        '            MarkGpuContentDirty();\n'
         '            rev35R014PublicationSerial++;\n'
-        '            operationHealthRev35R014PublicationEvents++;\n')
-    finalize, _ = replace_once(finalize, publication_old, publication_new,
-                               'R014 successful Entry publication serial')
+        '            operationHealthRev35R014PublicationEvents++;\n',
+        'R014 successful Entry publication serial')
     renderer = renderer[:f0] + finalize + renderer[f1:]
 
     d0, d1 = method_bounds(renderer,
@@ -192,8 +189,6 @@ if not already:
     if draw.count('system.CaptureVisible(') != 1:
         fail('R014 expected exactly one CaptureVisible before overlay')
 
-    # A publication that was deferred by the 0.20 s batching rail must itself keep the
-    # authoritative content block awake even after rasterizer workerResultReady goes false.
     tick_old = '''            bool contentTickRequired = contentGeometryChanged || workerResultReady ||
                 contentRetryDue;
 '''
@@ -262,24 +257,28 @@ if not already:
     content_block = content_block[:pump_end] + gated_expensive
     draw = draw[:cb0 + 1] + content_block + draw[cb1 - 1:]
 
-    # Pruning belongs to a full content reconcile. Worker-only staged progress must not pay
-    # the old full prune cost at every authoritative tick.
-    prune_old = '''            EnsureResources(plot, effectiveMode, currentPreset, virtualDetail);
-            if (contentTickRequired)
-            {
-                Prune(ResolveVramLimitBytes());
-                PruneRenderReady(ResolveRenderReadyLimitBytes());
-            }
-'''
-    prune_new = '''            EnsureResources(plot, effectiveMode, currentPreset, virtualDetail);
-            if (rev35R014ReconcileRan)
-            {
-                Prune(ResolveVramLimitBytes());
-                PruneRenderReady(ResolveRenderReadyLimitBytes());
-            }
-'''
-    draw, _ = replace_once(draw, prune_old, prune_new,
-                           'R014 prune batching gate')
+    # AERIS24 Warm Visibility already owns a richer prune block here. Preserve every
+    # warm-resume/deferred RenderReady rule and replace only its admission condition.
+    ensure = draw.find(
+        '            EnsureResources(plot, effectiveMode, currentPreset, virtualDetail);')
+    if ensure < 0:
+        fail('R014 EnsureResources anchor missing before prune block')
+    prune_if = draw.find('            if (contentTickRequired)\n            {', ensure)
+    if prune_if < 0:
+        fail('R014 warm prune admission condition missing')
+    prune_open = draw.find('{', prune_if)
+    pb0, pb1 = block_bounds(draw, prune_open, 'R014 inherited warm prune block')
+    prune_block = draw[prune_if:pb1]
+    for token in ('long vramLimitBytes = ResolveVramLimitBytes();',
+                  'warmVisibilityPrunePending', 'PruneWarmResume(vramLimitBytes, 4)',
+                  'Prune(vramLimitBytes);',
+                  'PruneRenderReady(ResolveRenderReadyLimitBytes());'):
+        if token not in prune_block:
+            fail('R014 inherited warm prune contract missing: ' + token)
+    draw = (draw[:prune_if] +
+            prune_block.replace('if (contentTickRequired)',
+                                'if (rev35R014ReconcileRan)', 1) +
+            draw[pb1:])
     renderer = renderer[:d0] + draw + renderer[d1:]
 
     telemetry_old = (
@@ -357,6 +356,7 @@ print('publication_authority=successful FinalizePendingEntryCommit serial')
 print('publication_batching=inherited ContentMaintenanceRetrySeconds 0.20s maximum 5Hz')
 print('geometry_change=immediate full reconcile')
 print('deferred_publication=wakes content path until newest serial is reconciled')
+print('warm_visibility_prune=existing rich block retained; admission changed only')
 print('r008_current_request_and_far_first=retained inside full reconcile')
 print('rev009_heading_planner=6deg cumulative retained')
 print('worker_change=0 scheduler_change=0 rasterizer_change=0 commit_lane_change=0')
