@@ -10,6 +10,7 @@ P = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs'
 N = ROOT / 'Source/AERISFlightControl/UI/AERISNavigationDisplay.cs'
 B = ROOT / 'build_ubuntu.sh'
 PRE = ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'
+STEP2 = ROOT / 'Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py'
 PREFIX = '[AERIS28 REV3.5 SALBUTAMOL SULFATE R014 PUBLICATION GATED CONTENT RECONCILE]'
 R010 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R010_CONTINUOUS_COMMIT_STREAM'
 R011 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R011_TURNING_VIEW_CHURN_OBSERVER'
@@ -107,7 +108,7 @@ def statement_end(text, start):
     fail('statement terminator missing')
 
 
-for path in (R, O, P, N, B, PRE):
+for path in (R, O, P, N, B, PRE, STEP2):
     if not path.is_file():
         fail('required file missing: ' + str(path.relative_to(ROOT)))
 
@@ -117,6 +118,7 @@ preload = P.read_text()
 nav = N.read_text()
 build = B.read_text()
 prebuild = PRE.read_text()
+step2 = STEP2.read_text()
 
 if R010 not in renderer:
     fail('R010 generated parent required before R014 overlay')
@@ -297,6 +299,19 @@ if R014 not in renderer:
 else:
     print(PREFIX + ' renderer overlay already present')
 
+# Exact inherited Step2 successor: R014 narrows pruning from every content tick to only
+# full content reconciles. Legacy/Phase6 trees still require contentTickRequired; only the
+# exact R014 runtime marker admits rev35R014ReconcileRan.
+step2_old = "ck('if (contentTickRequired)' in post and 'Prune(' in post and 'PruneRenderReady(' in post,'pruning is content-only work')"
+step2_new = """r014_prune_successor = ('AERIS28_REV3_5_SALBUTAMOL_SULFATE_R014_PUBLICATION_GATED_CONTENT_RECONCILE' in R and
+    'oh_rev35_r014_full_reconcile=' in R)
+ck((('if (contentTickRequired)' in post) or
+    (r014_prune_successor and 'if (rev35R014ReconcileRan)' in post)) and
+   'Prune(' in post and 'PruneRenderReady(' in post,
+   'pruning remains content/full-reconcile-only work')"""
+step2, step2_changed = replace_once(step2, step2_old, step2_new,
+                                    'R014 Step2 prune successor')
+
 # Build/test wiring is additive over R012 only. R013 is intentionally absent.
 r012_var = 'REV3_5_R012_VARIANT="' + R012 + '"\n'
 r014_var = r012_var + 'REV3_5_R014_VARIANT="' + R014 + '"\n'
@@ -343,6 +358,7 @@ for forbidden in ('Task.Run(', 'new Thread(', 'ThreadPool.', 'WaitManagedPrepara
 R.write_text(renderer)
 B.write_text(build)
 PRE.write_text(prebuild)
+STEP2.write_text(step2)
 print(PREFIX + ' APPLY PASS')
 print('parent_r010=' + R010)
 print('observer_r011=' + R011)
@@ -356,6 +372,7 @@ print('geometry_change=immediate full reconcile')
 print('deferred_publication=wakes content path until newest serial is reconciled')
 print('phase6_003_packet_retirement_text=PRESERVED_BYTE_FOR_BYTE')
 print('warm_visibility_prune=existing rich block retained; admission changed only')
+print('step2_prune_successor=exact R014 rev35R014ReconcileRan admission')
 print('r008_current_request_and_far_first=retained inside full reconcile')
 print('rev009_heading_planner=6deg cumulative retained')
 print('worker_change=0 scheduler_change=0 rasterizer_change=0 commit_lane_change=0')
