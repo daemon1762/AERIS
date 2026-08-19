@@ -17,11 +17,7 @@ R013 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R013_STABLE_CONTENT_SNAPSHOT_RECONCILE
 R014 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R014_PUBLICATION_GATED_CONTENT_RECONCILE'
 
 
-def method_bounds(text, signature):
-    start = text.find(signature)
-    if start < 0: return -1, -1
-    op = text.find('{', start)
-    if op < 0: return -1, -1
+def block_bounds(text, op):
     depth = 0; state = 'code'; i = op
     while i < len(text):
         c = text[i]; n = text[i + 1] if i + 1 < len(text) else ''
@@ -33,7 +29,7 @@ def method_bounds(text, signature):
             if c == '{': depth += 1
             elif c == '}':
                 depth -= 1
-                if depth == 0: return start, i + 1
+                if depth == 0: return op, i + 1
             i += 1; continue
         if state == 'line':
             if c == '\n': state = 'code'
@@ -50,6 +46,15 @@ def method_bounds(text, signature):
             if c == "'": state = 'code'
             i += 1; continue
     return -1, -1
+
+
+def method_bounds(text, signature):
+    start = text.find(signature)
+    if start < 0: return -1, -1
+    op = text.find('{', start)
+    if op < 0: return -1, -1
+    _, end = block_bounds(text, op)
+    return (start, end) if end > op else (-1, -1)
 
 
 for path in (R, O, P, N, B, PRE, S):
@@ -156,11 +161,24 @@ check(reconciled > measure,
 check(draw.count('system.CaptureVisible(') == 1,
       'single CaptureVisible authority retained')
 
-prune_gate = draw.find('if (rev35R014ReconcileRan)')
-prune = draw.find('Prune(ResolveVramLimitBytes());', prune_gate)
-prune_ready = draw.find('PruneRenderReady(ResolveRenderReadyLimitBytes());', prune_gate)
-check(prune_gate >= 0 and prune > prune_gate and prune_ready > prune,
-      'VRAM/render-ready prune runs only with full reconcile')
+# Warm Visibility already owns the complete prune implementation. R014 may only gate that
+# block; it must not collapse it back to the historical two-call prune shape.
+ensure = draw.find('EnsureResources(plot, effectiveMode, currentPreset, virtualDetail);')
+prune_gate = draw.find('if (rev35R014ReconcileRan)', ensure)
+prune_open = draw.find('{', prune_gate) if prune_gate >= 0 else -1
+_, prune_end = block_bounds(draw, prune_open) if prune_open >= 0 else (-1, -1)
+prune_block = draw[prune_gate:prune_end] if prune_gate >= 0 and prune_end > prune_gate else ''
+check(ensure >= 0 and prune_gate > ensure and bool(prune_block),
+      'R014 gates the inherited post-resource prune block only')
+for token, label in (
+    ('long vramLimitBytes = ResolveVramLimitBytes();', 'Warm Visibility VRAM limit staging retained'),
+    ('warmVisibilityPrunePending', 'Warm Visibility reload prune deferral retained'),
+    ('PruneWarmResume(vramLimitBytes, 4)', 'bounded warm-resume prune retained'),
+    ('Prune(vramLimitBytes);', 'normal bounded prune retained'),
+    ('PruneRenderReady(ResolveRenderReadyLimitBytes());', 'RenderReady prune retained')):
+    check(token in prune_block, label)
+check('if (contentTickRequired)' not in prune_block,
+      'worker-only content tick no longer admits warm/normal prune block')
 
 check('const float ContentPlanningHeadingStepDeg = 6f;' in renderer,
       'REV009 cumulative 6 degree hidden heading planner retained')
@@ -190,8 +208,8 @@ for forbidden in ('Task.Run(', 'new Thread(', 'ThreadPool.', 'WaitManagedPrepara
                   'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE'):
     check(forbidden not in renderer, 'R014 renderer excludes ' + forbidden)
 
-# Truth table for the full-reconcile admission decision. Geometry is the sole immediate
-# bypass. Publication/retry work waits for the inherited 0.20 s maintenance deadline.
+# Geometry is the sole immediate bypass. Publication/retry work waits for the inherited
+# 0.20 s maintenance deadline; worker-only completion is never a full reconcile trigger.
 def full_reconcile(geometry, publication, retry, cadence_due):
     return geometry or (cadence_due and (publication or retry))
 
