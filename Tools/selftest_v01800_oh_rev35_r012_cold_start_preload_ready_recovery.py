@@ -10,13 +10,14 @@ P = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs'
 N = ROOT / 'Source/AERISFlightControl/UI/AERISNavigationDisplay.cs'
 B = ROOT / 'build_ubuntu.sh'
 PRE = ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'
+STEP2 = ROOT / 'Tools/selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py'
 S = ROOT / 'Source/AERISFlightControl/Settings/AERISSettings.cs'
 R010 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R010_CONTINUOUS_COMMIT_STREAM'
 R011 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R011_TURNING_VIEW_CHURN_OBSERVER'
 R012 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R012_COLD_START_PRELOAD_READY_RECOVERY'
 PREFIX = '[OH REV3.5 R012 COLD START PRELOAD READY RECOVERY]'
 
-for path in (R, O, P, N, B, PRE, S):
+for path in (R, O, P, N, B, PRE, STEP2, S):
     if not path.is_file():
         raise SystemExit(PREFIX + ' FAIL missing ' + str(path.relative_to(ROOT)))
 
@@ -26,6 +27,7 @@ preload = P.read_text()
 nav = N.read_text()
 build = B.read_text()
 prebuild = PRE.read_text()
+step2 = STEP2.read_text()
 settings = S.read_text()
 
 checks = []
@@ -74,6 +76,8 @@ check('"RELOADING ND " + percent + "%"' in nav,
       'partial requested view presents explicit RELOADING ND state')
 check('"TERRAIN GPU BUILDING " + percent + "%"' not in nav,
       'legacy ambiguous partial label removed')
+check("(('TERRAIN GPU BUILDING ' in N) or ('RELOADING ND ' in N))" in step2,
+      'inherited Step2 gate accepts explicit R012 reload wording successor')
 
 for token in ('ndReloadGeneration++;', 'frontReloadGeneration = ndReloadGeneration;',
               'if (Reloading) return false;', 'oh_nd_reload='):
