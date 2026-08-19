@@ -39,15 +39,21 @@ checks = [
      'stale first non-Flight Tick cannot apply last Flight point-set'),
     ('flightSuspended || HighLogic.LoadedSceneIsFlight' not in preload,
      'stale flightSuspended latch excluded from scene classification'),
-    ('bool solidBodyColdInit = !hazardOnly && tileSystem != null &&' in nav,
+    ('bool terrainPresentationRequested = settings == null ||' in nav and
+     'settings.TerrainGpuMode != AERISTerrainGpuMode.Off' in nav and
+     'settings.PerformanceGpuAccelerationEnabled' in nav,
+     'cold-init requires terrain GPU presentation request'),
+    ('bool solidBodyColdInit = !hazardOnly && terrainPresentationRequested &&' in nav,
      'pre-render cold-init gate present'),
     ('!tileSystem.BodySupported' in nav and
      'AERISTerrainTileSystem.BodyHasSolidSurface(vessel.mainBody)' in nav,
-     'cold-init gate distinguishes expected terrain from unsupported body'),
+     'cold-init distinguishes expected solid terrain from unsupported body'),
     ('"RELOADING ND\\nTERRAIN INIT"' in nav,
      'unique R012 terrain-init reload presentation present'),
     ('"TERRAIN GPU BUILDING " + percent + "%"' in nav,
      'ordinary renderer Partial/BUILDING presentation preserved'),
+    ('bool ndReloading =' in nav and 'terrainTileRenderer.Reloading' in nav,
+     'inherited AERIS24 black-reload UI preserved'),
     ('new Color(0.015f, 0.025f, 0.035f, 1f)' in nav,
      'near-black standby backdrop present'),
     ('REV3_5_R012_VARIANT="' + R012 + '"' in build,
