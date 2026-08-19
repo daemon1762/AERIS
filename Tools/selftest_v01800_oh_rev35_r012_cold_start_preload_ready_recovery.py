@@ -55,12 +55,18 @@ check('flightSuspended || HighLogic.LoadedSceneIsFlight' not in preload,
       'stale flightSuspended latch is excluded from scene classification')
 
 update_start = preload.find('internal void UpdatePoints(')
-update_end = preload.find('static int ComparePreloadPoints', update_start)
-update_slice = preload[update_start:update_end] if update_start >= 0 and update_end > update_start else ''
+helper_start = preload.find('void ApplyPointSetInvalidationLocked(string signature)', update_start)
+compare_start = preload.find('static int ComparePreloadPoints', helper_start)
+update_slice = preload[update_start:helper_start] if update_start >= 0 and helper_start > update_start else ''
+helper_slice = preload[helper_start:compare_start] if helper_start >= 0 and compare_start > helper_start else ''
+check(update_start >= 0 and helper_start > update_start,
+      'UpdatePoints method boundary resolves before invalidation helper')
 check('InvalidateAutomaticCompletion(plan);' not in update_slice,
       'UpdatePoints never directly revokes completion')
 check('ApplyPointSetInvalidationLocked(pointSetSignature);' in update_slice,
       'UpdatePoints uses coalesced non-Flight invalidation helper')
+check(helper_slice.count('InvalidateAutomaticCompletion(plan);') == 1,
+      'single helper owns exactly one automatic completion invalidation call')
 flight_start = update_slice.find('if (flight)')
 flight_end = update_slice.find('// A non-Flight registry refresh', flight_start)
 flight_slice = update_slice[flight_start:flight_end] if flight_start >= 0 and flight_end > flight_start else ''
