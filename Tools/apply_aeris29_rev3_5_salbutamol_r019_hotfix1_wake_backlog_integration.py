@@ -26,7 +26,6 @@ def replace_once(text, old, new, label):
 
 
 def insert_after_unique_line(text, marker, insertion, already_marker, label):
-    """Insert after one generated C# source line without depending on Python escape spelling."""
     if already_marker in text:
         return text, False
     count = text.count(marker)
@@ -40,6 +39,38 @@ def insert_after_unique_line(text, marker, insertion, already_marker, label):
     return text[:end] + insertion + text[end:], True
 
 
+def replace_python_assertion_block(text, label, new_block, successor_marker,
+                                   include_assignment=None):
+    """Replace one historical verifier assertion by its human-readable label.
+
+    This intentionally ignores whitespace/escape spelling so it works on both the
+    pristine historical verifier and the already-materialized R018 local verifier.
+    """
+    if successor_marker in text:
+        return text, False
+    needle = "'" + label + "'"
+    if text.count(needle) != 1:
+        fail('historical verifier label count=%d label=%s' %
+             (text.count(needle), label))
+    label_pos = text.find(needle)
+    if include_assignment:
+        start = text.rfind('\n' + include_assignment, 0, label_pos)
+        if start < 0:
+            fail('historical verifier assignment start missing: ' + include_assignment)
+        start += 1
+    else:
+        start = text.rfind('\nck(', 0, label_pos)
+        if start < 0:
+            fail('historical verifier ck start missing: ' + label)
+        start += 1
+    line_end = text.find('\n', label_pos)
+    if line_end < 0:
+        line_end = len(text)
+    else:
+        line_end += 1
+    return text[:start] + new_block + text[line_end:], True
+
+
 for path in (R, V7, V10):
     if not path.is_file():
         fail('missing ' + str(path.relative_to(ROOT)))
@@ -48,7 +79,6 @@ renderer = R.read_text()
 if R019 not in renderer:
     fail('R019 generated overlay required before Hotfix1')
 
-# Hotfix identity is source-visible so the incremental DLL can be verified directly.
 if HF1 not in renderer:
     old = '        const string Rev35R019Variant = "' + R019 + '";\n'
     new = old + (
@@ -57,9 +87,6 @@ if HF1 not in renderer:
         '        const string Rev35R019Hotfix1Variant = "' + HF1 + '";\n')
     renderer, _ = replace_once(renderer, old, new, 'Hotfix1 identity')
 
-# R010 originally wakes the non-authoritative commit pump for pending/raster/R007 queue.
-# R019 split exact-visible FAR into a second queue, so that queue must participate in the
-# same wake condition or a visible-only backlog can sleep until an unrelated content tick.
 wake_old = '''                if (pendingEntryCommit != null || rasterizer.CompletedCount > 0 ||
                     rev35R007FoundationQueue.Count > 0)
 '''
@@ -70,8 +97,6 @@ wake_new = '''                if (pendingEntryCommit != null || rasterizer.Compl
 renderer, _ = replace_once(renderer, wake_old, wake_new,
                            'Hotfix1 R010 non-authoritative wake')
 
-# R010's adaptive-budget backlog must count both halves of the still-single bounded handoff
-# queue. This changes no budget rail: R004 still owns 0.50/1.00/1.50/2.00 ms and frame guard.
 budget_old = '''            int r010QueueBacklog = Math.Max(0, rev35R007FoundationQueue.Count);
 '''
 budget_new = '''            int r010QueueBacklog =
@@ -93,35 +118,27 @@ final_new = '''            int finalRemainingCompleted = Math.Max(0, rasterizer.
 renderer, _ = replace_once(renderer, final_old, final_new,
                            'Hotfix1 final backlog')
 
-# Publish only an identity witness. Do not anchor on the Python applicator's escaped "\\n"
-# spelling: inspect the already-generated C# source line and insert after that physical line.
 telemetry_marker = '                "; oh_rev35_r019_variant=" + Rev35R019Variant +'
 telemetry_insert = (
     '                "; oh_rev35_r019_hf1_variant=" + Rev35R019Hotfix1Variant +\n')
 renderer, _ = insert_after_unique_line(
-    renderer,
-    telemetry_marker,
-    telemetry_insert,
-    'oh_rev35_r019_hf1_variant=',
-    'Hotfix1 telemetry identity')
+    renderer, telemetry_marker, telemetry_insert,
+    'oh_rev35_r019_hf1_variant=', 'Hotfix1 telemetry identity')
 
-# Fail closed before writing any runtime source if the complete Hotfix1 shape is not present.
 required_runtime = (
     HF1,
     'Rev35R019Hotfix1Variant',
     'oh_rev35_r019_hf1_variant=',
     'rev35R019VisibleFoundationQueue.Count > 0 ||\n                    rev35R007FoundationQueue.Count > 0',
     'int r010QueueBacklog =\n                Math.Max(0, rev35R019VisibleFoundationQueue.Count) +\n                Math.Max(0, rev35R007FoundationQueue.Count);',
-    'Math.Max(0, rev35R019VisibleFoundationQueue.Count) +\n                Math.Max(0, rev35R007FoundationQueue.Count);',
+    '(pendingEntryCommit == null ? 0 : 1) +\n                Math.Max(0, rev35R019VisibleFoundationQueue.Count) +\n                Math.Max(0, rev35R007FoundationQueue.Count);',
 )
 missing_runtime = [token for token in required_runtime if token not in renderer]
 if missing_runtime:
     fail('runtime contract incomplete: ' + ', '.join(missing_runtime))
 R.write_text(renderer)
 
-# Historical R007 verifier froze the pre-split implementation shape (one queue Count >= 128).
-# R019 retains the SAME total hard cap 128 across visible+hidden queues. Admit only that exact
-# successor form; do not weaken the overflow requirement.
+# R007 historical queue-bound compatibility.
 v7 = V7.read_text()
 legacy7 = '''ck('rev35R007FoundationQueue.Count >= Rev35R007FoundationQueueMaximum' in queue and
    'operationHealthRev35R007Overflow++' in queue,
@@ -149,15 +166,11 @@ if successor7 not in v7:
 else:
     print(PREFIX + ' historical R007 queue-bound successor already present')
 
-# Historical R010 verifier froze the inherited one-queue wake/backlog implementation.
-# R019 Hotfix1 retains the same continuous-pump contract but the bounded handoff is now
-# visible-priority + hidden. Admit only legacy or the exact two-queue successor shape.
+# R010 historical wake/backlog compatibility. Use assertion labels rather than
+# byte-exact source because the local R018 materialization may already have successor
+# edits elsewhere in this verifier.
 v10 = V10.read_text()
-legacy10_wake = '''wake = re.search(
-    r'if \\(pendingEntryCommit != null \\|\\| rasterizer\\.CompletedCount > 0 \\|\\|\\s*'
-    r'rev35R007FoundationQueue\\.Count > 0\\)', r, re.S)
-ck(wake is not None, 'R007 FIFO wakes non-authoritative staged pump')
-'''
+
 successor10_wake = '''legacy_wake = re.search(
     r'if \\(pendingEntryCommit != null \\|\\| rasterizer\\.CompletedCount > 0 \\|\\|\\s*'
     r'rev35R007FoundationQueue\\.Count > 0\\)', r, re.S)
@@ -168,14 +181,15 @@ r019_wake = re.search(
 ck(legacy_wake is not None or r019_wake is not None,
    'R007 legacy FIFO or exact R019 visible+hidden queues wake staged pump')
 '''
-if successor10_wake not in v10:
-    if v10.count(legacy10_wake) != 1:
-        fail('R010 wake verifier legacy anchor count=%d' % v10.count(legacy10_wake))
-    v10 = v10.replace(legacy10_wake, successor10_wake, 1)
+v10, changed = replace_python_assertion_block(
+    v10,
+    'R007 FIFO wakes non-authoritative staged pump',
+    successor10_wake,
+    'r019_wake = re.search(',
+    include_assignment='wake = re.search(')
+if changed:
+    print(PREFIX + ' patched historical R010 wake assertion')
 
-legacy10_budget = '''ck('int r010QueueBacklog = Math.Max(0, rev35R007FoundationQueue.Count);' in r,
-   'R007 FIFO included in adaptive backlog')
-'''
 successor10_budget = '''legacy_r010_backlog = (
     'int r010QueueBacklog = Math.Max(0, rev35R007FoundationQueue.Count);' in r)
 r019_r010_backlog = (
@@ -183,15 +197,14 @@ r019_r010_backlog = (
 ck(legacy_r010_backlog or r019_r010_backlog,
    'R007 legacy FIFO or exact R019 visible+hidden queues included in adaptive backlog')
 '''
-if successor10_budget not in v10:
-    if v10.count(legacy10_budget) != 1:
-        fail('R010 adaptive backlog verifier legacy anchor count=%d' %
-             v10.count(legacy10_budget))
-    v10 = v10.replace(legacy10_budget, successor10_budget, 1)
+v10, changed = replace_python_assertion_block(
+    v10,
+    'R007 FIFO included in adaptive backlog',
+    successor10_budget,
+    'r019_r010_backlog = (')
+if changed:
+    print(PREFIX + ' patched historical R010 adaptive-backlog assertion')
 
-legacy10_final = '''ck('(pendingEntryCommit == null ? 0 : 1) +\n                Math.Max(0, rev35R007FoundationQueue.Count);' in r,
-   'main commit final backlog includes R007 FIFO')
-'''
 successor10_final = '''legacy_final_backlog = (
     '(pendingEntryCommit == null ? 0 : 1) +\\n                Math.Max(0, rev35R007FoundationQueue.Count);' in r)
 r019_final_backlog = (
@@ -199,12 +212,14 @@ r019_final_backlog = (
 ck(legacy_final_backlog or r019_final_backlog,
    'main commit final backlog includes R007 legacy or exact R019 visible+hidden queues')
 '''
-if successor10_final not in v10:
-    if v10.count(legacy10_final) != 1:
-        fail('R010 final backlog verifier legacy anchor count=%d' % v10.count(legacy10_final))
-    v10 = v10.replace(legacy10_final, successor10_final, 1)
+v10, changed = replace_python_assertion_block(
+    v10,
+    'main commit final backlog includes R007 FIFO',
+    successor10_final,
+    'r019_final_backlog = (')
+if changed:
+    print(PREFIX + ' patched historical R010 final-backlog assertion')
 
-# Validate successor clauses before writing the historical verifier.
 for token in (
     'legacy_wake = re.search(', 'r019_wake = re.search(',
     'legacy_r010_backlog = (', 'r019_r010_backlog = (',
