@@ -29,6 +29,47 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1), True
 
 
+def statement_end(text, start, label):
+    depth = 0
+    state = 'code'
+    i = start
+    while i < len(text):
+        c = text[i]
+        n = text[i + 1] if i + 1 < len(text) else ''
+        if state == 'code':
+            if c == '/' and n == '/':
+                state = 'line'; i += 2; continue
+            if c == '/' and n == '*':
+                state = 'block'; i += 2; continue
+            if c == '"':
+                state = 'string'; i += 1; continue
+            if c == "'":
+                state = 'char'; i += 1; continue
+            if c == '(':
+                depth += 1
+            elif c == ')':
+                depth = max(0, depth - 1)
+            elif c == ';' and depth == 0:
+                return i + 1
+            i += 1; continue
+        if state == 'line':
+            if c == '\n': state = 'code'
+            i += 1; continue
+        if state == 'block':
+            if c == '*' and n == '/':
+                state = 'code'; i += 2; continue
+            i += 1; continue
+        if state == 'string':
+            if c == '\\': i += 2; continue
+            if c == '"': state = 'code'
+            i += 1; continue
+        if state == 'char':
+            if c == '\\': i += 2; continue
+            if c == "'": state = 'code'
+            i += 1; continue
+    fail('statement terminator missing: ' + label)
+
+
 for path in (R, O17, PLANNER, B, PRE):
     if not path.is_file():
         fail('required file missing: ' + str(path.relative_to(ROOT)))
@@ -67,10 +108,21 @@ if R018 not in renderer:
     renderer, _ = replace_once(renderer, helper_old, helper_new,
                                'R018 canonical visible FAR readiness helper')
 
-    reconcile_old = '''                contentFoundationCoverage = MeasureFoundationGpuReadiness(visible,\n                    tiles, currentEntriesScratch, out readyGlobal, out readyFar);\n                contentVisible = visible;\n'''
-    reconcile_new = '''                contentFoundationCoverage = MeasureFoundationGpuReadiness(visible,\n                    tiles, currentEntriesScratch, out readyGlobal, out readyFar);\n                MeasureVisibleFoundationGpuReadiness(vessel.mainBody, tiles,\n                    currentEntriesScratch, centerLatitudeDeg, centerLongitudeDeg,\n                    rangeMeters, mapHeadingDeg, trackUp, anchorV, orientation,\n                    out operationHealthRev35R018VisiblePlanValid,\n                    out operationHealthRev35R018VisibleRequiredFar,\n                    out operationHealthRev35R018VisibleReadyFar);\n                operationHealthRev35R018VisibleCoverage =\n                    operationHealthRev35R018VisiblePlanValid &&\n                    operationHealthRev35R018VisibleRequiredFar > 0 ?\n                    Mathf.Clamp01(operationHealthRev35R018VisibleReadyFar /\n                        (float)operationHealthRev35R018VisibleRequiredFar) : 0f;\n                contentVisible = visible;\n'''
-    renderer, _ = replace_once(renderer, reconcile_old, reconcile_new,
-                               'R018 visible readiness inside full reconcile')
+    # R014 wraps the inherited expensive reconcile block without re-indenting it to
+    # preserve Phase6_003's byte-exact packet/retirement contract. Therefore do not
+    # depend on MeasureFoundationGpuReadiness() being immediately followed by
+    # contentVisible. Insert after the unique statement boundary instead.
+    reconcile_anchor = 'contentFoundationCoverage = MeasureFoundationGpuReadiness(visible,'
+    reconcile_start = renderer.find(reconcile_anchor)
+    if reconcile_start < 0:
+        fail('R018 full-reconcile MeasureFoundationGpuReadiness anchor missing')
+    if renderer.count(reconcile_anchor) != 1:
+        fail('R018 full-reconcile MeasureFoundationGpuReadiness anchor ambiguous=%d' %
+             renderer.count(reconcile_anchor))
+    reconcile_end = statement_end(renderer, reconcile_start,
+                                  'R018 MeasureFoundationGpuReadiness')
+    reconcile_insert = '''\n                MeasureVisibleFoundationGpuReadiness(vessel.mainBody, tiles,\n                    currentEntriesScratch, centerLatitudeDeg, centerLongitudeDeg,\n                    rangeMeters, mapHeadingDeg, trackUp, anchorV, orientation,\n                    out operationHealthRev35R018VisiblePlanValid,\n                    out operationHealthRev35R018VisibleRequiredFar,\n                    out operationHealthRev35R018VisibleReadyFar);\n                operationHealthRev35R018VisibleCoverage =\n                    operationHealthRev35R018VisiblePlanValid &&\n                    operationHealthRev35R018VisibleRequiredFar > 0 ?\n                    Mathf.Clamp01(operationHealthRev35R018VisibleReadyFar /\n                        (float)operationHealthRev35R018VisibleRequiredFar) : 0f;'''
+    renderer = renderer[:reconcile_end] + reconcile_insert + renderer[reconcile_end:]
 
     gate_prep_old = '''            bool refreshAllowed = ShouldRefreshBackBuffer(visible, refreshRequired);\n            bool rendered = false;\n'''
     gate_prep_new = '''            bool refreshAllowed = ShouldRefreshBackBuffer(visible, refreshRequired);\n\n            bool r018VisibleGpuComplete =\n                operationHealthRev35R018VisiblePlanValid &&\n                operationHealthRev35R018VisibleRequiredFar > 0 &&\n                operationHealthRev35R018VisibleReadyFar >=\n                    operationHealthRev35R018VisibleRequiredFar;\n            bool r018OverscanGpuComplete = visible.FoundationComplete &&\n                lastBackFoundationCoverage >= 0.999f &&\n                readyFar >= visible.FarFoundationCount;\n            operationHealthRev35R018OverscanRequiredFar =\n                Math.Max(0, visible.FarFoundationCount);\n            operationHealthRev35R018OverscanReadyFar =\n                Math.Min(operationHealthRev35R018OverscanRequiredFar,\n                    Math.Max(0, readyFar));\n\n            bool rendered = false;\n'''
@@ -165,8 +217,7 @@ print('visible_gate=canonical viewport foundation planner at exact user-visible 
 print('visible_guard=existing one-tile Gate3.1 guard ring retained')
 print('visible_measurement=full content reconcile only; 10Hz motion path allocation unchanged')
 print('overscan_preparation=UNCHANGED 1.35x/250km inherited authority')
-print('front_swap=rendered && exact-current visible FAR plan complete')
-print('overscan_cpu_gpu_hol=removed from presentation admission; telemetry retained')
+print('front_swap=rendered && exact-current visible FAR plan complete; hidden overscan cannot hold visible FRONT')
 print('recovery_gate=uses same cached visible FAR readiness')
 print('quality_change=0 10Hz_change=0 exact_range_change=0 worker_change=0')
 print('ap_change=0 fbw_change=0 protect_change=0 publication_authority_change=0')
