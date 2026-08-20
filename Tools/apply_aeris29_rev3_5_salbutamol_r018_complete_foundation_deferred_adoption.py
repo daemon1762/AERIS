@@ -45,38 +45,25 @@ def block_bounds(text, op, label):
                 state = 'string'; i += 1; continue
             if c == "'":
                 state = 'char'; i += 1; continue
-            if c == '{':
-                depth += 1
+            if c == '{': depth += 1
             elif c == '}':
                 depth -= 1
-                if depth == 0:
-                    return op, i + 1
-            i += 1
-            continue
+                if depth == 0: return op, i + 1
+            i += 1; continue
         if state == 'line':
-            if c == '\n':
-                state = 'code'
-            i += 1
-            continue
+            if c == '\n': state = 'code'
+            i += 1; continue
         if state == 'block':
-            if c == '*' and n == '/':
-                state = 'code'; i += 2; continue
-            i += 1
-            continue
+            if c == '*' and n == '/': state = 'code'; i += 2; continue
+            i += 1; continue
         if state == 'string':
-            if c == '\\':
-                i += 2; continue
-            if c == '"':
-                state = 'code'
-            i += 1
-            continue
+            if c == '\\': i += 2; continue
+            if c == '"': state = 'code'
+            i += 1; continue
         if state == 'char':
-            if c == '\\':
-                i += 2; continue
-            if c == "'":
-                state = 'code'
-            i += 1
-            continue
+            if c == '\\': i += 2; continue
+            if c == "'": state = 'code'
+            i += 1; continue
     fail('block close missing: ' + label)
 
 
@@ -85,8 +72,7 @@ def method_bounds(text, signature):
     if start < 0 or text.find(signature, start + 1) >= 0:
         fail('method anchor mismatch: ' + signature)
     op = text.find('{', start)
-    if op < 0:
-        fail('method opening brace missing: ' + signature)
+    if op < 0: fail('method opening brace missing: ' + signature)
     _, end = block_bounds(text, op, signature)
     return start, end
 
@@ -108,22 +94,23 @@ if 'operationHealthRev35R017BlockedCoverage' not in renderer:
     fail('R017 exact blocker instrumentation must already be applied')
 if R013 in renderer or 'REV3_5_R013_VARIANT=' in build or 'rev3_5_r013_variant=' in build:
     fail('rejected R013 experiment must remain absent')
-if 'ContentPlanningHeadingStepDeg = 6f' not in renderer:
+if 'const float ContentPlanningHeadingStepDeg = 6f;' not in renderer:
     fail('formal cumulative 6 degree content-planning contract missing')
 if R018 in renderer:
     print(PREFIX + ' renderer overlay already present')
     raise SystemExit(0)
 
+# Identity + compact handover state. No second worker/result/presentation lane exists.
 identity_old = '        const string Rev35R014Variant = "' + R014 + '";\n'
 identity_new = identity_old + (
     '        const string Rev35R018Variant = "' + R018 + '";\n')
-renderer, _ = replace_once(renderer, identity_old, identity_new, 'R018 renderer identity')
+renderer, _ = replace_once(renderer, identity_old, identity_new,
+                           'R018 renderer identity')
 
-field_old = '''        long operationHealthRev35R017CadenceSkips;
-'''
-field_new = field_old + '''        // R018 keeps the last complete content snapshot ACTIVE while the latest
-        // 6-degree planning target is prepared through the existing single pipeline.
-        // Only cache-key strings are protected; completed presentation objects are not cached.
+field_old = '        long operationHealthRev35R017CadenceSkips;\n'
+field_new = field_old + '''        // R018: keep the last complete content material set ACTIVE while the
+        // threshold-qualified next view is prepared through the existing R008/R010/R014
+        // single pipeline. Only cache-key strings receive temporary lifetime protection.
         readonly HashSet<string> rev35R018ProtectedActiveKeys =
             new HashSet<string>(StringComparer.Ordinal);
         bool rev35R018DeferredAdoptionPending;
@@ -146,10 +133,10 @@ field_new = field_old + '''        // R018 keeps the last complete content snaps
         long operationHealthRev35R018ProtectedSupersededSkips;
         long operationHealthRev35R018ProtectedPruneSkips;
 '''
-renderer, _ = replace_once(renderer, field_old, field_new, 'R018 state/counters')
+renderer, _ = replace_once(renderer, field_old, field_new,
+                           'R018 state/counters')
 
-helper_anchor = '''        bool NeedsContentRefresh(AERISTerrainTileSystem system, Vessel vessel,
-'''
+helper_anchor = '        bool NeedsContentRefresh(AERISTerrainTileSystem system, Vessel vessel,\n'
 helpers = r'''        void Rev35R018SetDeferredTarget(AERISTerrainTileSystem system,
             double centerLatitudeDeg, double centerLongitudeDeg, float rangeMeters,
             float mapHeadingDeg, bool trackUp, float anchorV,
@@ -285,6 +272,20 @@ helpers = r'''        void Rev35R018SetDeferredTarget(AERISTerrainTileSystem sys
 renderer, _ = replace_once(renderer, helper_anchor, helpers + helper_anchor,
                            'R018 helper methods')
 
+# Patch Draw only at narrow stable authorities. R008 requested-first/FAR-first and R014
+# batching remain byte-for-byte inside the candidate block.
+d0, d1 = method_bounds(renderer,
+    '        internal AERISTerrainGpuDrawState Draw(Rect plot,')
+draw = renderer[d0:d1]
+
+for required in (
+    'rasterizer.ReconcileCurrentRequests(requested);',
+    'for (int admissionPass = 0; admissionPass < 2; admissionPass++)',
+    'bool rev35R014ReconcileRequired = contentGeometryChanged ||',
+    'rev35R014ReconciledPublicationSerial ='):
+    if required not in draw:
+        fail('generated R008/R014 Draw contract missing: ' + required)
+
 geometry_old = '''            bool contentGeometryChanged = NeedsContentRefresh(system, vessel,
                 centerLatitudeDeg, centerLongitudeDeg, rangeMeters, mapHeadingDeg,
                 trackUp, anchorV, orientation, styleKey);
@@ -315,8 +316,8 @@ geometry_new = geometry_old + '''            bool rev35R018DeferredTargetChanged
                     anchorV, orientation, styleKey);
             }
 '''
-renderer, _ = replace_once(renderer, geometry_old, geometry_new,
-                           'R018 deferred target admission')
+draw, _ = replace_once(draw, geometry_old, geometry_new,
+                       'R018 deferred target admission')
 
 retry_old = '''            bool contentRetryDue = (rasterizer.PendingCount > 0 ||
                 !requestedViewReady) &&
@@ -326,8 +327,8 @@ retry_new = '''            bool contentRetryDue = (rasterizer.PendingCount > 0 |
                 !requestedViewReady || rev35R018DeferredAdoptionPending) &&
                 presentationNow >= nextContentMaintenanceRealtime;
 '''
-renderer, _ = replace_once(renderer, retry_old, retry_new,
-                           'R018 pending handover retry cadence')
+draw, _ = replace_once(draw, retry_old, retry_new,
+                       'R018 pending handover retry cadence')
 
 capture_old = '''                visible = system.CaptureVisible(centerLatitudeDeg,
                     centerLongitudeDeg, rangeMeters, mapHeadingDeg, trackUp,
@@ -364,11 +365,14 @@ capture_new = '''                double rev35R018CaptureLatitudeDeg =
                     rev35R018CaptureHeadingDeg, rev35R018CaptureTrackUp,
                     rev35R018CaptureAnchorV, rev35R018CaptureOrientation);
                 operationHealthContentCaptures++;
+                bool rev35R018CandidateAvailable =
+                    visible != null && visible.Tiles != null &&
+                    visible.Tiles.Length > 0;
 '''
-renderer, _ = replace_once(renderer, capture_old, capture_new,
-                           'R018 stable candidate capture target')
+draw, _ = replace_once(draw, capture_old, capture_new,
+                       'R018 stable candidate capture target')
 
-body_old = '''                if (visible == null || visible.Tiles == null ||
+null_old = '''                if (visible == null || visible.Tiles == null ||
                     visible.Tiles.Length == 0)
                 {
                     ResetContentSnapshot();
@@ -380,41 +384,41 @@ body_old = '''                if (visible == null || visible.Tiles == null ||
                     return lastDrawState;
                 }
 
-                requested.Clear();
-                scheduledThisFrame.Clear();
-                tiles = PrepareSortedTileScratch(visible.Tiles);
-                EnsureEntryScratch(tiles == null ? 0 : tiles.Length);
-                for (int i = 0; i < tiles.Length; i++)
+'''
+null_new = '''                if (!rev35R018CandidateAvailable &&
+                    !rev35R018DeferredAdoptionPending)
                 {
-                    AERISTerrainHeightTile tile = tiles[i];
-                    if (tile == null)
-                    {
-                        fallbackEntriesScratch[i] = null;
-                        currentEntriesScratch[i] = null;
-                        drawEntriesScratch[i] = null;
-                        continue;
-                    }
-                    string cacheKey = CacheKey(tile.Key, tile.CreatedUtcTicks, styleKey);
-                    requested.Add(cacheKey);
-                    Entry fallbackEntry, currentEntry;
-                    ResolveRenderableEntries(tile, cacheKey, styleKey,
-                        out fallbackEntry, out currentEntry);
-                    if (currentEntry == null)
-                    {
-                        if (!TryUploadRenderReadyField(tile, cacheKey, styleKey, system,
-                            out currentEntry))
-                            Schedule(tile, cacheKey, styleKey, contourInterval,
-                                virtualDetail);
-                    }
-                    if (fallbackEntry != null) fallbackEntry.LastUse = ++useSequence;
-                    if (currentEntry != null) currentEntry.LastUse = ++useSequence;
-                    fallbackEntriesScratch[i] = fallbackEntry;
-                    currentEntriesScratch[i] = currentEntry;
-                    drawEntriesScratch[i] = currentEntry != null ?
-                        currentEntry : fallbackEntry;
+                    ResetContentSnapshot();
+                    nextContentMaintenanceRealtime = presentationNow +
+                        ContentMaintenanceRetrySeconds;
+                    lastCoverageFraction = 0f;
+                    lastDrawState = AERISTerrainGpuDrawState.Partial;
+                    TryPresentCoalescedFront(plot, vessel);
+                    return lastDrawState;
+                }
+                if (!rev35R018CandidateAvailable &&
+                    rev35R018DeferredAdoptionPending)
+                {
+                    operationHealthRev35R018HandoverDeferred++;
+                    nextContentMaintenanceRealtime = presentationNow +
+                        ContentMaintenanceRetrySeconds;
                 }
 
-                contentFoundationCoverage = MeasureFoundationGpuReadiness(visible,
+'''
+draw, _ = replace_once(draw, null_old, null_new,
+                       'R018 null candidate keeps ACTIVE snapshot')
+
+# Wrap the inherited R008/R014 candidate preparation block without rewriting it.
+requested_anchor = '                requested.Clear();\n'
+requested_pos = draw.find(requested_anchor, draw.find('rev35R018CandidateAvailable'))
+if requested_pos < 0 or draw.find(requested_anchor, requested_pos + 1) >= 0:
+    fail('R018 requested.Clear candidate anchor mismatch')
+draw = (draw[:requested_pos] +
+        '                if (rev35R018CandidateAvailable)\n'
+        '                {\n' +
+        draw[requested_pos:])
+
+assignment_old = '''                contentFoundationCoverage = MeasureFoundationGpuReadiness(visible,
                     tiles, currentEntriesScratch, out readyGlobal, out readyFar);
                 contentVisible = visible;
                 contentTerrainGeneration = visible.TerrainGeneration;
@@ -435,138 +439,83 @@ body_old = '''                if (visible == null || visible.Tiles == null ||
                 lastBackFoundationCoverage = contentFoundationCoverage;
                 lastCoverageFraction = contentFoundationCoverage;
 '''
-body_new = '''                bool rev35R018CandidateAvailable =
-                    visible != null && visible.Tiles != null &&
-                    visible.Tiles.Length > 0;
-                if (!rev35R018CandidateAvailable)
+assignment_new = '''                contentFoundationCoverage = MeasureFoundationGpuReadiness(visible,
+                    tiles, currentEntriesScratch, out readyGlobal, out readyFar);
+                float rev35R018CandidateCoverage = contentFoundationCoverage;
+                bool rev35R018CandidateComplete = visible.FoundationComplete &&
+                    rev35R018CandidateCoverage >= 0.999f &&
+                    readyFar >= visible.FarFoundationCount;
+                if (!rev35R018DeferredAdoptionPending ||
+                    !contentSnapshotValid || contentVisible == null ||
+                    rev35R018CandidateComplete)
                 {
-                    if (rev35R018DeferredAdoptionPending &&
-                        contentSnapshotValid && contentVisible != null)
+                    if (rev35R018DeferredAdoptionPending)
                     {
-                        operationHealthRev35R018HandoverDeferred++;
-                        nextContentMaintenanceRealtime = presentationNow +
-                            ContentMaintenanceRetrySeconds;
-                        if (!Rev35R018RestoreActivePresentationScratch(
-                            out visible, out tiles, out readyGlobal, out readyFar))
-                        {
-                            lastDrawState = AERISTerrainGpuDrawState.Partial;
-                            TryPresentCoalescedFront(plot, vessel);
-                            return lastDrawState;
-                        }
+                        operationHealthRev35R018HandoverReady++;
+                        operationHealthRev35R018HandoverAdopted++;
                     }
-                    else
+                    contentVisible = visible;
+                    contentTerrainGeneration = visible.TerrainGeneration;
+                    contentStyleKey = rev35R018CaptureStyleKey;
+                    contentCenterLatitudeDeg = rev35R018CaptureLatitudeDeg;
+                    contentCenterLongitudeDeg = rev35R018CaptureLongitudeDeg;
+                    contentRangeMeters = rev35R018CaptureRangeMeters;
+                    contentHeadingDeg = rev35R018CaptureHeadingDeg;
+                    contentTrackUp = rev35R018CaptureTrackUp;
+                    contentAnchorV = rev35R018CaptureAnchorV;
+                    contentOrientation = rev35R018CaptureOrientation;
+                    contentReadyGlobal = readyGlobal;
+                    contentReadyFar = readyFar;
+                    contentSnapshotValid = true;
+                    contentGpuReadyPending = true;
+                    nextContentMaintenanceRealtime = presentationNow +
+                        ContentMaintenanceRetrySeconds;
+                    lastBackFoundationCoverage = contentFoundationCoverage;
+                    lastCoverageFraction = contentFoundationCoverage;
+                    if (rev35R018DeferredAdoptionPending)
+                        Rev35R018ClearDeferredAdoption();
+                }
+                else
+                {
+                    operationHealthRev35R018HandoverDeferred++;
+                    nextContentMaintenanceRealtime = presentationNow +
+                        ContentMaintenanceRetrySeconds;
+                }
+                }
+
+                // Candidate preparation may have overwritten the reusable scratch arrays.
+                // If adoption is still pending, reconstruct only the last complete ACTIVE
+                // material set and continue its exact current-position/current-heading 10 Hz
+                // projection. Failure remains fail-closed and leaves the committed FRONT latch.
+                if (rev35R018DeferredAdoptionPending)
+                {
+                    if (!Rev35R018RestoreActivePresentationScratch(
+                        out visible, out tiles, out readyGlobal, out readyFar))
                     {
-                        ResetContentSnapshot();
-                        nextContentMaintenanceRealtime = presentationNow +
-                            ContentMaintenanceRetrySeconds;
-                        lastCoverageFraction = 0f;
                         lastDrawState = AERISTerrainGpuDrawState.Partial;
                         TryPresentCoalescedFront(plot, vessel);
                         return lastDrawState;
                     }
                 }
-                else
-                {
-                    requested.Clear();
-                    scheduledThisFrame.Clear();
-                    tiles = PrepareSortedTileScratch(visible.Tiles);
-                    EnsureEntryScratch(tiles == null ? 0 : tiles.Length);
-                    for (int i = 0; i < tiles.Length; i++)
-                    {
-                        AERISTerrainHeightTile tile = tiles[i];
-                        if (tile == null)
-                        {
-                            fallbackEntriesScratch[i] = null;
-                            currentEntriesScratch[i] = null;
-                            drawEntriesScratch[i] = null;
-                            continue;
-                        }
-                        string cacheKey = CacheKey(tile.Key,
-                            tile.CreatedUtcTicks, rev35R018CaptureStyleKey);
-                        requested.Add(cacheKey);
-                        Entry fallbackEntry, currentEntry;
-                        ResolveRenderableEntries(tile, cacheKey,
-                            rev35R018CaptureStyleKey,
-                            out fallbackEntry, out currentEntry);
-                        if (currentEntry == null)
-                        {
-                            if (!TryUploadRenderReadyField(tile, cacheKey,
-                                rev35R018CaptureStyleKey, system,
-                                out currentEntry))
-                                Schedule(tile, cacheKey,
-                                    rev35R018CaptureStyleKey, contourInterval,
-                                    virtualDetail);
-                        }
-                        if (fallbackEntry != null)
-                            fallbackEntry.LastUse = ++useSequence;
-                        if (currentEntry != null)
-                            currentEntry.LastUse = ++useSequence;
-                        fallbackEntriesScratch[i] = fallbackEntry;
-                        currentEntriesScratch[i] = currentEntry;
-                        drawEntriesScratch[i] = currentEntry != null ?
-                            currentEntry : fallbackEntry;
-                    }
-
-                    float rev35R018CandidateCoverage =
-                        MeasureFoundationGpuReadiness(visible, tiles,
-                            currentEntriesScratch, out readyGlobal, out readyFar);
-                    bool rev35R018CandidateComplete =
-                        visible.FoundationComplete &&
-                        rev35R018CandidateCoverage >= 0.999f &&
-                        readyFar >= visible.FarFoundationCount;
-
-                    if (!rev35R018DeferredAdoptionPending ||
-                        !contentSnapshotValid || contentVisible == null ||
-                        rev35R018CandidateComplete)
-                    {
-                        if (rev35R018DeferredAdoptionPending)
-                        {
-                            operationHealthRev35R018HandoverReady++;
-                            operationHealthRev35R018HandoverAdopted++;
-                        }
-                        contentFoundationCoverage = rev35R018CandidateCoverage;
-                        contentVisible = visible;
-                        contentTerrainGeneration = visible.TerrainGeneration;
-                        contentStyleKey = rev35R018CaptureStyleKey;
-                        contentCenterLatitudeDeg =
-                            rev35R018CaptureLatitudeDeg;
-                        contentCenterLongitudeDeg =
-                            rev35R018CaptureLongitudeDeg;
-                        contentRangeMeters = rev35R018CaptureRangeMeters;
-                        contentHeadingDeg = rev35R018CaptureHeadingDeg;
-                        contentTrackUp = rev35R018CaptureTrackUp;
-                        contentAnchorV = rev35R018CaptureAnchorV;
-                        contentOrientation = rev35R018CaptureOrientation;
-                        contentReadyGlobal = readyGlobal;
-                        contentReadyFar = readyFar;
-                        contentSnapshotValid = true;
-                        contentGpuReadyPending = true;
-                        nextContentMaintenanceRealtime = presentationNow +
-                            ContentMaintenanceRetrySeconds;
-                        lastBackFoundationCoverage =
-                            contentFoundationCoverage;
-                        lastCoverageFraction = contentFoundationCoverage;
-                        if (rev35R018DeferredAdoptionPending)
-                            Rev35R018ClearDeferredAdoption();
-                    }
-                    else
-                    {
-                        operationHealthRev35R018HandoverDeferred++;
-                        nextContentMaintenanceRealtime = presentationNow +
-                            ContentMaintenanceRetrySeconds;
-                        if (!Rev35R018RestoreActivePresentationScratch(
-                            out visible, out tiles, out readyGlobal, out readyFar))
-                        {
-                            lastDrawState = AERISTerrainGpuDrawState.Partial;
-                            TryPresentCoalescedFront(plot, vessel);
-                            return lastDrawState;
-                        }
-                    }
-                }
 '''
-renderer, _ = replace_once(renderer, body_old, body_new,
-                           'R018 deferred atomic content adoption body')
+draw, _ = replace_once(draw, assignment_old, assignment_new,
+                       'R018 conditional atomic content publication')
 
+# The generated block must still contain every upstream scheduling authority exactly once.
+for required, expected in (
+    ('rasterizer.ReconcileCurrentRequests(requested);', 1),
+    ('for (int admissionPass = 0; admissionPass < 2; admissionPass++)', 1),
+    ('system.CaptureVisible(', 1),
+    ('contentFoundationCoverage = MeasureFoundationGpuReadiness(', 1),
+    ('Rev35R018RestoreActivePresentationScratch(', 1)):
+    count = draw.count(required)
+    if count != expected:
+        fail('R018 Draw authority count mismatch %s=%d expected=%d' %
+             (required, count, expected))
+
+renderer = renderer[:d0] + draw + renderer[d1:]
+
+# Protect only ACTIVE material identity while the candidate is incomplete.
 m0, m1 = method_bounds(renderer, '        void RemoveSupersededEntries(')
 method = renderer[m0:m1]
 sup_old = '''                if (entry == null || string.Equals(entry.CacheKey, keepCacheKey,
@@ -625,16 +574,17 @@ method, _ = replace_once(method, rr_old, rr_new,
                          'R018 RenderReady ACTIVE protection')
 renderer = renderer[:rr0] + method + renderer[rr1:]
 
+# Any hard content lifecycle reset invalidates the pending handover as well.
 rs0, rs1 = method_bounds(renderer, '        void ResetContentSnapshot()')
 method = renderer[rs0:rs1]
-reset_anchor = '''        {
+reset_old = '''        {
             contentVisible = null;
 '''
 reset_new = '''        {
             Rev35R018ClearDeferredAdoption();
             contentVisible = null;
 '''
-method, _ = replace_once(method, reset_anchor, reset_new,
+method, _ = replace_once(method, reset_old, reset_new,
                          'R018 reset deferred state')
 renderer = renderer[:rs0] + method + renderer[rs1:]
 
@@ -666,6 +616,7 @@ telemetry_new = telemetry_old + (
 renderer, _ = replace_once(renderer, telemetry_old, telemetry_new,
                            'R018 telemetry')
 
+# Build/prebuild wiring remains additive over R017.
 r017_var = 'REV3_5_R017_VARIANT="' + R017 + '"\n'
 r018_var = r017_var + 'REV3_5_R018_VARIANT="' + R018 + '"\n'
 build, _ = replace_once(build, r017_var, r018_var,
@@ -709,7 +660,7 @@ for required in (
     'lastBackFoundationCoverage >= 0.999f',
     'readyFar >= visible.FarFoundationCount',
     'nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f',
-    'ContentPlanningHeadingStepDeg = 6f'):
+    'const float ContentPlanningHeadingStepDeg = 6f;'):
     if required not in renderer:
         fail('frozen contract missing after R018: ' + required)
 
@@ -724,6 +675,7 @@ print('r018=' + R018)
 print('handover=ACTIVE_COMPLETE_UNTIL_CANDIDATE_COMPLETE')
 print('candidate_target=LATEST_THRESHOLD_QUALIFIED_NON_SPECULATIVE')
 print('candidate_complete=FoundationComplete && coverage>=0.999 && readyFar>=requiredFar')
+print('r008_requested_first=RETAINED r008_far_first=RETAINED r014_batching=RETAINED')
 print('active_material_protection=exact cache-key lifetime only')
 print('new_worker=0 new_queue=0 new_mesh=0 new_rendertexture=0 completed_front_cache=0')
 print('swap_gate_change=0 quality_change=0 cadence_change=0 exact_range_change=0')
