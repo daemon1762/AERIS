@@ -24,6 +24,21 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1), True
 
 
+def insert_after_unique_line(text, marker, insertion, already_marker, label):
+    """Insert after one generated C# source line without depending on Python escape spelling."""
+    if already_marker in text:
+        return text, False
+    count = text.count(marker)
+    if count != 1:
+        fail('%s anchor count=%d' % (label, count))
+    start = text.find(marker)
+    end = text.find('\n', start)
+    if end < 0:
+        fail('%s line terminator missing' % label)
+    end += 1
+    return text[:end] + insertion + text[end:], True
+
+
 for path in (R, V7):
     if not path.is_file():
         fail('missing ' + str(path.relative_to(ROOT)))
@@ -77,13 +92,30 @@ final_new = '''            int finalRemainingCompleted = Math.Max(0, rasterizer.
 renderer, _ = replace_once(renderer, final_old, final_new,
                            'Hotfix1 final backlog')
 
-# Publish only an identity witness; existing R019 counters already expose queue/budget effect.
-telemetry_old = (
-    '                "; oh_rev35_r019_variant=" + Rev35R019Variant +\\n')
-telemetry_new = telemetry_old + (
-    '                "; oh_rev35_r019_hf1_variant=" + Rev35R019Hotfix1Variant +\\n')
-renderer, _ = replace_once(renderer, telemetry_old, telemetry_new,
-                           'Hotfix1 telemetry identity')
+# Publish only an identity witness. Do not anchor on the Python applicator's escaped "\\n"
+# spelling: inspect the already-generated C# source line and insert after that physical line.
+telemetry_marker = '                "; oh_rev35_r019_variant=" + Rev35R019Variant +'
+telemetry_insert = (
+    '                "; oh_rev35_r019_hf1_variant=" + Rev35R019Hotfix1Variant +\n')
+renderer, _ = insert_after_unique_line(
+    renderer,
+    telemetry_marker,
+    telemetry_insert,
+    'oh_rev35_r019_hf1_variant=',
+    'Hotfix1 telemetry identity')
+
+# Fail closed before writing any runtime source if the complete Hotfix1 shape is not present.
+required_runtime = (
+    HF1,
+    'Rev35R019Hotfix1Variant',
+    'oh_rev35_r019_hf1_variant=',
+    'rev35R019VisibleFoundationQueue.Count > 0 ||\n                    rev35R007FoundationQueue.Count > 0',
+    'int r010QueueBacklog =\n                Math.Max(0, rev35R019VisibleFoundationQueue.Count) +\n                Math.Max(0, rev35R007FoundationQueue.Count);',
+    'Math.Max(0, rev35R019VisibleFoundationQueue.Count) +\n                Math.Max(0, rev35R007FoundationQueue.Count);',
+)
+missing_runtime = [token for token in required_runtime if token not in renderer]
+if missing_runtime:
+    fail('runtime contract incomplete: ' + ', '.join(missing_runtime))
 R.write_text(renderer)
 
 # Historical R007 verifier froze the pre-split implementation shape (one queue Count >= 128).
