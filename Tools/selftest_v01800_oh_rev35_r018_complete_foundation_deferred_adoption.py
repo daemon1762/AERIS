@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 R = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs'
 O17 = ROOT / 'Source/AERISFlightControl/Terrain/AERISR017NdPresentationStallObserver.cs'
 A = ROOT / 'Tools/apply_aeris29_rev3_5_salbutamol_r018_complete_foundation_deferred_adoption.py'
+H = ROOT / 'Tools/apply_aeris29_rev3_5_salbutamol_r018_structural_view_bypass_hotfix1.py'
 B = ROOT / 'build_ubuntu.sh'
 PRE = ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'
 
@@ -21,10 +22,10 @@ checks = []
 def ck(ok, label):
     checks.append((bool(ok), label))
 
-for path in (R, O17, A, B, PRE):
+for path in (R, O17, A, H, B, PRE):
     ck(path.is_file(), 'file exists: ' + str(path.relative_to(ROOT)))
 
-if not all(path.is_file() for path in (R, O17, A, B, PRE)):
+if not all(path.is_file() for path in (R, O17, A, H, B, PRE)):
     for ok, label in checks:
         print(('[PASS] ' if ok else '[FAIL] ') + label)
     raise SystemExit(1)
@@ -32,6 +33,7 @@ if not all(path.is_file() for path in (R, O17, A, B, PRE)):
 r = R.read_text()
 o = O17.read_text()
 a = A.read_text()
+h = H.read_text()
 b = B.read_text()
 pre = PRE.read_text()
 
@@ -67,6 +69,27 @@ ck('rev35R018DeferredAdoptionPending ?' in r and
    'candidate capture uses stable threshold-qualified target')
 ck('!requestedViewReady || rev35R018DeferredAdoptionPending' in r,
    'pending handover retries on inherited content cadence')
+
+# Deferred adoption is deliberately limited to geographic heading/position updates inside
+# the same structural view. Structural changes retain the inherited immediate semantics.
+ck('bool Rev35R018CanDeferCurrentGeometry(' in r,
+   'structural-view eligibility helper present')
+for token in (
+    'contentTerrainGeneration == system.TerrainGeneration',
+    'string.Equals(contentStyleKey, styleKey, StringComparison.Ordinal)',
+    'contentTrackUp == trackUp',
+    'contentOrientation == orientation',
+    'Math.Abs(contentAnchorV - anchorV) <= 0.001f',
+    'Math.Abs(contentRangeMeters - rangeMeters) <= 0.5f'):
+    ck(token in r, 'structural eligibility retains ' + token)
+ck('if (rev35R018DeferredAdoptionPending &&\n                !rev35R018StructuralCompatible)' in r and
+   'Rev35R018ClearDeferredAdoption();' in r,
+   'structural change cancels deferred ownership before legacy handover')
+ck('contentGeometryChanged && rev35R018StructuralCompatible' in r,
+   'new deferred handover starts only for structural-compatible geometry')
+ck('operationHealthRev35R018StructuralBypasses' in r and
+   'oh_rev35_r018_structural_bypass=' in r,
+   'structural bypass is observable')
 
 ck('bool rev35R018CandidateComplete = visible.FoundationComplete &&' in r and
    'rev35R018CandidateCoverage >= 0.999f' in r and
@@ -110,7 +133,8 @@ for field in (
     'oh_rev35_r018_active_restore=',
     'oh_rev35_r018_active_safety_block=',
     'oh_rev35_r018_protected_superseded_skip=',
-    'oh_rev35_r018_protected_prune_skip='):
+    'oh_rev35_r018_protected_prune_skip=',
+    'oh_rev35_r018_structural_bypass='):
     ck(field in r, 'telemetry field: ' + field)
 
 ck(('REV3_5_R018_VARIANT="' + R018 + '"') in b,
@@ -126,6 +150,7 @@ ck(R013 not in r and 'REV3_5_R013_VARIANT=' not in b and
    'rejected R013 remains absent')
 
 ck('AERISTerrainGpuTileRenderer.cs' in a, 'applicator targets renderer')
+ck('AERISTerrainGpuTileRenderer.cs' in h, 'structural hotfix targets renderer only')
 for forbidden_path in (
     'AERISWorkerScheduler.cs',
     'AERISTerrainGpuTileRasterizer.cs',
@@ -134,16 +159,19 @@ for forbidden_path in (
     'AERISNavigationDisplay.cs',
     'AERISFlightControl.cs',
     'AERISFlightDataRecorder.cs'):
-    ck(forbidden_path not in a, 'applicator does not target ' + forbidden_path)
+    ck(forbidden_path not in a and forbidden_path not in h,
+       'R018 tools do not target ' + forbidden_path)
 
 for forbidden in (
     'Task.Run(', 'new Thread(', 'ThreadPool.', 'GC.Collect(',
     'WaitManagedPreparation', 'ResidentPreparedPresentation'):
-    ck(forbidden not in a, 'applicator avoids forbidden mechanism: ' + forbidden)
+    ck(forbidden not in a and forbidden not in h,
+       'R018 tools avoid forbidden mechanism: ' + forbidden)
 
 for forbidden in ('new RenderTexture', 'new Mesh', 'pendingEntryCommit2',
                   'second staged', 'speculative'):
-    ck(forbidden not in a, 'no R018 duplicate/speculative authority: ' + forbidden)
+    ck(forbidden not in a and forbidden not in h,
+       'no R018 duplicate/speculative authority: ' + forbidden)
 
 failed = [label for ok, label in checks if not ok]
 for ok, label in checks:
