@@ -10,7 +10,10 @@ A = ROOT / 'Tools/apply_aeris29_rev3_5_salbutamol_r018_complete_foundation_defer
 B = ROOT / 'build_ubuntu.sh'
 PRE = ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'
 
+R008 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R008_CURRENT_FOUNDATION_UPSTREAM_PRIORITY'
+R010 = 'AERIS27_REV3_5_SALBUTAMOL_SULFATE_R010_CONTINUOUS_COMMIT_STREAM'
 R013 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R013_STABLE_CONTENT_SNAPSHOT_RECONCILE'
+R014 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R014_PUBLICATION_GATED_CONTENT_RECONCILE'
 R017 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R017_ND_PRESENTATION_STALL_OBSERVER'
 R018 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R018_COMPLETE_FOUNDATION_DEFERRED_ADOPTION'
 
@@ -35,8 +38,22 @@ pre = PRE.read_text()
 ck(R018 in r, 'R018 renderer identity present')
 ck(R017 in o and '[OH_REV3_5_R017_ND_PRESENT_STALL]' in o,
    'R017 stall observer retained')
-ck('ContentPlanningHeadingStepDeg = 6f' in r,
-   'formal cumulative 6 degree planning threshold retained')
+ck('const float ContentPlanningHeadingStepDeg = 6f;' in r and
+   'if (headingDelta >= ContentPlanningHeadingStepDeg) return true;' in r,
+   'formal cumulative 6 degree planning authority retained')
+
+# R018 must be a successor of the exact current-FAR / continuous-commit / publication
+# lineage, not a replacement implementation of those mechanisms.
+ck(R008 in r and 'rasterizer.ReconcileCurrentRequests(requested);' in r,
+   'R008 current-request reconciliation retained')
+ck('for (int admissionPass = 0; admissionPass < 2; admissionPass++)' in r,
+   'R008 FAR-first two-pass admission retained')
+ck(R010 in r and 'rev35R007FoundationQueue.Count > 0' in r,
+   'R010 continuous single commit stream retained')
+ck(R014 in r and 'bool rev35R014ReconcileRequired = contentGeometryChanged ||' in r,
+   'R014 publication-gated reconcile retained')
+ck('rev35R014ReconciledPublicationSerial =' in r,
+   'R014 reconciled publication serial retained')
 
 ck('rev35R018DeferredAdoptionPending' in r,
    'deferred-adoption state present')
@@ -51,19 +68,23 @@ ck('rev35R018DeferredAdoptionPending ?' in r and
 ck('!requestedViewReady || rev35R018DeferredAdoptionPending' in r,
    'pending handover retries on inherited content cadence')
 
-candidate_gate = '''bool rev35R018CandidateComplete =
-                        visible.FoundationComplete &&
-                        rev35R018CandidateCoverage >= 0.999f &&
-                        readyFar >= visible.FarFoundationCount;'''
-ck(candidate_gate in r, 'candidate adoption requires exact complete foundation gate')
-ck('contentVisible = visible;' in r and
-   'if (!rev35R018DeferredAdoptionPending ||' in r and
-   'rev35R018CandidateComplete)' in r,
+ck('bool rev35R018CandidateComplete = visible.FoundationComplete &&' in r and
+   'rev35R018CandidateCoverage >= 0.999f' in r and
+   'readyFar >= visible.FarFoundationCount;' in r,
+   'candidate adoption requires exact complete foundation gate')
+ck('contentFoundationCoverage = MeasureFoundationGpuReadiness(visible,' in r,
+   'inherited foundation measurement authority retained')
+ck('if (!rev35R018DeferredAdoptionPending ||' in r and
+   'rev35R018CandidateComplete)' in r and
+   'contentVisible = visible;' in r,
    'content authority publication is conditional')
-ck('Rev35R018RestoreActivePresentationScratch(' in r,
+ck('if (rev35R018DeferredAdoptionPending)' in r and
+   'Rev35R018RestoreActivePresentationScratch(' in r,
    'incomplete candidate restores ACTIVE presentation scratch')
 ck('operationHealthRev35R018ActiveRestoreSafetyBlock' in r,
    'ACTIVE restore has fail-closed safety telemetry')
+ck(r.count('system.CaptureVisible(') == 1,
+   'single CaptureVisible authority retained')
 
 ck('rev35R018ProtectedActiveKeys.Contains(entry.CacheKey)' in r,
    'superseded/LRU path protects ACTIVE entry keys')
@@ -72,10 +93,10 @@ ck('rev35R018ProtectedActiveKeys.Contains(pair.Key)' in r,
 ck('Rev35R018ClearDeferredAdoption();\n            contentVisible = null;' in r,
    'hard content reset clears deferred ownership')
 
-swap_gate = '''foundationComplete = rendered && visible.FoundationComplete &&
-                    lastBackFoundationCoverage >= 0.999f &&
-                    readyFar >= visible.FarFoundationCount;'''
-ck(swap_gate in r, 'existing FRONT swap complete-coverage gate unchanged')
+ck('foundationComplete = rendered && visible.FoundationComplete &&' in r and
+   'lastBackFoundationCoverage >= 0.999f' in r and
+   'readyFar >= visible.FarFoundationCount;' in r,
+   'existing FRONT swap complete-coverage gate unchanged')
 ck('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in r,
    'fixed 10Hz authoritative presentation unchanged')
 
@@ -104,7 +125,7 @@ ck(R013 not in r and 'REV3_5_R013_VARIANT=' not in b and
    'rev3_5_r013_variant=' not in b,
    'rejected R013 remains absent')
 
-ck("AERISTerrainGpuTileRenderer.cs" in a, 'applicator targets renderer')
+ck('AERISTerrainGpuTileRenderer.cs' in a, 'applicator targets renderer')
 for forbidden_path in (
     'AERISWorkerScheduler.cs',
     'AERISTerrainGpuTileRasterizer.cs',
