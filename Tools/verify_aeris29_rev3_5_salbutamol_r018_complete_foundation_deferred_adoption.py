@@ -7,7 +7,9 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 R = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs'
 A = ROOT / 'Tools/apply_aeris29_rev3_5_salbutamol_r018_complete_foundation_deferred_adoption.py'
+H = ROOT / 'Tools/apply_aeris29_rev3_5_salbutamol_r018_structural_view_bypass_hotfix1.py'
 S = ROOT / 'Tools/selftest_v01800_oh_rev35_r018_complete_foundation_deferred_adoption.py'
+P = ROOT / 'Tools/prepare_aeris29_rev3_5_salbutamol_r018_runtime.py'
 B = ROOT / 'build_ubuntu.sh'
 
 R013 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R013_STABLE_CONTENT_SNAPSHOT_RECONCILE'
@@ -16,7 +18,7 @@ R018 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R018_COMPLETE_FOUNDATION_DEFERRED_ADOP
 def fail(msg):
     raise SystemExit('[AERIS29 R018 VERIFY] ' + msg)
 
-for p in (R, A, S, B):
+for p in (R, A, H, S, P, B):
     if not p.is_file():
         fail('missing ' + str(p.relative_to(ROOT)))
 
@@ -24,7 +26,16 @@ subprocess.run([sys.executable, str(S)], cwd=str(ROOT), check=True)
 
 r = R.read_text()
 a = A.read_text()
+h = H.read_text()
+p = P.read_text()
 b = B.read_text()
+
+apply_name = 'apply_aeris29_rev3_5_salbutamol_r018_complete_foundation_deferred_adoption.py'
+hotfix_name = 'apply_aeris29_rev3_5_salbutamol_r018_structural_view_bypass_hotfix1.py'
+verify_name = 'verify_aeris29_rev3_5_salbutamol_r018_complete_foundation_deferred_adoption.py'
+apply_pos = p.find(apply_name)
+hotfix_pos = p.find(hotfix_name)
+verify_pos = p.find(verify_name)
 
 checks = (
     (R018 in r, 'renderer identity'),
@@ -33,10 +44,14 @@ checks = (
     ('readyFar >= visible.FarFoundationCount' in r, 'candidate/FRONT FAR gate'),
     ('Rev35R018RestoreActivePresentationScratch' in r, 'ACTIVE scratch restore'),
     ('rev35R018ProtectedActiveKeys' in r, 'ACTIVE key lifetime protection'),
+    ('Rev35R018CanDeferCurrentGeometry' in r, 'structural-view eligibility gate'),
+    ('oh_rev35_r018_structural_bypass=' in r, 'structural bypass telemetry'),
     ('oh_rev35_r018_handover_adopted=' in r, 'R018 telemetry'),
     ('ContentPlanningHeadingStepDeg = 6f' in r, '6 degree planning threshold'),
     ('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in r,
      '10Hz authority'),
+    (apply_pos >= 0 and hotfix_pos > apply_pos and verify_pos > hotfix_pos,
+     'formal prepare applies R018 -> structural hotfix -> verifier in order'),
     (('REV3_5_R018_VARIANT="' + R018 + '"') in b, 'build identity'),
     ('rev3_5_r018_variant=' in b, 'candidate identity'),
     (R013 not in r and 'REV3_5_R013_VARIANT=' not in b, 'R013 absent'),
@@ -51,7 +66,7 @@ if failed:
 
 for forbidden in ('Task.Run(', 'new Thread(', 'ThreadPool.', 'GC.Collect(',
                   'WaitManagedPreparation', 'ResidentPreparedPresentation'):
-    if forbidden in a:
-        fail('applicator contains forbidden mechanism: ' + forbidden)
+    if forbidden in a or forbidden in h:
+        fail('R018 tool contains forbidden mechanism: ' + forbidden)
 
 print('[AERIS29 R018 VERIFY] PASS')
