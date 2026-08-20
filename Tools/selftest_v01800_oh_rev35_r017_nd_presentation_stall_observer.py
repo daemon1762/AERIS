@@ -2,7 +2,7 @@
 from pathlib import Path
 import sys
 
-sys.dont_write_bytecode = True
+sys.dont_writebytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 R = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs'
 O = ROOT / 'Source/AERISFlightControl/Terrain/AERISR017NdPresentationStallObserver.cs'
@@ -15,6 +15,7 @@ R013 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R013_STABLE_CONTENT_SNAPSHOT_RECONCILE
 R014 = 'AERIS28_REV3_5_SALBUTAMOL_SULFATE_R014_PUBLICATION_GATED_CONTENT_RECONCILE'
 R016 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R016_FDR_HIGH_RATE_DIAGNOSTICS_ISOLATION'
 R017 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R017_ND_PRESENTATION_STALL_OBSERVER'
+R018 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R018_VISIBLE_FOUNDATION_PRESENTATION_GATE_SPLIT'
 
 for path in (R, O, REC, P, B, PRE):
     if not path.is_file():
@@ -62,16 +63,16 @@ for field in ('operationHealthRev35R017BlockedRenderedFalse',
           'observer reads ' + field)
 
 check('if (!rendered) operationHealthRev35R017BlockedRenderedFalse++;' in renderer,
-      'blocked reason mirrors existing rendered predicate')
+      'blocked reason retains R017 rendered witness')
 check('if (!visible.FoundationComplete)' in renderer and
       'operationHealthRev35R017BlockedFoundationFlag++;' in renderer,
-      'blocked reason mirrors existing FoundationComplete predicate')
+      'blocked reason retains R017 FoundationComplete witness')
 check('if (lastBackFoundationCoverage < 0.999f)' in renderer and
       'operationHealthRev35R017BlockedCoverage++;' in renderer,
-      'blocked reason mirrors existing coverage predicate')
+      'blocked reason retains R017 overscan-coverage witness')
 check('if (readyFar < visible.FarFoundationCount)' in renderer and
       'operationHealthRev35R017BlockedReadyFar++;' in renderer,
-      'blocked reason mirrors existing readyFar predicate')
+      'blocked reason retains R017 overscan-readyFar witness')
 check('else if (refreshRequired)' in renderer and
       'skippedBackRenderFrames++;\n                operationHealthRev35R017CadenceSkips++;' in renderer,
       'cadence observation stays inside existing refreshRequired skip branch')
@@ -104,13 +105,31 @@ for forbidden in ('Task.Run(', 'new Thread(', 'ThreadPool.', 'GC.Collect(',
                   'SwapFrontAndBack(', 'PresentFrontDirect('):
     check(forbidden not in observer, 'observer owns no authority: excludes ' + forbidden)
 
-# Instrumentation may count branch outcomes only; it must not alter the formal gates.
-check('foundationComplete = rendered && visible.FoundationComplete &&\n                    lastBackFoundationCoverage >= 0.999f &&\n                    readyFar >= visible.FarFoundationCount;' in renderer,
-      'formal complete-foundation gate remains byte-exact')
+# R017 is measurement-only. Its original runtime keeps the byte-exact overscan gate.
+# R018 is the only admitted successor here: it preserves all R017 counters/observer
+# behavior while splitting hidden overscan readiness from exact-visible presentation.
+r018_gate_successor = (R018 in renderer and
+    'oh_rev35_r018_visible_required_far=' in renderer and
+    'oh_rev35_r018_overscan_hol_avoided=' in renderer)
+legacy_gate = ('foundationComplete = rendered && visible.FoundationComplete &&\n'
+               '                    lastBackFoundationCoverage >= 0.999f &&\n'
+               '                    readyFar >= visible.FarFoundationCount;' in renderer)
+r018_gate = (r018_gate_successor and
+    'foundationComplete = rendered && r018VisibleGpuComplete;' in renderer and
+    'bool r018OverscanGpuComplete = visible.FoundationComplete &&' in renderer)
+check(legacy_gate or r018_gate,
+      'formal complete-foundation gate is R017 legacy or exact R018 visible successor')
 check('bool refreshAllowed = ShouldRefreshBackBuffer(visible, refreshRequired);' in renderer,
       'formal refresh admission authority remains unchanged')
-check('if (foundationComplete)\n                {\n                    SwapFrontAndBack(' in renderer,
-      'successful swap authority remains foundationComplete only')
+legacy_swap = ('if (foundationComplete)\n                {\n'
+               '                    SwapFrontAndBack(' in renderer)
+r018_swap = (r018_gate_successor and
+    'if (foundationComplete)\n                {\n'
+    '                    if (!r018OverscanGpuComplete)\n'
+    '                        operationHealthRev35R018OverscanHolAvoided++;\n'
+    '                    SwapFrontAndBack(' in renderer)
+check(legacy_swap or r018_swap,
+      'successful swap authority is R017 legacy or exact R018 visible successor')
 
 failed = []
 for ok, label in checks:
