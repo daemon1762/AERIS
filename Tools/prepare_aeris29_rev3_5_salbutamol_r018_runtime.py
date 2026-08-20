@@ -103,7 +103,7 @@ def reconstruct_r005():
 
 
 parser = argparse.ArgumentParser(
-    description='Reconstruct formal R014 lineage, retain R015/R016/R017 diagnostics, overlay R018 complete-foundation deferred adoption, verify, build and install once.')
+    description='Reconstruct formal R014 lineage, retain R015/R016/R017 diagnostics, overlay R018 complete-foundation deferred adoption plus structural-view safety bypass, verify, build and install once.')
 parser.add_argument('ksp_path')
 args = parser.parse_args()
 ksp = Path(args.ksp_path).expanduser().resolve()
@@ -169,6 +169,7 @@ run([sys.executable, ROOT / 'Tools/verify_aeris29_rev3_5_salbutamol_r016_fdr_hig
 run([sys.executable, ROOT / 'Tools/apply_aeris29_rev3_5_salbutamol_r017_nd_presentation_stall_observer.py'])
 run([sys.executable, ROOT / 'Tools/verify_aeris29_rev3_5_salbutamol_r017_nd_presentation_stall_observer.py'])
 run([sys.executable, ROOT / 'Tools/apply_aeris29_rev3_5_salbutamol_r018_complete_foundation_deferred_adoption.py'])
+run([sys.executable, ROOT / 'Tools/apply_aeris29_rev3_5_salbutamol_r018_structural_view_bypass_hotfix1.py'])
 run([sys.executable, ROOT / 'Tools/verify_aeris29_rev3_5_salbutamol_r018_complete_foundation_deferred_adoption.py'])
 run(['git', 'diff', '--check'])
 
@@ -213,10 +214,14 @@ checks = [
     (marker_in_bytes(dll, R018), 'DLL embeds R018 marker'),
     (marker_in_bytes(dll, 'rev35R018DeferredAdoptionPending'),
      'DLL embeds R018 pending handover symbol'),
+    (marker_in_bytes(dll, 'Rev35R018CanDeferCurrentGeometry'),
+     'DLL embeds R018 structural-view eligibility gate'),
     (marker_in_bytes(dll, 'oh_rev35_r018_handover_adopted='),
      'DLL embeds R018 adoption telemetry'),
     (marker_in_bytes(dll, 'oh_rev35_r018_active_safety_block='),
      'DLL embeds R018 fail-closed restore telemetry'),
+    (marker_in_bytes(dll, 'oh_rev35_r018_structural_bypass='),
+     'DLL embeds R018 structural-bypass telemetry'),
     (not marker_in_bytes(dll, R013), 'DLL excludes rejected R013 marker'),
     (not marker_in_bytes(dll, 'WaitManagedPreparation') and
      not marker_in_bytes(dll, 'ResidentPreparedPresentation') and
@@ -245,4 +250,4 @@ print('r017=' + R017)
 print('r018=' + R018)
 print('dll_sha256=' + sha256(installed))
 print(YELLOW + 'R018 CONTRACT:' + RESET +
-      ' retain the last complete ACTIVE content snapshot while the exact latest threshold-qualified candidate is prepared through the existing single R010/R014 pipeline. Candidate adoption requires FoundationComplete, coverage>=0.999 and readyFar>=requiredFar. No second worker lane, Mesh, RenderTexture or completed-front cache. Existing 10Hz/160km/complete-coverage swap gate and R017 stall observer remain authoritative.')
+      ' retain the last complete ACTIVE content material set only for threshold-qualified heading/position changes inside the same structural view while the next candidate is prepared through the existing single R008/R010/R014 pipeline. Candidate adoption requires FoundationComplete, coverage>=0.999 and readyFar>=requiredFar. Structural changes retain inherited immediate fail-closed semantics. No second worker lane, Mesh, RenderTexture or completed-front cache. Existing 10Hz/160km/complete-coverage swap gate and R017 stall observer remain authoritative.')
