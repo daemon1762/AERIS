@@ -2,7 +2,7 @@
 from pathlib import Path
 import sys
 
-sys.dont_writebytecode = True
+sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 R = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs'
 O = ROOT / 'Source/AERISFlightControl/Terrain/AERISR017NdPresentationStallObserver.cs'
