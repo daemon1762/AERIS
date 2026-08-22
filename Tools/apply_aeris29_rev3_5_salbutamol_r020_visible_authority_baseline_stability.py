@@ -8,7 +8,7 @@ T = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs'
 R = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs'
 B = ROOT / 'build_ubuntu.sh'
 PRE = ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'
-PREFIX = '[AERIS29 REV3.5 SALBUTAMOL SULFATE R020 VISIBLE AUTHORITY BASELINE STABILITY]'
+PREFIX = '[AERIS30 REV3.5 R020 VISIBLE AUTHORITY BASELINE STABILITY SUCCESSOR COMPAT]'
 R018 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R018_VISIBLE_FOUNDATION_PRESENTATION_GATE_SPLIT'
 R019 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R019_VISIBLE_FAR_COMMIT_PRIORITY'
 HF1 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R019_HOTFIX1_VISIBLE_QUEUE_WAKE_BACKLOG_INTEGRATION'
@@ -29,12 +29,20 @@ def replace_once(text, old, new, label):
 
 
 def method_bounds(text, signature):
-    start = text.find(signature)
-    if start < 0:
-        fail('method missing: ' + signature)
+    starts = []
+    pos = 0
+    while True:
+        pos = text.find(signature, pos)
+        if pos < 0:
+            break
+        starts.append(pos)
+        pos += len(signature)
+    if len(starts) != 1:
+        fail('method count=%d: %s' % (len(starts), signature.strip()))
+    start = starts[0]
     op = text.find('{', start)
     if op < 0:
-        fail('method open missing: ' + signature)
+        fail('method open missing: ' + signature.strip())
     depth = 0
     state = 'code'
     i = op
@@ -65,7 +73,7 @@ def method_bounds(text, signature):
             if c == '\\': i += 2; continue
             if c == "'": state = 'code'
             i += 1; continue
-    fail('method close missing: ' + signature)
+    fail('method close missing: ' + signature.strip())
 
 
 def patch_reset_method(text, signature):
@@ -73,8 +81,8 @@ def patch_reset_method(text, signature):
     body = text[start:end]
     old = '            displayViewValid = false;\n'
     new = old + '            rev35R020GenerationViewValid = false;\n'
-    body, changed = replace_once(body, old, new,
-                                 'R020 authority baseline reset in ' + signature.strip())
+    body, changed = replace_once(
+        body, old, new, 'R020 authority baseline reset in ' + signature.strip())
     return text[:start] + body + text[end:], changed
 
 
@@ -82,18 +90,16 @@ for path in (T, R, B, PRE):
     if not path.is_file():
         fail('required file missing: ' + str(path.relative_to(ROOT)))
 
-tile = T.read_text()
-renderer = R.read_text()
-build = B.read_text()
-prebuild = PRE.read_text()
+tile = T.read_text(encoding='utf-8')
+renderer = R.read_text(encoding='utf-8')
+build = B.read_text(encoding='utf-8')
+prebuild = PRE.read_text(encoding='utf-8')
 
 for required in (R018, R019, HF1):
     if required not in renderer:
         fail('materialized parent missing from renderer: ' + required)
 
-# R020 fixes only the definition of a material viewport generation. The live displayView*
-# sample remains current on every CaptureVisible() call, while a separate baseline remains
-# fixed until one of the already-existing material thresholds is actually crossed.
+heading_policy = 'already-r020'
 if R020 not in tile:
     fields_old = '''        AERISTerrainRenderTargetOrientation displayViewOrientation =
             AERISTerrainRenderTargetOrientation.Direct;
@@ -101,10 +107,10 @@ if R020 not in tile:
 '''
     fields_new = '''        AERISTerrainRenderTargetOrientation displayViewOrientation =
             AERISTerrainRenderTargetOrientation.Direct;
-        // ''' + R020 + ''': displayView* remains the latest live planner sample.
-        // These fields are the stable authority baseline used only for deciding when the
-        // existing View/Range/Plan generations advance. Sub-threshold samples must not
-        // drag the comparison origin forward and erase cumulative aircraft motion/heading.
+        // ''' + R020 + ''': stable last-generation authority baseline.
+        // Geometry samples remain current on every CaptureVisible(). A successor tree
+        // may intentionally retain a burst-governed planning heading; R020 preserves
+        // that heading policy while preventing sub-threshold baseline drift.
         internal const string Rev35R020Variant = "''' + R020 + '''";
         bool rev35R020GenerationViewValid;
         double rev35R020GenerationViewLatitudeDeg;
@@ -141,8 +147,7 @@ if R020 not in tile:
         }
         internal string ActiveBodyName { get { return activeBodyName; } }
 '''
-    tile, _ = replace_once(tile, prop_old, prop_new,
-                           'R020 telemetry accessors')
+    tile, _ = replace_once(tile, prop_old, prop_new, 'R020 telemetry accessors')
 
     for signature in (
         '        internal void Reset(string reason)',
@@ -152,21 +157,67 @@ if R020 not in tile:
     ):
         tile, _ = patch_reset_method(tile, signature)
 
-    m0, m1 = method_bounds(tile,
-        '        void UpdateDisplayView(double latitudeDeg, double longitudeDeg,')
+    m0, m1 = method_bounds(
+        tile, '        void UpdateDisplayView(double latitudeDeg, double longitudeDeg,')
     old_method = tile[m0:m1]
+
     for required in (
         'Math.Abs(displayViewRangeMeters - normalizedRange) > 0.5',
         'GreatCircleDistanceMeters(activeBody, displayViewLatitudeDeg,',
         'Math.Max(100.0, normalizedRange * 0.02)',
-        'Math.Abs(DeltaAngle(displayViewHeadingDeg, normalizedHeading)) > 3.0',
         'displayViewLatitudeDeg = normalizedLatitude;',
         'if (rangeChanged) rangeGeneration++;',
         'if (centerChanged || orientationChanged || headingChanged) planGeneration++;',
         'viewGeneration++;',
     ):
         if required not in old_method:
-            fail('legacy UpdateDisplayView contract missing: ' + required)
+            fail('UpdateDisplayView common contract missing: ' + required)
+
+    legacy3 = (
+        'Math.Abs(DeltaAngle(displayViewHeadingDeg, normalizedHeading)) > 3.0'
+        in old_method
+    )
+    burst_tokens = (
+        'AERIS25_CONTENT_GENERATION_BURST_GOVERNOR',
+        'double planningHeadingDelta = !displayViewValid ? double.MaxValue :',
+        'Math.Abs(DeltaAngle(displayViewHeadingDeg, normalizedHeading));',
+        'planningHeadingDelta >= 6.0',
+        'bool structuralViewChanged = rangeChanged || centerChanged ||',
+        'bool acceptPlanningHeading = !displayViewValid || !trackUp ||',
+        'if (acceptPlanningHeading) displayViewHeadingDeg = normalizedHeading;',
+    )
+    burst6 = all(token in old_method for token in burst_tokens)
+    if legacy3 == burst6:
+        fail('UpdateDisplayView heading policy ambiguous/unsupported legacy3=%s burst6=%s' %
+             (legacy3, burst6))
+
+    if burst6:
+        heading_policy = 'successor-cumulative-ge-6deg'
+        heading_block = r'''            // AERIS25_CONTENT_GENERATION_BURST_GOVERNOR preserved:
+            // visible Track-Up projection remains current in the renderer while hidden
+            // foundation/request planning advances at a cumulative 6-degree boundary.
+            double planningHeadingDelta = !authorityValid ? double.MaxValue :
+                Math.Abs(DeltaAngle(rev35R020GenerationViewHeadingDeg,
+                    normalizedHeading));
+            bool headingChanged = !authorityValid || (trackUp &&
+                planningHeadingDelta >= 6.0);
+            bool structuralViewChanged = rangeChanged || centerChanged ||
+                orientationChanged;
+            bool materiallyChanged = structuralViewChanged || headingChanged;
+            bool acceptPlanningHeading = !displayViewValid || !trackUp ||
+                structuralViewChanged || headingChanged;'''
+        display_heading = (
+            '            if (acceptPlanningHeading) '
+            'displayViewHeadingDeg = normalizedHeading;'
+        )
+    else:
+        heading_policy = 'historical-strict-gt-3deg'
+        heading_block = r'''            bool headingChanged = !authorityValid || (trackUp &&
+                Math.Abs(DeltaAngle(rev35R020GenerationViewHeadingDeg,
+                    normalizedHeading)) > 3.0);
+            bool materiallyChanged = rangeChanged || centerChanged ||
+                orientationChanged || headingChanged;'''
+        display_heading = '            displayViewHeadingDeg = normalizedHeading;'
 
     new_method = r'''        void UpdateDisplayView(double latitudeDeg, double longitudeDeg,
             double rangeMeters, double headingDeg, bool trackUp, float anchorGuiV,
@@ -199,26 +250,19 @@ if R020 not in tile:
                 rev35R020GenerationViewTrackUp != trackUp ||
                 rev35R020GenerationViewOrientation != orientation ||
                 Math.Abs(rev35R020GenerationViewAnchorGuiV - normalizedAnchor) > 0.001f;
-            bool headingChanged = !authorityValid || (trackUp &&
-                Math.Abs(DeltaAngle(rev35R020GenerationViewHeadingDeg,
-                    normalizedHeading)) > 3.0);
-            bool materiallyChanged = rangeChanged || centerChanged ||
-                orientationChanged || headingChanged;
+__HEADING_BLOCK__
 
-            // Live planning always follows the newest sample, exactly as before R020.
             displayViewValid = true;
             displayViewLatitudeDeg = normalizedLatitude;
             displayViewLongitudeDeg = normalizedLongitude;
             displayViewRangeMeters = normalizedRange;
-            displayViewHeadingDeg = normalizedHeading;
+__DISPLAY_HEADING__
             displayViewTrackUp = trackUp;
             displayViewAnchorGuiV = normalizedAnchor;
             displayViewOrientation = orientation;
 
             if (materiallyChanged)
             {
-                // Advance the stable authority baseline atomically with the generations.
-                // A new baseline represents the exact live view for the new generation.
                 rev35R020GenerationViewValid = true;
                 rev35R020GenerationViewLatitudeDeg = normalizedLatitude;
                 rev35R020GenerationViewLongitudeDeg = normalizedLongitude;
@@ -242,11 +286,12 @@ if R020 not in tile:
                 operationHealthRev35R020GenerationRetained++;
             }
         }'''
+    new_method = new_method.replace('__HEADING_BLOCK__', heading_block)
+    new_method = new_method.replace('__DISPLAY_HEADING__', display_heading)
     tile = tile[:m0] + new_method + tile[m1:]
 else:
     print(PREFIX + ' tile-system overlay already present')
 
-# Telemetry is read-only: mirror the tile-system counters into the existing OH line.
 if R020 not in renderer:
     identity_old = '        const string Rev35R019Hotfix1Variant = "' + HF1 + '";\n'
     identity_new = identity_old + (
@@ -286,12 +331,9 @@ if R020 not in renderer:
 else:
     print(PREFIX + ' renderer telemetry overlay already present')
 
-# FORMAL build wiring. FAST does not invoke build_ubuntu.sh, but keeping the formal
-# materialization identity/verifier chain correct avoids a second ad-hoc patch later.
 r019_var = 'REV3_5_R019_VARIANT="' + R019 + '"\n'
 r020_var = r019_var + 'REV3_5_R020_VARIANT="' + R020 + '"\n'
-build, _ = replace_once(build, r019_var, r020_var,
-                        'R020 build identity variable')
+build, _ = replace_once(build, r019_var, r020_var, 'R020 build identity variable')
 
 r019_verify = (
     'PYTHONDONTWRITEBYTECODE=1 python3 '
@@ -299,8 +341,7 @@ r019_verify = (
 r020_verify = r019_verify + (
     'PYTHONDONTWRITEBYTECODE=1 python3 '
     '"$ROOT/Tools/verify_aeris29_rev3_5_salbutamol_r020_visible_authority_baseline_stability.py"\n')
-build, _ = replace_once(build, r019_verify, r020_verify,
-                        'R020 build verifier')
+build, _ = replace_once(build, r019_verify, r020_verify, 'R020 build verifier')
 
 r019_identity = (
     'printf \'rev3_5_r019_variant=%s\\n\' "$REV3_5_R019_VARIANT" >> '
@@ -308,8 +349,7 @@ r019_identity = (
 r020_identity = r019_identity + (
     'printf \'rev3_5_r020_variant=%s\\n\' "$REV3_5_R020_VARIANT" >> '
     '"$ROOT/GameData/AERISFlightControl/AERISCandidateBuildIdentity.txt"\n')
-build, _ = replace_once(build, r019_identity, r020_identity,
-                        'R020 candidate identity')
+build, _ = replace_once(build, r019_identity, r020_identity, 'R020 candidate identity')
 
 pre_anchor = (
     " ('OH REV3.5 R019 Visible FAR Commit Priority',"
@@ -317,18 +357,16 @@ pre_anchor = (
 pre_insert = pre_anchor + (
     " ('OH REV3.5 R020 Visible Authority Baseline Stability',"
     "'selftest_v01900_oh_rev35_r020_visible_authority_baseline_stability.py'),\n")
-prebuild, _ = replace_once(prebuild, pre_anchor, pre_insert,
-                           'R020 prebuild selftest')
+prebuild, _ = replace_once(prebuild, pre_anchor, pre_insert, 'R020 prebuild selftest')
 
-required_tile = (
+for token in (
     R020,
     'rev35R020GenerationViewValid',
     'rev35R020GenerationViewLatitudeDeg',
     'operationHealthRev35R020AuthoritySamples++',
     'operationHealthRev35R020GenerationAdvances++',
     'operationHealthRev35R020GenerationRetained++',
-)
-for token in required_tile:
+):
     if token not in tile:
         fail('tile-system contract incomplete: ' + token)
 for token in (
@@ -340,14 +378,15 @@ for token in (
     if token not in renderer:
         fail('renderer telemetry incomplete: ' + token)
 
-T.write_text(tile)
-R.write_text(renderer)
-B.write_text(build)
-PRE.write_text(prebuild)
+T.write_text(tile, encoding='utf-8')
+R.write_text(renderer, encoding='utf-8')
+B.write_text(build, encoding='utf-8')
+PRE.write_text(prebuild, encoding='utf-8')
 
 print(PREFIX + ' APPLY PASS')
-print('authority=latest live display sample + separate last-generation baseline')
-print('thresholds=range>0.5m center>max(100m,2% range) trackup/anchor/orientation heading>3deg')
+print('authority=stable last-generation baseline; successor heading policy preserved')
+print('heading_policy=' + heading_policy)
+print('thresholds=range>0.5m center>max(100m,2% range); heading inherited from input tree')
 print('generation=view/range/plan advance from one stable baseline; sub-threshold samples retain baseline')
 print('publication=R017/R018/R019/HF1 untouched; stale BACK relabel/promotion=NONE')
 print('worker_change=0 rasterizer_change=0 quality_change=0 10Hz_change=0 exact_range_change=0')
