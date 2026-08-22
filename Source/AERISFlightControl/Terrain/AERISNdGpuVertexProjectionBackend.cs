@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using AERISFlightControl.Logging;
+using AERISFlightControl.Settings;
 
 namespace AERISFlightControl.Terrain
 {
@@ -17,10 +18,10 @@ namespace AERISFlightControl.Terrain
     internal sealed class AERISNdGpuVertexProjectionBackend : IDisposable
     {
         const string ShaderName = "AERIS/ND/ExactVertexProjection";
-        const string BundleWindows = "aeris_nd_gpu_vertex_projection_windows.bundle";
-        const string BundleLinux = "aeris_nd_gpu_vertex_projection_linux.bundle";
-        const string ProbeWindows = "aeris_gpu_bundle_probe_windows.bundle";
-        const string ProbeLinux = "aeris_gpu_bundle_probe_linux.bundle";
+        const string BundleWindows = "aeris25_nd_gpu_dynamic_terrain_colour_windows.bundle";
+        const string BundleLinux = "aeris25_nd_gpu_dynamic_terrain_colour_linux.bundle";
+        const string ProbeWindows = "aeris25_gpu_dynamic_colour_probe_windows.bundle";
+        const string ProbeLinux = "aeris25_gpu_dynamic_colour_probe_linux.bundle";
         const string ProbeMarker = "AERIS24_GPU_BUNDLE_PROBE_V1";
         // Managed-memory recovery is a one-time compatibility path for Proton/Wine cases
         // where System.IO can read the package but Unity native LoadFromFile rejects the
@@ -37,6 +38,10 @@ namespace AERISFlightControl.Terrain
         static readonly int AnchorId = Shader.PropertyToID("_AerisAnchorRenderV");
         static readonly int OrientationSignId = Shader.PropertyToID("_AerisOrientationSign");
         static readonly int ColourId = Shader.PropertyToID("_Color");
+        static readonly int DynamicTerrainSemanticModeId = Shader.PropertyToID("_AerisTerrainSemanticMode");
+        static readonly int DynamicTerrainDisplayModeId = Shader.PropertyToID("_AerisTerrainDisplayMode");
+        static readonly int DynamicTerrainPresetId = Shader.PropertyToID("_AerisTerrainPreset");
+        static readonly int DynamicTerrainAircraftAltitudeId = Shader.PropertyToID("_AerisAircraftAltitudeMeters");
 
         AssetBundle bundle;
         Shader shader;
@@ -49,6 +54,11 @@ namespace AERISFlightControl.Terrain
         string failure = string.Empty;
         string bundlePath = string.Empty;
         string bundleLoadMode = "NONE";
+        AERISNdProjectionBackendMode requestedMode =
+            AERISNdProjectionBackendMode.Automatic;
+        bool viewportSuspendedResident;
+        int activationCount;
+        int residentSuspensionCount;
 
         internal bool Active
         {
@@ -61,13 +71,63 @@ namespace AERISFlightControl.Terrain
         }
 
         internal string Failure { get { return failure; } }
+        internal bool DynamicTerrainColourActive { get { return Active; } }
         internal string BundlePath { get { return bundlePath; } }
+        internal int ActivationCount { get { return activationCount; } }
+        internal int ResidentSuspensionCount { get { return residentSuspensionCount; } }
+        internal string RequestedModeName
+        {
+            get
+            {
+                switch (requestedMode)
+                {
+                    case AERISNdProjectionBackendMode.Cpu: return "CPU";
+                    case AERISNdProjectionBackendMode.Gpu: return "GPU";
+                    default: return "AUTO";
+                }
+            }
+        }
+        internal string EffectiveModeName
+        {
+            get
+            {
+                if (requestedMode == AERISNdProjectionBackendMode.Cpu)
+                    return "CPU_EXACT";
+                if (Active) return "GPU_ACTIVE";
+                return attempted ? "CPU_FALLBACK" : "GPU_PENDING";
+            }
+        }
         internal Material TerrainMaterial { get { return terrainMaterial; } }
         internal Material ContourMaterial { get { return contourMaterial; } }
         internal Material CoastlineMaterial { get { return coastlineMaterial; } }
 
+        internal void SetRequestedMode(AERISNdProjectionBackendMode mode)
+        {
+            if (mode == requestedMode) return;
+            ReleaseForSuspension();
+            requestedMode = mode;
+            AERISLogger.Info("[AERIS24_ND_PROJECTION_BACKEND] requested=" +
+                RequestedModeName + "; effective=" + EffectiveModeName + ".");
+        }
+
         internal bool TryEnsureLoaded()
         {
+            // Resume is intentionally allocation-free when visibility alone suspended ND.
+            viewportSuspendedResident = false;
+            // Explicit CPU is a hard no-touch rail: do not probe, read or invoke
+            // AssetBundle APIs at all. AUTO/GPU retain the same fail-closed GPU attempt.
+            if (requestedMode == AERISNdProjectionBackendMode.Cpu)
+            {
+                if (!attempted)
+                {
+                    attempted = true;
+                    disabled = true;
+                    failure = "CPU_EXACT_REQUESTED";
+                    AERISLogger.Info("[AERIS24_GPU_VERTEX_PROJECTION] SKIPPED; " +
+                        "requested=CPU; effective=CPU_EXACT; AssetBundleInit=0.");
+                }
+                return false;
+            }
             if (attempted) return Active;
             attempted = true;
             try
@@ -127,7 +187,9 @@ namespace AERISFlightControl.Terrain
                     return Fail("GPU exact projection material creation failed");
 
                 failure = string.Empty;
-                AERISLogger.Info("[AERIS24_GPU_VERTEX_PROJECTION] ACTIVE; shader=" +
+                activationCount++;
+                AERISLogger.Info("[AERIS25_GPU_DYNAMIC_COLOUR] ACTIVE; requested=" +
+                    RequestedModeName + "; effective=" + EffectiveModeName + "; shader=" +
                     ShaderName + "; bundle=" + fileName + "; load=" + bundleLoadMode +
                     "; unity=" + Application.unityVersion + "; platform=" +
                     Application.platform + "; graphics=" + SystemInfo.graphicsDeviceType +
@@ -327,7 +389,8 @@ namespace AERISFlightControl.Terrain
         }
 
         internal void ConfigureProjection(AERISNdMapProjection projection,
-            Color contourColour)
+            Color contourColour, AERISTerrainDisplayMode mode,
+            AERISTerrainColourPreset preset, float aircraftAltitudeAslMeters)
         {
             if (!Active) return;
             Vector4 center = new Vector4((float)projection.CenterX,
@@ -347,6 +410,9 @@ namespace AERISFlightControl.Terrain
                 orientationSign, contourColour);
             ConfigureMaterial(coastlineMaterial, projection, center, east, north,
                 orientationSign, Color.white);
+            ConfigureDynamicTerrainColour(terrainMaterial, true, mode, preset, aircraftAltitudeAslMeters);
+            ConfigureDynamicTerrainColour(contourMaterial, false, mode, preset, aircraftAltitudeAslMeters);
+            ConfigureDynamicTerrainColour(coastlineMaterial, false, mode, preset, aircraftAltitudeAslMeters);
         }
 
         static void ConfigureMaterial(Material material,
@@ -365,6 +431,39 @@ namespace AERISFlightControl.Terrain
             material.SetFloat(AnchorId, projection.AnchorRenderV);
             material.SetFloat(OrientationSignId, orientationSign);
             material.SetColor(ColourId, colour);
+        }
+
+        internal void RetainForViewportSuspension()
+        {
+            if (viewportSuspendedResident) return;
+            viewportSuspendedResident = true;
+            if (!Active) return;
+            residentSuspensionCount++;
+            AERISLogger.Info("[AERIS24_GPU_VERTEX_PROJECTION] RESIDENT SUSPEND; requested=" +
+                RequestedModeName + "; effective=" + EffectiveModeName +
+                "; activation=" + activationCount + "; retained=" +
+                residentSuspensionCount + ".");
+        }
+
+        static void ConfigureDynamicTerrainColour(Material material,
+            bool terrainSemanticMode, AERISTerrainDisplayMode mode,
+            AERISTerrainColourPreset preset, float aircraftAltitudeAslMeters)
+        {
+            if (material == null) return;
+            int presetCode = 0;
+            switch (preset)
+            {
+                case AERISTerrainColourPreset.RedGreenAssist: presetCode = 1; break;
+                case AERISTerrainColourPreset.BlueYellowAssist: presetCode = 2; break;
+                case AERISTerrainColourPreset.HighContrast: presetCode = 3; break;
+            }
+            bool relativeMode = mode == AERISTerrainDisplayMode.Relative;
+            float quantizedAltitude = relativeMode ?
+                Mathf.RoundToInt(aircraftAltitudeAslMeters / 5f) * 5f : aircraftAltitudeAslMeters;
+            material.SetFloat(DynamicTerrainSemanticModeId, terrainSemanticMode ? 1f : 0f);
+            material.SetFloat(DynamicTerrainDisplayModeId, relativeMode ? 1f : 0f);
+            material.SetFloat(DynamicTerrainPresetId, presetCode);
+            material.SetFloat(DynamicTerrainAircraftAltitudeId, quantizedAltitude);
         }
 
         internal void DisableAndFallback(string reason)
@@ -388,7 +487,8 @@ namespace AERISFlightControl.Terrain
         {
             if (failureLogged) return;
             failureLogged = true;
-            AERISLogger.Warn("[AERIS24_GPU_VERTEX_PROJECTION] CPU EXACT FALLBACK; reason=" +
+            AERISLogger.Warn("[AERIS25_GPU_DYNAMIC_COLOUR] CPU EXACT FALLBACK; requested=" +
+                RequestedModeName + "; effective=" + EffectiveModeName + "; reason=" +
                 failure + "; unity=" + Application.unityVersion + "; platform=" +
                 Application.platform + "; graphics=" + SystemInfo.graphicsDeviceType + ".");
         }
@@ -413,6 +513,7 @@ namespace AERISFlightControl.Terrain
             failure = string.Empty;
             bundlePath = string.Empty;
             bundleLoadMode = "NONE";
+            viewportSuspendedResident = false;
         }
 
         public void Dispose()

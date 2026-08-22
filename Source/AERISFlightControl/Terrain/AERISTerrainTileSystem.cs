@@ -98,6 +98,13 @@ namespace AERISFlightControl.Terrain
         readonly List<AERISTerrainHeightTile> visibleTiles = new List<AERISTerrainHeightTile>(128);
         readonly List<string> diskWriteReadyScratch = new List<string>(64);
         readonly AERISTerrainTileCacheTelemetry telemetry = new AERISTerrainTileCacheTelemetry();
+        // AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_COMPLETE_COVERAGE_CONTRACT_HOTFIX3: complete visible terrain authority is monotonic. A complete
+        // Preview may be replaced by a complete higher-fidelity Final, never by an
+        // in-progress Final commit. This repairs the cold-foundation BLACK deadlock.
+        const string Rev35R006CompleteCoverageHotfix3 = "AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_COMPLETE_COVERAGE_CONTRACT_HOTFIX3";
+        long operationHealthRev35R006Hf3PreservedCompleteAuthority;
+        long operationHealthRev35R006Hf3IncompleteStageRetries;
+        int operationHealthRev35R006Hf3WorstIncompleteQuality = 100;
 
         CelestialBody activeBody;
         string activeBodyName = string.Empty;
@@ -124,6 +131,23 @@ namespace AERISFlightControl.Terrain
         float displayViewAnchorGuiV = 0.5f;
         AERISTerrainRenderTargetOrientation displayViewOrientation =
             AERISTerrainRenderTargetOrientation.Direct;
+        // AERIS29_REV3_5_SALBUTAMOL_SULFATE_R020_VISIBLE_AUTHORITY_BASELINE_STABILITY: stable last-generation authority baseline.
+        // Geometry samples remain current on every CaptureVisible(). A successor tree
+        // may intentionally retain a burst-governed planning heading; R020 preserves
+        // that heading policy while preventing sub-threshold baseline drift.
+        internal const string Rev35R020Variant = "AERIS29_REV3_5_SALBUTAMOL_SULFATE_R020_VISIBLE_AUTHORITY_BASELINE_STABILITY";
+        bool rev35R020GenerationViewValid;
+        double rev35R020GenerationViewLatitudeDeg;
+        double rev35R020GenerationViewLongitudeDeg;
+        double rev35R020GenerationViewRangeMeters;
+        double rev35R020GenerationViewHeadingDeg;
+        bool rev35R020GenerationViewTrackUp;
+        float rev35R020GenerationViewAnchorGuiV = 0.5f;
+        AERISTerrainRenderTargetOrientation rev35R020GenerationViewOrientation =
+            AERISTerrainRenderTargetOrientation.Direct;
+        long operationHealthRev35R020AuthoritySamples;
+        long operationHealthRev35R020GenerationRetained;
+        long operationHealthRev35R020GenerationAdvances;
         int lastFoundationRequestedCount;
         int lastFoundationMissingCount;
         int lastFoundationGlobalCount;
@@ -192,6 +216,18 @@ namespace AERISFlightControl.Terrain
         internal string StatusText { get { return status; } }
         internal long TerrainGeneration { get { return terrainGeneration; } }
         internal long ViewGeneration { get { return viewGeneration; } }
+        internal long Rev35R020AuthoritySampleCount
+        {
+            get { return operationHealthRev35R020AuthoritySamples; }
+        }
+        internal long Rev35R020GenerationRetainedCount
+        {
+            get { return operationHealthRev35R020GenerationRetained; }
+        }
+        internal long Rev35R020GenerationAdvanceCount
+        {
+            get { return operationHealthRev35R020GenerationAdvances; }
+        }
         internal string ActiveBodyName { get { return activeBodyName; } }
         internal bool LandDetailRequestsActive { get { return landDetailActive; } }
         // CP3 Gate 3.1 Compile Hotfix 1: SYSTEM UI reads these values directly
@@ -292,6 +328,7 @@ namespace AERISFlightControl.Terrain
             lastSamplingBatchMilliseconds = 0.0;
             nextPlanRealtime = 0f;
             displayViewValid = false;
+            rev35R020GenerationViewValid = false;
             displayViewLatitudeDeg = 0.0;
             displayViewLongitudeDeg = 0.0;
             displayViewRangeMeters = 0.0;
@@ -459,6 +496,7 @@ namespace AERISFlightControl.Terrain
             if (!flightViewportActive) return;
             flightViewportActive = false;
             displayViewValid = false;
+            rev35R020GenerationViewValid = false;
             displayViewLatitudeDeg = 0.0;
             displayViewLongitudeDeg = 0.0;
             displayViewRangeMeters = 0.0;
@@ -492,6 +530,7 @@ namespace AERISFlightControl.Terrain
             if (flightViewportActive) return;
             flightViewportActive = true;
             displayViewValid = false;
+            rev35R020GenerationViewValid = false;
             nextPlanRealtime = 0f;
             firstViewRequestRealtime = 0f;
             terrainRequestGeneration++;
@@ -570,6 +609,7 @@ namespace AERISFlightControl.Terrain
             lastSamplingBatchSamples = 0;
             lastSamplingBatchMilliseconds = 0.0;
             displayViewValid = false;
+            rev35R020GenerationViewValid = false;
             displayViewLatitudeDeg = 0.0;
             displayViewLongitudeDeg = 0.0;
             displayViewRangeMeters = 0.0;
@@ -1266,14 +1306,37 @@ namespace AERISFlightControl.Terrain
         // Returns true when the requested final fidelity is already complete. Both the
         // planning path and the queue-admission path use this routine so a progressive
         // Preview cannot be promoted merely because it reached RAM between those paths.
+        static bool IsCompleteCoverageAuthority(AERISTerrainHeightTile tile)
+        {
+            if (tile == null || !tile.SamplingComplete || tile.Quality < 100 ||
+                tile.Resolution < 2 || tile.Elevation == null || tile.Flags == null)
+                return false;
+            long expected = (long)tile.Resolution * tile.Resolution;
+            return tile.Elevation.LongLength == expected &&
+                tile.Flags.LongLength == expected;
+        }
+
+        static bool CanReplaceCompleteCoverageAuthority(AERISTerrainHeightTile existing,
+            AERISTerrainHeightTile incoming)
+        {
+            if (!IsCompleteCoverageAuthority(existing)) return true;
+            if (!IsCompleteCoverageAuthority(incoming)) return false;
+            if (incoming.Resolution > existing.Resolution) return true;
+            if (incoming.Resolution < existing.Resolution) return false;
+            if (existing.IsPreview && !incoming.IsPreview) return true;
+            if (!existing.IsPreview && incoming.IsPreview) return false;
+            return true;
+        }
+
         static bool ReconcileRequestWithRamTile(AERISTerrainTileRequest request,
             AERISTerrainHeightTile tile)
         {
             if (request == null || tile == null) return false;
             bool samplingComplete = tile.SamplingComplete;
-            if (samplingComplete && !tile.IsPreview &&
+            bool completeCoverage = IsCompleteCoverageAuthority(tile);
+            if (completeCoverage && !tile.IsPreview &&
                 tile.Resolution >= request.FinalResolution) return true;
-            if (samplingComplete &&
+            if (completeCoverage &&
                 (tile.IsPreview || tile.Resolution < request.FinalResolution))
             {
                 request.Stage = AERISTerrainSamplingStage.Final;
@@ -1914,6 +1977,33 @@ namespace AERISFlightControl.Terrain
             tile.PqsConfigurationHash = environmentHash;
             tile.GameDataHash = GameDataHash;
             tile.TerrainGenerationId = preloadDatabase.DatabaseGeneration;
+
+            AERISTerrainHeightTile existing;
+            bool hasExisting = ram.TryGet(request.Key, out existing) && existing != null;
+            bool preserveCompleteAuthority = hasExisting &&
+                IsCompleteCoverageAuthority(existing) &&
+                !CanReplaceCompleteCoverageAuthority(existing, tile);
+            if (preserveCompleteAuthority)
+            {
+                operationHealthRev35R006Hf3PreservedCompleteAuthority++;
+                operationHealthRev35R006Hf3WorstIncompleteQuality = Math.Min(
+                    operationHealthRev35R006Hf3WorstIncompleteQuality,
+                    Math.Max(0, Math.Min(100, tile.Quality)));
+                if (requestComplete)
+                {
+                    operationHealthRev35R006Hf3IncompleteStageRetries++;
+                    // The just-completed pipeline state is removed after this callback.
+                    // Do not synchronously re-enqueue the same WorkId here. Force the next
+                    // planner pass to request the stage again while the complete Preview
+                    // remains visible and foundation-complete.
+                    nextPlanRealtime = 0f;
+                    status = "TERRAIN COMPLETE AUTHORITY PRESERVED / RETRY QUEUED";
+                }
+                else
+                    status = "TERRAIN COMPLETE AUTHORITY PRESERVED / FINAL REFINEMENT";
+                return;
+            }
+
             ram.Put(tile);
             telemetry.Generated++;
             terrainGeneration++;
@@ -1925,6 +2015,16 @@ namespace AERISFlightControl.Terrain
             }
             if (request.Stage == AERISTerrainSamplingStage.Preview && tile.IsPreview)
             {
+                if (!IsCompleteCoverageAuthority(tile))
+                {
+                    operationHealthRev35R006Hf3IncompleteStageRetries++;
+                    operationHealthRev35R006Hf3WorstIncompleteQuality = Math.Min(
+                        operationHealthRev35R006Hf3WorstIncompleteQuality,
+                        Math.Max(0, Math.Min(100, tile.Quality)));
+                    nextPlanRealtime = 0f;
+                    status = "TERRAIN PREVIEW COVERAGE INCOMPLETE / RETRY";
+                    return;
+                }
                 telemetry.PreviewGenerated++;
                 status = "TERRAIN PREVIEW AVAILABLE";
                 if (desiredRequestIds.Contains(request.Key.StableId))
@@ -1932,6 +2032,16 @@ namespace AERISFlightControl.Terrain
                 return;
             }
             tile.IsPreview = false;
+            if (!IsCompleteCoverageAuthority(tile))
+            {
+                operationHealthRev35R006Hf3IncompleteStageRetries++;
+                operationHealthRev35R006Hf3WorstIncompleteQuality = Math.Min(
+                    operationHealthRev35R006Hf3WorstIncompleteQuality,
+                    Math.Max(0, Math.Min(100, tile.Quality)));
+                nextPlanRealtime = 0f;
+                status = "TERRAIN FINAL COVERAGE INCOMPLETE / RETRY";
+                return;
+            }
             telemetry.FinalGenerated++;
             status = tile.Key.Lod >= AERISTerrainTileLod.Local ?
                 "LOCAL TERRAIN AVAILABLE" : "GLOBAL TERRAIN AVAILABLE";
@@ -2167,37 +2277,68 @@ namespace AERISFlightControl.Terrain
             double normalizedRange = Math.Max(1000.0, Math.Min(250000.0, rangeMeters));
             double normalizedHeading = NormalizeHeading(headingDeg);
             float normalizedAnchor = Mathf.Clamp01(anchorGuiV);
-            bool rangeChanged = !displayViewValid ||
-                Math.Abs(displayViewRangeMeters - normalizedRange) > 0.5;
-            double centerMovement = !displayViewValid ? double.MaxValue :
-                GreatCircleDistanceMeters(activeBody, displayViewLatitudeDeg,
-                    displayViewLongitudeDeg, normalizedLatitude, normalizedLongitude);
-            bool centerChanged = !displayViewValid || centerMovement >
+
+            operationHealthRev35R020AuthoritySamples++;
+            bool authorityValid = rev35R020GenerationViewValid;
+            bool rangeChanged = !authorityValid ||
+                Math.Abs(rev35R020GenerationViewRangeMeters - normalizedRange) > 0.5;
+            double centerMovement = !authorityValid ? double.MaxValue :
+                GreatCircleDistanceMeters(activeBody,
+                    rev35R020GenerationViewLatitudeDeg,
+                    rev35R020GenerationViewLongitudeDeg,
+                    normalizedLatitude, normalizedLongitude);
+            bool centerChanged = !authorityValid || centerMovement >
                 Math.Max(100.0, normalizedRange * 0.02);
-            bool orientationChanged = !displayViewValid ||
-                displayViewTrackUp != trackUp || displayViewOrientation != orientation ||
-                Math.Abs(displayViewAnchorGuiV - normalizedAnchor) > 0.001f;
-            bool headingChanged = !displayViewValid || (trackUp &&
-                Math.Abs(DeltaAngle(displayViewHeadingDeg, normalizedHeading)) > 3.0);
-            bool materiallyChanged = rangeChanged || centerChanged ||
-                orientationChanged || headingChanged;
+            bool orientationChanged = !authorityValid ||
+                rev35R020GenerationViewTrackUp != trackUp ||
+                rev35R020GenerationViewOrientation != orientation ||
+                Math.Abs(rev35R020GenerationViewAnchorGuiV - normalizedAnchor) > 0.001f;
+            // AERIS25_CONTENT_GENERATION_BURST_GOVERNOR preserved:
+            // visible Track-Up projection remains current in the renderer while hidden
+            // foundation/request planning advances at a cumulative 6-degree boundary.
+            double planningHeadingDelta = !authorityValid ? double.MaxValue :
+                Math.Abs(DeltaAngle(rev35R020GenerationViewHeadingDeg,
+                    normalizedHeading));
+            bool headingChanged = !authorityValid || (trackUp &&
+                planningHeadingDelta >= 6.0);
+            bool structuralViewChanged = rangeChanged || centerChanged ||
+                orientationChanged;
+            bool materiallyChanged = structuralViewChanged || headingChanged;
+            bool acceptPlanningHeading = !displayViewValid || !trackUp ||
+                structuralViewChanged || headingChanged;
+
             displayViewValid = true;
             displayViewLatitudeDeg = normalizedLatitude;
             displayViewLongitudeDeg = normalizedLongitude;
             displayViewRangeMeters = normalizedRange;
-            displayViewHeadingDeg = normalizedHeading;
+            if (acceptPlanningHeading) displayViewHeadingDeg = normalizedHeading;
             displayViewTrackUp = trackUp;
             displayViewAnchorGuiV = normalizedAnchor;
             displayViewOrientation = orientation;
-            if (rangeChanged) rangeGeneration++;
-            if (centerChanged || orientationChanged || headingChanged) planGeneration++;
+
             if (materiallyChanged)
             {
+                rev35R020GenerationViewValid = true;
+                rev35R020GenerationViewLatitudeDeg = normalizedLatitude;
+                rev35R020GenerationViewLongitudeDeg = normalizedLongitude;
+                rev35R020GenerationViewRangeMeters = normalizedRange;
+                rev35R020GenerationViewHeadingDeg = normalizedHeading;
+                rev35R020GenerationViewTrackUp = trackUp;
+                rev35R020GenerationViewAnchorGuiV = normalizedAnchor;
+                rev35R020GenerationViewOrientation = orientation;
+                if (rangeChanged) rangeGeneration++;
+                if (centerChanged || orientationChanged || headingChanged)
+                    planGeneration++;
                 viewGeneration++;
+                operationHealthRev35R020GenerationAdvances++;
                 firstViewRequestRealtime = Time.realtimeSinceStartup;
                 preloadTelemetry.FirstTileVisibleMilliseconds = 0.0;
                 if (nextPlanRealtime - Time.realtimeSinceStartup > 0.05f)
                     nextPlanRealtime = Time.realtimeSinceStartup + 0.05f;
+            }
+            else
+            {
+                operationHealthRev35R020GenerationRetained++;
             }
         }
 
@@ -2340,7 +2481,13 @@ namespace AERISFlightControl.Terrain
                             "DEMAND" : "OFF") + "; foundation_gf=" +
                         lastFoundationGlobalCount + "/" + lastFoundationFarCount +
                         "; foundation_missing=" + lastFoundationMissingCount + "/" +
-                        lastFoundationRequestedCount + ".");
+                        lastFoundationRequestedCount +
+                        "; hf3_preserve=" +
+                        operationHealthRev35R006Hf3PreservedCompleteAuthority +
+                        "; hf3_retry=" +
+                        operationHealthRev35R006Hf3IncompleteStageRetries +
+                        "; hf3_worst_q=" +
+                        operationHealthRev35R006Hf3WorstIncompleteQuality + ".");
                 }
             }
         }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using AERISFlightControl.Logging;
+using AERISFlightControl.Performance;
 
 namespace AERISFlightControl.Terrain
 {
@@ -342,6 +343,7 @@ namespace AERISFlightControl.Terrain
                     " active=" + (active ? "1" : "0") +
                     " reason=" + (lastCause.Length == 0 ? reason.ToString() : lastCause) +
                     " payloadRoute=ASYNC_DECODE_RAM_RESIDENT");
+                AERISOperationHealthPenicillin.RecordRev003ObserverScopeReset();
                 return true;
             }
         }
@@ -362,6 +364,7 @@ namespace AERISFlightControl.Terrain
                 sceneResets++;
                 lastCause = cause ?? string.Empty;
                 status = "INACTIVE — SCENE RESET";
+                AERISOperationHealthPenicillin.RecordRev003ObserverScopeReset();
             }
         }
 
@@ -448,6 +451,8 @@ namespace AERISFlightControl.Terrain
                     token = TokenForLocked(entry);
                     TouchLocked(entry);
                     UpdateStatusLocked();
+                    AERISOperationHealthPenicillin.RecordRev003ObserverAccess(
+                        key.StableId, (int)key.Lod, 1, entry.RamBytes);
                     return true;
                 }
 
@@ -468,6 +473,8 @@ namespace AERISFlightControl.Terrain
                 token = TokenForLocked(entry);
                 TouchLocked(entry);
                 UpdateStatusLocked();
+                AERISOperationHealthPenicillin.RecordRev003ObserverAccess(
+                    key.StableId, (int)key.Lod, 2, entry.RamBytes);
                 return true;
             }
         }
@@ -512,6 +519,8 @@ namespace AERISFlightControl.Terrain
                 lastCause = cause ?? string.Empty;
                 TouchLocked(entry);
                 UpdateStatusLocked();
+                AERISOperationHealthPenicillin.RecordRev003ObserverDecodeFailure(
+                    token.StableId);
             }
         }
 
@@ -601,6 +610,8 @@ namespace AERISFlightControl.Terrain
                 EnforceBudgetLocked(entry.Key.StableId);
                 result = AERISResidentCommitResult.Committed;
                 UpdateStatusLocked();
+                AERISOperationHealthPenicillin.RecordRev003ObserverRamCommit(
+                    entry.Key.StableId, (int)entry.Key.Lod, incomingBytes);
                 return true;
             }
         }
@@ -682,9 +693,13 @@ namespace AERISFlightControl.Terrain
                     entry.ResidentTile == null)
                 {
                     cacheMisses++;
+                    AERISOperationHealthPenicillin.RecordRev003ObserverAccess(
+                        key.StableId, (int)key.Lod, 4, 0L);
                     return false;
                 }
                 cacheHits++;
+                AERISOperationHealthPenicillin.RecordRev003ObserverAccess(
+                    key.StableId, (int)key.Lod, 3, entry.RamBytes);
                 tile = entry.ResidentTile;
                 token = TokenForLocked(entry);
                 TouchLocked(entry);
@@ -988,6 +1003,9 @@ namespace AERISFlightControl.Terrain
             if (entry == null) return;
             entries.Remove(entry.Key.StableId);
             if (entry.LruNode != null) lru.Remove(entry.LruNode);
+            AERISOperationHealthPenicillin.RecordRev003ObserverEviction(
+                entry.Key.StableId, (int)entry.Key.Lod,
+                reason == AERISResidentEvictionReason.Budget, entry.RamBytes);
             ramBytes = Math.Max(0L, ramBytes - Math.Max(0L, entry.RamBytes));
             pinLeaseCount = Math.Max(0, pinLeaseCount - Math.Max(0, entry.PinCount));
             entry.Pins.Clear();

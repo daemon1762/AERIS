@@ -20,6 +20,11 @@ namespace AERISFlightControl.Recording
         const float SampleIntervalSeconds = 0.10f; // 10 Hz Flight Test mode
         const float FlushIntervalSeconds = 1.0f;
         const int MaxExtensionTelemetryChannels = 256;
+        // R016 isolation test: suppress only built-in control-cadence diagnostic CSV producers.
+        // Core 10 Hz FDR, CVR, extension telemetry and AA comparison remain untouched.
+        static readonly bool R016HighRateDiagnosticsEnabled = false;
+        const string R016IsolationVariant = "AERIS29_REV3_5_SALBUTAMOL_SULFATE_R016_FDR_HIGH_RATE_DIAGNOSTICS_ISOLATION";
+        internal static string R016IsolationMarker { get { return R016IsolationVariant; } }
         long sessionOrdinal;
         bool recoveryScanRequested;
 
@@ -578,6 +583,7 @@ namespace AERISFlightControl.Recording
         // 10 Hz general FDR so step motion and high-speed command chatter are not aliased away.
         internal void SampleBankDiagnostics(Vessel vessel, AERISBankDirector bank, VirtualAttitudeInstrument attitude)
         {
+            if (!R016HighRateDiagnosticsEnabled) return;
             if (vessel == null || bank == null) return;
             BeginFlight(vessel);
             float now = Time.realtimeSinceStartup;
@@ -610,6 +616,7 @@ namespace AERISFlightControl.Recording
         // virtual yaw/roll handoff before AA; AA internals and final control law remain untouched.
         internal void SampleHeadingDiagnostics(Vessel vessel, AERISHdgDirector hdg, AERISBankDirector bank, VirtualAttitudeInstrument attitude)
         {
+            if (!R016HighRateDiagnosticsEnabled) return;
             if (vessel == null || hdg == null) return;
             BeginFlight(vessel);
             float now = Time.realtimeSinceStartup;
@@ -681,6 +688,7 @@ namespace AERISFlightControl.Recording
         // set the other ownership flags without changing this recorder schema.
         internal void SampleApSmoothness(Vessel vessel, AERISBankDirector bank, AERISPitchDirector pitch, AERISHdgDirector hdg, AERISAltitudeDirector alt, AERISAccelerationDirector acc, AERISVelocityDirector vel, VirtualAttitudeInstrument attitude, ProtectTelemetry protect, AERISAxisStabilitySupervisor axisSupervisor, FlightCtrlState state)
         {
+            if (!R016HighRateDiagnosticsEnabled) return;
             if (vessel == null || state == null) return;
             BeginFlight(vessel);
             float now = Time.realtimeSinceStartup;
@@ -739,6 +747,7 @@ namespace AERISFlightControl.Recording
         // retained outer PITCH/V/S target law independently inspectable at 50 Hz.
         internal void SamplePitchDiagnostics(Vessel vessel, AERISPitchDirector pitch)
         {
+            if (!R016HighRateDiagnosticsEnabled) return;
             if (vessel == null || pitch == null) return;
             BeginFlight(vessel);
             float now = Time.realtimeSinceStartup;
@@ -771,6 +780,7 @@ namespace AERISFlightControl.Recording
         // Dedicated V/S trace. Keeps V/S tuning independent from the legacy AP smoothness schema.
         internal void SampleVerticalSpeedDiagnostics(Vessel vessel, AERISVerticalSpeedDirector vs, AERISPitchDirector pitch)
         {
+            if (!R016HighRateDiagnosticsEnabled) return;
             if (vessel == null || vs == null) return;
             BeginFlight(vessel);
             float now = Time.realtimeSinceStartup;
@@ -846,6 +856,7 @@ namespace AERISFlightControl.Recording
         internal void SampleAccelerationDiagnostics(Vessel vessel, AERISAccelerationDirector acc,
             AERISSpeedAirbrakeController airbrake, VirtualAttitudeInstrument attitude)
         {
+            if (!R016HighRateDiagnosticsEnabled) return;
             if (vessel == null || acc == null) return;
             BeginFlight(vessel);
             float now = Time.realtimeSinceStartup;
@@ -887,6 +898,7 @@ namespace AERISFlightControl.Recording
         internal void SampleVelocityDiagnostics(Vessel vessel, AERISVelocityDirector vel,
             AERISAccelerationDirector acc, VirtualAttitudeInstrument attitude)
         {
+            if (!R016HighRateDiagnosticsEnabled) return;
             if (vessel == null || vel == null || acc == null) return;
             BeginFlight(vessel);
             float now = Time.realtimeSinceStartup;
@@ -919,6 +931,7 @@ namespace AERISFlightControl.Recording
         internal void SampleAltitudeDiagnostics(Vessel vessel, AERISAltitudeDirector alt,
             AERISVerticalSpeedDirector vs, AERISPitchDirector pitch, VirtualAttitudeInstrument attitude)
         {
+            if (!R016HighRateDiagnosticsEnabled) return;
             if (vessel == null || alt == null) return;
             BeginFlight(vessel);
             float now = Time.realtimeSinceStartup;
@@ -1113,6 +1126,7 @@ namespace AERISFlightControl.Recording
         internal void SampleGroundTakeoffDiagnostics(Vessel vessel, GroundStabilityProtection ground,
             AERISAutoTakeoffDirector takeoff, VirtualAttitudeInstrument attitude, FlightCtrlState state)
         {
+            if (!R016HighRateDiagnosticsEnabled) return;
             if (vessel == null || state == null) return;
             BeginFlight(vessel);
             float now = Time.realtimeSinceStartup;

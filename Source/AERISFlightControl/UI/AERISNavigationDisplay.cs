@@ -124,13 +124,14 @@ namespace AERISFlightControl.UI
             flightViewportActive = active;
             if (active)
             {
+                if (terrainTileRenderer != null) terrainTileRenderer.ResumeVisibilityWarm();
                 nextNavigationSnapshotRealtime = 0f;
                 nextSymbologySnapshotRealtime = 0f;
                 nextNavigationCaptureRealtime = 0f;
                 return;
             }
 
-            if (terrainTileRenderer != null) terrainTileRenderer.SuspendViewport();
+            if (terrainTileRenderer != null) terrainTileRenderer.SuspendVisibilityWarm();
             nextNavigationSnapshotRealtime = 0f;
             nextSymbologySnapshotRealtime = 0f;
             nextNavigationCaptureRealtime = 0f;
@@ -382,6 +383,26 @@ namespace AERISFlightControl.UI
                         terrainCenterLongitudeDeg, requestedRange, mapHeading,
                         effectiveTrackUp, anchorV);
                 else DrawCleanBackground(plan);
+
+                bool ndReloading = (planMode || !landActive || overlay) &&
+                    terrainTileRenderer != null && terrainTileRenderer.Reloading &&
+                    terrainTileRenderer.LastDrawState == AERISTerrainGpuDrawState.Partial;
+                if (ndReloading)
+                {
+                    DrawCleanBackground(plan);
+                    if (landActive && profile.width > 0f && profile.height > 0f)
+                        DrawCleanBackground(profile);
+                    DrawLabel(plan, "RELOADING ND\n" +
+                        terrainTileRenderer.ReloadProgressPercent + "%", centerStyle,
+                        new Color(0.72f, 0.86f, 0.92f, 1f));
+                    // During reload no map, ownship, runway, traffic, trail, vector,
+                    // wind or LAND symbology may survive over the black viewport.
+                    DrawMapControls(mapControlsRect, landActive, requestedRange, overlay,
+                        planMode, scale);
+                    if (core.Performance != null)
+                        core.Performance.RecordNavigationDisplayState(planMode, requestedRange);
+                    return;
+                }
 
                 // Gate 5 Candidate 2 map-authority latch. Terrain and all world-fixed
                 // symbology must use the exact projection of the GPU FRONT that was actually
@@ -1872,6 +1893,20 @@ namespace AERISFlightControl.UI
 
             AERISTerrainTileSystem tileSystem = terrain == null ? null :
                 terrain.DisplayTiles;
+            bool terrainPresentationRequested = settings == null ||
+                (settings.TerrainGpuMode != AERISTerrainGpuMode.Off &&
+                 settings.PerformanceGpuAccelerationEnabled);
+            bool solidBodyColdInit = !hazardOnly && terrainPresentationRequested &&
+                tileSystem != null && !tileSystem.BodySupported && vessel != null &&
+                vessel.mainBody != null &&
+                AERISTerrainTileSystem.BodyHasSolidSurface(vessel.mainBody);
+            if (solidBodyColdInit)
+            {
+                DrawCleanBackground(plot);
+                DrawLabel(plot, "RELOADING ND\nTERRAIN INIT", centerStyle,
+                    new Color(0.72f, 0.86f, 0.92f, 1f));
+                return;
+            }
             AERISTerrainGpuDrawState gpuState = AERISTerrainGpuDrawState.None;
             if (!hazardOnly && terrainTileRenderer != null && tileSystem != null &&
                 tileSystem.BodySupported && vessel != null)
@@ -1883,11 +1918,21 @@ namespace AERISFlightControl.UI
             if (gpuState == AERISTerrainGpuDrawState.Complete) return;
             if (gpuState == AERISTerrainGpuDrawState.Partial)
             {
-                int percent = Mathf.Clamp(Mathf.RoundToInt(
-                    (terrainTileRenderer == null ? 0f :
-                    terrainTileRenderer.LastBackFoundationCoverage) * 100f), 0, 99);
-                DrawLabel(plot, "TERRAIN GPU BUILDING " + percent + "%", centerStyle,
-                    new Color(0.58f, 0.76f, 0.82f, 1f));
+                if (terrainTileRenderer != null && terrainTileRenderer.Reloading)
+                {
+                    DrawCleanBackground(plot);
+                    DrawLabel(plot, "RELOADING ND\n" +
+                        terrainTileRenderer.ReloadProgressPercent + "%", centerStyle,
+                        new Color(0.72f, 0.86f, 0.92f, 1f));
+                }
+                else
+                {
+                    int percent = Mathf.Clamp(Mathf.RoundToInt(
+                        (terrainTileRenderer == null ? 0f :
+                        terrainTileRenderer.LastBackFoundationCoverage) * 100f), 0, 99);
+                    DrawLabel(plot, "TERRAIN GPU BUILDING " + percent + "%", centerStyle,
+                        new Color(0.58f, 0.76f, 0.82f, 1f));
+                }
                 return;
             }
 
@@ -2180,6 +2225,36 @@ namespace AERISFlightControl.UI
             }
         }
 
+        string FormatProjectionBackend()
+        {
+            if (settings == null) return "PROJ AUTO";
+            switch (settings.NavigationDisplayProjectionBackend)
+            {
+                case AERISNdProjectionBackendMode.Cpu: return "PROJ CPU";
+                case AERISNdProjectionBackendMode.Gpu: return "PROJ GPU";
+                default: return "PROJ AUTO";
+            }
+        }
+
+        void CycleProjectionBackend()
+        {
+            if (settings == null) return;
+            switch (settings.NavigationDisplayProjectionBackend)
+            {
+                case AERISNdProjectionBackendMode.Automatic:
+                    settings.NavigationDisplayProjectionBackend =
+                        AERISNdProjectionBackendMode.Cpu; break;
+                case AERISNdProjectionBackendMode.Cpu:
+                    settings.NavigationDisplayProjectionBackend =
+                        AERISNdProjectionBackendMode.Gpu; break;
+                default:
+                    settings.NavigationDisplayProjectionBackend =
+                        AERISNdProjectionBackendMode.Automatic; break;
+            }
+            AERISLogger.Info("[ND/PROJECTION_BACKEND] requested=" +
+                settings.NavigationDisplayProjectionBackend + ".");
+        }
+
         string FormatTerrainRenderTargetOrientation()
         {
             return settings != null && settings.TerrainRenderTargetOrientation ==
@@ -2195,7 +2270,11 @@ namespace AERISFlightControl.UI
                     AERISTerrainRenderTargetOrientation.Direct ?
                     AERISTerrainRenderTargetOrientation.Flipped :
                     AERISTerrainRenderTargetOrientation.Direct;
-            if (terrainTileRenderer != null) terrainTileRenderer.ResetGpuFailure();
+            if (terrainTileRenderer != null)
+            {
+                terrainTileRenderer.ResetGpuFailure();
+                terrainTileRenderer.InvalidatePendingForViewChange();
+            }
             AERISLogger.Info("[ND/TERRAIN_ALIGN] presentation orientation changed to " +
                 settings.TerrainRenderTargetOrientation + ".");
         }
@@ -2214,6 +2293,8 @@ namespace AERISFlightControl.UI
                 default:
                     settings.TerrainDisplayMode = AERISTerrainDisplayMode.Automatic; break;
             }
+            if (terrainTileRenderer != null)
+                terrainTileRenderer.InvalidatePendingForViewChange();
             AERISLogger.Info("[ND/TERRAIN] display mode=" +
                 settings.TerrainDisplayMode);
         }
@@ -2262,6 +2343,8 @@ namespace AERISFlightControl.UI
                     "TRACK UP / NORTH UP"), buttonStyle))
                 {
                     settings.NavigationDisplayTrackUp = !settings.NavigationDisplayTrackUp;
+                    if (terrainTileRenderer != null)
+                        terrainTileRenderer.InvalidatePendingForViewChange();
                     SaveSettingsAndProfile();
                 }
                 GUI.enabled = isPlan;
@@ -2295,7 +2378,7 @@ namespace AERISFlightControl.UI
             float rowHeight = Mathf.Max(18f, 22f * scale);
             float width = Mathf.Max(112f, 142f * scale);
             bool windAvailable = !string.IsNullOrEmpty(AERISWindProviderApi.ProviderName);
-            int rows = 4 + (windAvailable ? 1 : 0) + (landActive ? 2 : 0);
+            int rows = 5 + (windAvailable ? 1 : 0) + (landActive ? 2 : 0);
             return new Rect(controlsRect.x + 3f,
                 controlsRect.y - rows * rowHeight - 5f, width,
                 rows * rowHeight + 3f);
@@ -2344,6 +2427,12 @@ namespace AERISFlightControl.UI
                 if (GUI.Button(new Rect(panel.x + 2f, y, panel.width - 4f, rowHeight - 1f),
                     FormatTerrainRenderTargetOrientation(), buttonStyle))
                 { CycleTerrainRenderTargetOrientation(); changed = true; }
+                y += rowHeight;
+                GUI.enabled = true;
+                GUI.backgroundColor = new Color(0.30f, 0.42f, 0.48f, 1f);
+                if (GUI.Button(new Rect(panel.x + 2f, y, panel.width - 4f, rowHeight - 1f),
+                    FormatProjectionBackend(), buttonStyle))
+                { CycleProjectionBackend(); changed = true; }
                 y += rowHeight;
                 bool windAvailable = !string.IsNullOrEmpty(AERISWindProviderApi.ProviderName);
                 if (windAvailable)

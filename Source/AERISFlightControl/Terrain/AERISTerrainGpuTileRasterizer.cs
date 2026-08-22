@@ -14,6 +14,9 @@ namespace AERISFlightControl.Terrain
         internal float ContourIntervalMeters;
         internal string StyleKey;
         internal AERISTerrainVirtualDetailProfile VirtualDetailProfile;
+        // AERIS27_REV3_5_SALBUTAMOL_SULFATE_R008_CURRENT_FOUNDATION_UPSTREAM_PRIORITY: exact renderer cache-key identity for current-view
+        // reconciliation. This does not alter tile data or worker ownership.
+        internal string RequestIdentity;
     }
 
     internal class AERISTerrainRenderReadyHeightField
@@ -49,6 +52,7 @@ namespace AERISFlightControl.Terrain
         internal long LastUseSequence;
         internal bool ResidentTokenValid;
         internal AERISResidentCommitToken ResidentToken;
+        internal string RequestIdentity;
 
         internal long EstimatedBytes
         {
@@ -81,6 +85,7 @@ namespace AERISFlightControl.Terrain
         // tile has 1024 coarse parent cells; 256 therefore caps sparse refinement at
         // one quarter of a tile and still prevents Candidate7-style whole-tile 129 fill.
         const int MaximumSparseCorrectionParentCells = 256;
+        const string Rev35R009Variant = "AERIS27_REV3_5_SALBUTAMOL_SULFATE_R009_GHOST_PENDING_BACKPRESSURE";
 
         sealed class PendingState
         {
@@ -89,6 +94,7 @@ namespace AERISFlightControl.Terrain
             internal string StyleKey;
             internal string SchedulerKey;
             internal long EnqueuedTicks;
+            internal string RequestIdentity;
         }
 
         readonly object gate = new object();
@@ -97,6 +103,21 @@ namespace AERISFlightControl.Terrain
         // Operation Health Pass 2: lifecycle cancellation is uncommon but must not create
         // a fresh scheduler-key List every time the ND viewport is reset.
         readonly List<string> cancelSchedulerKeysScratch = new List<string>(32);
+        // AERIS27_REV3_5_SALBUTAMOL_SULFATE_R008_CURRENT_FOUNDATION_UPSTREAM_PRIORITY: bounded reconciliation scratch. completed is already hard
+        // capped at 64, and this queue never survives beyond one reconcile call.
+        readonly List<string> rev35R008CancelTileIdsScratch = new List<string>(128);
+        readonly List<string> rev35R008CancelSchedulerKeysScratch = new List<string>(128);
+        readonly Queue<AERISTerrainGpuTileRasterResult> rev35R008CompletedScratch =
+            new Queue<AERISTerrainGpuTileRasterResult>(64);
+        long rev35R008Reconciliations;
+        long rev35R008PendingCancelled;
+        long rev35R008CompletedDropped;
+        long rev35R008SchedulerCancels;
+        long rev35R009AdmissionAccepted;
+        long rev35R009AdmissionRejected;
+        long rev35R009PendingRegistered;
+        long rev35R009DuplicatePending;
+        long rev35R009TerminalNull;
         bool disposed;
         int dropped;
         int failures;
@@ -105,10 +126,19 @@ namespace AERISFlightControl.Terrain
         internal int CompletedCount { get { lock (gate) return completed.Count; } }
         internal int DroppedCount { get { lock (gate) return dropped; } }
         internal int FailureCount { get { lock (gate) return failures; } }
+        internal long Rev35R008Reconciliations { get { lock (gate) return rev35R008Reconciliations; } }
+        internal long Rev35R008PendingCancelled { get { lock (gate) return rev35R008PendingCancelled; } }
+        internal long Rev35R008CompletedDropped { get { lock (gate) return rev35R008CompletedDropped; } }
+        internal long Rev35R008SchedulerCancels { get { lock (gate) return rev35R008SchedulerCancels; } }
+        internal long Rev35R009AdmissionAccepted { get { lock (gate) return rev35R009AdmissionAccepted; } }
+        internal long Rev35R009AdmissionRejected { get { lock (gate) return rev35R009AdmissionRejected; } }
+        internal long Rev35R009PendingRegistered { get { lock (gate) return rev35R009PendingRegistered; } }
+        internal long Rev35R009DuplicatePending { get { lock (gate) return rev35R009DuplicatePending; } }
+        internal long Rev35R009TerminalNull { get { lock (gate) return rev35R009TerminalNull; } }
 
         internal bool Enqueue(AERISTerrainGpuTileRasterRequest request)
         {
-            if (disposed || request == null || request.Tile == null || request.Tile.Elevation == null || request.Tile.Flags == null || string.IsNullOrEmpty(request.StyleKey)) return false;
+            if (disposed || request == null || request.Tile == null || request.Tile.Elevation == null || request.Tile.Flags == null || string.IsNullOrEmpty(request.StyleKey) || string.IsNullOrEmpty(request.RequestIdentity)) return false;
             AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
             if (runtime == null) return false;
             string tileId = request.Tile.Key.StableId;
@@ -116,13 +146,15 @@ namespace AERISFlightControl.Terrain
             lock (gate)
             {
                 PendingState existing;
-                if (pending.TryGetValue(tileId, out existing) && existing != null && existing.CreatedUtcTicks == createdUtcTicks && string.Equals(existing.StyleKey, request.StyleKey, StringComparison.Ordinal) && ElapsedSeconds(existing.EnqueuedTicks) < 10.0) return true;
-                string pendingSchedulerKey = "terrain-gpu-mesh:" + request.Tile.Key.FileStem;
-                pending[tileId] = new PendingState { Generation = request.Generation, CreatedUtcTicks = createdUtcTicks, StyleKey = request.StyleKey, SchedulerKey = pendingSchedulerKey, EnqueuedTicks = Stopwatch.GetTimestamp() };
+                if (pending.TryGetValue(tileId, out existing) && existing != null && existing.CreatedUtcTicks == createdUtcTicks && string.Equals(existing.StyleKey, request.StyleKey, StringComparison.Ordinal) && ElapsedSeconds(existing.EnqueuedTicks) < 10.0)
+                {
+                    rev35R009DuplicatePending++;
+                    return true;
+                }
             }
             request.Tile = request.Tile.CloneImmutable();
             string schedulerKey = "terrain-gpu-mesh:" + request.Tile.Key.FileStem;
-            bool accepted = runtime.Scheduler.SubmitLatest(AERISRuntimeLane.GeneralCompute, schedulerKey, runtime.CaptureStamp(), context =>
+            bool accepted = runtime.Scheduler.SubmitRequired(AERISRuntimeLane.GeneralCompute, schedulerKey, runtime.CaptureStamp(), context =>
             {
                 context.ThrowIfStale();
                 AERISTerrainGpuTileRasterResult result = BuildMesh(request);
@@ -137,21 +169,92 @@ namespace AERISFlightControl.Terrain
                     PendingState newest;
                     if (!pending.TryGetValue(tileId, out newest) || newest == null || newest.Generation != request.Generation) { dropped++; return; }
                     pending.Remove(tileId);
-                    if (result == null) { failures++; return; }
+                    if (result == null) { failures++; rev35R009TerminalNull++; return; }
                     while (completed.Count >= 64) { completed.Dequeue(); dropped++; }
                     completed.Enqueue(result);
                 }
             });
             if (!accepted)
             {
-                lock (gate)
+                // Required admission rejected by bounded queue/backpressure. No pending
+                // ownership exists yet, so the caller can retry on the next content tick.
+                lock (gate) rev35R009AdmissionRejected++;
+                return false;
+            }
+            lock (gate)
+            {
+                // Scheduler accepted the required job. Only now publish Rasterizer pending
+                // ownership; DrainCommits executes on the main thread after Enqueue returns.
+                pending[tileId] = new PendingState
                 {
-                    PendingState newest;
-                    if (pending.TryGetValue(tileId, out newest) && newest != null && newest.Generation == request.Generation) pending.Remove(tileId);
-                    dropped++;
+                    Generation = request.Generation,
+                    CreatedUtcTicks = createdUtcTicks,
+                    StyleKey = request.StyleKey,
+                    SchedulerKey = schedulerKey,
+                    EnqueuedTicks = Stopwatch.GetTimestamp(),
+                    RequestIdentity = request.RequestIdentity
+                };
+                rev35R009AdmissionAccepted++;
+                rev35R009PendingRegistered++;
+            }
+            return true;
+        }
+
+        internal void ReconcileCurrentRequests(HashSet<string> currentRequestIdentities)
+        {
+            if (disposed || currentRequestIdentities == null) return;
+            rev35R008CancelTileIdsScratch.Clear();
+            rev35R008CancelSchedulerKeysScratch.Clear();
+            rev35R008CompletedScratch.Clear();
+            lock (gate)
+            {
+                rev35R008Reconciliations++;
+                foreach (KeyValuePair<string, PendingState> pair in pending)
+                {
+                    PendingState state = pair.Value;
+                    if (state == null || string.IsNullOrEmpty(state.RequestIdentity) ||
+                        !currentRequestIdentities.Contains(state.RequestIdentity))
+                    {
+                        rev35R008CancelTileIdsScratch.Add(pair.Key);
+                        if (state != null && !string.IsNullOrEmpty(state.SchedulerKey))
+                            rev35R008CancelSchedulerKeysScratch.Add(state.SchedulerKey);
+                    }
+                }
+                for (int i = 0; i < rev35R008CancelTileIdsScratch.Count; i++)
+                {
+                    if (pending.Remove(rev35R008CancelTileIdsScratch[i]))
+                        rev35R008PendingCancelled++;
+                }
+
+                while (completed.Count > 0)
+                {
+                    AERISTerrainGpuTileRasterResult result = completed.Dequeue();
+                    if (result != null && !string.IsNullOrEmpty(result.RequestIdentity) &&
+                        currentRequestIdentities.Contains(result.RequestIdentity))
+                        rev35R008CompletedScratch.Enqueue(result);
+                    else
+                    {
+                        dropped++;
+                        rev35R008CompletedDropped++;
+                    }
+                }
+                while (rev35R008CompletedScratch.Count > 0)
+                    completed.Enqueue(rev35R008CompletedScratch.Dequeue());
+            }
+
+            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
+            if (runtime != null)
+            {
+                for (int i = 0; i < rev35R008CancelSchedulerKeysScratch.Count; i++)
+                {
+                    runtime.Scheduler.CancelKey(AERISRuntimeLane.GeneralCompute,
+                        rev35R008CancelSchedulerKeysScratch[i]);
+                    lock (gate) rev35R008SchedulerCancels++;
                 }
             }
-            return accepted;
+            rev35R008CancelTileIdsScratch.Clear();
+            rev35R008CancelSchedulerKeysScratch.Clear();
+            rev35R008CompletedScratch.Clear();
         }
 
         internal void CancelAll()
@@ -234,7 +337,7 @@ namespace AERISFlightControl.Terrain
             contourWatch.Stop(); watch.Stop();
             return new AERISTerrainGpuTileRasterResult
             {
-                Generation = request.Generation, Key = tile.Key, TileCreatedUtcTicks = tile.CreatedUtcTicks, StyleKey = request.StyleKey, Resolution = resolution,
+                Generation = request.Generation, Key = tile.Key, TileCreatedUtcTicks = tile.CreatedUtcTicks, StyleKey = request.StyleKey, RequestIdentity = request.RequestIdentity, Resolution = resolution,
                 SouthLatitudeDeg = tile.SouthLatitudeDeg, NorthLatitudeDeg = tile.NorthLatitudeDeg, WestLongitudeDeg = tile.WestLongitudeDeg, EastLongitudeDeg = tile.EastLongitudeDeg,
                 VertexX = x, VertexY = y, ElevationMeters = elevationMeters, Water = water, Valid = valid, Shade = shade, Triangles = triangles, ContourSegments = contours,
                 CoastlineSegments = coastlines, CoastlineResolution = highDensityBoundary ? tile.HighDensityCoastlineResolution : tile.Resolution,

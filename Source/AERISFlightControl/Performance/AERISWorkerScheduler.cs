@@ -278,6 +278,9 @@ namespace AERISFlightControl.Performance
         long submitted, completed, replaced, dropped, cancelled, stale, failed;
         long requiredRejected, requiredDropped;
         const int ResultCapacity = 256;
+        // AERIS27_REV3_5_SALBUTAMOL_SULFATE_R009_GHOST_PENDING_BACKPRESSURE: commit-required queue entries are protected from
+        // best-effort replacement/eviction. No lane capacity or worker count changes.
+        const string Rev35R009QueueProtection = "AERIS27_REV3_5_SALBUTAMOL_SULFATE_R009_GHOST_PENDING_BACKPRESSURE";
         // Legacy static acceptance marker: results.Count >= 256.
         volatile bool stopping;
         bool disposed;
@@ -409,9 +412,15 @@ namespace AERISFlightControl.Performance
                 }
                 else
                 {
-                    latestJobIds[job.IdentityKey] = job.Id;
                     if (queue.ByKey.TryGetValue(key, out previous))
                     {
+                        // Best-effort work may never replace an admitted required job.
+                        if (previous.Value != null && previous.Value.CommitRequired)
+                        {
+                            Interlocked.Increment(ref dropped);
+                            return false;
+                        }
+                        latestJobIds[job.IdentityKey] = job.Id;
                         previous.Value.Cancelled = true;
                         Interlocked.Increment(ref cancelled);
                         previous.Value = job;
@@ -421,17 +430,26 @@ namespace AERISFlightControl.Performance
                     {
                         if (queue.Jobs.Count >= queue.Capacity)
                         {
-                            LinkedListNode<Job> oldest = queue.Jobs.First;
-                            if (oldest != null)
+                            // Skip commit-required jobs while searching for an evictable
+                            // best-effort entry. If none exists, reject the incoming
+                            // best-effort job instead of corrupting required ownership.
+                            LinkedListNode<Job> evictable = queue.Jobs.First;
+                            while (evictable != null && evictable.Value != null &&
+                                evictable.Value.CommitRequired)
+                                evictable = evictable.Next;
+                            if (evictable == null)
                             {
-                                oldest.Value.Cancelled = true;
-                                Interlocked.Increment(ref cancelled);
-                                RemoveLatestIfSameLocked(oldest.Value);
-                                queue.ByKey.Remove(oldest.Value.Key);
-                                queue.Jobs.RemoveFirst();
                                 Interlocked.Increment(ref dropped);
+                                return false;
                             }
+                            evictable.Value.Cancelled = true;
+                            Interlocked.Increment(ref cancelled);
+                            RemoveLatestIfSameLocked(evictable.Value);
+                            queue.ByKey.Remove(evictable.Value.Key);
+                            queue.Jobs.Remove(evictable);
+                            Interlocked.Increment(ref dropped);
                         }
+                        latestJobIds[job.IdentityKey] = job.Id;
                         LinkedListNode<Job> node = queue.Jobs.AddLast(job);
                         queue.ByKey[key] = node;
                     }

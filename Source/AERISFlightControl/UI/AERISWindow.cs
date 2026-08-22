@@ -28,7 +28,7 @@ namespace AERISFlightControl.UI
   const float HeaderDragHeight=22f;
   const float CompactButtonHeight=20f;
   const float MasterButtonHeight=40f;
-  static readonly string[] FlightArchiveLimitLabels=new string[]{"1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30"};
+  // FDR archive retention uses one integer slider; the former 30-button grid is intentionally removed.
   const float SmallButtonWidth=82f;
   const float ActionButtonWidth=124f;
   const float CompactLabelWidth=82f;
@@ -265,11 +265,11 @@ namespace AERISFlightControl.UI
    GUILayout.Label("DISPLAY");
    DrawDisplayModeSelector("FDI",ref settings.FlightInstrumentDisplayMode);
    DrawDisplayModeSelector("ND",ref settings.NavigationDisplayMode);
+   DrawProjectionBackendSelector();
    ToggleOption(ref settings.NavigationDisplayTrackUp,"Navigation display track-up");
    GUILayout.Label("ND ranges are fixed at 10 / 20 / 40 / 80 / 160 km. Drag the map to enter PLAN; RECENTER restores the prior orientation.");
    DrawTerrainQualitySelector();
    DrawTerrainModeSelector();
-   DrawTerrainGpuSelector();
    DrawTerrainColourSelector();
    GUILayout.Label("ND presentation cadence is fixed at 10 Hz during CP3.75 stabilization.");
    ToggleOption(ref settings.TerrainContoursEnabled,"Terrain contour lines");
@@ -580,9 +580,41 @@ namespace AERISFlightControl.UI
   }
   void DrawTerrainQualitySelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terrain quality",GUILayout.Width(150f));bool oldEnabled=GUI.enabled;try{GUI.enabled=false;GUILayout.Button("LOW  (LOCKED)",GUILayout.Width(ResponsiveWidth(BaseSelectorWidth)),GUILayout.Height(CompactControlHeight()));}finally{GUI.enabled=oldEnabled;}GUILayout.EndHorizontal();}
   void DrawTerrainModeSelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terrain mode",GUILayout.Width(150f));int selected=GUILayout.SelectionGrid((int)settings.TerrainDisplayMode,new string[]{"AUTO","TOPO","REL","OFF"},4,GUILayout.Width(ResponsiveWidth(BaseSelectorWidth)),GUILayout.Height(CompactControlHeight()));GUILayout.EndHorizontal();var next=(AERISTerrainDisplayMode)Mathf.Clamp(selected,0,3);if(next!=settings.TerrainDisplayMode){settings.TerrainDisplayMode=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Terrain mode="+next);}}
-  void DrawTerrainGpuSelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terrain GPU",GUILayout.Width(150f));int selected=GUILayout.SelectionGrid((int)settings.TerrainGpuMode,new string[]{"AUTO","ON","OFF"},3,GUILayout.Width(ResponsiveWidth(BaseSelectorWidth)),GUILayout.Height(CompactControlHeight()));GUILayout.EndHorizontal();var next=(AERISTerrainGpuMode)Mathf.Clamp(selected,0,2);if(next!=settings.TerrainGpuMode){settings.TerrainGpuMode=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Terrain GPU="+next);}}
+  void DrawProjectionBackendSelector()
+  {
+   GUILayout.BeginHorizontal();
+   GUILayout.Label("ND projection",GUILayout.Width(150f));
+   int selected=GUILayout.SelectionGrid((int)settings.NavigationDisplayProjectionBackend,
+    new string[]{"AUTO","CPU","GPU"},3,GUILayout.Width(ResponsiveWidth(BaseSelectorWidth)),
+    GUILayout.Height(CompactControlHeight()));
+   GUILayout.EndHorizontal();
+   var next=(AERISNdProjectionBackendMode)Mathf.Clamp(selected,0,2);
+   if(next!=settings.NavigationDisplayProjectionBackend)
+   {
+    settings.NavigationDisplayProjectionBackend=next;
+    settings.Save();
+    AERISLogger.Info("[SYSTEM/OPTIONS] ND projection backend="+next);
+   }
+  }
   void DrawTerrainColourSelector(){GUILayout.BeginHorizontal();GUILayout.Label("Terrain colours",GUILayout.Width(150f));int selected=GUILayout.SelectionGrid((int)settings.TerrainColourPreset,new string[]{"STD","RG","BY","HIGH"},4,GUILayout.Width(ResponsiveWidth(BaseSelectorWidth)),GUILayout.Height(CompactControlHeight()));GUILayout.EndHorizontal();var next=(AERISTerrainColourPreset)Mathf.Clamp(selected,0,3);if(next!=settings.TerrainColourPreset){settings.TerrainColourPreset=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Terrain colours="+next);}}
-  void DrawFlightDataArchiveLimitSelector(){GUILayout.Label("Verified flight ZIP limit   (default 10 / range 1-30)");int current=AERISSettings.NormalizeFlightDataArchiveLimit(settings.FlightDataArchiveLimit)-1;int selected=GUILayout.SelectionGrid(current,FlightArchiveLimitLabels,10,GUILayout.ExpandWidth(true),GUILayout.Height(CompactControlHeight()*3f));if(selected>=0&&selected<30){int next=selected+1;if(next!=settings.FlightDataArchiveLimit){settings.FlightDataArchiveLimit=next;settings.Save();AERISFlightDataArchive.ConfigureRetention(next);AERISLogger.Info("[SYSTEM/OPTIONS] FDR/CVR verified ZIP limit="+next);}}}
+  void DrawFlightDataArchiveLimitSelector()
+  {
+   int current=AERISSettings.NormalizeFlightDataArchiveLimit(settings.FlightDataArchiveLimit);
+   GUILayout.Label("Verified flight ZIP limit   "+current+"   (default 10 / range 1-30)");
+   GUILayout.BeginHorizontal();
+   GUILayout.Label("1",GUILayout.Width(20f));
+   float raw=GUILayout.HorizontalSlider(current,1f,30f,GUILayout.ExpandWidth(true));
+   GUILayout.Label("30",GUILayout.Width(28f));
+   GUILayout.EndHorizontal();
+   int next=Mathf.Clamp(Mathf.RoundToInt(raw),1,30);
+   if(next!=settings.FlightDataArchiveLimit)
+   {
+    settings.FlightDataArchiveLimit=next;
+    settings.Save();
+    AERISFlightDataArchive.ConfigureRetention(next);
+    AERISLogger.Info("[SYSTEM/OPTIONS] FDR/CVR verified ZIP limit="+next);
+   }
+  }
   void ToggleOption(ref bool value,string label){bool next=GUILayout.Toggle(value,label);if(next!=value){value=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] "+label+"="+next);}}
   void DrawShortcutBinding(string label,AERISShortcutAction action){GUILayout.BeginHorizontal();GUILayout.Label(label,GUILayout.Width(150f));GUILayout.Label(settings.GetShortcutDisplay(action),GUILayout.ExpandWidth(true));bool capturing=hotkeyCaptureAction==(int)action;if(GUILayout.Button(capturing?"CAPTURE":"SET",GUILayout.Width(ResponsiveWidth(76f)),GUILayout.Height(CompactControlHeight())))BeginShortcutCapture(action);if(GUILayout.Button("CLEAR",GUILayout.Width(ResponsiveWidth(58f)),GUILayout.Height(CompactControlHeight()))){settings.ClearShortcut(action);settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut cleared: "+label);}GUILayout.EndHorizontal();}
   void BeginShortcutCapture(AERISShortcutAction action){hotkeyCaptureAction=(int)action;capturePrimary=KeyCode.None;captureSecondary=KeyCode.None;AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut capture started: "+action);}

@@ -11,6 +11,11 @@ namespace AERISFlightControl.Logging
         private static readonly object Sync = new object();
         private static bool initialized;
         private static bool fileLoggingDisabled;
+        // PENICILLIN_LOG_POLICY: central suppression only. Existing AA/AP/FBW call
+        // sites are deliberately untouched; WARN/ERROR and build/runtime identity
+        // markers remain visible even when routine logging is OFF.
+        private static AERISOperationHealthLogLevel configuredLogLevel =
+            AERISOperationHealthLogLevel.Diagnostic;
         private static AERISAsyncFileChannel mainWriter;
         private static AERISAsyncFileChannel sessionWriter;
         internal static Action<string, string> EventSink;
@@ -23,6 +28,7 @@ namespace AERISFlightControl.Logging
             lock (Sync)
             {
                 if (initialized) return;
+                LoadConfiguredLogLevel();
                 try
                 {
                     string previous = Path.Combine(RootPath, "AERISFlightControl-prev.log");
@@ -67,8 +73,77 @@ namespace AERISFlightControl.Logging
             }
         }
 
+        private static void LoadConfiguredLogLevel()
+        {
+            configuredLogLevel = AERISOperationHealthLogLevel.Diagnostic;
+            try
+            {
+                string path = Path.Combine(KSPUtil.ApplicationRootPath,
+                    "GameData", "AERISFlightControl", "Config",
+                    "AERISOperationHealth.cfg");
+                ConfigNode root = ConfigNode.Load(path);
+                if (root == null) return;
+                ConfigNode node = root.GetNode("AERIS_OPERATION_HEALTH");
+                if (node == null && root.name == "AERIS_OPERATION_HEALTH") node = root;
+                if (node == null) return;
+                string enabledText = node.GetValue("enabled");
+                bool enabledValue;
+                if (!string.IsNullOrEmpty(enabledText) &&
+                    bool.TryParse(enabledText, out enabledValue) && !enabledValue)
+                {
+                    configuredLogLevel = AERISOperationHealthLogLevel.Off;
+                    return;
+                }
+                string levelText = node.GetValue("logLevel");
+                if (string.IsNullOrEmpty(levelText)) return;
+                switch (levelText.Trim().ToUpperInvariant())
+                {
+                    case "OFF": configuredLogLevel = AERISOperationHealthLogLevel.Off; break;
+                    case "NORMAL": configuredLogLevel = AERISOperationHealthLogLevel.Normal; break;
+                    case "DIAGNOSTIC": configuredLogLevel = AERISOperationHealthLogLevel.Diagnostic; break;
+                    case "TRACE": configuredLogLevel = AERISOperationHealthLogLevel.Trace; break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(Prefix + " PENICILLIN logging policy load failed; using DIAGNOSTIC: " + ex.Message);
+                configuredLogLevel = AERISOperationHealthLogLevel.Diagnostic;
+            }
+        }
+
+        private static bool ShouldWrite(string level, string message)
+        {
+            if (string.Equals(level, "ERROR", StringComparison.Ordinal) ||
+                string.Equals(level, "WARN", StringComparison.Ordinal))
+                return true;
+
+            if (IsCandidateIdentityMessage(message))
+                return true;
+
+            if (configuredLogLevel == AERISOperationHealthLogLevel.Off)
+                return false;
+
+            if (string.Equals(level, "VERBOSE", StringComparison.Ordinal))
+                return configuredLogLevel == AERISOperationHealthLogLevel.Trace;
+
+            return true;
+        }
+
+        private static bool IsCandidateIdentityMessage(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return false;
+            return message.IndexOf("[AERIS23_RUNTIME_CANDIDATE]", StringComparison.Ordinal) >= 0 ||
+                message.IndexOf("[AERIS23_CANDIDATE", StringComparison.Ordinal) >= 0 ||
+                message.IndexOf("candidate=AERIS23_", StringComparison.Ordinal) >= 0;
+        }
+
         private static void Write(string level, string message)
         {
+            // Central zero-I/O fast path. The caller may already have constructed its
+            // message; eliminating call-site formatting inside AA/AP would violate the
+            // PENICILLIN no-touch boundary, so that optimization is intentionally out
+            // of scope for this update.
+            if (!ShouldWrite(level, message)) return;
             DateTime utc = DateTime.UtcNow;
             string line = string.Format("{0} [{1:yyyy-MM-dd HH:mm:ss.fff}] [{2}] {3}", Prefix, utc, level, message);
             Debug.Log(line);

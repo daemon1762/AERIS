@@ -19,8 +19,8 @@ namespace AERIS.Editor
         public static void BuildWindows()
         {
             Build(BuildTarget.StandaloneWindows64,
-                "aeris_nd_gpu_vertex_projection_windows.bundle",
-                "aeris_gpu_bundle_probe_windows.bundle",
+                "aeris25_nd_gpu_dynamic_terrain_colour_windows.bundle",
+                "aeris25_gpu_dynamic_colour_probe_windows.bundle",
                 "aeris_nd_gpu_vertex_projection_diagnostic_windows.bundle",
                 "aeris_gpu_bundle_probe_diagnostic_windows.bundle");
         }
@@ -28,8 +28,8 @@ namespace AERIS.Editor
         public static void BuildLinux()
         {
             Build(BuildTarget.StandaloneLinux64,
-                "aeris_nd_gpu_vertex_projection_linux.bundle",
-                "aeris_gpu_bundle_probe_linux.bundle",
+                "aeris25_nd_gpu_dynamic_terrain_colour_linux.bundle",
+                "aeris25_gpu_dynamic_colour_probe_linux.bundle",
                 null, null);
         }
 

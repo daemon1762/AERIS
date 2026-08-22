@@ -161,7 +161,8 @@ namespace AERISFlightControl.Terrain
             {
                 IndexEntry entry;
                 return tileIndex.TryGetValue(key.StableId, out entry) && entry != null &&
-                    entry.State == AERISTerrainGenerationState.Complete;
+                    entry.State == AERISTerrainGenerationState.Complete &&
+                    entry.Quality >= 100;
             }
         }
 
@@ -176,7 +177,8 @@ namespace AERISFlightControl.Terrain
             {
                 IndexEntry entry;
                 if (!tileIndex.TryGetValue(key.StableId, out entry) || entry == null ||
-                    entry.State != AERISTerrainGenerationState.Complete)
+                    entry.State != AERISTerrainGenerationState.Complete ||
+                    entry.Quality < 100)
                     return false;
                 chunkId = entry.ChunkId;
                 return !string.IsNullOrEmpty(chunkId);
@@ -206,6 +208,7 @@ namespace AERISFlightControl.Terrain
                 {
                     if (entry == null ||
                         entry.State != AERISTerrainGenerationState.Complete ||
+                        entry.Quality < 100 ||
                         !string.Equals(entry.Key.BodyName, normalizedBody,
                             StringComparison.Ordinal) ||
                         !string.Equals(entry.Key.EnvironmentHash,
@@ -640,7 +643,8 @@ namespace AERISFlightControl.Terrain
             {
                 AERISTerrainHeightTile tile = tiles[i];
                 if (tile == null || tile.IsPreview || !tile.SamplingComplete ||
-                    tile.Elevation == null || tile.Flags == null) continue;
+                    tile.Quality < 100 || tile.Elevation == null ||
+                    tile.Flags == null) continue;
                 try
                 {
                     encodedTiles.Add(AERISTerrainPreloadCodec.Encode(tile, pqsHash,
@@ -1095,7 +1099,9 @@ namespace AERISFlightControl.Terrain
             var entries = new List<AERISMapTerrainIndexEntry>(tileIndex.Count);
             foreach (IndexEntry entry in tileIndex.Values)
             {
-                if (entry == null || string.IsNullOrEmpty(entry.StableId)) continue;
+                if (entry == null || string.IsNullOrEmpty(entry.StableId) ||
+                    entry.State != AERISTerrainGenerationState.Complete ||
+                    entry.Quality < 100) continue;
                 AERISMapTerrainIndexEntry published;
                 if (!mapIndexEntryCache.TryGetValue(entry.StableId, out published) ||
                     published == null || !published.Key.Equals(entry.Key) ||

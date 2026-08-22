@@ -50,6 +50,16 @@ namespace AERISFlightControl.Settings
         Fps60 = 5
     }
 
+    // AERIS24 ND BACKEND/BLACK RELOAD. This selects only the geographic vertex
+    // projection implementation. Terrain content, painter order and control/safety
+    // authority remain unchanged.
+    internal enum AERISNdProjectionBackendMode
+    {
+        Automatic = 0,
+        Cpu = 1,
+        Gpu = 2
+    }
+
     // Temporary CP2 diagnostic control. DIRECT preserves the RenderTexture's
     // GL.LoadOrtho orientation when presenting it in IMGUI. FLIPPED applies one
     // explicit vertical inversion. The old backend-derived heuristic is deliberately
@@ -154,8 +164,10 @@ namespace AERISFlightControl.Settings
         internal bool TerrainLandRuntimeQualityEnabled;
         internal AERISNavigationDisplayUpdateMode NavigationDisplayUpdateMode =
             AERISNavigationDisplayUpdateMode.Fps10;
+        internal AERISNdProjectionBackendMode NavigationDisplayProjectionBackend =
+            AERISNdProjectionBackendMode.Automatic;
         internal AERISTerrainDisplayMode TerrainDisplayMode = AERISTerrainDisplayMode.Automatic;
-        internal AERISTerrainGpuMode TerrainGpuMode = AERISTerrainGpuMode.Automatic;
+        internal AERISTerrainGpuMode TerrainGpuMode = AERISTerrainGpuMode.On;
         internal AERISTerrainRenderTargetOrientation TerrainRenderTargetOrientation =
             AERISTerrainRenderTargetOrientation.Direct;
         internal AERISTerrainColourPreset TerrainColourPreset = AERISTerrainColourPreset.Standard;
@@ -378,6 +390,9 @@ namespace AERISFlightControl.Settings
                 settings.TerrainLandRuntimeQualityEnabled = false;
                 settings.TerrainQualityModelRevision = CurrentTerrainQualityModelRevision;
                 settings.NavigationDisplayUpdateMode = AERISNavigationDisplayUpdateMode.Fps10;
+                settings.NavigationDisplayProjectionBackend = ReadEnum(node,
+                    "navigationDisplayProjectionBackend",
+                    AERISNdProjectionBackendMode.Automatic);
                 if (terrainQualityRevision != CurrentTerrainQualityModelRevision ||
                     loadedTerrainQuality != AERISTerrainQualityMode.Low ||
                     rawLandCapability ||
@@ -390,8 +405,9 @@ namespace AERISFlightControl.Settings
                 }
                 settings.TerrainDisplayMode = ReadEnum(node, "terrainDisplayMode",
                     AERISTerrainDisplayMode.Automatic);
-                settings.TerrainGpuMode = ReadEnum(node, "terrainGpuMode",
-                    AERISTerrainGpuMode.Automatic);
+                // AERIS24: terrain GPU presentation is a fixed platform policy.
+                // Legacy AUTO/OFF values are intentionally migrated to ON.
+                settings.TerrainGpuMode = AERISTerrainGpuMode.On;
                 settings.TerrainRenderTargetOrientation = ReadEnum(node,
                     "terrainRenderTargetOrientation",
                     AERISTerrainRenderTargetOrientation.Direct);
@@ -593,8 +609,9 @@ namespace AERISFlightControl.Settings
             TerrainQualityModelRevision = CurrentTerrainQualityModelRevision;
             DisplayPolicyRevision = CurrentDisplayPolicyRevision;
             NavigationDisplayUpdateMode = AERISNavigationDisplayUpdateMode.Fps10;
+            NavigationDisplayProjectionBackend = AERISNdProjectionBackendMode.Automatic;
             TerrainDisplayMode = AERISTerrainDisplayMode.Automatic;
-            TerrainGpuMode = AERISTerrainGpuMode.Automatic;
+            TerrainGpuMode = AERISTerrainGpuMode.On;
             TerrainRenderTargetOrientation = AERISTerrainRenderTargetOrientation.Direct;
             TerrainColourPreset = AERISTerrainColourPreset.Standard;
             TerrainRamCacheLimitMiB = 0;
@@ -822,7 +839,10 @@ namespace AERISFlightControl.Settings
                 node.AddValue("terrainQualityMode", TerrainQualityMode);
                 node.AddValue("terrainLandRuntimeQualityEnabled", false);
                 node.AddValue("navigationDisplayUpdateMode", NavigationDisplayUpdateMode);
+                node.AddValue("navigationDisplayProjectionBackend",
+                    NavigationDisplayProjectionBackend);
                 node.AddValue("terrainDisplayMode", TerrainDisplayMode);
+                TerrainGpuMode = AERISTerrainGpuMode.On;
                 node.AddValue("terrainGpuMode", TerrainGpuMode);
                 node.AddValue("terrainRenderTargetOrientation",
                     TerrainRenderTargetOrientation);

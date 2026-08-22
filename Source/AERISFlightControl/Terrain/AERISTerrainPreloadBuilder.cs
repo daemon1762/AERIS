@@ -144,6 +144,9 @@ namespace AERISFlightControl.Terrain
         readonly AERISTerrainPreloadTelemetry telemetry;
 
         string pointSetSignature = string.Empty;
+        // R012: the latest observed registry/current-position signature is independent
+        // from the signature that last invalidated automatic completion.
+        string appliedPointSetSignature = string.Empty;
         AERISTerrainPreloadMode mode;
         AERISTerrainPreloadSpeedProfile speedProfile;
         string activeBodyName = string.Empty;
@@ -156,6 +159,10 @@ namespace AERISFlightControl.Terrain
         float nextStateSaveRealtime;
         bool stateDirty;
         bool flightSuspended;
+        // Flight point churn is coalesced until an authoritative non-Flight point
+        // snapshot is observed. No preload generation or state-file write is requested
+        // merely because the live current-position point moved in Flight.
+        bool deferredPointSetInvalidation;
         bool operationInFlight;
         bool indexRecoveryInFlight;
         bool standardSchedulerApplied;
@@ -272,23 +279,54 @@ namespace AERISFlightControl.Terrain
             string signature = ComputePointSignature(next);
             lock (sync)
             {
-                // Registry snapshots are refreshed periodically. Replaying an identical set
-                // must not advance Builder generations or cancel a slow in-progress tile.
-                if (string.Equals(pointSetSignature, signature,
-                    StringComparison.Ordinal)) return;
-                pointSetSignature = signature;
-                points.Clear();
-                points.AddRange(next);
-                foreach (BodyPlan plan in plans.Values)
+                bool flight = HighLogic.LoadedSceneIsFlight;
+                bool sameLatest = string.Equals(pointSetSignature, signature,
+                    StringComparison.Ordinal);
+                if (!sameLatest)
                 {
-                    plan.PointCursor = 0;
-                    plan.PointScannedWithoutMiss = 0;
-                    plan.EstimatedTargetTiles = 0L;
-                    InvalidateAutomaticCompletion(plan);
-                    plan.Generation++;
+                    pointSetSignature = signature;
+                    points.Clear();
+                    points.AddRange(next);
                 }
-                stateDirty = true;
+
+                // R012: Flight terrain reads have strict priority and the preload builder
+                // cannot service newly introduced point targets. Remember only the newest
+                // RAM snapshot; do not revoke READY, advance generations, or request a
+                // preload-state write while Flight is active.
+                if (flight)
+                {
+                    deferredPointSetInvalidation = !string.Equals(
+                        appliedPointSetSignature, pointSetSignature,
+                        StringComparison.Ordinal);
+                    return;
+                }
+
+                // A non-Flight registry refresh is now authoritative. If Flight churn
+                // returned to the exact point-set that was already completed, clear the
+                // deferred signal without rebuilding anything. Otherwise invalidate once.
+                if (string.Equals(appliedPointSetSignature, pointSetSignature,
+                    StringComparison.Ordinal))
+                {
+                    deferredPointSetInvalidation = false;
+                    return;
+                }
+                ApplyPointSetInvalidationLocked(pointSetSignature);
             }
+        }
+
+        void ApplyPointSetInvalidationLocked(string signature)
+        {
+            foreach (BodyPlan plan in plans.Values)
+            {
+                plan.PointCursor = 0;
+                plan.PointScannedWithoutMiss = 0;
+                plan.EstimatedTargetTiles = 0L;
+                InvalidateAutomaticCompletion(plan);
+                plan.Generation++;
+            }
+            appliedPointSetSignature = signature ?? string.Empty;
+            deferredPointSetInvalidation = false;
+            stateDirty = true;
         }
 
         static int ComparePreloadPoints(AERISTerrainPreloadPoint a,

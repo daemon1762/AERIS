@@ -335,6 +335,10 @@ namespace AERISFlightControl.Performance
             double measuredMainMilliseconds =
                 (capturedThisFrame ? snapshotCaptureMilliseconds : 0.0) +
                 commitDrainMilliseconds;
+            // Operation Health PENICILLIN: passive observation only. This hook reads
+            // already-computed timing values and never changes AA/AP/FBW scheduling.
+            AERISOperationHealthPenicillin.RecordRuntimeFrame(
+                frameMilliseconds, measuredMainMilliseconds, commitDrainMilliseconds);
             if (IsFinite(frameMilliseconds) && frameMilliseconds >= 0.0)
             {
                 frameMillisecondsEma = Ema(frameMillisecondsEma, frameMilliseconds, 0.10);

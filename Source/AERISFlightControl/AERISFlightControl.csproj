@@ -75,6 +75,9 @@
     <Compile Include="Performance\AERISCanonicalSnapshot.cs" />
     <Compile Include="Performance\AERISGpuAssistBackend.cs" />
     <Compile Include="Performance\AERISPerformanceRuntime.cs" />
+    <Compile Include="Performance\AERISOperationHealthPenicillin.cs" />
+    <Compile Include="Performance\AERISR015PeriodicGcAttributionObserver.cs" />
+    <Compile Include="Terrain\AERISR017NdPresentationStallObserver.cs" />
     <Compile Include="Performance\AERISBackgroundFileWriter.cs" />
     <Compile Include="Performance\AERISInstrumentPipeline.cs" />
     <Compile Include="Performance\AERISNavigationDisplayPipeline.cs" />
@@ -136,7 +139,9 @@
     <Compile Include="Terrain\AERISTerrainCoastlineExtractor.cs" />
     <Compile Include="Terrain\AERISTerrainVirtualDetail.cs" />
     <Compile Include="Terrain\AERISTerrainGpuTileRasterizer.cs" />
+    <Compile Include="Terrain\AERISNdGpuVertexProjectionBackend.cs" />
     <Compile Include="Terrain\AERISTerrainGpuTileRenderer.cs" />
+    <Compile Include="Terrain\AERISR011TurningViewChurnObserver.cs" />
     <Compile Include="Terrain\AERISTerrainAwareness.cs" />
     <Compile Include="FlightState\VirtualAttitudeInstrument.cs" />
     <Compile Include="FlightState\AERISFlightStateApi.cs" />

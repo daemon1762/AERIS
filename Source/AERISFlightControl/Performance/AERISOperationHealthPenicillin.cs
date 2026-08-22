@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using UnityEngine;
@@ -17,9 +18,10 @@ namespace AERISFlightControl.Performance
     [KSPAddon(KSPAddon.Startup.Flight, false)]
     internal sealed class AERISOperationHealthPenicillin : MonoBehaviour
     {
-        internal const string Codename = "PENICILLIN";
-        internal const string Revision = "OH_PHASE2_001";
-        internal const string Candidate = "AERIS23_OH_PENICILLIN";
+        internal const string Codename = "NOREPINEPHRINE";
+        internal const string Revision = "OH_PHASE6_003";
+        internal const string Candidate = "AERIS25_MAIN_THREAD_COMMIT_GOVERNOR";
+        internal const string ObserverVariant = "AERIS26_REV003_OBSERVER_M1";
 
         const int FrameSampleCapacity = 256;
         const double DefaultSummaryIntervalSeconds = 1.0;
@@ -30,6 +32,53 @@ namespace AERISFlightControl.Performance
         const double MaximumSummaryIntervalSeconds = 5.0;
 
         static AERISOperationHealthPenicillin current;
+
+        const int Rev003ObserverMapLimit = 16384;
+        static readonly object rev003ObserverSync = new object();
+        static readonly Dictionary<string, long> rev003ObserverLastHitTicks =
+            new Dictionary<string, long>(StringComparer.Ordinal);
+        static readonly Dictionary<string, long> rev003ObserverLastEvictionTicks =
+            new Dictionary<string, long>(StringComparer.Ordinal);
+        static readonly Dictionary<string, long> rev003ObserverDecodeSubmitTicks =
+            new Dictionary<string, long>(StringComparer.Ordinal);
+        static readonly Dictionary<string, long> rev003ObserverResidentCommitTicks =
+            new Dictionary<string, long>(StringComparer.Ordinal);
+        static readonly long[] rev003ObserverReuseBuckets = new long[6];
+        static readonly long[] rev003ObserverRerequestBuckets = new long[6];
+        static readonly long[] rev003ObserverDecodeBuckets = new long[6];
+        static readonly long[] rev003ObserverResidentLifeBuckets = new long[6];
+        static readonly long[] rev003ObserverEvictionIdleBuckets = new long[6];
+        static readonly long[] rev003ObserverLodEvents = new long[5];
+        static long rev003ObserverAccessTotal;
+        static long rev003ObserverPrepHit;
+        static long rev003ObserverDecodeSubmit;
+        static long rev003ObserverGetHit;
+        static long rev003ObserverGetMiss;
+        static long rev003ObserverRamCommit;
+        static long rev003ObserverDecodeFailure;
+        static long rev003ObserverEvictions;
+        static long rev003ObserverBudgetEvictions;
+        static long rev003ObserverEvictedBytes;
+        static long rev003ObserverReuseSamples;
+        static double rev003ObserverReuseTotalMs;
+        static double rev003ObserverReuseMaxMs;
+        static long rev003ObserverRerequestSamples;
+        static double rev003ObserverRerequestTotalMs;
+        static double rev003ObserverRerequestMaxMs;
+        static long rev003ObserverDecodeSamples;
+        static double rev003ObserverDecodeTotalMs;
+        static double rev003ObserverDecodeMaxMs;
+        static long rev003ObserverResidentLifeSamples;
+        static double rev003ObserverResidentLifeTotalMs;
+        static double rev003ObserverResidentLifeMaxMs;
+        static long rev003ObserverEvictionIdleSamples;
+        static double rev003ObserverEvictionIdleTotalMs;
+        static double rev003ObserverEvictionIdleMaxMs;
+        static long rev003ObserverScopeResets;
+        static long rev003ObserverMapResets;
+        static long rev003ObserverSelfCalls;
+        static long rev003ObserverSelfTicks;
+        static long rev003ObserverSelfMaxTicks;
 
         readonly double[] frameGapSamples = new double[FrameSampleCapacity];
         readonly double[] percentileScratch = new double[FrameSampleCapacity];
@@ -72,7 +121,7 @@ namespace AERISFlightControl.Performance
         double fixedSimSecondsWindow;
         double fiveSecondWallSeconds;
         double fiveSecondSimSeconds;
-        double latestFiveSecondRealtimeRatio = 1.0;
+        double latestFiveSecondRealtimeRatio = double.NaN;
         double fixedWallGapMaxMsWindow;
         double physicsDebtPeakMsWindow;
         double frameGapMaxMsWindow;
@@ -119,6 +168,317 @@ namespace AERISFlightControl.Performance
             internal double SelfEmaMs;
             internal int DeferredSummaries;
             internal bool OneXEligible;
+        }
+
+
+        internal static void RecordRev003ObserverAccess(string stableId, int lod,
+            int kind, long bytes)
+        {
+            AERISOperationHealthPenicillin instance = current;
+            if (instance == null ||
+                instance.logLevel == AERISOperationHealthLogLevel.Off ||
+                string.IsNullOrEmpty(stableId)) return;
+
+            long start = Stopwatch.GetTimestamp();
+            long now = start;
+            lock (rev003ObserverSync)
+            {
+                rev003ObserverAccessTotal++;
+                if (kind == 1) rev003ObserverPrepHit++;
+                else if (kind == 2) rev003ObserverDecodeSubmit++;
+                else if (kind == 3) rev003ObserverGetHit++;
+                else if (kind == 4) rev003ObserverGetMiss++;
+
+                if (lod >= 0 && lod < rev003ObserverLodEvents.Length)
+                    rev003ObserverLodEvents[lod]++;
+
+                bool hit = kind == 1 || kind == 3;
+                if (hit)
+                {
+                    long previousHit;
+                    if (rev003ObserverLastHitTicks.TryGetValue(stableId,
+                        out previousHit) && previousHit > 0L && now >= previousHit)
+                    {
+                        double ageMs = (now - previousHit) * 1000.0 /
+                            Stopwatch.Frequency;
+                        if (FiniteNonNegative(ageMs))
+                        {
+                            rev003ObserverReuseSamples++;
+                            rev003ObserverReuseTotalMs += ageMs;
+                            rev003ObserverReuseMaxMs = Math.Max(
+                                rev003ObserverReuseMaxMs, ageMs);
+                            rev003ObserverReuseBuckets[ObserverAgeBucket(ageMs)]++;
+                        }
+                    }
+                    rev003ObserverLastHitTicks[stableId] = now;
+                }
+
+                long evicted;
+                if (rev003ObserverLastEvictionTicks.TryGetValue(stableId,
+                    out evicted) && evicted > 0L && now >= evicted)
+                {
+                    double ageMs = (now - evicted) * 1000.0 /
+                        Stopwatch.Frequency;
+                    if (FiniteNonNegative(ageMs))
+                    {
+                        rev003ObserverRerequestSamples++;
+                        rev003ObserverRerequestTotalMs += ageMs;
+                        rev003ObserverRerequestMaxMs = Math.Max(
+                            rev003ObserverRerequestMaxMs, ageMs);
+                        rev003ObserverRerequestBuckets[ObserverAgeBucket(ageMs)]++;
+                    }
+                    rev003ObserverLastEvictionTicks.Remove(stableId);
+                }
+
+                if (kind == 2 &&
+                    !rev003ObserverDecodeSubmitTicks.ContainsKey(stableId))
+                    rev003ObserverDecodeSubmitTicks[stableId] = now;
+
+                BoundRev003ObserverMapsLocked();
+                RecordRev003ObserverSelfLocked(start);
+            }
+        }
+
+        internal static void RecordRev003ObserverRamCommit(string stableId, int lod,
+            long bytes)
+        {
+            AERISOperationHealthPenicillin instance = current;
+            if (instance == null ||
+                instance.logLevel == AERISOperationHealthLogLevel.Off ||
+                string.IsNullOrEmpty(stableId)) return;
+
+            long start = Stopwatch.GetTimestamp();
+            long now = start;
+            lock (rev003ObserverSync)
+            {
+                rev003ObserverRamCommit++;
+                long submitted;
+                if (rev003ObserverDecodeSubmitTicks.TryGetValue(stableId,
+                    out submitted) && submitted > 0L && now >= submitted)
+                {
+                    double latencyMs = (now - submitted) * 1000.0 /
+                        Stopwatch.Frequency;
+                    if (FiniteNonNegative(latencyMs))
+                    {
+                        rev003ObserverDecodeSamples++;
+                        rev003ObserverDecodeTotalMs += latencyMs;
+                        rev003ObserverDecodeMaxMs = Math.Max(
+                            rev003ObserverDecodeMaxMs, latencyMs);
+                        rev003ObserverDecodeBuckets[ObserverDecodeBucket(latencyMs)]++;
+                    }
+                    rev003ObserverDecodeSubmitTicks.Remove(stableId);
+                }
+                rev003ObserverResidentCommitTicks[stableId] = now;
+                BoundRev003ObserverMapsLocked();
+                RecordRev003ObserverSelfLocked(start);
+            }
+        }
+
+        internal static void RecordRev003ObserverDecodeFailure(string stableId)
+        {
+            AERISOperationHealthPenicillin instance = current;
+            if (instance == null ||
+                instance.logLevel == AERISOperationHealthLogLevel.Off ||
+                string.IsNullOrEmpty(stableId)) return;
+            long start = Stopwatch.GetTimestamp();
+            lock (rev003ObserverSync)
+            {
+                rev003ObserverDecodeFailure++;
+                rev003ObserverDecodeSubmitTicks.Remove(stableId);
+                RecordRev003ObserverSelfLocked(start);
+            }
+        }
+
+        internal static void RecordRev003ObserverEviction(string stableId, int lod,
+            bool budget, long bytes)
+        {
+            AERISOperationHealthPenicillin instance = current;
+            if (instance == null ||
+                instance.logLevel == AERISOperationHealthLogLevel.Off ||
+                string.IsNullOrEmpty(stableId)) return;
+
+            long start = Stopwatch.GetTimestamp();
+            long now = start;
+            lock (rev003ObserverSync)
+            {
+                rev003ObserverEvictions++;
+                if (budget) rev003ObserverBudgetEvictions++;
+                rev003ObserverEvictedBytes += Math.Max(0L, bytes);
+                rev003ObserverLastEvictionTicks[stableId] = now;
+
+                long committed;
+                if (rev003ObserverResidentCommitTicks.TryGetValue(stableId,
+                    out committed) && committed > 0L && now >= committed)
+                {
+                    double lifeMs = (now - committed) * 1000.0 /
+                        Stopwatch.Frequency;
+                    if (FiniteNonNegative(lifeMs))
+                    {
+                        rev003ObserverResidentLifeSamples++;
+                        rev003ObserverResidentLifeTotalMs += lifeMs;
+                        rev003ObserverResidentLifeMaxMs = Math.Max(
+                            rev003ObserverResidentLifeMaxMs, lifeMs);
+                        rev003ObserverResidentLifeBuckets[ObserverAgeBucket(lifeMs)]++;
+                    }
+                    rev003ObserverResidentCommitTicks.Remove(stableId);
+                }
+
+                long hit;
+                if (rev003ObserverLastHitTicks.TryGetValue(stableId, out hit) &&
+                    hit > 0L && now >= hit)
+                {
+                    double idleMs = (now - hit) * 1000.0 /
+                        Stopwatch.Frequency;
+                    if (FiniteNonNegative(idleMs))
+                    {
+                        rev003ObserverEvictionIdleSamples++;
+                        rev003ObserverEvictionIdleTotalMs += idleMs;
+                        rev003ObserverEvictionIdleMaxMs = Math.Max(
+                            rev003ObserverEvictionIdleMaxMs, idleMs);
+                        rev003ObserverEvictionIdleBuckets[ObserverAgeBucket(idleMs)]++;
+                    }
+                }
+
+                rev003ObserverDecodeSubmitTicks.Remove(stableId);
+                BoundRev003ObserverMapsLocked();
+                RecordRev003ObserverSelfLocked(start);
+            }
+        }
+
+        internal static void RecordRev003ObserverScopeReset()
+        {
+            AERISOperationHealthPenicillin instance = current;
+            if (instance == null ||
+                instance.logLevel == AERISOperationHealthLogLevel.Off) return;
+            long start = Stopwatch.GetTimestamp();
+            lock (rev003ObserverSync)
+            {
+                rev003ObserverScopeResets++;
+                rev003ObserverLastHitTicks.Clear();
+                rev003ObserverLastEvictionTicks.Clear();
+                rev003ObserverDecodeSubmitTicks.Clear();
+                rev003ObserverResidentCommitTicks.Clear();
+                RecordRev003ObserverSelfLocked(start);
+            }
+        }
+
+        static int ObserverAgeBucket(double milliseconds)
+        {
+            if (milliseconds < 1000.0) return 0;
+            if (milliseconds < 5000.0) return 1;
+            if (milliseconds < 15000.0) return 2;
+            if (milliseconds < 60000.0) return 3;
+            if (milliseconds < 300000.0) return 4;
+            return 5;
+        }
+
+        static int ObserverDecodeBucket(double milliseconds)
+        {
+            if (milliseconds < 5.0) return 0;
+            if (milliseconds < 20.0) return 1;
+            if (milliseconds < 50.0) return 2;
+            if (milliseconds < 100.0) return 3;
+            if (milliseconds < 250.0) return 4;
+            return 5;
+        }
+
+        static void BoundRev003ObserverMapsLocked()
+        {
+            if (rev003ObserverLastHitTicks.Count <= Rev003ObserverMapLimit &&
+                rev003ObserverLastEvictionTicks.Count <= Rev003ObserverMapLimit &&
+                rev003ObserverDecodeSubmitTicks.Count <= Rev003ObserverMapLimit &&
+                rev003ObserverResidentCommitTicks.Count <= Rev003ObserverMapLimit)
+                return;
+
+            rev003ObserverLastHitTicks.Clear();
+            rev003ObserverLastEvictionTicks.Clear();
+            rev003ObserverDecodeSubmitTicks.Clear();
+            rev003ObserverResidentCommitTicks.Clear();
+            rev003ObserverMapResets++;
+        }
+
+        static void RecordRev003ObserverSelfLocked(long startTicks)
+        {
+            long elapsed = Math.Max(0L, Stopwatch.GetTimestamp() - startTicks);
+            rev003ObserverSelfCalls++;
+            rev003ObserverSelfTicks += elapsed;
+            rev003ObserverSelfMaxTicks = Math.Max(
+                rev003ObserverSelfMaxTicks, elapsed);
+        }
+
+        static string ObserverHistogram(long[] buckets)
+        {
+            return buckets[0] + "/" + buckets[1] + "/" + buckets[2] + "/" +
+                buckets[3] + "/" + buckets[4] + "/" + buckets[5];
+        }
+
+        static string ObserverLodHistogram(long[] buckets)
+        {
+            return buckets[0] + "/" + buckets[1] + "/" + buckets[2] + "/" +
+                buckets[3] + "/" + buckets[4];
+        }
+
+        static string Rev003ObserverSummary()
+        {
+            lock (rev003ObserverSync)
+            {
+                double reuseMean = rev003ObserverReuseSamples > 0L ?
+                    rev003ObserverReuseTotalMs / rev003ObserverReuseSamples : 0.0;
+                double rerequestMean = rev003ObserverRerequestSamples > 0L ?
+                    rev003ObserverRerequestTotalMs / rev003ObserverRerequestSamples : 0.0;
+                double decodeMean = rev003ObserverDecodeSamples > 0L ?
+                    rev003ObserverDecodeTotalMs / rev003ObserverDecodeSamples : 0.0;
+                double lifeMean = rev003ObserverResidentLifeSamples > 0L ?
+                    rev003ObserverResidentLifeTotalMs / rev003ObserverResidentLifeSamples : 0.0;
+                double idleMean = rev003ObserverEvictionIdleSamples > 0L ?
+                    rev003ObserverEvictionIdleTotalMs / rev003ObserverEvictionIdleSamples : 0.0;
+                double selfMeanUs = rev003ObserverSelfCalls > 0L ?
+                    (rev003ObserverSelfTicks * 1000000.0 / Stopwatch.Frequency) /
+                        rev003ObserverSelfCalls : 0.0;
+                double selfMaxUs = rev003ObserverSelfMaxTicks * 1000000.0 /
+                    Stopwatch.Frequency;
+
+                return "; obs_variant=" + ObserverVariant +
+                    "; obs_access=" + rev003ObserverAccessTotal +
+                    "; obs_prep_hit=" + rev003ObserverPrepHit +
+                    "; obs_decode_submit=" + rev003ObserverDecodeSubmit +
+                    "; obs_get_hit=" + rev003ObserverGetHit +
+                    "; obs_get_miss=" + rev003ObserverGetMiss +
+                    "; obs_ram_commit=" + rev003ObserverRamCommit +
+                    "; obs_decode_fail=" + rev003ObserverDecodeFailure +
+                    "; obs_evict=" + rev003ObserverEvictions +
+                    "; obs_budget_evict=" + rev003ObserverBudgetEvictions +
+                    "; obs_evict_mib=" + F3(rev003ObserverEvictedBytes / 1048576.0) +
+                    "; obs_reuse_samples=" + rev003ObserverReuseSamples +
+                    "; obs_reuse_mean_ms=" + F3(reuseMean) +
+                    "; obs_reuse_max_ms=" + F3(rev003ObserverReuseMaxMs) +
+                    "; obs_reuse_hist=" + ObserverHistogram(rev003ObserverReuseBuckets) +
+                    "; obs_rereq_samples=" + rev003ObserverRerequestSamples +
+                    "; obs_rereq_mean_ms=" + F3(rerequestMean) +
+                    "; obs_rereq_max_ms=" + F3(rev003ObserverRerequestMaxMs) +
+                    "; obs_rereq_hist=" + ObserverHistogram(rev003ObserverRerequestBuckets) +
+                    "; obs_decode_samples=" + rev003ObserverDecodeSamples +
+                    "; obs_decode_mean_ms=" + F3(decodeMean) +
+                    "; obs_decode_max_ms=" + F3(rev003ObserverDecodeMaxMs) +
+                    "; obs_decode_hist=" + ObserverHistogram(rev003ObserverDecodeBuckets) +
+                    "; obs_reslife_samples=" + rev003ObserverResidentLifeSamples +
+                    "; obs_reslife_mean_s=" + F3(lifeMean / 1000.0) +
+                    "; obs_reslife_max_s=" + F3(rev003ObserverResidentLifeMaxMs / 1000.0) +
+                    "; obs_reslife_hist=" + ObserverHistogram(rev003ObserverResidentLifeBuckets) +
+                    "; obs_evict_idle_samples=" + rev003ObserverEvictionIdleSamples +
+                    "; obs_evict_idle_mean_s=" + F3(idleMean / 1000.0) +
+                    "; obs_evict_idle_max_s=" + F3(rev003ObserverEvictionIdleMaxMs / 1000.0) +
+                    "; obs_evict_idle_hist=" + ObserverHistogram(rev003ObserverEvictionIdleBuckets) +
+                    "; obs_lod_evt_g_f_r_l_land=" + ObserverLodHistogram(rev003ObserverLodEvents) +
+                    "; obs_maps=" + rev003ObserverLastHitTicks.Count + "/" +
+                        rev003ObserverLastEvictionTicks.Count + "/" +
+                        rev003ObserverDecodeSubmitTicks.Count + "/" +
+                        rev003ObserverResidentCommitTicks.Count +
+                    "; obs_scope_reset=" + rev003ObserverScopeResets +
+                    "; obs_map_reset=" + rev003ObserverMapResets +
+                    "; obs_self_mean_us=" + F3(selfMeanUs) +
+                    "; obs_self_max_us=" + F3(selfMaxUs);
+            }
         }
 
         internal static bool Enabled
@@ -221,6 +581,9 @@ namespace AERISFlightControl.Performance
                 AERISLogger.Info("[OH] codename=" + Codename +
                     "; revision=" + Revision +
                     "; candidate=" + Candidate +
+                    "; observer_variant=" + ObserverVariant +
+                    "; measurement_only=1" +
+                    "; control_delta=0" +
                     "; level=" + logLevel.ToString().ToUpperInvariant() +
                     "; passive_only=1; aa_ap_control_touch=0");
             }
@@ -334,8 +697,14 @@ namespace AERISFlightControl.Performance
 
             if (oneXWindowEligible && wallSinceWindow > 0.0)
             {
+                // A healthy FixedUpdate stream can sit anywhere within one fixed-step
+                // phase relative to Update. Only debt beyond that normal quantization window
+                // is reported as physics backlog.
+                double normalFixedPhaseSeconds =
+                    Math.Max(0.0, Time.fixedDeltaTime);
                 double debtMs = Math.Max(0.0,
-                    wallSinceWindow - fixedSimSecondsWindow) * 1000.0;
+                    wallSinceWindow - fixedSimSecondsWindow -
+                    normalFixedPhaseSeconds) * 1000.0;
                 physicsDebtPeakMsWindow =
                     Math.Max(physicsDebtPeakMsWindow, debtMs);
             }
@@ -521,6 +890,7 @@ namespace AERISFlightControl.Performance
                 "; oh_self_max_ms=" + F3(value.SelfMaxMs) +
                 "; oh_self_ema_ms=" + F3(value.SelfEmaMs) +
                 "; log_deferred=" + value.DeferredSummaries +
+                Rev003ObserverSummary() +
                 "; attribution=PARTIAL_PASSIVE");
         }
 
