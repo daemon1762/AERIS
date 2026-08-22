@@ -854,6 +854,10 @@ namespace AERISFlightControl.Terrain
         const string Rev35R019Hotfix1Variant = "AERIS29_REV3_5_SALBUTAMOL_SULFATE_R019_HOTFIX1_VISIBLE_QUEUE_WAKE_BACKLOG_INTEGRATION";
         // AERIS29_REV3_5_SALBUTAMOL_SULFATE_R020_VISIBLE_AUTHORITY_BASELINE_STABILITY: read-only witness for TileSystem authority-generation baseline.
         const string Rev35R020Variant = "AERIS29_REV3_5_SALBUTAMOL_SULFATE_R020_VISIBLE_AUTHORITY_BASELINE_STABILITY";
+        // AERIS30 R021: reuse R019's canonical exact-visible FAR key set at the
+        // upstream admission boundary. No new geometry authority, worker, lane,
+        // queue capacity, presentation gate, range or quality policy is introduced.
+        const string Rev35R021Variant = "AERIS30_REV3_5_SALBUTAMOL_SULFATE_R021_EXACT_VISIBLE_UPSTREAM_PRIORITY";
         long operationHealthRev35R020AuthoritySamples;
         long operationHealthRev35R020GenerationRetained;
         long operationHealthRev35R020GenerationAdvances;
@@ -1378,9 +1382,10 @@ namespace AERISFlightControl.Terrain
                 }
                 rev35R008GeometryReconcilePending = false;
 
-                // R008 phase 2: current FAR foundation enters GeneralCompute before
-                // Route/Local/exact work. Same worker pool and FIFO semantics remain.
-                for (int admissionPass = 0; admissionPass < 2; admissionPass++)
+                // R021: exact-visible FAR enters the existing GeneralCompute lane
+                // before hidden/overscan FAR. Remaining FAR still precedes non-FAR work.
+                // R008 reconciliation, worker count and FIFO scheduler semantics remain.
+                for (int admissionPass = 0; admissionPass < 3; admissionPass++)
                 for (int i = 0; i < tiles.Length; i++)
                 {
                     AERISTerrainHeightTile tile = tiles[i];
@@ -1394,8 +1399,15 @@ namespace AERISFlightControl.Terrain
                         }
                         continue;
                     }
-                    bool r008Foundation = tile.Key.Lod == AERISTerrainTileLod.Far;
-                    if ((admissionPass == 0) != r008Foundation) continue;
+                    bool r021Far =
+                        tile.Key.Lod == AERISTerrainTileLod.Far;
+                    bool r021VisibleFar = r021Far &&
+                        rev35R019VisibleFarKeys.Contains(tile.Key);
+                    bool r021Admit =
+                        admissionPass == 0 ? r021VisibleFar :
+                        admissionPass == 1 ? (r021Far && !r021VisibleFar) :
+                        !r021Far;
+                    if (!r021Admit) continue;
                     string cacheKey = CacheKey(tile.Key, tile.CreatedUtcTicks, styleKey);
                     Entry fallbackEntry, currentEntry;
                     ResolveRenderableEntries(tile, cacheKey, styleKey,
@@ -2984,6 +2996,7 @@ namespace AERISFlightControl.Terrain
                 "; oh_rev35_r019_variant=" + Rev35R019Variant +
                 "; oh_rev35_r019_hf1_variant=" + Rev35R019Hotfix1Variant +
                 "; oh_rev35_r020_variant=" + Rev35R020Variant +
+                "; oh_rev35_r021_variant=" + Rev35R021Variant +
                 "; oh_rev35_r020_authority_samples=" + operationHealthRev35R020AuthoritySamples +
                 "; oh_rev35_r020_generation_retained=" + operationHealthRev35R020GenerationRetained +
                 "; oh_rev35_r020_generation_advance=" + operationHealthRev35R020GenerationAdvances +
