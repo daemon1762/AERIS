@@ -15,6 +15,8 @@ namespace AERISFlightControl.Terrain
     public sealed class AERISR017NdPresentationStallObserver : MonoBehaviour
     {
         const string Variant = "AERIS29_REV3_5_SALBUTAMOL_SULFATE_R017_ND_PRESENTATION_STALL_OBSERVER";
+        const string R025Variant = "AERIS30_REV3_5_SALBUTAMOL_SULFATE_R025_RESIDUAL_STALL_ATTRIBUTION_OBSERVER";
+        const string R025LogPrefix = "[OH_REV3_5_R025_STALL_ATTRIBUTION]";
         const string LogPrefix = "[OH_REV3_5_R017_ND_PRESENT_STALL]";
         const float SampleIntervalSeconds = 0.10f;
         const float StallThresholdSeconds = 0.25f;
@@ -45,6 +47,52 @@ namespace AERISFlightControl.Terrain
         static readonly FieldInfo R014ReconciledSerialField = RendererField("rev35R014ReconciledPublicationSerial");
         static readonly FieldInfo R014FullReconcileField = RendererField("operationHealthRev35R014FullReconciles");
         static readonly FieldInfo R014PublicationEventsField = RendererField("operationHealthRev35R014PublicationEvents");
+
+        // R025 observation-only pipeline attribution.
+        static readonly FieldInfo MainCommitBacklogField =
+            RendererField("operationHealthMainCommitBacklog");
+        static readonly FieldInfo PendingEntryCommitField =
+            RendererField("pendingEntryCommit");
+
+        static readonly FieldInfo R006MissingPendingField =
+            RendererField("operationHealthRev35R006FoundationMissingPending");
+        static readonly FieldInfo R006MissingRenderReadyField =
+            RendererField("operationHealthRev35R006FoundationMissingRenderReady");
+        static readonly FieldInfo R006MissingUpstreamField =
+            RendererField("operationHealthRev35R006FoundationMissingUpstream");
+
+        static readonly FieldInfo R018VisibleRequiredFarField =
+            RendererField("operationHealthRev35R018VisibleRequiredFar");
+        static readonly FieldInfo R018VisibleReadyFarField =
+            RendererField("operationHealthRev35R018VisibleReadyFar");
+        static readonly FieldInfo R018VisibleCoverageField =
+            RendererField("operationHealthRev35R018VisibleCoverage");
+        static readonly FieldInfo R019VisibleDeficitField =
+            RendererField("operationHealthRev35R019VisibleDeficit");
+
+        static readonly FieldInfo ContentReadyFarField =
+            RendererField("contentReadyFar");
+        static readonly FieldInfo R008GeometryReconcilePendingField =
+            RendererField("rev35R008GeometryReconcilePending");
+
+        static readonly FieldInfo FrontViewGenerationField =
+            RendererField("frontViewGeneration");
+        static readonly FieldInfo FrontTerrainGenerationField =
+            RendererField("frontTerrainGeneration");
+        static readonly FieldInfo ContentTerrainGenerationField =
+            RendererField("contentTerrainGeneration");
+        static readonly FieldInfo ContentVisibleField =
+            RendererField("contentVisible");
+
+        static readonly FieldInfo RasterizerField =
+            RendererField("rasterizer");
+
+        static readonly FieldInfo R024VisibleReadyChecksField =
+            RendererField("operationHealthRev35R024VisibleReadyChecks");
+        static readonly FieldInfo R024HiddenPendingPreemptionsField =
+            RendererField("operationHealthRev35R024HiddenPendingPreemptions");
+        static readonly FieldInfo R024FinalizeProtectedField =
+            RendererField("operationHealthRev35R024LateFinalizeProtected");
 
         static readonly FieldInfo R017BlockedRenderedFalseField =
             RendererField("operationHealthRev35R017BlockedRenderedFalse");
@@ -234,6 +282,7 @@ namespace AERISFlightControl.Terrain
             long renderedFalse, long foundationFlag, long coverage, long readyFar, long cadenceSkip,
             bool revisionMismatch, bool requestedReady)
         {
+            EmitR025Attribution("START");
             AERISLogger.Info(LogPrefix + " START variant=" + Variant +
                 "; front_age_s=" + frontAge.ToString("F3", CultureInfo.InvariantCulture) +
                 "; back_since_swap=" + NonNegativeDelta(backRender, swapBaselineBackRender) +
@@ -260,6 +309,7 @@ namespace AERISFlightControl.Terrain
             long reconciledSerial, long fullReconcile, long publications, long renderedFalse,
             long foundationFlag, long coverage, long readyFar, long cadenceSkip, string reason)
         {
+            EmitR025Attribution("END");
             float duration = Math.Max(0f, now - stallStartedRealtime);
             AERISLogger.Info(LogPrefix + " END reason=" + reason +
                 "; duration_s=" + duration.ToString("F3", CultureInfo.InvariantCulture) +
@@ -281,6 +331,117 @@ namespace AERISFlightControl.Terrain
                 "; cadence_skip=" + NonNegativeDelta(cadenceSkip, swapBaselineCadenceSkip) +
                 "; publication_pending=" + (pubSerial != reconciledSerial ? "1" : "0"));
             stallActive = false;
+        }
+
+        void EmitR025Attribution(string phase)
+        {
+            try
+            {
+                AERISLogger.Info(R025LogPrefix + " " + phase + R025Snapshot());
+            }
+            catch (Exception ex)
+            {
+                // Observer failure must never influence ND authority.
+                AERISLogger.Warn(R025LogPrefix +
+                    " observer_error=" + ex.GetType().Name);
+            }
+        }
+
+        string R025Snapshot()
+        {
+            int missingPending = ReadInt(R006MissingPendingField, renderer);
+            int missingRenderReady =
+                ReadInt(R006MissingRenderReadyField, renderer);
+            int missingUpstream = ReadInt(R006MissingUpstreamField, renderer);
+
+            int visibleRequired =
+                ReadInt(R018VisibleRequiredFarField, renderer);
+            int visibleReady =
+                ReadInt(R018VisibleReadyFarField, renderer);
+            float visibleCoverage =
+                ReadFloat(R018VisibleCoverageField, renderer);
+            int visibleDeficit =
+                ReadInt(R019VisibleDeficitField, renderer);
+
+            int contentReadyFar = ReadInt(ContentReadyFarField, renderer);
+            int mainBacklog = ReadInt(MainCommitBacklogField, renderer);
+            bool geometryReconcile =
+                ReadBool(R008GeometryReconcilePendingField, renderer);
+
+            long frontViewGeneration =
+                ReadLong(FrontViewGenerationField, renderer);
+            long frontTerrainGeneration =
+                ReadLong(FrontTerrainGenerationField, renderer);
+            long contentTerrainGeneration =
+                ReadLong(ContentTerrainGenerationField, renderer);
+
+            long contentViewGeneration = -1L;
+            object contentVisibleObject =
+                ContentVisibleField.GetValue(renderer);
+            AERISTerrainVisibleTileSet visible =
+                contentVisibleObject as AERISTerrainVisibleTileSet;
+            if (visible != null)
+                contentViewGeneration = visible.ViewGeneration;
+
+            int rasterPending = -1;
+            int rasterCompleted = -1;
+            object rasterObject = RasterizerField.GetValue(renderer);
+            AERISTerrainGpuTileRasterizer raster =
+                rasterObject as AERISTerrainGpuTileRasterizer;
+            if (raster != null)
+            {
+                rasterPending = raster.PendingCount;
+                rasterCompleted = raster.CompletedCount;
+            }
+
+            object pendingObject = PendingEntryCommitField.GetValue(renderer);
+            string pendingStage = "NONE";
+            if (pendingObject != null)
+            {
+                FieldInfo stageField = pendingObject.GetType().GetField(
+                    "Stage", PrivateInstance);
+                if (stageField != null)
+                {
+                    object stage = stageField.GetValue(pendingObject);
+                    if (stage != null)
+                        pendingStage = stage.ToString();
+                }
+                else
+                {
+                    pendingStage = "UNKNOWN";
+                }
+            }
+
+            return
+                "; variant=" + R025Variant +
+                "; missing_pending=" + missingPending +
+                "; missing_render_ready=" + missingRenderReady +
+                "; missing_upstream=" + missingUpstream +
+                "; visible_required_far=" + visibleRequired +
+                "; visible_ready_far=" + visibleReady +
+                "; visible_coverage=" +
+                    visibleCoverage.ToString("F3",
+                        CultureInfo.InvariantCulture) +
+                "; visible_deficit=" + visibleDeficit +
+                "; content_ready_far=" + contentReadyFar +
+                "; main_commit_backlog=" + mainBacklog +
+                "; pending_commit_stage=" + pendingStage +
+                "; raster_pending=" + rasterPending +
+                "; raster_completed=" + rasterCompleted +
+                "; geometry_reconcile_pending=" +
+                    (geometryReconcile ? "1" : "0") +
+                "; requested_view_ready=" +
+                    (renderer.RequestedViewReady ? "1" : "0") +
+                "; front_view_generation=" + frontViewGeneration +
+                "; content_view_generation=" + contentViewGeneration +
+                "; front_terrain_generation=" + frontTerrainGeneration +
+                "; content_terrain_generation=" + contentTerrainGeneration +
+                "; r024_visible_ready_checks=" +
+                    ReadLong(R024VisibleReadyChecksField, renderer) +
+                "; r024_hidden_preempt=" +
+                    ReadLong(R024HiddenPendingPreemptionsField, renderer) +
+                "; r024_finalize_protected=" +
+                    ReadLong(R024FinalizeProtectedField, renderer);
         }
 
         void ResetSwapBaseline(long swaps, long backRender, long blocked, long skipped, long motion,
@@ -328,7 +489,26 @@ namespace AERISFlightControl.Terrain
                 R014FullReconcileField != null && R014PublicationEventsField != null &&
                 R017BlockedRenderedFalseField != null && R017BlockedFoundationFlagField != null &&
                 R017BlockedCoverageField != null && R017BlockedReadyFarField != null &&
-                R017CadenceSkipField != null;
+                R017CadenceSkipField != null &&
+                MainCommitBacklogField != null &&
+                PendingEntryCommitField != null &&
+                R006MissingPendingField != null &&
+                R006MissingRenderReadyField != null &&
+                R006MissingUpstreamField != null &&
+                R018VisibleRequiredFarField != null &&
+                R018VisibleReadyFarField != null &&
+                R018VisibleCoverageField != null &&
+                R019VisibleDeficitField != null &&
+                ContentReadyFarField != null &&
+                R008GeometryReconcilePendingField != null &&
+                FrontViewGenerationField != null &&
+                FrontTerrainGenerationField != null &&
+                ContentTerrainGenerationField != null &&
+                ContentVisibleField != null &&
+                RasterizerField != null &&
+                R024VisibleReadyChecksField != null &&
+                R024HiddenPendingPreemptionsField != null &&
+                R024FinalizeProtectedField != null;
         }
 
         static FieldInfo RendererField(string name)
@@ -340,6 +520,12 @@ namespace AERISFlightControl.Terrain
         {
             object value = field.GetValue(target);
             return value is long ? (long)value : 0L;
+        }
+
+        static int ReadInt(FieldInfo field, object target)
+        {
+            object value = field.GetValue(target);
+            return value is int ? (int)value : 0;
         }
 
         static float ReadFloat(FieldInfo field, object target)
