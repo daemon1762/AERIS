@@ -8,8 +8,9 @@ import sys
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
-PREFIX = '[AERIS29 REV3.5 R020 FAST BUILD]'
+PREFIX = '[AERIS30 REV3.5 R020 FAST BUILD]'
 BRANCH = 'agent/aeris29-rev3-5-salbutamol-r020-current-revision-publication-catch-up'
+R017 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R017_ND_PRESENTATION_STALL_OBSERVER'
 R018 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R018_VISIBLE_FOUNDATION_PRESENTATION_GATE_SPLIT'
 R019 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R019_VISIBLE_FAR_COMMIT_PRIORITY'
 HF1 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R019_HOTFIX1_VISIBLE_QUEUE_WAKE_BACKLOG_INTEGRATION'
@@ -40,7 +41,7 @@ def marker_in_bytes(data, text):
 
 
 parser = argparse.ArgumentParser(
-    description='R020 development FAST build: materialize R019+HF1+R020, run impact gates, incremental xbuild, DLL-only install.')
+    description='R020 development FAST build: bootstrap R017/R018 from a materialized R016 successor when needed, then materialize R019+HF1+R020, run impact gates, incremental xbuild, DLL-only install.')
 parser.add_argument('ksp_path')
 args = parser.parse_args()
 ksp = Path(args.ksp_path).expanduser().resolve()
@@ -55,8 +56,30 @@ renderer = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer
 tile_system = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs'
 if not renderer.is_file() or not tile_system.is_file():
     raise SystemExit(PREFIX + ' terrain source missing')
-if R018 not in renderer.read_text():
-    raise SystemExit(PREFIX + ' exact materialized R018+ successor tree required before FAST overlay')
+
+# AERIS30 successor bootstrap: the user's preserved dirty/materialized development tree
+# may legitimately still be at the successful R016 runtime materialization even though
+# Git HEAD has advanced to the R020 tooling branch. R017 and R018 are deterministic,
+# idempotent overlays designed for that exact R016 successor lineage. Materialize only
+# those two missing runtime stages here; do not replay R005-R016, clean bin/obj, reset,
+# stash, or touch unrelated generated/user worktree state.
+renderer_text = renderer.read_text()
+if R018 not in renderer_text:
+    print(PREFIX + ' R018 marker absent; bootstrapping R017 -> R018 from preserved materialized successor tree')
+    run([sys.executable,
+         ROOT / 'Tools/apply_aeris29_rev3_5_salbutamol_r017_nd_presentation_stall_observer.py'])
+    run([sys.executable,
+         ROOT / 'Tools/verify_aeris29_rev3_5_salbutamol_r017_nd_presentation_stall_observer.py'])
+    run([sys.executable,
+         ROOT / 'Tools/apply_aeris29_rev3_5_salbutamol_r018_visible_foundation_presentation_gate_split.py'])
+    run([sys.executable,
+         ROOT / 'Tools/verify_aeris29_rev3_5_salbutamol_r018_visible_foundation_presentation_gate_split.py'])
+    renderer_text = renderer.read_text()
+    if R018 not in renderer_text:
+        raise SystemExit(PREFIX + ' FAIL R018 bootstrap completed without exact R018 renderer marker')
+    print(PREFIX + ' R017/R018 successor bootstrap PASS')
+else:
+    print(PREFIX + ' existing materialized R018+ successor tree detected')
 
 # Materialize the current successor chain locally. These applicators are idempotent and
 # do not require a clean generated tree. Historical successor compatibility is applied
@@ -108,6 +131,7 @@ if changed:
 renderer_text = renderer.read_text()
 tile_text = tile_system.read_text()
 for token, where in (
+    (R017, renderer_text + (ROOT / 'Source/AERISFlightControl/Terrain/AERISR017NdPresentationStallObserver.cs').read_text()),
     (R018, renderer_text),
     (R019, renderer_text),
     (HF1, renderer_text),
@@ -187,10 +211,10 @@ if failed:
     raise SystemExit(PREFIX + ' FAIL: ' + ', '.join(failed))
 
 print(PREFIX + ' PASS')
-print('mode=FAST development R020')
+print('mode=FAST development R020 with conditional R017/R018 successor bootstrap')
 print('formal_replay=NO full_prebuild=NO bin_obj_clean=NO package_copy=NO')
-print('runtime_change=stable viewport-generation authority baseline only; live display sample remains current')
-print('publication=R017/R018/R019/HF1 unchanged; stale BACK relabel/promotion=NO')
+print('runtime_change=R017/R018/R019/HF1 inherited + stable viewport-generation authority baseline; live display sample remains current')
+print('publication=R017/R018/R019/HF1 semantics retained; stale BACK relabel/promotion=NO')
 print('install=DLL + candidate identity only')
 print('dll_sha256=' + installed_sha)
 print('NOTE: fully exit and restart KSP after DLL replacement; plugin assemblies are not hot-reloaded.')
