@@ -869,6 +869,12 @@ namespace AERISFlightControl.Terrain
         // this cap and remain immediately reusable.
         const string Rev35R023Variant = "AERIS30_REV3_5_SALBUTAMOL_SULFATE_R023_BOUNDED_PREWARM_ADMISSION_PACING";
         const int Rev35R023PrewarmScheduleMaximumPerReconcile = 8;
+
+        // R024: if an exact-visible FAR is already RenderReady while a hidden FAR
+        // owns the single staged GPU commit lane, abandon only that partial hidden
+        // Entry construction and immediately admit the visible field. The immutable
+        // RenderReady worker product remains cached for later hidden retry.
+        const string Rev35R024Variant = "AERIS30_REV3_5_SALBUTAMOL_SULFATE_R024_EXACT_VISIBLE_COMMIT_PREEMPTION";
         long operationHealthRev35R020AuthoritySamples;
         long operationHealthRev35R020GenerationRetained;
         long operationHealthRev35R020GenerationAdvances;
@@ -882,6 +888,10 @@ namespace AERISFlightControl.Terrain
         long operationHealthRev35R023PrewarmScheduleAdmitted;
         long operationHealthRev35R023PrewarmScheduleDeferred;
         int operationHealthRev35R023PrewarmScheduleWindowMax;
+
+        long operationHealthRev35R024VisibleReadyChecks;
+        long operationHealthRev35R024HiddenPendingPreemptions;
+        long operationHealthRev35R024LateFinalizeProtected;
         readonly Queue<string> rev35R019VisibleFoundationQueue =
             new Queue<string>(Rev35R007FoundationQueueMaximum);
         long operationHealthRev35R019VisiblePriorityQueued;
@@ -3114,6 +3124,10 @@ namespace AERISFlightControl.Terrain
                 "; oh_rev35_r023_prewarm_admitted=" + operationHealthRev35R023PrewarmScheduleAdmitted +
                 "; oh_rev35_r023_prewarm_deferred=" + operationHealthRev35R023PrewarmScheduleDeferred +
                 "; oh_rev35_r023_prewarm_window_max=" + operationHealthRev35R023PrewarmScheduleWindowMax +
+                "; oh_rev35_r024_variant=" + Rev35R024Variant +
+                "; oh_rev35_r024_visible_ready_checks=" + operationHealthRev35R024VisibleReadyChecks +
+                "; oh_rev35_r024_hidden_pending_preempt=" + operationHealthRev35R024HiddenPendingPreemptions +
+                "; oh_rev35_r024_finalize_protected=" + operationHealthRev35R024LateFinalizeProtected +
                 "; oh_rev35_r020_authority_samples=" + operationHealthRev35R020AuthoritySamples +
                 "; oh_rev35_r020_generation_retained=" + operationHealthRev35R020GenerationRetained +
                 "; oh_rev35_r020_generation_advance=" + operationHealthRev35R020GenerationAdvances +
@@ -3272,6 +3286,32 @@ namespace AERISFlightControl.Terrain
 
             while (publishedThisWindow < hardMaximum)
             {
+                // R024 exact-visible commit preemption.
+                //
+                // Only a hidden FAR may be displaced, and only when a CURRENT
+                // exact-visible field is already RenderReady and waiting in R019's
+                // canonical visible queue. A nearly-complete Finalize stage is allowed
+                // to finish rather than throwing away essentially-completed GPU work.
+                if (pendingEntryCommit != null &&
+                    pendingEntryCommit.Result != null &&
+                    pendingEntryCommit.Result.Key.Lod == AERISTerrainTileLod.Far &&
+                    !rev35R019VisibleFarKeys.Contains(
+                        pendingEntryCommit.Result.Key) &&
+                    HasRev35R024VisibleCommitReady())
+                {
+                    if (pendingEntryCommit.Stage ==
+                        PendingEntryCommitStage.Finalize)
+                    {
+                        operationHealthRev35R024LateFinalizeProtected++;
+                    }
+                    else
+                    {
+                        CancelPendingEntryCommit();
+                        operationHealthRev35R024HiddenPendingPreemptions++;
+                        continue;
+                    }
+                }
+
                 // R003 anti-HOL gate: an immutable worker product may remain useful in the
                 // existing render-ready RAM store, but main-thread GPU Entry construction is
                 // admitted only while that exact cache key belongs to the latest requested
@@ -4853,6 +4893,38 @@ namespace AERISFlightControl.Terrain
             operationHealthRev35R007QueuePeak = Math.Max(
                 operationHealthRev35R007QueuePeak,
                 combinedQueueCount + 1);
+        }
+
+        bool HasRev35R024VisibleCommitReady()
+        {
+            if (rev35R019VisibleFoundationQueue.Count <= 0)
+                return false;
+
+            operationHealthRev35R024VisibleReadyChecks++;
+
+            foreach (string cacheKey in rev35R019VisibleFoundationQueue)
+            {
+                if (string.IsNullOrEmpty(cacheKey))
+                    continue;
+
+                if (requested.Count > 0 && !requested.Contains(cacheKey))
+                    continue;
+
+                if (entries.ContainsKey(cacheKey))
+                    continue;
+
+                AERISTerrainRenderReadyHeightField field;
+                if (!renderReadyFields.TryGetValue(cacheKey, out field) ||
+                    field == null)
+                    continue;
+
+                if (!ValidResult(field))
+                    continue;
+
+                return true;
+            }
+
+            return false;
         }
 
         bool TryBeginRev35R019VisibleFoundationCommit()
