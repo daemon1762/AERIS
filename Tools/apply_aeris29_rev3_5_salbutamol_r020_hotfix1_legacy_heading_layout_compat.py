@@ -6,10 +6,10 @@ import sys
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
 T = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs'
-PREFIX = '[AERIS30 REV3.5 R020 HOTFIX1 LEGACY HEADING LAYOUT COMPAT]'
+PREFIX = '[AERIS30 REV3.5 R020 HOTFIX2 HEADING SUCCESSOR COMPAT]'
 R020 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R020_VISIBLE_AUTHORITY_BASELINE_STABILITY'
 SIGNATURE = '        void UpdateDisplayView(double latitudeDeg, double longitudeDeg,'
-CANONICAL = 'Math.Abs(DeltaAngle(displayViewHeadingDeg, normalizedHeading)) > 3.0'
+CANONICAL_3 = 'Math.Abs(DeltaAngle(displayViewHeadingDeg, normalizedHeading)) > 3.0'
 
 
 def fail(message):
@@ -41,57 +41,34 @@ def method_bounds(text, signature):
         n = text[i + 1] if i + 1 < len(text) else ''
         if state == 'code':
             if c == '/' and n == '/':
-                state = 'line'
-                i += 2
-                continue
+                state = 'line'; i += 2; continue
             if c == '/' and n == '*':
-                state = 'block'
-                i += 2
-                continue
+                state = 'block'; i += 2; continue
             if c == '"':
-                state = 'string'
-                i += 1
-                continue
+                state = 'string'; i += 1; continue
             if c == "'":
-                state = 'char'
-                i += 1
-                continue
+                state = 'char'; i += 1; continue
             if c == '{':
                 depth += 1
             elif c == '}':
                 depth -= 1
                 if depth == 0:
                     return start, i + 1
-            i += 1
-            continue
+            i += 1; continue
         if state == 'line':
-            if c == '\n':
-                state = 'code'
-            i += 1
-            continue
+            if c == '\n': state = 'code'
+            i += 1; continue
         if state == 'block':
-            if c == '*' and n == '/':
-                state = 'code'
-                i += 2
-                continue
-            i += 1
-            continue
+            if c == '*' and n == '/': state = 'code'; i += 2; continue
+            i += 1; continue
         if state == 'string':
-            if c == '\\':
-                i += 2
-                continue
-            if c == '"':
-                state = 'code'
-            i += 1
-            continue
+            if c == '\\': i += 2; continue
+            if c == '"': state = 'code'
+            i += 1; continue
         if state == 'char':
-            if c == '\\':
-                i += 2
-                continue
-            if c == "'":
-                state = 'code'
-            i += 1
-            continue
+            if c == '\\': i += 2; continue
+            if c == "'": state = 'code'
+            i += 1; continue
 
     fail('UpdateDisplayView closing brace missing')
 
@@ -101,9 +78,6 @@ if not T.is_file():
 
 text = T.read_text(encoding='utf-8')
 
-# The wrapper must remain idempotent after the base R020 overlay has materialized.
-# In that state the legacy displayViewHeadingDeg authority expression is intentionally
-# gone, so there is nothing left for this compatibility normalizer to touch.
 if R020 in text:
     print(PREFIX + ' R020 already materialized; compatibility normalization not required')
     print('runtime_policy_change=0 threshold_change=0 publication_change=0 worker_change=0')
@@ -112,10 +86,23 @@ if R020 in text:
 m0, m1 = method_bounds(text, SIGNATURE)
 method = text[m0:m1]
 
-# Match the complete legacy headingChanged semantic statement, not an arbitrary
-# DeltaAngle occurrence elsewhere in the file. Whitespace/newline placement may vary,
-# but every authority operand and the strict > 3.0 threshold must remain unchanged.
-pattern = re.compile(
+# Successor tree support: AERIS25 deliberately changed hidden Track-Up planning from
+# the historical strict >3deg expression to a cumulative >=6deg burst governor. That
+# is an intentional runtime policy and MUST NOT be normalized back to 3deg by tooling.
+burst_tokens = (
+    'AERIS25_CONTENT_GENERATION_BURST_GOVERNOR',
+    'double planningHeadingDelta = !displayViewValid ? double.MaxValue :',
+    'Math.Abs(DeltaAngle(displayViewHeadingDeg, normalizedHeading));',
+    'planningHeadingDelta >= 6.0',
+    'bool structuralViewChanged = rangeChanged || centerChanged ||',
+    'bool acceptPlanningHeading = !displayViewValid || !trackUp ||',
+    'if (acceptPlanningHeading) displayViewHeadingDeg = normalizedHeading;',
+)
+burst6 = all(token in method for token in burst_tokens)
+
+# Historical R020 input remains supported. Only whitespace/layout in the proven strict
+# >3deg expression may be canonicalized; no threshold or operand is changed.
+pattern3 = re.compile(
     r'(?P<indent>^[ \t]*)bool\s+headingChanged\s*=\s*!displayViewValid\s*\|\|\s*'
     r'\(\s*trackUp\s*&&\s*'
     r'(?P<expr>Math\s*\.\s*Abs\s*\(\s*DeltaAngle\s*\(\s*'
@@ -123,35 +110,39 @@ pattern = re.compile(
     r'\s*\)\s*;',
     re.MULTILINE,
 )
-matches = list(pattern.finditer(method))
-if len(matches) != 1:
-    fail('semantic heading threshold matches=%d' % len(matches))
+matches3 = list(pattern3.finditer(method))
+legacy3 = len(matches3) == 1
 
-match = matches[0]
+if burst6 and legacy3:
+    fail('ambiguous heading policy: both legacy3 and successor6 detected')
+if burst6:
+    print(PREFIX + ' successor AERIS25 cumulative >=6deg burst governor detected')
+    print('heading_policy=preserve_successor_cumulative_ge_6deg')
+    print('runtime_policy_change=0 threshold_change=0 publication_change=0 worker_change=0')
+    raise SystemExit(0)
+if not legacy3:
+    fail('unsupported heading policy: legacy3 matches=%d successor6=%s' %
+         (len(matches3), 'yes' if burst6 else 'no'))
+
+match = matches3[0]
 expr = match.group('expr')
-if expr == CANONICAL:
-    print(PREFIX + ' already canonical')
-    print('semantic_expression=' + CANONICAL)
+if expr == CANONICAL_3:
+    print(PREFIX + ' historical strict >3deg input already canonical')
+    print('heading_policy=preserve_legacy_strict_gt_3deg')
     print('runtime_policy_change=0 threshold_change=0 publication_change=0 worker_change=0')
     raise SystemExit(0)
 
-# Normalize only the formatting of the proven legacy threshold expression. The
-# surrounding headingChanged logic, Track-Up guard, operands and 3.0-degree policy
-# remain byte-for-byte untouched outside this expression.
 expr0 = m0 + match.start('expr')
 expr1 = m0 + match.end('expr')
-text = text[:expr0] + CANONICAL + text[expr1:]
-
-# Fail closed before writing if the resulting method no longer contains exactly the
-# canonical semantic contract required by the base R020 applicator.
+text = text[:expr0] + CANONICAL_3 + text[expr1:]
 new_m0, new_m1 = method_bounds(text, SIGNATURE)
 new_method = text[new_m0:new_m1]
-if new_method.count(CANONICAL) != 1:
-    fail('post-normalization canonical count=%d' % new_method.count(CANONICAL))
+if new_method.count(CANONICAL_3) != 1:
+    fail('post-normalization canonical count=%d' % new_method.count(CANONICAL_3))
 
 T.write_text(text, encoding='utf-8')
-
 print(PREFIX + ' APPLY PASS')
-print('scope=UpdateDisplayView legacy heading whitespace/layout normalization only before R020 applicator')
-print('semantic_expression=' + CANONICAL)
+print('scope=historical UpdateDisplayView whitespace/layout normalization only')
+print('heading_policy=preserve_legacy_strict_gt_3deg')
+print('semantic_expression=' + CANONICAL_3)
 print('runtime_policy_change=0 threshold_change=0 publication_change=0 worker_change=0')
