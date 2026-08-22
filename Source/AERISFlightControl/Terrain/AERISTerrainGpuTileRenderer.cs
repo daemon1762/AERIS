@@ -864,6 +864,11 @@ namespace AERISFlightControl.Terrain
         // lane before generic hidden FAR. Publication authority remains unchanged.
         const string Rev35R022Variant = "AERIS30_REV3_5_SALBUTAMOL_SULFATE_R022_NEXT_EXACT_VISIBLE_BOUNDED_PREWARM";
         const int Rev35R022PrewarmMaximumKeys = 64;
+        // R023 preserves the complete R022 successor candidate set but paces only
+        // NEW raster admission. Already RenderReady/committed successor tiles bypass
+        // this cap and remain immediately reusable.
+        const string Rev35R023Variant = "AERIS30_REV3_5_SALBUTAMOL_SULFATE_R023_BOUNDED_PREWARM_ADMISSION_PACING";
+        const int Rev35R023PrewarmScheduleMaximumPerReconcile = 8;
         long operationHealthRev35R020AuthoritySamples;
         long operationHealthRev35R020GenerationRetained;
         long operationHealthRev35R020GenerationAdvances;
@@ -874,6 +879,9 @@ namespace AERISFlightControl.Terrain
         int operationHealthRev35R022PrewarmKeyCount;
         long operationHealthRev35R022PrewarmSelected;
         long operationHealthRev35R022PrewarmScheduleFirst;
+        long operationHealthRev35R023PrewarmScheduleAdmitted;
+        long operationHealthRev35R023PrewarmScheduleDeferred;
+        int operationHealthRev35R023PrewarmScheduleWindowMax;
         readonly Queue<string> rev35R019VisibleFoundationQueue =
             new Queue<string>(Rev35R007FoundationQueueMaximum);
         long operationHealthRev35R019VisiblePriorityQueued;
@@ -1394,10 +1402,11 @@ namespace AERISFlightControl.Terrain
                 }
                 rev35R008GeometryReconcilePending = false;
 
-                // R022 keeps R021 current exact-visible first, then promotes only
-                // the bounded immediate successor ring already inside temporal overscan.
-                // Remaining hidden FAR still precedes non-FAR work.
-                // No worker count, queue capacity or publication rule changes.
+                int r023PrewarmSchedulesThisReconcile = 0;
+
+                // R023 preserves R022 ordering and candidate coverage. Only NEW
+                // successor raster Schedule() admissions are paced; current exact-visible
+                // FAR remains completely unrestricted and first in the lane.
                 for (int admissionPass = 0; admissionPass < 4; admissionPass++)
                 for (int i = 0; i < tiles.Length; i++)
                 {
@@ -1434,10 +1443,30 @@ namespace AERISFlightControl.Terrain
                         if (!TryUploadRenderReadyField(tile, cacheKey, styleKey, system,
                             out currentEntry))
                         {
+                            bool r023AllowSchedule = true;
                             if (r022PrewarmFar)
-                                operationHealthRev35R022PrewarmScheduleFirst++;
-                            Schedule(tile, cacheKey, styleKey, contourInterval,
-                                virtualDetail);
+                            {
+                                if (r023PrewarmSchedulesThisReconcile >=
+                                    Rev35R023PrewarmScheduleMaximumPerReconcile)
+                                {
+                                    r023AllowSchedule = false;
+                                    operationHealthRev35R023PrewarmScheduleDeferred++;
+                                }
+                                else
+                                {
+                                    r023PrewarmSchedulesThisReconcile++;
+                                    operationHealthRev35R022PrewarmScheduleFirst++;
+                                    operationHealthRev35R023PrewarmScheduleAdmitted++;
+                                    operationHealthRev35R023PrewarmScheduleWindowMax =
+                                        Math.Max(
+                                            operationHealthRev35R023PrewarmScheduleWindowMax,
+                                            r023PrewarmSchedulesThisReconcile);
+                                }
+                            }
+
+                            if (r023AllowSchedule)
+                                Schedule(tile, cacheKey, styleKey, contourInterval,
+                                    virtualDetail);
                         }
                     }
                     bool currentRenderable = HasRenderableTerrain(currentEntry);
@@ -3080,6 +3109,11 @@ namespace AERISFlightControl.Terrain
                 "; oh_rev35_r022_prewarm_keys=" + operationHealthRev35R022PrewarmKeyCount +
                 "; oh_rev35_r022_prewarm_selected=" + operationHealthRev35R022PrewarmSelected +
                 "; oh_rev35_r022_prewarm_schedule_first=" + operationHealthRev35R022PrewarmScheduleFirst +
+                "; oh_rev35_r023_variant=" + Rev35R023Variant +
+                "; oh_rev35_r023_prewarm_schedule_cap=" + Rev35R023PrewarmScheduleMaximumPerReconcile +
+                "; oh_rev35_r023_prewarm_admitted=" + operationHealthRev35R023PrewarmScheduleAdmitted +
+                "; oh_rev35_r023_prewarm_deferred=" + operationHealthRev35R023PrewarmScheduleDeferred +
+                "; oh_rev35_r023_prewarm_window_max=" + operationHealthRev35R023PrewarmScheduleWindowMax +
                 "; oh_rev35_r020_authority_samples=" + operationHealthRev35R020AuthoritySamples +
                 "; oh_rev35_r020_generation_retained=" + operationHealthRev35R020GenerationRetained +
                 "; oh_rev35_r020_generation_advance=" + operationHealthRev35R020GenerationAdvances +
