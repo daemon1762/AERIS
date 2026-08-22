@@ -858,11 +858,22 @@ namespace AERISFlightControl.Terrain
         // upstream admission boundary. No new geometry authority, worker, lane,
         // queue capacity, presentation gate, range or quality policy is introduced.
         const string Rev35R021Variant = "AERIS30_REV3_5_SALBUTAMOL_SULFATE_R021_EXACT_VISIBLE_UPSTREAM_PRIORITY";
+        // R022 does not create speculative terrain work. It promotes only the
+        // immediate hidden FAR ring already present in the current temporal-overscan
+        // request set, so likely successor-visible tiles enter the inherited worker
+        // lane before generic hidden FAR. Publication authority remains unchanged.
+        const string Rev35R022Variant = "AERIS30_REV3_5_SALBUTAMOL_SULFATE_R022_NEXT_EXACT_VISIBLE_BOUNDED_PREWARM";
+        const int Rev35R022PrewarmMaximumKeys = 64;
         long operationHealthRev35R020AuthoritySamples;
         long operationHealthRev35R020GenerationRetained;
         long operationHealthRev35R020GenerationAdvances;
         readonly HashSet<AERISTerrainTileKey> rev35R019VisibleFarKeys =
             new HashSet<AERISTerrainTileKey>();
+        readonly HashSet<AERISTerrainTileKey> rev35R022SuccessorPrewarmFarKeys =
+            new HashSet<AERISTerrainTileKey>();
+        int operationHealthRev35R022PrewarmKeyCount;
+        long operationHealthRev35R022PrewarmSelected;
+        long operationHealthRev35R022PrewarmScheduleFirst;
         readonly Queue<string> rev35R019VisibleFoundationQueue =
             new Queue<string>(Rev35R007FoundationQueueMaximum);
         long operationHealthRev35R019VisiblePriorityQueued;
@@ -1364,6 +1375,7 @@ namespace AERISFlightControl.Terrain
                 RefreshRev35R019VisibleFarKeys(vessel.mainBody, tiles,
                     centerLatitudeDeg, centerLongitudeDeg, rangeMeters,
                     mapHeadingDeg, trackUp, anchorV, orientation);
+                RefreshRev35R022SuccessorPrewarmFarKeys(vessel.mainBody, tiles);
 
                 // R008 phase 1: establish the complete current exact request set first.
                 for (int i = 0; i < tiles.Length; i++)
@@ -1382,10 +1394,11 @@ namespace AERISFlightControl.Terrain
                 }
                 rev35R008GeometryReconcilePending = false;
 
-                // R021: exact-visible FAR enters the existing GeneralCompute lane
-                // before hidden/overscan FAR. Remaining FAR still precedes non-FAR work.
-                // R008 reconciliation, worker count and FIFO scheduler semantics remain.
-                for (int admissionPass = 0; admissionPass < 3; admissionPass++)
+                // R022 keeps R021 current exact-visible first, then promotes only
+                // the bounded immediate successor ring already inside temporal overscan.
+                // Remaining hidden FAR still precedes non-FAR work.
+                // No worker count, queue capacity or publication rule changes.
+                for (int admissionPass = 0; admissionPass < 4; admissionPass++)
                 for (int i = 0; i < tiles.Length; i++)
                 {
                     AERISTerrainHeightTile tile = tiles[i];
@@ -1403,11 +1416,15 @@ namespace AERISFlightControl.Terrain
                         tile.Key.Lod == AERISTerrainTileLod.Far;
                     bool r021VisibleFar = r021Far &&
                         rev35R019VisibleFarKeys.Contains(tile.Key);
-                    bool r021Admit =
+                    bool r022PrewarmFar = r021Far && !r021VisibleFar &&
+                        rev35R022SuccessorPrewarmFarKeys.Contains(tile.Key);
+                    bool r022Admit =
                         admissionPass == 0 ? r021VisibleFar :
-                        admissionPass == 1 ? (r021Far && !r021VisibleFar) :
+                        admissionPass == 1 ? r022PrewarmFar :
+                        admissionPass == 2 ?
+                            (r021Far && !r021VisibleFar && !r022PrewarmFar) :
                         !r021Far;
-                    if (!r021Admit) continue;
+                    if (!r022Admit) continue;
                     string cacheKey = CacheKey(tile.Key, tile.CreatedUtcTicks, styleKey);
                     Entry fallbackEntry, currentEntry;
                     ResolveRenderableEntries(tile, cacheKey, styleKey,
@@ -1416,8 +1433,12 @@ namespace AERISFlightControl.Terrain
                     {
                         if (!TryUploadRenderReadyField(tile, cacheKey, styleKey, system,
                             out currentEntry))
+                        {
+                            if (r022PrewarmFar)
+                                operationHealthRev35R022PrewarmScheduleFirst++;
                             Schedule(tile, cacheKey, styleKey, contourInterval,
                                 virtualDetail);
+                        }
                     }
                     bool currentRenderable = HasRenderableTerrain(currentEntry);
                     if (!currentRenderable && currentEntry != null && fallbackEntry != null)
@@ -2054,6 +2075,64 @@ namespace AERISFlightControl.Terrain
             for (int i = 0; i < plan.FarKeys.Length; i++)
                 rev35R019VisibleFarKeys.Add(plan.FarKeys[i]);
             operationHealthRev35R019VisibleKeyCount = rev35R019VisibleFarKeys.Count;
+        }
+
+        void RefreshRev35R022SuccessorPrewarmFarKeys(CelestialBody body,
+            AERISTerrainHeightTile[] tiles)
+        {
+            rev35R022SuccessorPrewarmFarKeys.Clear();
+            operationHealthRev35R022PrewarmKeyCount = 0;
+            if (body == null || tiles == null ||
+                rev35R019VisibleFarKeys.Count == 0) return;
+
+            int longitudeCount = AERISTerrainTileSystem.LongitudeTileCountFor(
+                body, AERISTerrainTileLod.Far);
+
+            // tiles is already deterministically sorted. Select only FAR tiles that
+            // are hidden now but touch the canonical visible set by one tile.
+            // This is effectively one successor guard ring outside R018/R019.
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                AERISTerrainHeightTile tile = tiles[i];
+                if (tile == null ||
+                    tile.Key.Lod != AERISTerrainTileLod.Far ||
+                    rev35R019VisibleFarKeys.Contains(tile.Key))
+                    continue;
+
+                AERISTerrainTileKey candidate = tile.Key;
+                bool adjacent = false;
+
+                foreach (AERISTerrainTileKey visibleKey in rev35R019VisibleFarKeys)
+                {
+                    int latitudeDelta = Math.Abs(
+                        candidate.LatitudeIndex - visibleKey.LatitudeIndex);
+                    if (latitudeDelta > 1) continue;
+
+                    int longitudeDelta = Math.Abs(
+                        candidate.LongitudeIndex - visibleKey.LongitudeIndex);
+                    if (longitudeCount > 0)
+                        longitudeDelta = Math.Min(longitudeDelta,
+                            longitudeCount - longitudeDelta);
+
+                    if (longitudeDelta <= 1)
+                    {
+                        adjacent = true;
+                        break;
+                    }
+                }
+
+                if (!adjacent) continue;
+
+                rev35R022SuccessorPrewarmFarKeys.Add(candidate);
+                if (rev35R022SuccessorPrewarmFarKeys.Count >=
+                    Rev35R022PrewarmMaximumKeys)
+                    break;
+            }
+
+            operationHealthRev35R022PrewarmKeyCount =
+                rev35R022SuccessorPrewarmFarKeys.Count;
+            operationHealthRev35R022PrewarmSelected +=
+                operationHealthRev35R022PrewarmKeyCount;
         }
 
         void MeasureVisibleFoundationGpuReadiness(CelestialBody body,
@@ -2997,6 +3076,10 @@ namespace AERISFlightControl.Terrain
                 "; oh_rev35_r019_hf1_variant=" + Rev35R019Hotfix1Variant +
                 "; oh_rev35_r020_variant=" + Rev35R020Variant +
                 "; oh_rev35_r021_variant=" + Rev35R021Variant +
+                "; oh_rev35_r022_variant=" + Rev35R022Variant +
+                "; oh_rev35_r022_prewarm_keys=" + operationHealthRev35R022PrewarmKeyCount +
+                "; oh_rev35_r022_prewarm_selected=" + operationHealthRev35R022PrewarmSelected +
+                "; oh_rev35_r022_prewarm_schedule_first=" + operationHealthRev35R022PrewarmScheduleFirst +
                 "; oh_rev35_r020_authority_samples=" + operationHealthRev35R020AuthoritySamples +
                 "; oh_rev35_r020_generation_retained=" + operationHealthRev35R020GenerationRetained +
                 "; oh_rev35_r020_generation_advance=" + operationHealthRev35R020GenerationAdvances +
@@ -4695,6 +4778,8 @@ namespace AERISFlightControl.Terrain
             rev35R019VisibleFoundationQueue.Clear();
             rev35R019VisibleFarKeys.Clear();
             operationHealthRev35R019VisibleKeyCount = 0;
+            rev35R022SuccessorPrewarmFarKeys.Clear();
+            operationHealthRev35R022PrewarmKeyCount = 0;
             rev35R007FoundationQueued.Clear();
         }
 
