@@ -9,7 +9,7 @@ R = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs'
 B = ROOT / 'build_ubuntu.sh'
 PRE = ROOT / 'Tools/run_v01800_operation_health_pass3_prebuild.py'
 A = ROOT / 'Tools/apply_aeris29_rev3_5_salbutamol_r020_visible_authority_baseline_stability.py'
-PREFIX = '[AERIS29 REV3.5 R020 VISIBLE AUTHORITY BASELINE STABILITY VERIFY]'
+PREFIX = '[AERIS30 REV3.5 R020 VISIBLE AUTHORITY BASELINE STABILITY VERIFY]'
 R018 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R018_VISIBLE_FOUNDATION_PRESENTATION_GATE_SPLIT'
 R019 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R019_VISIBLE_FAR_COMMIT_PRIORITY'
 HF1 = 'AERIS29_REV3_5_SALBUTAMOL_SULFATE_R019_HOTFIX1_VISIBLE_QUEUE_WAKE_BACKLOG_INTEGRATION'
@@ -66,11 +66,11 @@ for path in (T, R, B, PRE, A):
 if not all(path.is_file() for path in (T, R, B, PRE, A)):
     raise SystemExit(1)
 
-tile = T.read_text()
-renderer = R.read_text()
-build = B.read_text()
-prebuild = PRE.read_text()
-applicator = A.read_text()
+tile = T.read_text(encoding='utf-8')
+renderer = R.read_text(encoding='utf-8')
+build = B.read_text(encoding='utf-8')
+prebuild = PRE.read_text(encoding='utf-8')
+applicator = A.read_text(encoding='utf-8')
 
 for token, label in (
     (R018, 'R018 presentation parent retained'),
@@ -81,40 +81,56 @@ for token, label in (
 check(R020 in tile and R020 in renderer,
       'R020 identity present in tile-system and telemetry renderer')
 
-method = method_body(tile,
-    '        void UpdateDisplayView(double latitudeDeg, double longitudeDeg,')
+method = method_body(
+    tile, '        void UpdateDisplayView(double latitudeDeg, double longitudeDeg,')
 check(bool(method), 'UpdateDisplayView resolved')
 check('operationHealthRev35R020AuthoritySamples++;' in method,
       'each valid display sample is observable')
 check('bool authorityValid = rev35R020GenerationViewValid;' in method,
       'material comparison uses dedicated stable validity')
 check('Math.Abs(rev35R020GenerationViewRangeMeters - normalizedRange) > 0.5' in method,
-      'range threshold remains strict >0.5 m')
+      'range threshold remains strict >0.5m')
 check('GreatCircleDistanceMeters(activeBody,' in method and
       'rev35R020GenerationViewLatitudeDeg' in method and
-      'rev35R020GenerationViewLongitudeDeg' in method,
-      'center displacement compares against last-generation baseline')
-check('centerMovement >' in method and
+      'rev35R020GenerationViewLongitudeDeg' in method and
+      'centerMovement >' in method and
       'Math.Max(100.0, normalizedRange * 0.02)' in method,
-      'center threshold remains strict > max(100m, 2% range)')
+      'center displacement uses stable baseline and original threshold')
 check('rev35R020GenerationViewTrackUp != trackUp' in method and
       'rev35R020GenerationViewOrientation != orientation' in method and
       'Math.Abs(rev35R020GenerationViewAnchorGuiV - normalizedAnchor) > 0.001f' in method,
       'track-up/orientation/anchor authority preserved')
-check('Math.Abs(DeltaAngle(rev35R020GenerationViewHeadingDeg,' in method and
-      'normalizedHeading)) > 3.0' in method,
-      'track-up heading threshold remains strict >3 degrees')
+
+legacy3 = (
+    'Math.Abs(DeltaAngle(rev35R020GenerationViewHeadingDeg,' in method and
+    'normalizedHeading)) > 3.0' in method
+)
+burst6 = all(token in method for token in (
+    'AERIS25_CONTENT_GENERATION_BURST_GOVERNOR',
+    'double planningHeadingDelta = !authorityValid ? double.MaxValue :',
+    'Math.Abs(DeltaAngle(rev35R020GenerationViewHeadingDeg,',
+    'planningHeadingDelta >= 6.0',
+    'bool structuralViewChanged = rangeChanged || centerChanged ||',
+    'bool acceptPlanningHeading = !displayViewValid || !trackUp ||',
+    'if (acceptPlanningHeading) displayViewHeadingDeg = normalizedHeading;',
+))
+check(legacy3 != burst6, 'exactly one supported heading policy materialized')
+if burst6:
+    check(True, 'AERIS25 cumulative >=6deg hidden-planning governor preserved')
+    heading_policy = 'successor-cumulative-ge-6deg'
+else:
+    check(legacy3, 'historical strict >3deg heading policy preserved')
+    heading_policy = 'historical-strict-gt-3deg'
 
 for token in (
     'displayViewLatitudeDeg = normalizedLatitude;',
     'displayViewLongitudeDeg = normalizedLongitude;',
     'displayViewRangeMeters = normalizedRange;',
-    'displayViewHeadingDeg = normalizedHeading;',
     'displayViewTrackUp = trackUp;',
     'displayViewAnchorGuiV = normalizedAnchor;',
     'displayViewOrientation = orientation;',
 ):
-    check(token in method, 'live planner sample retained: ' + token)
+    check(token in method, 'live/current planner geometry retained: ' + token)
 
 material = method.find('            if (materiallyChanged)')
 retained = method.find('            else', material)
@@ -132,17 +148,14 @@ for token in (
     'rev35R020GenerationViewTrackUp = trackUp;',
     'rev35R020GenerationViewAnchorGuiV = normalizedAnchor;',
     'rev35R020GenerationViewOrientation = orientation;',
+    'if (rangeChanged) rangeGeneration++;',
+    'viewGeneration++;',
+    'operationHealthRev35R020GenerationAdvances++;',
 ):
-    check(token in material_block,
-          'new generation atomically captures baseline: ' + token)
-check('if (rangeChanged) rangeGeneration++;' in material_block,
-      'range generation uses same material baseline')
+    check(token in material_block, 'material branch contract: ' + token)
 check('if (centerChanged || orientationChanged || headingChanged)' in material_block and
       'planGeneration++;' in material_block,
-      'plan generation uses same material baseline')
-check('viewGeneration++;' in material_block and
-      'operationHealthRev35R020GenerationAdvances++;' in material_block,
-      'view generation advances exactly on material branch')
+      'plan generation uses stable material baseline')
 check('operationHealthRev35R020GenerationRetained++;' in method[retained:],
       'sub-threshold retention is observable')
 
@@ -152,8 +165,7 @@ for signature in (
     '        void ResumeFlightViewport()',
     '        void BeginBody(CelestialBody body)',
 ):
-    body = method_body(tile, signature)
-    check('rev35R020GenerationViewValid = false;' in body,
+    check('rev35R020GenerationViewValid = false;' in method_body(tile, signature),
           'authority baseline invalidated by ' + signature.strip())
 
 check('foundationComplete = rendered && r018VisibleGpuComplete;' in renderer,
@@ -174,8 +186,7 @@ check('REV3_5_R020_VARIANT="' + R020 + '"' in build,
       'formal build records R020 identity')
 check('verify_aeris29_rev3_5_salbutamol_r020_visible_authority_baseline_stability.py' in build,
       'formal build invokes R020 verifier')
-check('rev3_5_r020_variant=%s' in build,
-      'candidate identity records R020')
+check('rev3_5_r020_variant=%s' in build, 'candidate identity records R020')
 check('selftest_v01900_oh_rev35_r020_visible_authority_baseline_stability.py' in prebuild,
       'R020 selftest wired into prebuild')
 
@@ -197,9 +208,10 @@ for forbidden_path in (
     check(forbidden_path not in applicator,
           'R020 applicator does not target ' + forbidden_path)
 
-settings = (ROOT / 'Source/AERISFlightControl/Settings/AERISSettings.cs').read_text()
+settings = (ROOT / 'Source/AERISFlightControl/Settings/AERISSettings.cs').read_text(
+    encoding='utf-8')
 check('internal const float FixedNavigationDisplayUpdateHz = 10f' in settings,
-      'fixed visible 10 Hz authority retained')
+      'fixed visible 10Hz authority retained')
 check('RenderTextureFormat.ARGB32' in renderer and 'FilterMode.Bilinear' in renderer,
       'Golden ARGB32/Bilinear retained')
 check('HistoryOverscanScale = 1.35f' in renderer and
@@ -212,5 +224,6 @@ if failed:
     print('FAILED: ' + '; '.join(failed))
     raise SystemExit(1)
 print(PREFIX + ' STATIC PASS')
-print('contract=stable last-generation authority baseline; live display sample still updates every capture')
+print('heading_policy=' + heading_policy)
+print('contract=stable last-generation authority baseline; successor heading policy preserved')
 print('publication=R017/R018/R019/HF1 unchanged; stale BACK promotion/relabel forbidden')
