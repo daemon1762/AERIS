@@ -25,7 +25,9 @@ checks = [
     ('PURE_PROCEDURAL' in text, 'procedural profile'),
     ('HYBRID_LOCAL_COMPLEX' in text, 'local modifier profile'),
     ('OnVertexBuildHeight' in text, 'height entrypoint probe'),
-    ('MapSO' in text and 'LibNoise' in text, 'runtime source object inspection'),
+    ('DescribeObjectGraph' in text and 'lower.Contains("mapso")' in text and
+        'lower.Contains("libnoise")' in text,
+        'runtime source object inspection'),
     ('certification=NO_SHADOW_ONLY' in text, 'no certification claim'),
     ('db_write=false' in text, 'DB write disabled'),
     ('producer_switch=false' in text, 'producer switch disabled'),
