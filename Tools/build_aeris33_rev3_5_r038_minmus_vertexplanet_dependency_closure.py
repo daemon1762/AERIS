@@ -29,9 +29,13 @@ if out(['git','branch','--show-current'])!=BRANCH:raise SystemExit(PREFIX+' wron
 parent=ROOT/'Source/AERISFlightControl/Terrain/AERISR037PtcPolFlattenOceanExactClosureObserver.cs'
 csproj=ROOT/'Source/AERISFlightControl/AERISFlightControl.csproj'
 version=ROOT/'Source/AERISFlightControl/Properties/AERISBuildVersion.generated.cs'
-if not parent.is_file() or PARENT not in version.read_text() or 'AERISR037PtcPolFlattenOceanExactClosureObserver.cs' not in csproj.read_text():
-    raise SystemExit(PREFIX+' accepted R037 materialization missing. Do NOT reset/clean/stash. Materialize/build accepted R037 first, then return to R038.')
-print(PREFIX+' PASS accepted R037 materialization reused')
+version_text=version.read_text()
+csproj_text=csproj.read_text()
+if (not parent.is_file() or
+    (PARENT not in version_text and MARKER not in version_text) or
+    'AERISR037PtcPolFlattenOceanExactClosureObserver.cs' not in csproj_text):
+    raise SystemExit(PREFIX+' accepted R037/R038 materialization missing. Do NOT reset/clean/stash. Materialize/build accepted R037 first, then return to R038.')
+print(PREFIX+' PASS accepted R037/R038 materialization reused')
 frozen=[
 ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs',
 ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs',
