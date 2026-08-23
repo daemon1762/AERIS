@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PREFIX='[AERIS32 R031 CPU FEASIBILITY BUILD]'
 BRANCH='agent/aeris32-rev3-5-r031-ptc-source-resolver-cpu-file-exact'
 MARKER='AERIS32_REV3_5_R031_PTC_CPU_RECONSTRUCTION_FEASIBILITY_SHADOW'
+GRAPH_MARKER='AERIS32_REV3_5_R031_PTC_RUNTIME_SOURCE_GRAPH_SHADOW'
 
 def run(args):
     print(PREFIX+' $ '+' '.join(str(x) for x in args))
@@ -35,8 +36,30 @@ if not ksp.is_dir(): raise SystemExit(PREFIX+' KSP path missing')
 branch=out(['git','branch','--show-current'])
 if branch!=BRANCH: raise SystemExit(PREFIX+' wrong branch '+branch)
 
-# Parent graph build is itself shadow-only and preserves the accepted V5 DB.
-run([sys.executable,ROOT/'Tools/build_aeris32_rev3_5_r031_runtime_source_graph_shadow.py',str(ksp)])
+# Resume-safe parent handling. A previous failed child build may already have
+# materialized the graph observer and advanced the generated build identity to the
+# child marker. Re-running the parent graph applicator in that state is incorrect.
+graph_source=ROOT/'Source/AERISFlightControl/Terrain/AERISR031PtcRuntimeSourceGraphObserver.cs'
+csproj_path=ROOT/'Source/AERISFlightControl/AERISFlightControl.csproj'
+graph_ready=graph_source.is_file() and GRAPH_MARKER in graph_source.read_text()
+if not graph_ready:
+    run([sys.executable,ROOT/'Tools/build_aeris32_rev3_5_r031_runtime_source_graph_shadow.py',str(ksp)])
+else:
+    graph_text=graph_source.read_text()
+    graph_csproj=csproj_path.read_text()
+    graph_checks=(
+        ('[R031][PTC_GRAPH_MOD]' in graph_text,'graph per-mod telemetry'),
+        ('[R031][PTC_GRAPH_BODY]' in graph_text,'graph per-body telemetry'),
+        ('[R031][PTC_GRAPH] event=COMPLETE' in graph_text,'graph summary telemetry'),
+        ('authority=PQS' in graph_text,'graph PQS authority'),
+        ('AERISR031PtcRuntimeSourceGraphObserver.cs' in graph_csproj,'graph csproj registration'),
+    )
+    failed=[label for ok,label in graph_checks if not ok]
+    for ok,label in graph_checks:
+        print(PREFIX+(' PASS ' if ok else ' FAIL ')+label)
+    if failed:
+        raise SystemExit(PREFIX+' existing parent graph materialization invalid: '+', '.join(failed))
+    print(PREFIX+' PASS existing parent graph materialization reused; parent rebuild skipped')
 
 frozen=[ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs',
         ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs',
