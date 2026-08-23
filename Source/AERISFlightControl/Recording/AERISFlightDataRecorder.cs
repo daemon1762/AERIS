@@ -9,6 +9,7 @@ using AERISFlightControl.API;
 using AERISFlightControl.FlightState;
 using System.Collections.Generic;
 using AERISFlightControl.Performance;
+using AERISFlightControl.Logging;
 
 namespace AERISFlightControl.Recording
 {
@@ -359,7 +360,15 @@ namespace AERISFlightControl.Recording
 
         internal string CurrentFolder { get { return folder ?? string.Empty; } }
 
+        // AERIS31_R029_LOG_ROOT_CONSOLIDATION: all AERIS-owned runtime log/data
+        // products now live under GameData/AERISFlightControl/Logs. The legacy
+        // FlightData root is recovery-only so pre-R029 raw sessions are not orphaned.
         static string RootPath
+        {
+            get { return Path.Combine(KSPUtil.ApplicationRootPath, "GameData", "AERISFlightControl", "Logs", "FlightData"); }
+        }
+
+        static string LegacyRootPath
         {
             get { return Path.Combine(KSPUtil.ApplicationRootPath, "GameData", "AERISFlightControl", "FlightData"); }
         }
@@ -406,7 +415,9 @@ namespace AERISFlightControl.Recording
                 // The scan runs asynchronously and may start after the Open commands have
                 // created this new folder, so carry an explicit exclusion rather than relying
                 // on timing between the archive and writer lanes.
-                AERISFlightDataArchive.QueueRecoveryArchives(RootPath, folder);
+                AERISFlightDataArchive.QueueRecoveryArchives(RootPath, folder, LegacyRootPath);
+                AERISLogger.Info("[FDR][R029] root=" + RootPath +
+                    "; legacyRecoveryRoot=" + LegacyRootPath);
             }
             cvrWriter = new AERISAsyncFileChannel(Path.Combine(folder, "cvr_events.csv"), false,
                 AERISFileRecordPriority.CriticalEvent);

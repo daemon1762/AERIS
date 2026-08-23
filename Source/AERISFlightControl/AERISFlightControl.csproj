@@ -3,7 +3,7 @@
 <PropertyGroup><Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration><Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform><OutputType>Library</OutputType><RootNamespace>AERISFlightControl</RootNamespace><AssemblyName>AERISFlightControl</AssemblyName><TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion><LangVersion>7.2</LangVersion><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
 <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' "><DebugType>pdbonly</DebugType><Optimize>true</Optimize><OutputPath>bin\Release\</OutputPath><DefineConstants>TRACE</DefineConstants></PropertyGroup>
 <ItemGroup>
-<Reference Include="System"/><Reference Include="System.Core"/><Reference Include="System.Xml"/><Reference Include="System.IO.Compression"/>
+<Reference Include="System"/><Reference Include="System.Core"/><Reference Include="System.Xml"/>
 <Reference Include="UnityEngine"><HintPath>$(KSPDIR)/KSP_x64_Data/Managed/UnityEngine.dll</HintPath><Private>False</Private></Reference>
 <Reference Include="UnityEngine.CoreModule"><HintPath>$(KSPDIR)/KSP_x64_Data/Managed/UnityEngine.CoreModule.dll</HintPath><Private>False</Private></Reference>
 <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(KSPDIR)/KSP_x64_Data/Managed/UnityEngine.IMGUIModule.dll</HintPath><Private>False</Private></Reference>

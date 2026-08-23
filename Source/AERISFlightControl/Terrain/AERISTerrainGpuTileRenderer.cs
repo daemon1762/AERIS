@@ -188,7 +188,13 @@ namespace AERISFlightControl.Terrain
         const string Rev35R006ResourceReleaseHotfix1 = "AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_RESOURCE_RELEASE_HOTFIX1";
         const string Rev35R006ResourceReleaseOrderHotfix2 = "AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_RESOURCE_RELEASE_ORDER_HOTFIX2";
         const long Rev35R006GeographicPoolMaximumBytes = 8L * 1024L * 1024L;
-        const int Rev35R006GeographicPoolMaximumArrays = 16;
+        const int Rev35R006GeographicPoolMaximumArrays = 128;
+        // R029 retains R028's exact 128-array / 8 MiB memory authority. When the
+        // exact-length pool is full, at most four ended-ownership buffers of other
+        // lengths may be discarded so a newly useful exact-length buffer can enter.
+        // No live Entry/Pending buffer is ever touched and no RAM ceiling is raised.
+        const string Rev35R029Variant = "AERIS31_REV3_5_SALBUTAMOL_SULFATE_R029_LOG_ARCHIVE_GC_FULLSTACK_HARDENING";
+        const int Rev35R029GeographicPoolEvictionMaximumPerRecycle = 4;
         // AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_PACKED_MANAGED_BUFFER_REUSE_HOTFIX4: reuse only managed buffers whose ownership has ended.
         // PackedSource remains Entry projected-geometry authority and is never pooled.
         const string Rev35R006PackedManagedBufferHotfix4 = "AERIS27_REV3_5_SALBUTAMOL_SULFATE_R006_PACKED_MANAGED_BUFFER_REUSE_HOTFIX4";
@@ -639,6 +645,10 @@ namespace AERISFlightControl.Terrain
         long operationHealthRev35R006GeoPoolMiss;
         long operationHealthRev35R006GeoPoolReject;
         long operationHealthRev35R006GeoPoolRecycle;
+        long operationHealthRev35R029GeoPoolRebalances;
+        long operationHealthRev35R029GeoPoolEvicted;
+        long operationHealthRev35R029GeoPoolEvictedBytes;
+        long operationHealthRev35R029GeoPoolRebalanceRejects;
         long operationHealthRev35R006ProjectedOwnershipTransfers;
         double operationHealthRev35R006GeoAllocationMaxMs;
         int operationHealthRev35R006GeoMaxItems;
@@ -875,6 +885,13 @@ namespace AERISFlightControl.Terrain
         // Entry construction and immediately admit the visible field. The immutable
         // RenderReady worker product remains cached for later hidden retry.
         const string Rev35R024Variant = "AERIS30_REV3_5_SALBUTAMOL_SULFATE_R024_EXACT_VISIBLE_COMMIT_PREEMPTION";
+
+        // R028 removes the rejected R027 direct RenderReady wake and changes only
+        // the managed geographic-buffer pool's array-count ceiling. The existing 8 MiB
+        // byte hard cap remains authoritative, so this increases reuse opportunity without
+        // increasing the pool's maximum retained RAM. Commit count/budget/presentation
+        // authority and all visual contracts remain unchanged.
+        const string Rev35R028Variant = "AERIS31_REV3_5_SALBUTAMOL_SULFATE_R028_GEOGRAPHIC_BUFFER_REUSE_STRENGTHENING";
         long operationHealthRev35R020AuthoritySamples;
         long operationHealthRev35R020GenerationRetained;
         long operationHealthRev35R020GenerationAdvances;
@@ -892,6 +909,7 @@ namespace AERISFlightControl.Terrain
         long operationHealthRev35R024VisibleReadyChecks;
         long operationHealthRev35R024HiddenPendingPreemptions;
         long operationHealthRev35R024LateFinalizeProtected;
+
         readonly Queue<string> rev35R019VisibleFoundationQueue =
             new Queue<string>(Rev35R007FoundationQueueMaximum);
         long operationHealthRev35R019VisiblePriorityQueued;
@@ -3128,6 +3146,14 @@ namespace AERISFlightControl.Terrain
                 "; oh_rev35_r024_visible_ready_checks=" + operationHealthRev35R024VisibleReadyChecks +
                 "; oh_rev35_r024_hidden_pending_preempt=" + operationHealthRev35R024HiddenPendingPreemptions +
                 "; oh_rev35_r024_finalize_protected=" + operationHealthRev35R024LateFinalizeProtected +
+                "; oh_rev35_r028_variant=" + Rev35R028Variant +
+                "; oh_rev35_r028_geo_pool_array_cap=" + Rev35R006GeographicPoolMaximumArrays +
+                "; oh_rev35_r028_geo_pool_byte_cap=" + Rev35R006GeographicPoolMaximumBytes +
+                "; oh_rev35_r029_variant=" + Rev35R029Variant +
+                "; oh_rev35_r029_geo_pool_rebalance=" + operationHealthRev35R029GeoPoolRebalances +
+                "; oh_rev35_r029_geo_pool_evicted=" + operationHealthRev35R029GeoPoolEvicted +
+                "; oh_rev35_r029_geo_pool_evicted_bytes=" + operationHealthRev35R029GeoPoolEvictedBytes +
+                "; oh_rev35_r029_geo_pool_rebalance_reject=" + operationHealthRev35R029GeoPoolRebalanceRejects +
                 "; oh_rev35_r020_authority_samples=" + operationHealthRev35R020AuthoritySamples +
                 "; oh_rev35_r020_generation_retained=" + operationHealthRev35R020GenerationRetained +
                 "; oh_rev35_r020_generation_advance=" + operationHealthRev35R020GenerationAdvances +
@@ -4449,6 +4475,64 @@ namespace AERISFlightControl.Terrain
             return created;
         }
 
+        bool TryMakeRoomRev35R029GeographicPool(int incomingLength, long incomingBytes)
+        {
+            if (incomingLength <= 0 || incomingBytes <= 0L ||
+                incomingBytes > Rev35R006GeographicPoolMaximumBytes)
+                return false;
+
+            if (rev35R006GeographicPoolArrays < Rev35R006GeographicPoolMaximumArrays &&
+                rev35R006GeographicPoolBytes + incomingBytes <=
+                    Rev35R006GeographicPoolMaximumBytes)
+                return true;
+
+            operationHealthRev35R029GeoPoolRebalances++;
+            int evictions = 0;
+            while ((rev35R006GeographicPoolArrays >=
+                        Rev35R006GeographicPoolMaximumArrays ||
+                    rev35R006GeographicPoolBytes + incomingBytes >
+                        Rev35R006GeographicPoolMaximumBytes) &&
+                evictions < Rev35R029GeographicPoolEvictionMaximumPerRecycle)
+            {
+                int selectedLength = -1;
+                long selectedBytes = -1L;
+                Stack<GeographicUnitPoint[]> selectedStack = null;
+                foreach (KeyValuePair<int, Stack<GeographicUnitPoint[]>> pair in
+                    rev35R006GeographicPool)
+                {
+                    Stack<GeographicUnitPoint[]> stack = pair.Value;
+                    if (pair.Key == incomingLength || stack == null || stack.Count == 0)
+                        continue;
+                    long candidateBytes = Math.Max(0L, (long)pair.Key * 24L);
+                    if (candidateBytes <= selectedBytes) continue;
+                    selectedLength = pair.Key;
+                    selectedBytes = candidateBytes;
+                    selectedStack = stack;
+                }
+
+                if (selectedStack == null || selectedLength <= 0 || selectedBytes <= 0L)
+                    break;
+
+                selectedStack.Pop();
+                if (selectedStack.Count == 0)
+                    rev35R006GeographicPool.Remove(selectedLength);
+                rev35R006GeographicPoolBytes = Math.Max(0L,
+                    rev35R006GeographicPoolBytes - selectedBytes);
+                rev35R006GeographicPoolArrays = Math.Max(0,
+                    rev35R006GeographicPoolArrays - 1);
+                operationHealthRev35R029GeoPoolEvicted++;
+                operationHealthRev35R029GeoPoolEvictedBytes += selectedBytes;
+                evictions++;
+            }
+
+            bool fits = rev35R006GeographicPoolArrays <
+                    Rev35R006GeographicPoolMaximumArrays &&
+                rev35R006GeographicPoolBytes + incomingBytes <=
+                    Rev35R006GeographicPoolMaximumBytes;
+            if (!fits) operationHealthRev35R029GeoPoolRebalanceRejects++;
+            return fits;
+        }
+
         void RecycleRev35R006GeographicBuffer(ref GeographicUnitPoint[] buffer)
         {
             if (buffer == null || buffer.Length <= 0)
@@ -4457,10 +4541,8 @@ namespace AERISFlightControl.Terrain
                 return;
             }
             long bytes = Math.Max(0L, (long)buffer.Length * 24L);
-            if (rev35R006GeographicPoolArrays >= Rev35R006GeographicPoolMaximumArrays ||
-                bytes > Rev35R006GeographicPoolMaximumBytes ||
-                rev35R006GeographicPoolBytes + bytes >
-                    Rev35R006GeographicPoolMaximumBytes)
+            if (bytes > Rev35R006GeographicPoolMaximumBytes ||
+                !TryMakeRoomRev35R029GeographicPool(buffer.Length, bytes))
             {
                 operationHealthRev35R006GeoPoolReject++;
                 buffer = null;

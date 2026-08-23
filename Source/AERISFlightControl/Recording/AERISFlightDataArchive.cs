@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Text;
 using System.Threading;
 using AERISFlightControl.Logging;
 using AERISFlightControl.Performance;
@@ -41,6 +42,40 @@ namespace AERISFlightControl.Recording
             internal string Path;
             internal long Length;
         }
+
+        // AERIS31_R029_PROTON_SAFE_ZIP32_DEFLATE_ARCHIVE
+        // KSP/Proton does not reliably provide the framework compression helper assembly.
+        // The archive worker therefore emits a conservative, standards-compatible
+        // classic ZIP32 archive using DEFLATE (method 8), then verifies every byte and
+        // CRC32 before the existing raw-folder deletion/retention logic can run.
+        sealed class StoredZipWriteEntry
+        {
+            internal string Name;
+            internal byte[] NameBytes;
+            internal uint Crc32;
+            internal uint CompressedSize;
+            internal uint Size;
+            internal ushort DosTime;
+            internal ushort DosDate;
+            internal uint LocalHeaderOffset;
+        }
+
+        sealed class StoredZipCentralEntry
+        {
+            internal string Name;
+            internal uint Crc32;
+            internal uint CompressedSize;
+            internal uint Size;
+            internal uint LocalHeaderOffset;
+        }
+
+        const uint ZipLocalHeaderSignature = 0x04034B50u;
+        const uint ZipCentralHeaderSignature = 0x02014B50u;
+        const uint ZipEndSignature = 0x06054B50u;
+        const ushort ZipUtf8Flag = 0x0800;
+        const ushort ZipDeflateMethod = 8;
+        static readonly Encoding ZipUtf8 = new UTF8Encoding(false, true);
+        static readonly uint[] Crc32Table = BuildCrc32Table();
 
         const int PendingCapacity = 64;
         const int ResultCapacity = 256;
@@ -114,7 +149,7 @@ namespace AERISFlightControl.Recording
         }
 
         internal static void QueueRecoveryArchives(string rootPath,
-            string excludedOpenFolder)
+            string excludedOpenFolder, string additionalRootPath = null)
         {
             if (string.IsNullOrEmpty(rootPath)) return;
             lock (Sync)
@@ -131,6 +166,7 @@ namespace AERISFlightControl.Recording
                 return;
             }
             string immutableRoot = rootPath;
+            string immutableAdditionalRoot = additionalRootPath ?? string.Empty;
             string immutableExcluded = string.Empty;
             try
             {
@@ -146,25 +182,24 @@ namespace AERISFlightControl.Recording
                     var scan = new RecoveryScanResult { Root = immutableRoot };
                     try
                     {
-                        if (!Directory.Exists(immutableRoot))
-                            scan.Folders = new string[0];
-                        else
+                        var recoverable = new List<string>();
+                        CollectRecoveryFolders(immutableRoot, immutableExcluded,
+                            recoverable, context);
+                        if (!string.IsNullOrEmpty(immutableAdditionalRoot))
                         {
-                            string[] discovered = Directory.GetDirectories(immutableRoot);
-                            var recoverable = new List<string>(discovered.Length);
-                            for (int i = 0; i < discovered.Length; i++)
-                            {
-                                string normalized = Path.GetFullPath(discovered[i]).TrimEnd(
-                                    Path.DirectorySeparatorChar,
+                            string normalizedPrimary = Path.GetFullPath(immutableRoot)
+                                .TrimEnd(Path.DirectorySeparatorChar,
                                     Path.AltDirectorySeparatorChar);
-                                if (!string.IsNullOrEmpty(immutableExcluded) &&
-                                    string.Equals(normalized, immutableExcluded,
-                                        StringComparison.OrdinalIgnoreCase)) continue;
-                                recoverable.Add(discovered[i]);
-                            }
-                            scan.Folders = recoverable.ToArray();
-                            Array.Sort(scan.Folders, StringComparer.Ordinal);
+                            string normalizedAdditional = Path.GetFullPath(immutableAdditionalRoot)
+                                .TrimEnd(Path.DirectorySeparatorChar,
+                                    Path.AltDirectorySeparatorChar);
+                            if (!string.Equals(normalizedPrimary, normalizedAdditional,
+                                StringComparison.OrdinalIgnoreCase))
+                                CollectRecoveryFolders(immutableAdditionalRoot,
+                                    immutableExcluded, recoverable, context);
                         }
+                        scan.Folders = recoverable.ToArray();
+                        Array.Sort(scan.Folders, StringComparer.Ordinal);
                     }
                     catch (Exception ex)
                     {
@@ -194,6 +229,25 @@ namespace AERISFlightControl.Recording
             {
                 lock (Sync) recoveryScanQueued = false;
                 Interlocked.Increment(ref deferredCount);
+            }
+        }
+
+        static void CollectRecoveryFolders(string rootPath, string excludedFolder,
+            List<string> recoverable, AERISRuntimeJobContext context)
+        {
+            if (recoverable == null || string.IsNullOrEmpty(rootPath) ||
+                !Directory.Exists(rootPath)) return;
+            string[] discovered = Directory.GetDirectories(rootPath);
+            for (int i = 0; i < discovered.Length; i++)
+            {
+                context.ThrowIfStale();
+                string normalized = Path.GetFullPath(discovered[i]).TrimEnd(
+                    Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (!string.IsNullOrEmpty(excludedFolder) &&
+                    string.Equals(normalized, excludedFolder,
+                        StringComparison.OrdinalIgnoreCase)) continue;
+                if (!recoverable.Contains(discovered[i]))
+                    recoverable.Add(discovered[i]);
             }
         }
 
@@ -241,15 +295,12 @@ namespace AERISFlightControl.Recording
 
                 if (result.Success)
                 {
-                    double ratio = result.SourceBytes > 0
-                        ? 100.0 * (1.0 - (double)result.ArchiveBytes / result.SourceBytes)
-                        : 0.0;
+                    long sizeDelta = result.ArchiveBytes - result.SourceBytes;
                     string message = "[FDR][ARCHIVE] ZIP verified: " +
                         result.ArchivePath + "; files=" + result.FileCount +
                         "; source=" + result.SourceBytes + " B; zip=" +
-                        result.ArchiveBytes + " B; reduction=" +
-                        ratio.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) +
-                        "%; sourceDeleted=" + result.SourceDeleted +
+                        result.ArchiveBytes + " B; method=ZIP32/DEFLATE; sizeDelta=" +
+                        sizeDelta + " B; sourceDeleted=" + result.SourceDeleted +
                         "; retention=" + result.RetentionLimit +
                         "; pruned=" + result.PrunedArchives + ".";
                     if (result.SourceDeleted) AERISLogger.Info(message);
@@ -452,40 +503,7 @@ namespace AERISFlightControl.Recording
 
             try
             {
-                using (var output = new FileStream(temporaryPath, FileMode.CreateNew,
-                    FileAccess.ReadWrite, FileShare.None, 1024 * 128,
-                    FileOptions.SequentialScan))
-                using (var archive = new ZipArchive(output, ZipArchiveMode.Create, true))
-                {
-                    byte[] buffer = new byte[1024 * 128];
-                    for (int i = 0; i < files.Count; i++)
-                    {
-                        context.ThrowIfStale();
-                        string full = Path.GetFullPath(files[i]);
-                        string relative = full.Substring(prefix.Length)
-                            .Replace(Path.DirectorySeparatorChar, '/')
-                            .Replace(Path.AltDirectorySeparatorChar, '/');
-                        ZipArchiveEntry entry = archive.CreateEntry(relative,
-                            CompressionLevel.Optimal);
-                        DateTime modified = File.GetLastWriteTimeUtc(full);
-                        if (modified.Year < 1980) modified = new DateTime(1980, 1, 1, 0, 0, 0,
-                            DateTimeKind.Utc);
-                        if (modified.Year > 2107) modified = new DateTime(2107, 12, 31, 23, 59, 58,
-                            DateTimeKind.Utc);
-                        entry.LastWriteTime = new DateTimeOffset(modified);
-                        using (Stream target = entry.Open())
-                        using (var input = new FileStream(full, FileMode.Open, FileAccess.Read,
-                            FileShare.Read, buffer.Length, FileOptions.SequentialScan))
-                        {
-                            int read;
-                            while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
-                            {
-                                context.ThrowIfStale();
-                                target.Write(buffer, 0, read);
-                            }
-                        }
-                    }
-                }
+                WriteDeflatedZip(temporaryPath, files, prefix, context);
 
                 context.ThrowIfStale();
                 if (!VerifyArchive(temporaryPath, expected, context, out validationError))
@@ -643,6 +661,266 @@ namespace AERISFlightControl.Recording
             }
         }
 
+        static void WriteDeflatedZip(string archivePath, List<string> files,
+            string prefix, AERISRuntimeJobContext context)
+        {
+            if (files == null) throw new ArgumentNullException("files");
+            if (files.Count > ushort.MaxValue)
+                throw new InvalidDataException("ZIP32 entry limit exceeded");
+
+            var entries = new List<StoredZipWriteEntry>(files.Count);
+            byte[] buffer = new byte[128 * 1024];
+            using (var output = new FileStream(archivePath, FileMode.CreateNew,
+                FileAccess.ReadWrite, FileShare.None, buffer.Length,
+                FileOptions.SequentialScan))
+            using (var writer = new BinaryWriter(output, ZipUtf8, true))
+            {
+                for (int i = 0; i < files.Count; i++)
+                {
+                    context.ThrowIfStale();
+                    string full = Path.GetFullPath(files[i]);
+                    if (!full.StartsWith(prefix, StringComparison.Ordinal))
+                        throw new IOException("file escaped source folder: " + full);
+                    string relative = full.Substring(prefix.Length)
+                        .Replace(Path.DirectorySeparatorChar, '/')
+                        .Replace(Path.AltDirectorySeparatorChar, '/');
+                    byte[] nameBytes = ZipUtf8.GetBytes(relative);
+                    if (nameBytes.Length == 0 || nameBytes.Length > ushort.MaxValue)
+                        throw new InvalidDataException(
+                            "ZIP32 entry name length invalid: " + relative);
+
+                    long sourceLength = new FileInfo(full).Length;
+                    if (sourceLength < 0L || sourceLength > uint.MaxValue)
+                        throw new InvalidDataException(
+                            "ZIP32 file size limit exceeded: " + relative);
+                    if (output.Position < 0L || output.Position > uint.MaxValue)
+                        throw new InvalidDataException(
+                            "ZIP32 local-header offset limit exceeded");
+
+                    ushort dosTime, dosDate;
+                    GetDosDateTime(File.GetLastWriteTimeUtc(full), out dosTime, out dosDate);
+                    long localHeaderOffsetLong = output.Position;
+
+                    writer.Write(ZipLocalHeaderSignature);
+                    writer.Write((ushort)20);
+                    writer.Write(ZipUtf8Flag);
+                    writer.Write(ZipDeflateMethod);
+                    writer.Write(dosTime);
+                    writer.Write(dosDate);
+                    writer.Write((uint)0);
+                    writer.Write((uint)0);
+                    writer.Write((uint)0);
+                    writer.Write((ushort)nameBytes.Length);
+                    writer.Write((ushort)0);
+                    writer.Write(nameBytes);
+                    writer.Flush();
+
+                    long dataStart = output.Position;
+                    uint crc = 0xFFFFFFFFu;
+                    long copied = 0L;
+                    using (var input = new FileStream(full, FileMode.Open, FileAccess.Read,
+                        FileShare.Read, buffer.Length, FileOptions.SequentialScan))
+                    using (var deflate = new DeflateStream(output,
+                        CompressionLevel.Fastest, true))
+                    {
+                        int read;
+                        while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            context.ThrowIfStale();
+                            crc = UpdateCrc32(crc, buffer, read);
+                            deflate.Write(buffer, 0, read);
+                            copied += read;
+                            if (copied > sourceLength)
+                                throw new IOException(
+                                    "source grew during ZIP write: " + relative);
+                        }
+                    }
+                    crc ^= 0xFFFFFFFFu;
+
+                    if (copied != sourceLength)
+                        throw new IOException(
+                            "source changed during ZIP write: " + relative);
+                    long afterData = output.Position;
+                    long compressedLength = afterData - dataStart;
+                    if (compressedLength < 0L || compressedLength > uint.MaxValue)
+                        throw new InvalidDataException(
+                            "ZIP32 compressed size limit exceeded: " + relative);
+                    if (afterData < 0L || afterData > uint.MaxValue)
+                        throw new InvalidDataException(
+                            "ZIP32 archive offset limit exceeded");
+
+                    output.Seek(localHeaderOffsetLong + 14L, SeekOrigin.Begin);
+                    writer.Write(crc);
+                    writer.Write((uint)compressedLength);
+                    writer.Write((uint)copied);
+                    writer.Flush();
+                    output.Seek(afterData, SeekOrigin.Begin);
+
+                    entries.Add(new StoredZipWriteEntry
+                    {
+                        Name = relative,
+                        NameBytes = nameBytes,
+                        Crc32 = crc,
+                        CompressedSize = (uint)compressedLength,
+                        Size = (uint)copied,
+                        DosTime = dosTime,
+                        DosDate = dosDate,
+                        LocalHeaderOffset = (uint)localHeaderOffsetLong
+                    });
+                }
+
+                writer.Flush();
+                long centralOffsetLong = output.Position;
+                if (centralOffsetLong < 0L || centralOffsetLong > uint.MaxValue)
+                    throw new InvalidDataException(
+                        "ZIP32 central-directory offset limit exceeded");
+                uint centralOffset = (uint)centralOffsetLong;
+
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    context.ThrowIfStale();
+                    StoredZipWriteEntry entry = entries[i];
+                    writer.Write(ZipCentralHeaderSignature);
+                    writer.Write((ushort)20);
+                    writer.Write((ushort)20);
+                    writer.Write(ZipUtf8Flag);
+                    writer.Write(ZipDeflateMethod);
+                    writer.Write(entry.DosTime);
+                    writer.Write(entry.DosDate);
+                    writer.Write(entry.Crc32);
+                    writer.Write(entry.CompressedSize);
+                    writer.Write(entry.Size);
+                    writer.Write((ushort)entry.NameBytes.Length);
+                    writer.Write((ushort)0);
+                    writer.Write((ushort)0);
+                    writer.Write((ushort)0);
+                    writer.Write((ushort)0);
+                    writer.Write((uint)0);
+                    writer.Write(entry.LocalHeaderOffset);
+                    writer.Write(entry.NameBytes);
+                }
+
+                writer.Flush();
+                long centralSizeLong = output.Position - centralOffsetLong;
+                if (centralSizeLong < 0L || centralSizeLong > uint.MaxValue)
+                    throw new InvalidDataException(
+                        "ZIP32 central-directory size limit exceeded");
+                writer.Write(ZipEndSignature);
+                writer.Write((ushort)0);
+                writer.Write((ushort)0);
+                writer.Write((ushort)entries.Count);
+                writer.Write((ushort)entries.Count);
+                writer.Write((uint)centralSizeLong);
+                writer.Write(centralOffset);
+                writer.Write((ushort)0);
+                writer.Flush();
+                output.Flush();
+            }
+        }
+
+        static uint[] BuildCrc32Table()
+        {
+            uint[] table = new uint[256];
+            for (uint i = 0; i < table.Length; i++)
+            {
+                uint value = i;
+                for (int bit = 0; bit < 8; bit++)
+                    value = (value & 1u) != 0u ?
+                        0xEDB88320u ^ (value >> 1) : value >> 1;
+                table[i] = value;
+            }
+            return table;
+        }
+
+        static uint UpdateCrc32(uint crc, byte[] buffer, int count)
+        {
+            for (int i = 0; i < count; i++)
+                crc = Crc32Table[(int)((crc ^ buffer[i]) & 0xFFu)] ^ (crc >> 8);
+            return crc;
+        }
+
+        static uint ComputeFileCrc32(string path, byte[] buffer,
+            AERISRuntimeJobContext context, out long bytesRead)
+        {
+            uint crc = 0xFFFFFFFFu;
+            bytesRead = 0L;
+            using (var input = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.Read, buffer.Length, FileOptions.SequentialScan))
+            {
+                int read;
+                while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    context.ThrowIfStale();
+                    crc = UpdateCrc32(crc, buffer, read);
+                    bytesRead += read;
+                }
+            }
+            return crc ^ 0xFFFFFFFFu;
+        }
+
+        static void GetDosDateTime(DateTime timeUtc, out ushort dosTime,
+            out ushort dosDate)
+        {
+            DateTime value = timeUtc.Kind == DateTimeKind.Utc ? timeUtc : timeUtc.ToUniversalTime();
+            if (value.Year < 1980)
+                value = new DateTime(1980, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            else if (value.Year > 2107)
+                value = new DateTime(2107, 12, 31, 23, 59, 58, DateTimeKind.Utc);
+            dosTime = (ushort)((value.Hour << 11) | (value.Minute << 5) |
+                (value.Second / 2));
+            dosDate = (ushort)(((value.Year - 1980) << 9) | (value.Month << 5) |
+                value.Day);
+        }
+
+        sealed class LimitedReadStream : Stream
+        {
+            readonly Stream inner;
+            long remaining;
+
+            internal LimitedReadStream(Stream inner, long length)
+            {
+                if (inner == null) throw new ArgumentNullException("inner");
+                if (length < 0L) throw new ArgumentOutOfRangeException("length");
+                this.inner = inner;
+                remaining = length;
+            }
+
+            internal long Remaining { get { return remaining; } }
+            public override bool CanRead { get { return true; } }
+            public override bool CanSeek { get { return false; } }
+            public override bool CanWrite { get { return false; } }
+            public override long Length { get { throw new NotSupportedException(); } }
+            public override long Position
+            {
+                get { throw new NotSupportedException(); }
+                set { throw new NotSupportedException(); }
+            }
+            public override void Flush() { }
+            public override long Seek(long offset, SeekOrigin origin)
+            { throw new NotSupportedException(); }
+            public override void SetLength(long value)
+            { throw new NotSupportedException(); }
+            public override void Write(byte[] buffer, int offset, int count)
+            { throw new NotSupportedException(); }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                if (remaining <= 0L) return 0;
+                int allowed = (int)Math.Min((long)count, remaining);
+                int read = inner.Read(buffer, offset, allowed);
+                if (read > 0) remaining -= read;
+                return read;
+            }
+
+            public override int ReadByte()
+            {
+                if (remaining <= 0L) return -1;
+                int value = inner.ReadByte();
+                if (value >= 0) remaining--;
+                return value;
+            }
+        }
+
         static bool VerifyArchive(string archivePath,
             Dictionary<string, ExpectedFile> expected,
             AERISRuntimeJobContext context,
@@ -652,70 +930,216 @@ namespace AERISFlightControl.Recording
             try
             {
                 using (var input = new FileStream(archivePath, FileMode.Open, FileAccess.Read,
-                    FileShare.Read, 1024 * 128, FileOptions.SequentialScan))
-                using (var archive = new ZipArchive(input, ZipArchiveMode.Read, false))
+                    FileShare.Read, 128 * 1024, FileOptions.RandomAccess))
                 {
-                    if (archive.Entries.Count != expected.Count)
+                    ushort entryCount;
+                    uint centralSize, centralOffset;
+                    if (!TryFindZipEnd(input, out entryCount, out centralSize,
+                        out centralOffset, out error)) return false;
+                    if (entryCount != expected.Count)
                     {
                         error = "entry count mismatch";
                         return false;
                     }
-                    byte[] archiveBuffer = new byte[1024 * 128];
-                    byte[] sourceBuffer = new byte[1024 * 128];
-                    var seen = new HashSet<string>(StringComparer.Ordinal);
-                    for (int i = 0; i < archive.Entries.Count; i++)
+                    long centralEnd = (long)centralOffset + centralSize;
+                    if (centralEnd > input.Length)
                     {
-                        context.ThrowIfStale();
-                        ZipArchiveEntry entry = archive.Entries[i];
-                        ExpectedFile expectedFile;
-                        if (!expected.TryGetValue(entry.FullName, out expectedFile) ||
-                            expectedFile == null)
+                        error = "central directory exceeds archive length";
+                        return false;
+                    }
+
+                    var entries = new List<StoredZipCentralEntry>(entryCount);
+                    var seen = new HashSet<string>(StringComparer.Ordinal);
+                    input.Seek(centralOffset, SeekOrigin.Begin);
+                    using (var reader = new BinaryReader(input, ZipUtf8, true))
+                    {
+                        for (int i = 0; i < entryCount; i++)
                         {
-                            error = "unexpected entry: " + entry.FullName;
-                            return false;
-                        }
-                        if (!seen.Add(entry.FullName) || entry.Length != expectedFile.Length)
-                        {
-                            error = "entry length/duplicate mismatch: " + entry.FullName;
-                            return false;
-                        }
-                        long readTotal = 0L;
-                        using (Stream stream = entry.Open())
-                        using (var source = new FileStream(expectedFile.Path, FileMode.Open,
-                            FileAccess.Read, FileShare.Read, sourceBuffer.Length,
-                            FileOptions.SequentialScan))
-                        {
-                            while (true)
+                            context.ThrowIfStale();
+                            if (reader.ReadUInt32() != ZipCentralHeaderSignature)
                             {
-                                context.ThrowIfStale();
-                                int archiveRead = ReadBlock(stream, archiveBuffer);
-                                int sourceRead = ReadBlock(source, sourceBuffer);
-                                if (archiveRead != sourceRead)
-                                {
-                                    error = "entry/source read length mismatch: " +
-                                        entry.FullName;
-                                    return false;
-                                }
-                                if (archiveRead == 0) break;
-                                for (int offset = 0; offset < archiveRead; offset++)
-                                {
-                                    if (archiveBuffer[offset] == sourceBuffer[offset]) continue;
-                                    error = "entry/source content mismatch: " + entry.FullName;
-                                    return false;
-                                }
-                                readTotal += archiveRead;
+                                error = "central-directory signature mismatch";
+                                return false;
                             }
-                        }
-                        if (readTotal != expectedFile.Length)
-                        {
-                            error = "entry readback mismatch: " + entry.FullName;
-                            return false;
+                            reader.ReadUInt16();
+                            reader.ReadUInt16();
+                            ushort flags = reader.ReadUInt16();
+                            ushort method = reader.ReadUInt16();
+                            reader.ReadUInt16();
+                            reader.ReadUInt16();
+                            uint crc = reader.ReadUInt32();
+                            uint compressedSize = reader.ReadUInt32();
+                            uint uncompressedSize = reader.ReadUInt32();
+                            ushort nameLength = reader.ReadUInt16();
+                            ushort extraLength = reader.ReadUInt16();
+                            ushort commentLength = reader.ReadUInt16();
+                            ushort diskStart = reader.ReadUInt16();
+                            reader.ReadUInt16();
+                            reader.ReadUInt32();
+                            uint localOffset = reader.ReadUInt32();
+                            if ((flags & 0x0001) != 0 || (flags & 0x0008) != 0 ||
+                                (flags & ZipUtf8Flag) == 0 ||
+                                method != ZipDeflateMethod || diskStart != 0)
+                            {
+                                error = "unsupported ZIP entry encoding/method";
+                                return false;
+                            }
+                            byte[] nameBytes = reader.ReadBytes(nameLength);
+                            if (nameBytes.Length != nameLength)
+                            {
+                                error = "truncated central-directory name";
+                                return false;
+                            }
+                            string name = ZipUtf8.GetString(nameBytes);
+                            if (!seen.Add(name))
+                            {
+                                error = "duplicate entry: " + name;
+                                return false;
+                            }
+                            ExpectedFile expectedFile;
+                            if (!expected.TryGetValue(name, out expectedFile) ||
+                                expectedFile == null ||
+                                expectedFile.Length != uncompressedSize)
+                            {
+                                error = "unexpected entry/length: " + name;
+                                return false;
+                            }
+                            if (extraLength > 0)
+                                input.Seek(extraLength, SeekOrigin.Current);
+                            if (commentLength > 0)
+                                input.Seek(commentLength, SeekOrigin.Current);
+                            entries.Add(new StoredZipCentralEntry
+                            {
+                                Name = name,
+                                Crc32 = crc,
+                                CompressedSize = compressedSize,
+                                Size = uncompressedSize,
+                                LocalHeaderOffset = localOffset
+                            });
                         }
                     }
-                    if (seen.Count != expected.Count)
+                    if (input.Position != centralEnd || seen.Count != expected.Count)
                     {
-                        error = "missing entries";
+                        error = "central-directory size/missing entry mismatch";
                         return false;
+                    }
+
+                    byte[] archiveBuffer = new byte[128 * 1024];
+                    byte[] sourceBuffer = new byte[128 * 1024];
+                    using (var reader = new BinaryReader(input, ZipUtf8, true))
+                    {
+                        for (int i = 0; i < entries.Count; i++)
+                        {
+                            context.ThrowIfStale();
+                            StoredZipCentralEntry entry = entries[i];
+                            ExpectedFile expectedFile = expected[entry.Name];
+                            input.Seek(entry.LocalHeaderOffset, SeekOrigin.Begin);
+                            if (reader.ReadUInt32() != ZipLocalHeaderSignature)
+                            {
+                                error = "local-header signature mismatch: " + entry.Name;
+                                return false;
+                            }
+                            reader.ReadUInt16();
+                            ushort flags = reader.ReadUInt16();
+                            ushort method = reader.ReadUInt16();
+                            reader.ReadUInt16();
+                            reader.ReadUInt16();
+                            uint localCrc = reader.ReadUInt32();
+                            uint localCompressed = reader.ReadUInt32();
+                            uint localSize = reader.ReadUInt32();
+                            ushort nameLength = reader.ReadUInt16();
+                            ushort extraLength = reader.ReadUInt16();
+                            byte[] localNameBytes = reader.ReadBytes(nameLength);
+                            if (localNameBytes.Length != nameLength ||
+                                ZipUtf8.GetString(localNameBytes) != entry.Name ||
+                                flags != ZipUtf8Flag ||
+                                method != ZipDeflateMethod ||
+                                localCrc != entry.Crc32 ||
+                                localCompressed != entry.CompressedSize ||
+                                localSize != entry.Size)
+                            {
+                                error = "local/central entry mismatch: " + entry.Name;
+                                return false;
+                            }
+                            if (extraLength > 0)
+                                input.Seek(extraLength, SeekOrigin.Current);
+                            long dataEnd = input.Position + entry.CompressedSize;
+                            if (dataEnd > centralOffset)
+                            {
+                                error = "entry data overlaps central directory: " +
+                                    entry.Name;
+                                return false;
+                            }
+
+                            uint crc = 0xFFFFFFFFu;
+                            long remaining = entry.Size;
+                            using (var limited = new LimitedReadStream(
+                                input, entry.CompressedSize))
+                            using (var inflate = new DeflateStream(
+                                limited, CompressionMode.Decompress, true))
+                            using (var source = new FileStream(expectedFile.Path,
+                                FileMode.Open, FileAccess.Read, FileShare.Read,
+                                sourceBuffer.Length, FileOptions.SequentialScan))
+                            {
+                                while (remaining > 0L)
+                                {
+                                    context.ThrowIfStale();
+                                    int wanted = (int)Math.Min(
+                                        (long)archiveBuffer.Length, remaining);
+                                    int archiveRead = ReadExactCount(
+                                        inflate, archiveBuffer, wanted);
+                                    int sourceRead = ReadExactCount(
+                                        source, sourceBuffer, wanted);
+                                    if (archiveRead != wanted ||
+                                        sourceRead != wanted)
+                                    {
+                                        error = "entry/source truncated: " +
+                                            entry.Name;
+                                        return false;
+                                    }
+                                    for (int offset = 0; offset < wanted; offset++)
+                                    {
+                                        if (archiveBuffer[offset] ==
+                                            sourceBuffer[offset]) continue;
+                                        error = "entry/source content mismatch: " +
+                                            entry.Name;
+                                        return false;
+                                    }
+                                    crc = UpdateCrc32(crc, archiveBuffer, wanted);
+                                    remaining -= wanted;
+                                }
+                                if (inflate.ReadByte() != -1)
+                                {
+                                    error = "decompressed entry exceeds declared size: " +
+                                        entry.Name;
+                                    return false;
+                                }
+                                if (limited.Remaining != 0L)
+                                {
+                                    error = "compressed entry was not fully consumed: " +
+                                        entry.Name;
+                                    return false;
+                                }
+                                if (source.ReadByte() != -1)
+                                {
+                                    error = "source grew during verification: " +
+                                        entry.Name;
+                                    return false;
+                                }
+                            }
+                            if (input.Position != dataEnd)
+                            {
+                                error = "compressed entry boundary mismatch: " +
+                                    entry.Name;
+                                return false;
+                            }
+                            crc ^= 0xFFFFFFFFu;
+                            if (crc != entry.Crc32)
+                            {
+                                error = "CRC32 mismatch: " + entry.Name;
+                                return false;
+                            }
+                        }
                     }
                 }
                 return true;
@@ -728,16 +1152,72 @@ namespace AERISFlightControl.Recording
             }
         }
 
-        static int ReadBlock(Stream stream, byte[] buffer)
+        static bool TryFindZipEnd(FileStream input, out ushort entryCount,
+            out uint centralSize, out uint centralOffset, out string error)
+        {
+            entryCount = 0;
+            centralSize = 0u;
+            centralOffset = 0u;
+            error = string.Empty;
+            if (input == null || input.Length < 22L)
+            {
+                error = "archive too short";
+                return false;
+            }
+            int scanLength = (int)Math.Min(65557L, input.Length);
+            byte[] tail = new byte[scanLength];
+            input.Seek(input.Length - scanLength, SeekOrigin.Begin);
+            if (ReadExactCount(input, tail, scanLength) != scanLength)
+            {
+                error = "could not read ZIP tail";
+                return false;
+            }
+            for (int offset = scanLength - 22; offset >= 0; offset--)
+            {
+                if (ReadUInt32LittleEndian(tail, offset) != ZipEndSignature) continue;
+                ushort commentLength = ReadUInt16LittleEndian(tail, offset + 20);
+                if (offset + 22 + commentLength != scanLength) continue;
+                ushort disk = ReadUInt16LittleEndian(tail, offset + 4);
+                ushort centralDisk = ReadUInt16LittleEndian(tail, offset + 6);
+                ushort diskEntries = ReadUInt16LittleEndian(tail, offset + 8);
+                ushort totalEntries = ReadUInt16LittleEndian(tail, offset + 10);
+                if (disk != 0 || centralDisk != 0 || diskEntries != totalEntries)
+                {
+                    error = "multi-disk ZIP is unsupported";
+                    return false;
+                }
+                entryCount = totalEntries;
+                centralSize = ReadUInt32LittleEndian(tail, offset + 12);
+                centralOffset = ReadUInt32LittleEndian(tail, offset + 16);
+                return true;
+            }
+            error = "end-of-central-directory not found";
+            return false;
+        }
+
+        static int ReadExactCount(Stream stream, byte[] buffer, int count)
         {
             int total = 0;
-            while (total < buffer.Length)
+            while (total < count)
             {
-                int read = stream.Read(buffer, total, buffer.Length - total);
+                int read = stream.Read(buffer, total, count - total);
                 if (read <= 0) break;
                 total += read;
             }
             return total;
+        }
+
+        static ushort ReadUInt16LittleEndian(byte[] data, int offset)
+        {
+            return (ushort)(data[offset] | (data[offset + 1] << 8));
+        }
+
+        static uint ReadUInt32LittleEndian(byte[] data, int offset)
+        {
+            return (uint)data[offset] |
+                ((uint)data[offset + 1] << 8) |
+                ((uint)data[offset + 2] << 16) |
+                ((uint)data[offset + 3] << 24);
         }
 
         static bool TryDeleteSource(string folder, out string detail)

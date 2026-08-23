@@ -125,12 +125,48 @@ namespace AERISFlightControl.Autopilot
                 error = "Auto Takeoff is not available while splashed.";
             else if (ground == null || !ground.GroundAssistMasterEnabled || !ground.Enabled || !ground.ReliableGrounded || !ground.Available)
                 error = "Ground Stability PROTECT must be enabled and reliably grounded.";
-            else if (manager.PitchController == null || !manager.PitchController.moderate_aoa ||
-                !manager.PitchController.moderate_g)
-                error = "AA pitch AoA/G moderation must be enabled before ARM.";
+            else if (manager.PitchController == null)
+                error = "AA pitch controller is unavailable.";
             else if (!attitude.InstrumentHeadingValid || !attitude.InstrumentPitchValid)
                 error = "Heading/pitch reference is not valid.";
-            if (error != null) return false;
+
+            if (error != null)
+            {
+                Status = "ARM INHIBITED — " + error;
+                return false;
+            }
+
+            // AERIS31_AUTOTO_HF1_GROUND_STABLE_ARM_PREREQUISITE_SELF_ENABLE
+            // Reliable-ground AUTO TAKEOFF owns establishment of its own
+            // AA pitch AoA/G moderation prerequisite. All preceding MASTER,
+            // Standard FBW, ground-state and attitude-reference gates remain authoritative.
+            bool moderationAutoEnabled = false;
+
+            if (!manager.PitchController.moderate_aoa ||
+                !manager.PitchController.moderate_g)
+            {
+                manager.PitchController.moderate_aoa = true;
+                manager.PitchController.moderate_g = true;
+                moderationAutoEnabled = true;
+
+                if (!manager.PitchController.moderate_aoa ||
+                    !manager.PitchController.moderate_g)
+                {
+                    error = "AA pitch AoA/G moderation could not be enabled.";
+                    Status = "ARM INHIBITED — " + error;
+
+                    AERISLogger.Warn(
+                        "[AUTO_TAKEOFF][GROUND_STABLE_ARM_HF1] " +
+                        "moderation self-enable failed.");
+
+                    return false;
+                }
+
+                AERISLogger.Info(
+                    "[AUTO_TAKEOFF][GROUND_STABLE_ARM_HF1] variant=" +
+                    "AERIS31_AUTOTO_HF1_GROUND_STABLE_ARM_PREREQUISITE_SELF_ENABLE" +
+                    "; AA pitch AoA/G moderation auto-enabled after reliable-ground validation.");
+            }
 
             ReleaseAxisOwnership();
             ReleaseBrakes(vessel);
@@ -150,7 +186,9 @@ namespace AERISFlightControl.Autopilot
             handoffStableSeconds = 0f;
             SelectVr(manager, false);
             ground.RecaptureCurrentHeading(attitude);
-            SetPhase(AutoTakeoffPhase.Armed, "ARMED — verify configuration, then EXECUTE TAKEOFF");
+            SetPhase(AutoTakeoffPhase.Armed, moderationAutoEnabled ?
+                "ARMED — AA AoA/G moderation auto-enabled; verify configuration, then EXECUTE TAKEOFF" :
+                "ARMED — verify configuration, then EXECUTE TAKEOFF");
             AERISLogger.Info("[AUTO_TAKEOFF] ARM; stall=" + selectedStallSpeedMps.ToString("F2") +
                 " m/s; Vr=" + selectedVrMps.ToString("F2") + " m/s; source=" + selectedVrSource +
                 "; detail=" + selectedVrDetail);
