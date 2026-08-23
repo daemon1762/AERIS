@@ -69,7 +69,8 @@ aex,afiles,abytes=stats(pdata)
 if bex and (not aex or bfiles!=afiles or bbytes!=abytes): raise SystemExit(PREFIX+' PluginData changed')
 dll=installed/'Plugins/AERISFlightControl.dll';data=dll.read_bytes()
 for token in (MARKER,'[R037][COMMON_CPU] event=POL_FLATTEN_OCEAN_EXACT_WORKER_COMPLETE',
-              'PQSMod_FlattenOcean','worker_invokes_runtime_object=false','authority=PQS'):
+              '[R037][FLATTEN] oceanRad=','relative_floor_m=','PQSMod_FlattenOcean',
+              'worker_invokes_runtime_object=false','authority=PQS'):
     if not marker(data,token): raise SystemExit(PREFIX+' DLL missing '+token)
 head=out(['git','rev-parse','HEAD'])
 identity=(
@@ -81,7 +82,10 @@ identity=(
 +'targets=Minmus,Ike,Gilly,Pol\n'
 +'expected_worker_ready=Gilly,Ike,Pol\n'
 +'expected_formula_pending=Minmus\n'
-+'flatten_ocean_formula=height_lt_oceanRad_then_oceanRad_else_height\n'
++'flatten_ocean_il_semantics=absolute_vertHeight_lt_oceanRad_then_oceanRad_else_unchanged\n'
++'worker_height_frame=RELATIVE_TO_PQS_RADIUS\n'
++'flatten_ocean_worker_formula=max(relative_height,oceanRad_minus_sphere_radius)\n'
++'expected_stock_pol_relative_floor_m=1\n'
 +'flatten_ocean_il_sha256='+FLATTEN_IL_SHA+'\n'
 +'signed_simplex=R036_RUNTIME_EXACT_PLUS_R037_IL_CONFIRMATION\n'
 +'landcontrol_guard=R035_GEOMETRY_INERT_RUNTIME_REVALIDATION\n'
