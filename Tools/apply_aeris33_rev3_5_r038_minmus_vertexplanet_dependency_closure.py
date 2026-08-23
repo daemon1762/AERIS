@@ -18,23 +18,33 @@ except subprocess.CalledProcessError: raise SystemExit(PREFIX+' observer is not 
 tracked=subprocess.check_output(['git','show','HEAD:'+rel],cwd=str(ROOT),text=True)
 if MARKER not in tracked: raise SystemExit(PREFIX+' observer marker missing from tracked source')
 
-# Accepted deterministic source materialization. Keep the tracked audit source reviewable while
-# fixing two runtime/compiler hazards before compilation, and reject every other dirty form.
+# Deterministic materialization. The tracked observer stays reviewable; build-time materialization
+# applies only audited safety fixes. Previous Hotfix0 materialization is accepted so interrupted
+# builds can be resumed without reset/clean/stash.
 old_array='''        static string ArraySha(Array a)\n        {\n            StringBuilder sb=new StringBuilder();\n            for(int i=0;i<a.Length;i++)\n            {\n                object v=a.GetValue(i);\n                sb.Append(v==null?"NULL":FormatValue(v)); sb.Append('\\n');\n            }\n            return Sha256(Encoding.UTF8.GetBytes(sb.ToString()));\n        }\n'''
 new_array='''        static string ArraySha(Array a)\n        {\n            StringBuilder sb=new StringBuilder();\n            foreach(object v in a)\n            {\n                sb.Append(v==null?"NULL":FormatValue(v)); sb.Append('\\n');\n            }\n            return Sha256(Encoding.UTF8.GetBytes(sb.ToString()));\n        }\n'''
+old_calls='''            LogHelper(mt, "Lerp");\n            LogHelper(mt, "Clamp");\n            LogHelper(mt, "CubicHermite");\n'''
+new_calls='''            LogHelper(mod, mt, "Lerp");\n            LogHelper(mod, mt, "Clamp");\n            LogHelper(mod, mt, "CubicHermite");\n'''
+old_signature='''        static void LogHelper(Type t,string name)\n'''
+new_signature='''        static void LogHelper(object instance,Type t,string name)\n'''
 old_invoke='''                object r=selected.Invoke(selected.IsStatic?null:null,args);\n'''
-new_invoke='''                if(!selected.IsStatic) throw new InvalidOperationException("helper expected static "+name);\n                object r=selected.Invoke(null,args);\n'''
-if old_array not in tracked: raise SystemExit(PREFIX+' ArraySha tracked anchor missing')
-if old_invoke not in tracked: raise SystemExit(PREFIX+' helper Invoke tracked anchor missing')
-materialized=tracked.replace(old_array,new_array,1).replace(old_invoke,new_invoke,1)
+previous_invoke='''                if(!selected.IsStatic) throw new InvalidOperationException("helper expected static "+name);\n                object r=selected.Invoke(null,args);\n'''
+new_invoke='''                object target=null;\n                if(!selected.IsStatic)\n                {\n                    if(instance==null) throw new InvalidOperationException("instance helper target missing "+name);\n                    MethodInfo clone=typeof(object).GetMethod("MemberwiseClone",\n                        BindingFlags.Instance|BindingFlags.NonPublic);\n                    if(clone==null) throw new InvalidOperationException("MemberwiseClone missing");\n                    target=clone.Invoke(instance,null);\n                    AERISLogger.Info("[R038][HELPER_TARGET] method="+name+\n                        "; invocation_target=SHALLOW_CLONE; live_runtime_object_mutated=false"+\n                        "; runtime_object_invocation_thread=MAIN_THREAD_ONLY");\n                }\n                object r=selected.Invoke(target,args);\n'''
+for anchor,label in ((old_array,'ArraySha'),(old_calls,'helper calls'),(old_signature,'helper signature'),(old_invoke,'helper invoke')):
+    if anchor not in tracked: raise SystemExit(PREFIX+' tracked anchor missing '+label)
+previous=tracked.replace(old_array,new_array,1).replace(old_invoke,previous_invoke,1)
+materialized=(tracked.replace(old_array,new_array,1)
+                    .replace(old_calls,new_calls,1)
+                    .replace(old_signature,new_signature,1)
+                    .replace(old_invoke,new_invoke,1))
 current=SOURCE.read_text()
-if current==tracked:
+if current==tracked or current==previous:
     SOURCE.write_text(materialized)
-    print(PREFIX+' PASS accepted observer materialized')
+    print(PREFIX+' PASS accepted Hotfix1 observer materialized')
 elif current==materialized:
-    print(PREFIX+' PASS accepted observer materialization already present')
+    print(PREFIX+' PASS accepted Hotfix1 observer materialization already present')
 else:
-    raise SystemExit(PREFIX+' observer differs from both tracked and accepted materialized forms; refusing')
+    raise SystemExit(PREFIX+' observer differs from tracked/Hotfix0/Hotfix1 accepted forms; refusing')
 
 cs=CSPROJ.read_text()
 inc='    <Compile Include="Terrain\\AERISR038PtcMinmusVertexPlanetDependencyClosureObserver.cs" />\n'
