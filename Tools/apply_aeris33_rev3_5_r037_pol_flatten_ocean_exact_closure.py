@@ -26,7 +26,7 @@ replacements=[
 ('[R036]','[R037]'),
 ('event=FORMULA_CLOSURE_WORKER_COMPLETE','event=POL_FLATTEN_OCEAN_EXACT_WORKER_COMPLETE'),
 ('HeightOffset = 4\n','HeightOffset = 4,\n            FlattenOcean = 5\n'),
-('internal double Offset;\n','internal double Offset;\n            internal double OceanRadius;\n'),
+('internal double Offset;\n','internal double Offset;\n            internal double OceanFloorMeters;\n'),
 ('if (!supported || tn=="PQSMod_VertexSimplexHeight")\n',
  'if (!supported || tn=="PQSMod_VertexSimplexHeight" || tn=="PQSMod_FlattenOcean")\n'),
 ]
@@ -35,12 +35,12 @@ for old,new in replacements:
     s=s.replace(old,new) if old=='[R036]' else s.replace(old,new,1)
 
 capture_anchor='''            else if (st.TypeName=="PQSMod_VertexHeightOffset")\n            {\n                st.Offset=ReadDouble(mod,"offset");\n                st.Kind=StepKind.HeightOffset;\n                st.NativePrimitive=new double[0];\n            }\n'''
-flatten_capture='''            else if (st.TypeName=="PQSMod_FlattenOcean")\n            {\n                MethodInfo fm=mod.GetType().GetMethod("OnVertexBuildHeight",\n                    BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.DeclaredOnly);\n                MethodBody fb=fm==null?null:fm.GetMethodBody();\n                byte[] fil=fb==null?null:fb.GetILAsByteArray();\n                string fsha=fil==null?string.Empty:Sha256(fil);\n                if (fsha=="'''+FLATTEN_IL_SHA+'''")\n                {\n                    st.OceanRadius=ReadDouble(mod,"oceanRad");\n                    st.Kind=StepKind.FlattenOcean;\n                    st.NativePrimitive=new double[0];\n                }\n            }\n'''
+flatten_capture='''            else if (st.TypeName=="PQSMod_FlattenOcean")\n            {\n                MethodInfo fm=mod.GetType().GetMethod("OnVertexBuildHeight",\n                    BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.DeclaredOnly);\n                MethodBody fb=fm==null?null:fm.GetMethodBody();\n                byte[] fil=fb==null?null:fb.GetILAsByteArray();\n                string fsha=fil==null?string.Empty:Sha256(fil);\n                if (fsha=="'''+FLATTEN_IL_SHA+'''")\n                {\n                    object sphere=ReadMember(mod,"sphere");\n                    if (sphere==null) throw new InvalidOperationException("FlattenOcean sphere missing");\n                    double oceanRad=ReadDouble(mod,"oceanRad");\n                    double sphereRadius=ReadDouble(sphere,"radius");\n                    st.OceanFloorMeters=oceanRad-sphereRadius;\n                    st.Kind=StepKind.FlattenOcean;\n                    st.NativePrimitive=new double[0];\n                    AERISLogger.Info("[R037][FLATTEN] oceanRad="+F(oceanRad)+\n                        "; sphere_radius="+F(sphereRadius)+"; relative_floor_m="+F(st.OceanFloorMeters)+\n                        "; il_sha256="+fsha+"; runtime_object_invocation_thread=MAIN_THREAD_ONLY"+\n                        "; worker_invokes_runtime_object=false; authority=PQS");\n                }\n            }\n'''
 if capture_anchor not in s: raise SystemExit('R037 CaptureStep anchor missing')
 s=s.replace(capture_anchor,flatten_capture+capture_anchor,1)
 
 apply_anchor='''            if (st.Kind==StepKind.HeightOffset)\n                return h+st.Offset;\n            throw new InvalidOperationException("unsupported worker step "+st.TypeName);\n'''
-flatten_apply='''            if (st.Kind==StepKind.FlattenOcean)\n                return h<st.OceanRadius?st.OceanRadius:h;\n'''
+flatten_apply='''            if (st.Kind==StepKind.FlattenOcean)\n                return h<st.OceanFloorMeters?st.OceanFloorMeters:h;\n'''
 if apply_anchor not in s: raise SystemExit('R037 ApplyStep anchor missing')
 s=s.replace(apply_anchor,flatten_apply+apply_anchor,1)
 
