@@ -12,17 +12,16 @@ if not SOURCE.is_file():
 text = SOURCE.read_text()
 if MARKER not in text:
     raise SystemExit('R031 source resolver marker missing')
-old = "return value.Trim().Trim('\\\"', '\\\\'').Replace('\\\\\\\\', '/').TrimStart('/').ToLowerInvariant();"
-new = "return value.Trim().Trim('\\\"').Replace('\\\\\\\\', '/').TrimStart('/').ToLowerInvariant();"
-if old in text:
-    text = text.replace(old, new, 1)
-elif new not in text:
-    # Accept the exact C# rendering produced by Python raw strings as a second anchor.
-    old2 = "return value.Trim().Trim('\\\"', '\\\'').Replace('\\\\\\\\', '/').TrimStart('/').ToLowerInvariant();"
-    if old2 in text:
-        text = text.replace(old2, new, 1)
-    else:
-        raise SystemExit('R031 Hotfix1 NormalizeHint anchor not found')
-SOURCE.write_text(text)
+lines = text.splitlines(True)
+changed = False
+for i, line in enumerate(lines):
+    if 'return value.Trim().Trim(' in line and 'ToLowerInvariant();' in line:
+        indent = line[:len(line) - len(line.lstrip())]
+        lines[i] = indent + "return value.Trim().Trim('\\\"').Replace('\\\\', '/').TrimStart('/').ToLowerInvariant();\n"
+        changed = True
+        break
+if not changed:
+    raise SystemExit('R031 Hotfix1 NormalizeHint return line not found')
+SOURCE.write_text(''.join(lines))
 print('PASS: R031 Hotfix1 NormalizeHint compile fix materialized')
 print('runtime_behavior_change=NONE equivalent quote-trim simplification')
