@@ -46,6 +46,7 @@ frozen=[ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs',
         ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs']
 before={str(p):sha(p) for p in frozen}
 run([sys.executable,ROOT/'Tools/apply_aeris32_rev3_5_r031_cpu_reconstruction_feasibility_probe.py'])
+run([sys.executable,ROOT/'Tools/apply_aeris32_rev3_5_r031_cpu_feasibility_identity_sync.py'])
 run([sys.executable,ROOT/'Tools/verify_aeris32_rev3_5_r031_cpu_reconstruction_feasibility_probe.py'])
 for p in frozen:
     if sha(p)!=before[str(p)]: raise SystemExit(PREFIX+' frozen R030 source changed '+str(p))
