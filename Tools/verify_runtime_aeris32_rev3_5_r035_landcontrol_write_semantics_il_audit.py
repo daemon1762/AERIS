@@ -70,6 +70,23 @@ print('[INFO] il_telemetry='+str(len(il))+' write_sites='+str(len(write_lines)))
 for l in write_lines: print('[WRITE_SITE] '+l)
 if method and len(il)!=int(field(method[0],'instructions')): bad.append('IL telemetry count mismatch')
 if len(write_lines)!=2: bad.append('write-site telemetry expected 2 got '+str(len(write_lines)))
+
+# Hotfix2: print one bounded, overlapping window that includes both known write sites.
+# This is verifier-only diagnostics over an already captured log; no KSP/runtime action occurs.
+if write_lines:
+    try:
+        site_indices=sorted(int(field(l,'index')) for l in write_lines)
+        lo=max(0,site_indices[0]-28)
+        hi=min(len(il)-1,site_indices[-1]+16)
+        print('[INFO] write_semantics_window=index '+str(lo)+'..'+str(hi))
+        for l in il:
+            idx=int(field(l,'index'))
+            if lo <= idx <= hi:
+                tag='[IL_WRITE_WINDOW*] ' if idx in site_indices else '[IL_WRITE_WINDOW] '
+                print(tag+l)
+    except Exception as ex:
+        bad.append('write-window extraction failed: '+str(ex))
+
 if bad: raise SystemExit(PREFIX+' FAIL: '+', '.join(bad))
 print(PREFIX+' PASS')
-print('[INFO] next=inspect full [R035][LANDCTRL_IL_INSN] sequence to reconstruct both write expressions and branch guards')
+print('[INFO] next=reconstruct both vertHeight write expressions and branch guards from [IL_WRITE_WINDOW]')
