@@ -46,6 +46,71 @@ def tree_stats(path):
 def marker_in_bytes(data, text):
     return text.encode() in data or text.encode('utf-16le') in data
 
+
+def verify_r030_parent_contract(builder, tile, phase0, fix1obs):
+    # The original R030 verifiers are intentionally branch-scoped. R031 is a direct
+    # descendant branch, so re-running them would fail only because the branch name is
+    # different. Verify the inherited accepted contract here instead, then freeze the
+    # complete persistence/DB/renderer surface byte-for-byte before R031 materializes.
+    for path in (builder, tile, phase0, fix1obs):
+        if not path.is_file():
+            raise SystemExit(PREFIX + ' inherited R030 file missing: ' + str(path))
+
+    builder_text = builder.read_text()
+    tile_text = tile.read_text()
+    phase0_text = phase0.read_text()
+    fix1_text = fix1obs.read_text()
+    checks = (
+        (R030_FIX1 in builder_text, 'R030 Fix1 builder marker'),
+        (R030_FIX2 in builder_text, 'R030 Fix2 builder marker'),
+        (R030_FIX1 in tile_text, 'R030 Fix1 tile marker'),
+        (R030_FIX2 in phase0_text, 'R030 Fix2 Phase0 marker'),
+        (R030_FIX1 in fix1_text, 'R030 Fix1 observer marker'),
+        ('writer.Write(5);' in builder_text, 'R030 V5 state writer'),
+        ('version != 4 && version != 5' in builder_text, 'R030 V4/V5 state reader'),
+        ('PersistentTerrainIdentityForBody(body)' in builder_text,
+            'R030 stable terrain identity validation'),
+        ('TerrainWitnessHashForBody(body)' in builder_text,
+            'R030 terrain witness validation'),
+        ('SetR030Fix1CanonicalEnvironment' in builder_text,
+            'R030 canonical environment reuse'),
+        ('r030Fix2MigrationLogged.Add(body.name)' in builder_text,
+            'R030 one-shot migration telemetry'),
+        ('AERIS_R030_WITNESS_V1' in tile_text, 'R030 witness authority marker'),
+        ('diagnostic_planet_hash=' in phase0_text and
+            'hash_authority=DIAGNOSTIC_ONLY' in phase0_text,
+            'R030 diagnostic hash non-authority'),
+        ('[R030_FIX1][SUMMARY]' in fix1_text, 'R030 persistence summary telemetry'),
+    )
+    failed = []
+    for ok, label in checks:
+        print(PREFIX + (' PASS ' if ok else ' FAIL ') + label)
+        if not ok: failed.append(label)
+    if failed:
+        raise SystemExit(PREFIX + ' inherited R030 contract FAIL: ' + ', '.join(failed))
+
+    # R029 accepted authorities outside the R030 persistence surface stay exact.
+    frozen_hashes = {
+        'Source/AERISFlightControl/Autopilot/AERISAutoTakeoffDirector.cs':
+            'b76adbc33d6699804fec68c770a7f4e2e0bd744790b42ff2fbb51f2d36ebf0de',
+        'Source/AERISFlightControl/Recording/AERISFlightDataArchive.cs':
+            '06385f7401e124d97a094fde0d427cff713e5fb31611d286061d9bdf7e964abf',
+        'Source/AERISFlightControl/Recording/AERISFlightDataRecorder.cs':
+            '286816c244b18955932bf7e05110c0cf5c5dd40a7458a966cc0f56090306dad7',
+        'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs':
+            'ff5d8f25b4121679246b582c03fa1d88d3d0fe7872c0b58582988bf09aa3d0f7',
+    }
+    for relative, expected in frozen_hashes.items():
+        path = ROOT / relative
+        if not path.is_file():
+            raise SystemExit(PREFIX + ' accepted authority missing: ' + relative)
+        actual = sha256(path)
+        if actual != expected:
+            raise SystemExit(PREFIX + ' accepted authority changed: ' + relative +
+                ' sha256=' + actual)
+        print(PREFIX + ' PASS accepted authority ' + relative)
+
+
 parser = argparse.ArgumentParser(description='R031 PTC source resolver + CPU FILE_EXACT shadow build. Preserves R030 V5 DB exactly.')
 parser.add_argument('ksp_path')
 args = parser.parse_args()
@@ -61,19 +126,17 @@ tile = ROOT / 'Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs'
 phase0 = ROOT / 'Source/AERISFlightControl/Terrain/AERISR030PreloadPersistencePtcPhase0Observer.cs'
 fix1obs = ROOT / 'Source/AERISFlightControl/Terrain/AERISR030Fix1PersistenceObserver.cs'
 
-# Materialize the accepted R030 persistence chain only when absent. The Phase0 verifier
-# must run before Fix1 mutates persistence paths.
+# Materialize the accepted R030 persistence chain only when absent. Do not invoke the
+# original R030 verifiers here: they deliberately reject any branch other than R030.
 if not builder.is_file() or R030_FIX1 not in builder.read_text():
     if not phase0.is_file():
         run([sys.executable, ROOT / 'Tools/apply_aeris32_rev3_5_r030_preload_persistence_ptc_phase0.py'])
-    run([sys.executable, ROOT / 'Tools/verify_aeris32_rev3_5_r030_preload_persistence_ptc_phase0.py'])
     run([sys.executable, ROOT / 'Tools/apply_aeris32_rev3_5_r030_fix1_stable_persistent_terrain_identity.py'])
-run([sys.executable, ROOT / 'Tools/verify_aeris32_rev3_5_r030_fix1_stable_persistent_terrain_identity.py'])
 if R030_FIX2 not in builder.read_text():
     run([sys.executable, ROOT / 'Tools/apply_aeris32_rev3_5_r030_fix2_persistence_telemetry_cleanup.py'])
-run([sys.executable, ROOT / 'Tools/verify_aeris32_rev3_5_r030_fix2_persistence_telemetry_cleanup.py'])
 # Parent build identity hotfix is harmless and keeps intermediate identity coherent.
 run([sys.executable, ROOT / 'Tools/apply_aeris32_rev3_5_r030_fix2_hotfix1_build_identity_sync.py'])
+verify_r030_parent_contract(builder, tile, phase0, fix1obs)
 
 # Freeze accepted R030 persistence/DB/renderer sources across R031 materialization.
 frozen = [
