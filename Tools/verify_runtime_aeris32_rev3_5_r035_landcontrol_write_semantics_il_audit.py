@@ -23,6 +23,10 @@ def field(line,name):
     m=re.search(r'(?:^|; )'+re.escape(name)+r'=([^;]+)',line)
     if not m: raise SystemExit(PREFIX+' FAIL missing '+name+' in '+line)
     return m.group(1).strip()
+def il_index(line):
+    m=re.search(r'\[R035\]\[LANDCTRL_IL_INSN\] index=(\d+);',line)
+    if not m: raise SystemExit(PREFIX+' FAIL missing IL index in '+line)
+    return int(m.group(1))
 checks=[
 (field(complete,'bodies')=='4','target body count'),
 (field(complete,'bodies_found')=='4','all target bodies found'),
@@ -71,16 +75,17 @@ for l in write_lines: print('[WRITE_SITE] '+l)
 if method and len(il)!=int(field(method[0],'instructions')): bad.append('IL telemetry count mismatch')
 if len(write_lines)!=2: bad.append('write-site telemetry expected 2 got '+str(len(write_lines)))
 
-# Hotfix2: print one bounded, overlapping window that includes both known write sites.
-# This is verifier-only diagnostics over an already captured log; no KSP/runtime action occurs.
+# Hotfix3: bounded window around both captured write sites. IL index is the first
+# telemetry field after the marker, so parse it from the marker explicitly rather than
+# the generic semicolon-delimited field helper used for later fields.
 if write_lines:
     try:
-        site_indices=sorted(int(field(l,'index')) for l in write_lines)
+        site_indices=sorted(il_index(l) for l in write_lines)
         lo=max(0,site_indices[0]-28)
         hi=min(len(il)-1,site_indices[-1]+16)
         print('[INFO] write_semantics_window=index '+str(lo)+'..'+str(hi))
         for l in il:
-            idx=int(field(l,'index'))
+            idx=il_index(l)
             if lo <= idx <= hi:
                 tag='[IL_WRITE_WINDOW*] ' if idx in site_indices else '[IL_WRITE_WINDOW] '
                 print(tag+l)
