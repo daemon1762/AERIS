@@ -56,6 +56,16 @@ for name in ('Lerp','Clamp','CubicHermite'):
     rows=[l for l in helper_w if 'method='+name+';' in l]
     print('[INFO] helper witness '+name+' rows='+str(len(rows)))
     if len(rows)!=3:bad.append(name+' helper witness count='+str(len(rows)))
+helper_targets=[l for l in section if '[R038][HELPER_TARGET]' in l]
+clone_rows=[l for l in helper_targets if 'method=CubicHermite;' in l]
+print('[INFO] CubicHermite clone target rows='+str(len(clone_rows)))
+if len(clone_rows)!=3:
+    bad.append('CubicHermite clone target count='+str(len(clone_rows)))
+else:
+    for row in clone_rows:
+        if field(row,'invocation_target')!='SHALLOW_CLONE':bad.append('CubicHermite target not SHALLOW_CLONE')
+        if field(row,'live_runtime_object_mutated').lower()!='false':bad.append('CubicHermite live runtime object mutation guard failed')
+        if field(row,'runtime_object_invocation_thread')!='MAIN_THREAD_ONLY':bad.append('CubicHermite clone invocation thread guard failed')
 
 getters=[l for l in section if '[R038][GETTER_IL]' in l]
 expected_getters=(
