@@ -39,7 +39,7 @@ ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainBlockPipeline.cs',
 ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainPreloadCodec.cs',
 ROOT/'Source/AERISFlightControl/Terrain/AERISTerrainGpuTileRenderer.cs']
 before={str(p):sha(p) for p in frozen}
-run([sys.executable,ROOT/'Tools/apply_aeris32_rev3_5_r034_pqslandcontrol_height_path_audit_hotfix2.py'])
+run([sys.executable,ROOT/'Tools/apply_aeris32_rev3_5_r034_pqslandcontrol_height_path_audit_hotfix3.py'])
 run([sys.executable,ROOT/'Tools/verify_aeris32_rev3_5_r034_pqslandcontrol_height_path_audit.py'])
 for p in frozen:
     if sha(p)!=before[str(p)]: raise SystemExit(PREFIX+' frozen terrain source changed '+str(p))
