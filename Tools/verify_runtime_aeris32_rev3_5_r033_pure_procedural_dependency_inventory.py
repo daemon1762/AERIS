@@ -41,6 +41,7 @@ expected={'Minmus':1,'Ike':3,'Gilly':2,'Pol':5}
 body_lines=[l for l in section if '[R033][PTC_PROC_BODY]' in l]
 dep_lines=[l for l in section if '[R033][PTC_PROC_DEP]' in l]
 mods=[l for l in section if '[R033][PTC_PROC_MOD]' in l]
+shape_mismatch=[]
 for body,known in expected.items():
  bl=[l for l in body_lines if 'body='+body+';' in l]
  dl=[l for l in dep_lines if 'body='+body+';' in l]
@@ -48,12 +49,21 @@ for body,known in expected.items():
  if len(dl)!=1:bad.append(body+' dependency summary count='+str(len(dl)));continue
  c=int(field(bl[0],'height_contributors'));m=int(field(dl[0],'methods'));a=int(field(dl[0],'arrays'));av=int(field(dl[0],'array_values'));f=int(field(dl[0],'failures'))
  print('[INFO] '+body+' contributors='+str(c)+' known_r031='+str(known)+' methods='+str(m)+' arrays='+str(a)+' array_values='+str(av)+' failures='+str(f))
- if c!=known:bad.append(body+' contributor shape changed expected '+str(known)+' got '+str(c))
+ if c!=known:
+  bad.append(body+' contributor shape changed expected '+str(known)+' got '+str(c));shape_mismatch.append(body)
  if m<1:bad.append(body+' no method closure')
  if f!=0:bad.append(body+' failures='+str(f))
 for body in expected:
  n=sum(1 for l in mods if 'body='+body+';' in l)
- if n!=expected[body]:bad.append(body+' mod telemetry count expected '+str(expected[body])+' got '+str(n))
+ if n!=expected[body]:
+  bad.append(body+' mod telemetry count expected '+str(expected[body])+' got '+str(n))
+  if body not in shape_mismatch:shape_mismatch.append(body)
 print('[INFO] total_contributors='+field(complete,'contributors')+' methods='+field(complete,'methods')+' arrays='+field(complete,'arrays')+' array_values='+field(complete,'array_values'))
+if shape_mismatch:
+ print('[DIAG] contributor shape mismatch detected; raw latest-session contributor telemetry follows')
+ for body in expected:
+  bodymods=[l for l in mods if 'body='+body+';' in l]
+  print('[DIAG] '+body+' runtime_contributors='+str(len(bodymods))+' known_r031='+str(expected[body]))
+  for l in bodymods:print(l)
 if bad:raise SystemExit(PREFIX+' FAIL: '+', '.join(bad))
 print(PREFIX+' PASS')
