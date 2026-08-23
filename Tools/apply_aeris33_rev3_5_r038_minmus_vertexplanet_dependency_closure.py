@@ -18,16 +18,19 @@ except subprocess.CalledProcessError: raise SystemExit(PREFIX+' observer is not 
 tracked=subprocess.check_output(['git','show','HEAD:'+rel],cwd=str(ROOT),text=True)
 if MARKER not in tracked: raise SystemExit(PREFIX+' observer marker missing from tracked source')
 
-# Materialization hotfix: System.Array.GetValue(int) is rank-1 only. Simplex.grad3 may be
-# multidimensional, so hash arrays through IEnumerable enumeration instead of linear GetValue.
-old='''        static string ArraySha(Array a)\n        {\n            StringBuilder sb=new StringBuilder();\n            for(int i=0;i<a.Length;i++)\n            {\n                object v=a.GetValue(i);\n                sb.Append(v==null?"NULL":FormatValue(v)); sb.Append('\\n');\n            }\n            return Sha256(Encoding.UTF8.GetBytes(sb.ToString()));\n        }\n'''
-new='''        static string ArraySha(Array a)\n        {\n            StringBuilder sb=new StringBuilder();\n            foreach(object v in a)\n            {\n                sb.Append(v==null?"NULL":FormatValue(v)); sb.Append('\\n');\n            }\n            return Sha256(Encoding.UTF8.GetBytes(sb.ToString()));\n        }\n'''
-if old not in tracked: raise SystemExit(PREFIX+' ArraySha tracked anchor missing')
-materialized=tracked.replace(old,new,1)
+# Accepted deterministic source materialization. Keep the tracked audit source reviewable while
+# fixing two runtime/compiler hazards before compilation, and reject every other dirty form.
+old_array='''        static string ArraySha(Array a)\n        {\n            StringBuilder sb=new StringBuilder();\n            for(int i=0;i<a.Length;i++)\n            {\n                object v=a.GetValue(i);\n                sb.Append(v==null?"NULL":FormatValue(v)); sb.Append('\\n');\n            }\n            return Sha256(Encoding.UTF8.GetBytes(sb.ToString()));\n        }\n'''
+new_array='''        static string ArraySha(Array a)\n        {\n            StringBuilder sb=new StringBuilder();\n            foreach(object v in a)\n            {\n                sb.Append(v==null?"NULL":FormatValue(v)); sb.Append('\\n');\n            }\n            return Sha256(Encoding.UTF8.GetBytes(sb.ToString()));\n        }\n'''
+old_invoke='''                object r=selected.Invoke(selected.IsStatic?null:null,args);\n'''
+new_invoke='''                if(!selected.IsStatic) throw new InvalidOperationException("helper expected static "+name);\n                object r=selected.Invoke(null,args);\n'''
+if old_array not in tracked: raise SystemExit(PREFIX+' ArraySha tracked anchor missing')
+if old_invoke not in tracked: raise SystemExit(PREFIX+' helper Invoke tracked anchor missing')
+materialized=tracked.replace(old_array,new_array,1).replace(old_invoke,new_invoke,1)
 current=SOURCE.read_text()
 if current==tracked:
     SOURCE.write_text(materialized)
-    print(PREFIX+' PASS multidimensional-array-safe observer materialized')
+    print(PREFIX+' PASS accepted observer materialized')
 elif current==materialized:
     print(PREFIX+' PASS accepted observer materialization already present')
 else:
