@@ -86,6 +86,19 @@ else:
     print('[INFO] Pol FlattenOcean adapter='+adapter+' supported='+supported)
     if adapter!='FLATTENOCEAN': bad.append('Pol FlattenOcean adapter='+adapter)
     if supported!='true': bad.append('Pol FlattenOcean not supported')
+flat_scalars=[l for l in section if '[R037][FLATTEN]' in l]
+if len(flat_scalars)!=1:
+    bad.append('FlattenOcean scalar telemetry count='+str(len(flat_scalars)))
+else:
+    ocean=field(flat_scalars[0],'oceanRad')
+    radius=field(flat_scalars[0],'sphere_radius')
+    floor=field(flat_scalars[0],'relative_floor_m')
+    fsha=field(flat_scalars[0],'il_sha256')
+    print('[INFO] FlattenOcean oceanRad='+ocean+' sphere_radius='+radius+' relative_floor_m='+floor+' il_sha256='+fsha)
+    if ocean!='44001': bad.append('stock Pol oceanRad expected 44001 got '+ocean)
+    if radius!='44000': bad.append('stock Pol sphere radius expected 44000 got '+radius)
+    if floor!='1': bad.append('stock Pol relative ocean floor expected 1 got '+floor)
+    if fsha!=EXPECTED_IL['PQSMod_FlattenOcean']: bad.append('FlattenOcean scalar IL hash mismatch')
 ils=[l for l in section if '[R037][IL]' in l]
 for typ,sha in EXPECTED_IL.items():
     rows=[l for l in ils if 'type='+typ+';' in l]
