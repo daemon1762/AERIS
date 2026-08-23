@@ -7,18 +7,25 @@ ap=argparse.ArgumentParser();ap.add_argument('log_path');args=ap.parse_args()
 p=Path(args.log_path).expanduser().resolve()
 if not p.is_file(): raise SystemExit(PREFIX+' log missing '+str(p))
 lines=p.read_text(errors='replace').splitlines()
-starts=[i for i,l in enumerate(lines) if '[R036][COMMON_CPU] event=SNAPSHOT_COMPLETE' in l]
-if not starts:
+snapshots=[i for i,l in enumerate(lines) if '[R036][COMMON_CPU] event=SNAPSHOT_COMPLETE' in l]
+if not snapshots:
     fails=[l for l in lines if '[R036][COMMON_CPU_FAIL]' in l or '[R036][IL_FAIL]' in l]
     if fails: print('\n'.join(fails[-50:]))
     raise SystemExit(PREFIX+' FAIL no R036 snapshot event')
-section=lines[starts[-1]:]
+snapshot_index=snapshots[-1]
+completion_indices=[i for i,l in enumerate(lines) if '[R036][COMMON_CPU] event=FORMULA_CLOSURE_WORKER_COMPLETE' in l]
+after=[i for i in completion_indices if i>snapshot_index]
+if not after: raise SystemExit(PREFIX+' FAIL no completion after latest snapshot')
+completion_index=after[0]
+previous=[i for i in completion_indices if i<snapshot_index]
+run_start=(previous[-1]+1) if previous else 0
+section=lines[run_start:completion_index+1]
 fails=[l for l in section if '[R036][COMMON_CPU_FAIL]' in l or '[R036][IL_FAIL]' in l]
 if fails:
     print('\n'.join(fails[-80:])); raise SystemExit(PREFIX+' FAIL runtime failure telemetry present')
 completes=[l for l in section if '[R036][COMMON_CPU] event=FORMULA_CLOSURE_WORKER_COMPLETE' in l]
-if not completes: raise SystemExit(PREFIX+' FAIL no completion after latest snapshot')
-complete=completes[-1]
+if len(completes)!=1: raise SystemExit(PREFIX+' FAIL expected exactly one completion in selected R036 run, got '+str(len(completes)))
+complete=completes[0]
 def field(line,name):
     m=re.search(r'(?:^|; )'+re.escape(name)+r'=([^;]+)',line)
     if not m: raise SystemExit(PREFIX+' FAIL missing '+name+' in '+line)
@@ -67,6 +74,7 @@ for typ in ('PQSMod_VertexPlanet','PQSMod_FlattenOcean','PQSMod_VertexSimplexHei
     rows=[l for l in ils if 'type='+typ+';' in l]
     print('[INFO] '+typ+' il_records='+str(len(rows)))
     if len(rows)<1: bad.append(typ+' IL closure telemetry missing')
+print('[INFO] selected_run_start_line='+str(run_start+1)+' snapshot_line='+str(snapshot_index+1)+' completion_line='+str(completion_index+1))
 print('[INFO] max_primitive_abs_error='+field(complete,'max_primitive_abs_error')+
       ' max_terrain_abs_error_m='+field(complete,'max_terrain_abs_error_m'))
 if bad: raise SystemExit(PREFIX+' FAIL: '+', '.join(bad))
