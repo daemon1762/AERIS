@@ -24,6 +24,15 @@ if not clean_for(SOURCE): raise SystemExit(PREFIX+' tracked observer modified; r
 s=SOURCE.read_text()
 if MARKER not in s: raise SystemExit(PREFIX+' observer marker missing')
 
+# Materialization hotfix: System.Array.GetValue(int) is rank-1 only. Simplex.grad3 may be
+# multidimensional, so hash arrays through IEnumerable enumeration instead of linear GetValue.
+old='''        static string ArraySha(Array a)\n        {\n            StringBuilder sb=new StringBuilder();\n            for(int i=0;i<a.Length;i++)\n            {\n                object v=a.GetValue(i);\n                sb.Append(v==null?"NULL":FormatValue(v)); sb.Append('\\n');\n            }\n            return Sha256(Encoding.UTF8.GetBytes(sb.ToString()));\n        }\n'''
+new='''        static string ArraySha(Array a)\n        {\n            StringBuilder sb=new StringBuilder();\n            foreach(object v in a)\n            {\n                sb.Append(v==null?"NULL":FormatValue(v)); sb.Append('\\n');\n            }\n            return Sha256(Encoding.UTF8.GetBytes(sb.ToString()));\n        }\n'''
+if old not in s: raise SystemExit(PREFIX+' ArraySha hotfix anchor missing')
+s=s.replace(old,new,1)
+SOURCE.write_text(s)
+print(PREFIX+' PASS multidimensional-array-safe observer materialization')
+
 cs=CSPROJ.read_text()
 inc='    <Compile Include="Terrain\\AERISR038PtcMinmusVertexPlanetDependencyClosureObserver.cs" />\n'
 anchor='    <Compile Include="Terrain\\AERISR037PtcPolFlattenOceanExactClosureObserver.cs" />\n'
