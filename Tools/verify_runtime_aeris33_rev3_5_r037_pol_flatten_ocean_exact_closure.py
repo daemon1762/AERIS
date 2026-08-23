@@ -32,7 +32,7 @@ completes=[l for l in section if '[R037][COMMON_CPU] event=POL_FLATTEN_OCEAN_EXA
 if len(completes)!=1: raise SystemExit(PREFIX+' FAIL expected exactly one completion in selected R037 run, got '+str(len(completes)))
 complete=completes[0]
 def field(line,name):
-    m=re.search(r'(?:^|; )'+re.escape(name)+r'=([^;]+)',line)
+    m=re.search(r'(?:^|; |\] )'+re.escape(name)+r'=([^;]+)',line)
     if not m: raise SystemExit(PREFIX+' FAIL missing '+name+' in '+line)
     return m.group(1).strip()
 checks=[
