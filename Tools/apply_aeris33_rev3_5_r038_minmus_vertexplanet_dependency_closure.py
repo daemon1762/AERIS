@@ -11,27 +11,27 @@ MARKER='AERIS33_REV3_5_R038_PTC_MINMUS_VERTEXPLANET_DEPENDENCY_CLOSURE_SHADOW'
 PREFIX='[AERIS33 R038 MINMUS VERTEXPLANET DEPENDENCY CLOSURE APPLY]'
 
 def out(a): return subprocess.check_output([str(x) for x in a],cwd=str(ROOT),text=True).strip()
-def clean_for(path):
-    rel=str(path.relative_to(ROOT))
-    if subprocess.run(['git','diff','--quiet','--',rel],cwd=str(ROOT)).returncode!=0:return False
-    if subprocess.run(['git','diff','--cached','--quiet','--',rel],cwd=str(ROOT)).returncode!=0:return False
-    return True
-
 if not SOURCE.is_file(): raise SystemExit(PREFIX+' tracked observer missing')
-try: out(['git','ls-files','--error-unmatch',str(SOURCE.relative_to(ROOT))])
+rel=str(SOURCE.relative_to(ROOT))
+try: out(['git','ls-files','--error-unmatch',rel])
 except subprocess.CalledProcessError: raise SystemExit(PREFIX+' observer is not tracked')
-if not clean_for(SOURCE): raise SystemExit(PREFIX+' tracked observer modified; refusing materialization')
-s=SOURCE.read_text()
-if MARKER not in s: raise SystemExit(PREFIX+' observer marker missing')
+tracked=subprocess.check_output(['git','show','HEAD:'+rel],cwd=str(ROOT),text=True)
+if MARKER not in tracked: raise SystemExit(PREFIX+' observer marker missing from tracked source')
 
 # Materialization hotfix: System.Array.GetValue(int) is rank-1 only. Simplex.grad3 may be
 # multidimensional, so hash arrays through IEnumerable enumeration instead of linear GetValue.
 old='''        static string ArraySha(Array a)\n        {\n            StringBuilder sb=new StringBuilder();\n            for(int i=0;i<a.Length;i++)\n            {\n                object v=a.GetValue(i);\n                sb.Append(v==null?"NULL":FormatValue(v)); sb.Append('\\n');\n            }\n            return Sha256(Encoding.UTF8.GetBytes(sb.ToString()));\n        }\n'''
 new='''        static string ArraySha(Array a)\n        {\n            StringBuilder sb=new StringBuilder();\n            foreach(object v in a)\n            {\n                sb.Append(v==null?"NULL":FormatValue(v)); sb.Append('\\n');\n            }\n            return Sha256(Encoding.UTF8.GetBytes(sb.ToString()));\n        }\n'''
-if old not in s: raise SystemExit(PREFIX+' ArraySha hotfix anchor missing')
-s=s.replace(old,new,1)
-SOURCE.write_text(s)
-print(PREFIX+' PASS multidimensional-array-safe observer materialization')
+if old not in tracked: raise SystemExit(PREFIX+' ArraySha tracked anchor missing')
+materialized=tracked.replace(old,new,1)
+current=SOURCE.read_text()
+if current==tracked:
+    SOURCE.write_text(materialized)
+    print(PREFIX+' PASS multidimensional-array-safe observer materialized')
+elif current==materialized:
+    print(PREFIX+' PASS accepted observer materialization already present')
+else:
+    raise SystemExit(PREFIX+' observer differs from both tracked and accepted materialized forms; refusing')
 
 cs=CSPROJ.read_text()
 inc='    <Compile Include="Terrain\\AERISR038PtcMinmusVertexPlanetDependencyClosureObserver.cs" />\n'
