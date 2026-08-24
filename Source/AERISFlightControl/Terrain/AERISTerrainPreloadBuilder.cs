@@ -83,6 +83,14 @@ namespace AERISFlightControl.Terrain
             internal string BodyName = string.Empty;
         }
 
+        sealed class DurableCoastlineCommitMarker
+        {
+            internal BodyPlan Plan;
+            internal string StableId = string.Empty;
+            internal string EnvironmentHash = string.Empty;
+            internal long PlanGeneration;
+        }
+
         sealed class PendingEncodeWork
         {
             internal BodyPlan Plan;
@@ -92,6 +100,7 @@ namespace AERISFlightControl.Terrain
             internal string GameDataHash = string.Empty;
             internal long PlanGeneration;
             internal long DatabaseGeneration;
+            internal bool DurableCoastlineCommit;
             internal int Attempts;
         }
 
@@ -102,6 +111,10 @@ namespace AERISFlightControl.Terrain
             internal float FirstQueuedRealtime;
             internal readonly Dictionary<string, AERISTerrainPreloadEncodedTile> Tiles =
                 new Dictionary<string, AERISTerrainPreloadEncodedTile>(StringComparer.Ordinal);
+            internal readonly Dictionary<string, DurableCoastlineCommitMarker>
+                CoastlineCommitMarkers =
+                new Dictionary<string, DurableCoastlineCommitMarker>(
+                    StringComparer.Ordinal);
         }
 
         sealed class ChunkWritePayload
@@ -111,6 +124,8 @@ namespace AERISFlightControl.Terrain
             internal AERISTerrainPreloadEncodedTile[] Tiles =
                 new AERISTerrainPreloadEncodedTile[0];
             internal string[] StableIds = new string[0];
+            internal DurableCoastlineCommitMarker[] CoastlineCommitMarkers =
+                new DurableCoastlineCommitMarker[0];
             internal PendingChunkBatch[] SourceBatches =
                 new PendingChunkBatch[0];
         }
@@ -942,7 +957,8 @@ namespace AERISFlightControl.Terrain
             };
         }
 
-        void CommitGeneratedTile(BodyPlan plan, AERISTerrainHeightTile tile, bool final)
+        void CommitGeneratedTile(BodyPlan plan, AERISTerrainHeightTile tile,
+            bool final, bool durableCoastlineCommit = false)
         {
             if (tile == null || plan == null) return;
             if (!final)
@@ -959,7 +975,8 @@ namespace AERISFlightControl.Terrain
                 PqsHash = plan.EnvironmentHash,
                 GameDataHash = CurrentGameDataHash(),
                 PlanGeneration = plan.Generation,
-                DatabaseGeneration = database.DatabaseGeneration
+                DatabaseGeneration = database.DatabaseGeneration,
+                DurableCoastlineCommit = durableCoastlineCommit
             };
             lock (sync)
             {
@@ -1286,12 +1303,11 @@ namespace AERISFlightControl.Terrain
             upgraded.Source = AERISTerrainTileSource.PreloadBuilderGenerated;
             upgraded.SamplingComplete = true;
             upgraded.IsPreview = false;
-            CommitGeneratedTile(plan, upgraded, true);
-            MarkCoastlineTileProcessed(plan, id);
+            CommitGeneratedTile(plan, upgraded, true, true);
             plan.CoastlineScannedWithoutUpgrade = 0L;
             stateDirty = true;
             AERISLogger.Info("[PRELOAD_COAST_HD] body=" + plan.BodyName +
-                "; event=READY; tile=" + id + "; resolution=" +
+                "; event=GENERATED; tile=" + id + "; resolution=" +
                 AERISTerrainCoastlineExtractor.HighDensityResolution +
                 "; segments=" + (segments == null ? 0 : segments.Length / 4) +
                 "; mask=" + hdCount);
@@ -1455,6 +1471,55 @@ namespace AERISFlightControl.Terrain
                     pendingChunkBatches[chunkId] = batch;
                 }
                 batch.Tiles[work.StableId] = encoded.CloneImmutable();
+                DurableCoastlineCommitMarker marker =
+                    CreateDurableCoastlineCommitMarker(work);
+                if (marker != null)
+                    batch.CoastlineCommitMarkers[work.StableId] = marker;
+                else
+                    batch.CoastlineCommitMarkers.Remove(work.StableId);
+            }
+        }
+
+        static DurableCoastlineCommitMarker CreateDurableCoastlineCommitMarker(
+            PendingEncodeWork work)
+        {
+            if (work == null || !work.DurableCoastlineCommit ||
+                work.Plan == null || string.IsNullOrEmpty(work.StableId))
+                return null;
+            return new DurableCoastlineCommitMarker
+            {
+                Plan = work.Plan,
+                StableId = work.StableId,
+                EnvironmentHash = work.PqsHash ?? string.Empty,
+                PlanGeneration = work.PlanGeneration
+            };
+        }
+
+        void CommitDurableCoastlineMarkers(
+            IList<DurableCoastlineCommitMarker> markers)
+        {
+            if (markers == null || markers.Count == 0) return;
+            for (int i = 0; i < markers.Count; i++)
+            {
+                DurableCoastlineCommitMarker marker = markers[i];
+                if (marker == null || marker.Plan == null ||
+                    string.IsNullOrEmpty(marker.StableId)) continue;
+                bool newlyProcessed = false;
+                lock (sync)
+                {
+                    BodyPlan plan = marker.Plan;
+                    if (plan.Generation != marker.PlanGeneration ||
+                        !string.Equals(plan.EnvironmentHash,
+                            marker.EnvironmentHash, StringComparison.Ordinal))
+                        continue;
+                    newlyProcessed =
+                        plan.CoastlineProcessedTileIds.Add(marker.StableId);
+                    if (newlyProcessed) stateDirty = true;
+                }
+                if (newlyProcessed)
+                    AERISLogger.Info("[PRELOAD_COAST_HD] body=" +
+                        marker.Plan.BodyName + "; event=DURABLE; tile=" +
+                        marker.StableId);
             }
         }
 
@@ -1501,6 +1566,8 @@ namespace AERISFlightControl.Terrain
             var tiles = new List<AERISTerrainPreloadEncodedTile>();
             var ids = new List<string>();
             var chunkIds = new List<string>();
+            var coastlineCommits =
+                new List<DurableCoastlineCommitMarker>();
             for (int i = 0; i < batches.Count; i++)
             {
                 PendingChunkBatch batch = batches[i];
@@ -1511,6 +1578,10 @@ namespace AERISFlightControl.Terrain
                 {
                     ids.Add(pair.Key);
                     tiles.Add(pair.Value);
+                    DurableCoastlineCommitMarker marker;
+                    if (batch.CoastlineCommitMarkers.TryGetValue(
+                            pair.Key, out marker) && marker != null)
+                        coastlineCommits.Add(marker);
                 }
             }
             if (tiles.Count == 0)
@@ -1526,6 +1597,7 @@ namespace AERISFlightControl.Terrain
                 ChunkIds = chunkIds.ToArray(),
                 Tiles = tiles.ToArray(),
                 StableIds = ids.ToArray(),
+                CoastlineCommitMarkers = coastlineCommits.ToArray(),
                 SourceBatches = new List<PendingChunkBatch>(batches).ToArray()
             };
             Stopwatch queuedAt = Stopwatch.StartNew();
@@ -1554,6 +1626,8 @@ namespace AERISFlightControl.Terrain
                         lock (sync)
                             for (int i = 0; i < payload.StableIds.Length; i++)
                                 pendingWrites.Remove(payload.StableIds[i]);
+                        CommitDurableCoastlineMarkers(
+                            payload.CoastlineCommitMarkers);
                         long bytes = (long)result[1];
                         double ratio = (double)result[2];
                         double seconds = Math.Max(0.000001, (double)result[3]);
@@ -1625,7 +1699,16 @@ namespace AERISFlightControl.Terrain
                         continue;
                     }
                     foreach (KeyValuePair<string, AERISTerrainPreloadEncodedTile>
-                        pair in batch.Tiles) existing.Tiles[pair.Key] = pair.Value;
+                        pair in batch.Tiles)
+                    {
+                        existing.Tiles[pair.Key] = pair.Value;
+                        DurableCoastlineCommitMarker marker;
+                        if (batch.CoastlineCommitMarkers.TryGetValue(
+                                pair.Key, out marker) && marker != null)
+                            existing.CoastlineCommitMarkers[pair.Key] = marker;
+                        else
+                            existing.CoastlineCommitMarkers.Remove(pair.Key);
+                    }
                     existing.FirstQueuedRealtime = Math.Min(
                         existing.FirstQueuedRealtime, batch.FirstQueuedRealtime);
                 }
@@ -2722,6 +2805,8 @@ namespace AERISFlightControl.Terrain
         {
             var encoded = new List<AERISTerrainPreloadEncodedTile>();
             var stableIds = new List<string>();
+            var coastlineCommits =
+                new List<DurableCoastlineCommitMarker>();
             var encodeWork = new List<PendingEncodeWork>();
             var batches = new List<PendingChunkBatch>();
             lock (sync)
@@ -2741,6 +2826,9 @@ namespace AERISFlightControl.Terrain
                         work.PqsHash, work.GameDataHash, work.DatabaseGeneration,
                         AERISTerrainCodecId.Deflate));
                     stableIds.Add(work.StableId);
+                    DurableCoastlineCommitMarker marker =
+                        CreateDurableCoastlineCommitMarker(work);
+                    if (marker != null) coastlineCommits.Add(marker);
                 }
                 catch { failedSinceStart++; }
             }
@@ -2753,6 +2841,10 @@ namespace AERISFlightControl.Terrain
                 {
                     stableIds.Add(pair.Key);
                     encoded.Add(pair.Value);
+                    DurableCoastlineCommitMarker marker;
+                    if (batch.CoastlineCommitMarkers.TryGetValue(
+                            pair.Key, out marker) && marker != null)
+                        coastlineCommits.Add(marker);
                 }
             }
             if (encoded.Count == 0) return;
@@ -2764,7 +2856,11 @@ namespace AERISFlightControl.Terrain
             lock (sync)
                 for (int i = 0; i < stableIds.Count; i++)
                     pendingWrites.Remove(stableIds[i]);
-            if (ok) completedSinceStart += encoded.Count;
+            if (ok)
+            {
+                CommitDurableCoastlineMarkers(coastlineCommits);
+                completedSinceStart += encoded.Count;
+            }
             else failedSinceStart += encoded.Count;
         }
     }
