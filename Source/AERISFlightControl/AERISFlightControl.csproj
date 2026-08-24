@@ -135,6 +135,7 @@
     <Compile Include="Terrain\AERISR039PtcMinmusLibNoiseStaticClosureObserver.cs" />
     <Compile Include="Terrain\AERISR039PtcMinmusPureCpuExact.cs" />
     <Compile Include="Terrain\AERISR039PtcMinmusPureCpuExactValidationObserver.cs" />
+    <Compile Include="Terrain\AERISR040PtcCoordinateConventionCertificationObserver.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadCodec.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadDatabase.cs" />
     <Compile Include="Terrain\AERISTerrainBlockPipeline.cs" />
