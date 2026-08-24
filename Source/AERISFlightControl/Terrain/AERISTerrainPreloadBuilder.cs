@@ -189,6 +189,8 @@ namespace AERISFlightControl.Terrain
         const int StandardEncodeCommitCeiling = 32;
         const int CoastlineScanBatchSize = 8;
         const int CoastlineSamplingActiveLimit = 2;
+        const int PreloadStateVersion = 5;
+        const int LegacyPreloadStateVersion = 4;
 
         long encodeAdmissionBackpressure;
         long writeAdmissionBackpressure;
@@ -2443,6 +2445,8 @@ namespace AERISFlightControl.Terrain
             var loaded = new Dictionary<string, BodyPlan>(
                 StringComparer.OrdinalIgnoreCase);
             AERISTerrainPreloadMode loadedMode;
+            string loadedAppliedPointSetSignature = string.Empty;
+            bool loadedLegacyState = false;
             try
             {
                 using (var stream = new FileStream(path, FileMode.Open,
@@ -2453,10 +2457,15 @@ namespace AERISFlightControl.Terrain
                     if (!string.Equals(magic, AERISTerrainPreloadFormat.StateMagic,
                         StringComparison.Ordinal)) return false;
                     int version = reader.ReadInt32();
-                    if (version != 4) return false;
+                    if (version != PreloadStateVersion &&
+                        version != LegacyPreloadStateVersion)
+                        return false;
+                    loadedLegacyState = version == LegacyPreloadStateVersion;
                     loadedMode = (AERISTerrainPreloadMode)reader.ReadInt32();
                     if (!Enum.IsDefined(typeof(AERISTerrainPreloadMode), loadedMode))
                         loadedMode = AERISTerrainPreloadMode.AggressiveIdle;
+                    if (version >= PreloadStateVersion)
+                        loadedAppliedPointSetSignature = reader.ReadString();
                     int count = reader.ReadInt32();
                     if (count < 0 || count > 10000) return false;
                     for (int i = 0; i < count; i++)
@@ -2521,6 +2530,10 @@ namespace AERISFlightControl.Terrain
                 mode = settings == null || settings.TerrainPreloadEnabled ?
                     AERISTerrainPreloadMode.AggressiveIdle : AERISTerrainPreloadMode.Off;
                 speedProfile = AERISTerrainPreloadSpeedProfile.Balanced;
+                appliedPointSetSignature =
+                    loadedAppliedPointSetSignature ?? string.Empty;
+                if (loadedLegacyState)
+                    stateDirty = true;
             }
             return true;
         }
@@ -2532,12 +2545,14 @@ namespace AERISFlightControl.Terrain
             AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
             if (runtime == null) return;
             nextStateSaveRealtime = now + 5f;
-            List<BodyPlan> snapshot = CaptureStateSnapshot();
+            string snapshotAppliedPointSetSignature;
+            List<BodyPlan> snapshot = CaptureStateSnapshot(
+                out snapshotAppliedPointSetSignature);
             AERISTerrainPreloadMode snapshotMode = mode;
             bool accepted = runtime.Scheduler.SubmitLatest(
                 AERISRuntimeLane.ArchiveCompression, "preload-state-save",
                 runtime.CaptureStamp(), context => WriteStateSnapshot(snapshot,
-                    snapshotMode), value =>
+                    snapshotMode, snapshotAppliedPointSetSignature), value =>
                 {
                     bool ok = value is bool && (bool)value;
                     if (!ok) stateDirty = true;
@@ -2545,10 +2560,14 @@ namespace AERISFlightControl.Terrain
             if (accepted) stateDirty = false;
         }
 
-        List<BodyPlan> CaptureStateSnapshot()
+        List<BodyPlan> CaptureStateSnapshot(
+            out string snapshotAppliedPointSetSignature)
         {
             var snapshot = new List<BodyPlan>();
             lock (sync)
+            {
+                snapshotAppliedPointSetSignature =
+                    appliedPointSetSignature ?? string.Empty;
                 foreach (BodyPlan plan in plans.Values)
                     snapshot.Add(new BodyPlan
                     {
@@ -2577,11 +2596,13 @@ namespace AERISFlightControl.Terrain
                         CompletedCoastlineEnvironmentHash =
                             plan.CompletedCoastlineEnvironmentHash
                     });
+            }
             return snapshot;
         }
 
         bool WriteStateSnapshot(IList<BodyPlan> snapshot,
-            AERISTerrainPreloadMode snapshotMode)
+            AERISTerrainPreloadMode snapshotMode,
+            string snapshotAppliedPointSetSignature)
         {
             try
             {
@@ -2591,8 +2612,10 @@ namespace AERISFlightControl.Terrain
                 using (var writer = new BinaryWriter(stream))
                 {
                     writer.Write(AERISTerrainPreloadFormat.StateMagic);
-                    writer.Write(4);
+                    writer.Write(PreloadStateVersion);
                     writer.Write((int)snapshotMode);
+                    writer.Write(snapshotAppliedPointSetSignature ??
+                        string.Empty);
                     writer.Write(snapshot == null ? 0 : snapshot.Count);
                     if (snapshot != null)
                     {
@@ -2687,7 +2710,11 @@ namespace AERISFlightControl.Terrain
             FlushPendingBatchesSynchronously();
             // Final shutdown checkpoint is intentionally synchronous: Flight control is no
             // longer active and losing builder progress is worse than a bounded close flush.
-            WriteStateSnapshot(CaptureStateSnapshot(), mode);
+            string finalAppliedPointSetSignature;
+            List<BodyPlan> finalSnapshot = CaptureStateSnapshot(
+                out finalAppliedPointSetSignature);
+            WriteStateSnapshot(finalSnapshot, mode,
+                finalAppliedPointSetSignature);
             disposed = true;
         }
 
