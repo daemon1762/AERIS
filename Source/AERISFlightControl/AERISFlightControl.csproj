@@ -130,6 +130,11 @@
     <Compile Include="Terrain\AERISPredictiveForwardCorridor.cs" />
     <Compile Include="Terrain\AERISTerrainTileCache.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadContracts.cs" />
+    <Compile Include="Terrain\AERISR039PtcMinmusVertexPlanetIlBasicBlockObserver.cs" />
+    <Compile Include="Terrain\AERISR039PtcMinmusPrimitiveDeepClosureObserver.cs" />
+    <Compile Include="Terrain\AERISR039PtcMinmusLibNoiseStaticClosureObserver.cs" />
+    <Compile Include="Terrain\AERISR039PtcMinmusPureCpuExact.cs" />
+    <Compile Include="Terrain\AERISR039PtcMinmusPureCpuExactValidationObserver.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadCodec.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadDatabase.cs" />
     <Compile Include="Terrain\AERISTerrainBlockPipeline.cs" />
