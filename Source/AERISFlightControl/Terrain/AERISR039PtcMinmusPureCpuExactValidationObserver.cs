@@ -40,6 +40,77 @@ namespace AERISFlightControl.Terrain
         const double PrimitiveTolerance = 1E-12;
         const double TerrainToleranceMeters = 1E-08;
 
+        // AERIS36 R040B Phase 1A:
+        // main-thread-only bridge from the accepted R039 runtime snapshot
+        // machinery into the production block pipeline. The returned object
+        // contains copied primitive arrays/scalars only.
+        internal static bool TryCreateR040BProductionSnapshot(
+            CelestialBody body,
+            out AERISR039MinmusPureCpuExact.VertexPlanetSnapshot snapshot,
+            out string failure)
+        {
+            snapshot = null;
+            failure = string.Empty;
+
+            try
+            {
+                if (body == null)
+                {
+                    failure = "BODY_NULL";
+                    return false;
+                }
+
+                if (!string.Equals(
+                    body.name,
+                    "Minmus",
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    failure = "UNSUPPORTED_BODY:" + (body.name ?? string.Empty);
+                    return false;
+                }
+
+                object pqs = RequireMember(body, "pqsController");
+                object vertexPlanet = FindMod(pqs, "PQSMod_VertexPlanet");
+
+                if (vertexPlanet == null)
+                {
+                    failure = "VERTEXPLANET_NOT_FOUND";
+                    return false;
+                }
+
+                string mainIlSha =
+                    HashVertexPlanetMainIl(vertexPlanet.GetType());
+
+                if (!string.Equals(
+                    mainIlSha,
+                    ExpectedMainIlSha256,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    failure =
+                        "VERTEXPLANET_MAIN_IL_SHA_MISMATCH:" + mainIlSha;
+                    return false;
+                }
+
+                snapshot = BuildSnapshot(vertexPlanet);
+
+                if (snapshot == null)
+                {
+                    failure = "SNAPSHOT_NULL";
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                snapshot = null;
+                failure =
+                    ex.GetType().Name + ":" +
+                    (ex.Message ?? string.Empty);
+                return false;
+            }
+        }
+
         sealed class HelperWitness
         {
             internal readonly string Method;

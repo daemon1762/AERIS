@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Threading;
 using UnityEngine;
 using AERISFlightControl.Performance;
+using AERISFlightControl.Logging;
 
 namespace AERISFlightControl.Terrain
 {
@@ -39,6 +40,22 @@ namespace AERISFlightControl.Terrain
             internal int Valid;
             internal float Minimum;
             internal float Maximum;
+
+            // R040B shadow payload: primitives/scalars only.
+            internal double[] AuthorityExact;
+            internal AERISR039MinmusPureCpuExact.VertexPlanetSnapshot
+                R040BMinmusSnapshot;
+            internal int Resolution;
+            internal double SouthLatitudeDeg;
+            internal double NorthLatitudeDeg;
+            internal double WestLongitudeDeg;
+            internal double EastLongitudeDeg;
+            internal int R040BMainThreadId;
+            internal int R040BWorkerThreadId;
+            internal int R040BShadowSamples;
+            internal int R040BShadowFailures;
+            internal double R040BShadowMaxErrorMeters;
+            internal string R040BShadowError;
         }
 
         struct BoundarySampleKey : IEquatable<BoundarySampleKey>
@@ -84,6 +101,8 @@ namespace AERISFlightControl.Terrain
         struct BoundarySampleValue
         {
             internal float Elevation;
+            // Preserve the original PQS double for R040B exactness comparison.
+            internal double AuthorityExactElevation;
             internal byte Flag;
             internal long Sequence;
         }
@@ -112,7 +131,17 @@ namespace AERISFlightControl.Terrain
             internal BlockDefinition SamplingBlock;
             internal float[] SamplingElevation;
             internal byte[] SamplingFlags;
+            internal double[] SamplingAuthorityExact;
             internal int SamplingIndex;
+
+            internal AERISR039MinmusPureCpuExact.VertexPlanetSnapshot
+                R040BMinmusSnapshot;
+            internal int R040BShadowSamples;
+            internal int R040BShadowFailures;
+            internal double R040BShadowMaxErrorMeters;
+            internal bool R040BAllWorkersOffMainThread = true;
+            internal string R040BShadowError = string.Empty;
+
             internal int Valid;
             internal float Minimum = float.PositiveInfinity;
             internal float Maximum = float.NegativeInfinity;
@@ -135,6 +164,10 @@ namespace AERISFlightControl.Terrain
         const int StandardPreloadActiveTiles = 64;
         const int StandardOutstandingBlocks = 96;
         const int MaximumBoundarySamples = 131072;
+
+        // R040B Phase 1A is certification/shadow only.
+        const double R040BShadowToleranceMeters = 1E-08;
+
         volatile bool standardPreloadThroughput;
         int roundRobinIndex;
         float sampleTokens;
@@ -154,9 +187,20 @@ namespace AERISFlightControl.Terrain
         int lastRecoveryTiles;
         string lastRecoveryReason = string.Empty;
 
+        readonly int r040bMainThreadId;
+        bool r040bMinmusSnapshotAttempted;
+        AERISR039MinmusPureCpuExact.VertexPlanetSnapshot r040bMinmusSnapshot;
+        string r040bMinmusSnapshotFailure = string.Empty;
+
+        long r040bShadowTiles;
+        long r040bShadowSamples;
+        long r040bShadowFailures;
+        double r040bShadowMaxErrorMeters;
+
         internal AERISTerrainBlockPipeline(AERISTerrainPerformanceController performance)
         {
             this.performance = performance;
+            r040bMainThreadId = Thread.CurrentThread.ManagedThreadId;
         }
 
         internal int Count { get { lock (sync) return states.Count; } }
@@ -221,6 +265,10 @@ namespace AERISFlightControl.Terrain
             Action<AERISTerrainTileRequest, AERISTerrainHeightTile, bool> commit)
         {
             if (disposed || body == null || request == null || commit == null) return false;
+
+            AERISR039MinmusPureCpuExact.VertexPlanetSnapshot r040bSnapshot = null;
+            TryGetR040BMinmusSnapshot(body, out r040bSnapshot);
+
             string id = WorkId(request);
             lock (sync)
             {
@@ -259,6 +307,7 @@ namespace AERISFlightControl.Terrain
                     Elevation = new float[count],
                     Flags = new byte[count],
                     Blocks = BuildBlocks(request.Resolution),
+                    R040BMinmusSnapshot = r040bSnapshot,
                     IsCurrent = isCurrent,
                     Commit = commit
                 };
@@ -266,6 +315,81 @@ namespace AERISFlightControl.Terrain
                 roundRobin.Add(state);
                 return true;
             }
+        }
+
+        bool TryGetR040BMinmusSnapshot(
+            CelestialBody body,
+            out AERISR039MinmusPureCpuExact.VertexPlanetSnapshot snapshot)
+        {
+            snapshot = null;
+
+            if (body == null ||
+                !string.Equals(
+                    body.name,
+                    "Minmus",
+                    StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (r040bMinmusSnapshotAttempted)
+            {
+                snapshot = r040bMinmusSnapshot;
+                return snapshot != null;
+            }
+
+            r040bMinmusSnapshotAttempted = true;
+
+            if (Thread.CurrentThread.ManagedThreadId != r040bMainThreadId)
+            {
+                r040bMinmusSnapshotFailure = "SNAPSHOT_CAPTURE_NOT_MAIN_THREAD";
+
+                AERISLogger.Warn(
+                    "[R040B][MINMUS_SNAPSHOT_FAIL]" +
+                    "; reason=" + r040bMinmusSnapshotFailure +
+                    "; producer_switch=false" +
+                    "; db_authority=PQS" +
+                    "; worker_runtime_object_access=false");
+
+                return false;
+            }
+
+            string failure;
+            AERISR039MinmusPureCpuExact.VertexPlanetSnapshot captured;
+
+            if (!AERISR039PtcMinmusPureCpuExactValidationObserver.
+                TryCreateR040BProductionSnapshot(
+                    body,
+                    out captured,
+                    out failure))
+            {
+                r040bMinmusSnapshotFailure =
+                    string.IsNullOrEmpty(failure) ?
+                    "UNKNOWN_CAPTURE_FAILURE" : failure;
+
+                AERISLogger.Warn(
+                    "[R040B][MINMUS_SNAPSHOT_FAIL]" +
+                    "; reason=" + r040bMinmusSnapshotFailure +
+                    "; producer_switch=false" +
+                    "; db_authority=PQS" +
+                    "; worker_runtime_object_access=false");
+
+                return false;
+            }
+
+            r040bMinmusSnapshot = captured;
+            r040bMinmusSnapshotFailure = string.Empty;
+            snapshot = captured;
+
+            AERISLogger.Info(
+                "[R040B][MINMUS_SNAPSHOT]" +
+                "; pass=true" +
+                "; main_thread_id=" + r040bMainThreadId +
+                "; payload=PRIMITIVES_ONLY" +
+                "; terrain_tolerance_m=1E-08" +
+                "; producer_switch=false" +
+                "; db_authority=PQS" +
+                "; worker_runtime_object_access=false");
+
+            return true;
         }
 
         // A viewport/range replan must refresh matching in-progress work even when the
@@ -429,8 +553,15 @@ namespace AERISFlightControl.Terrain
         void BeginBlock(TileState state, BlockDefinition block)
         {
             state.SamplingBlock = block;
-            state.SamplingElevation = new float[block.Width * block.Height];
-            state.SamplingFlags = new byte[block.Width * block.Height];
+
+            int count = block.Width * block.Height;
+            state.SamplingElevation = new float[count];
+            state.SamplingFlags = new byte[count];
+
+            state.SamplingAuthorityExact =
+                state.R040BMinmusSnapshot == null ?
+                null : new double[count];
+
             state.SamplingIndex = 0;
         }
 
@@ -462,6 +593,11 @@ namespace AERISFlightControl.Terrain
                     boundarySampleCacheHits++;
                     state.SamplingElevation[local] = cached.Elevation;
                     state.SamplingFlags[local] = cached.Flag;
+
+                    if (state.SamplingAuthorityExact != null)
+                        state.SamplingAuthorityExact[local] =
+                            cached.AuthorityExactElevation;
+
                     state.SamplingIndex++;
                     return false;
                 }
@@ -475,7 +611,16 @@ namespace AERISFlightControl.Terrain
                 byte flag = state.Body.ocean && elevation <= 1.0 ? (byte)2 : (byte)1;
                 state.SamplingElevation[local] = storedElevation;
                 state.SamplingFlags[local] = flag;
-                if (boundary) PutBoundarySample(cacheKey, storedElevation, flag);
+
+                if (state.SamplingAuthorityExact != null)
+                    state.SamplingAuthorityExact[local] = elevation;
+
+                if (boundary)
+                    PutBoundarySample(
+                        cacheKey,
+                        storedElevation,
+                        elevation,
+                        flag);
             }
             state.SamplingIndex++;
             return true;
@@ -498,7 +643,11 @@ namespace AERISFlightControl.Terrain
             };
         }
 
-        void PutBoundarySample(BoundarySampleKey key, float elevation, byte flag)
+        void PutBoundarySample(
+            BoundarySampleKey key,
+            float elevation,
+            double authorityExactElevation,
+            byte flag)
         {
             BoundarySampleValue existing;
             if (boundarySamples.TryGetValue(key, out existing)) return;
@@ -506,6 +655,7 @@ namespace AERISFlightControl.Terrain
             boundarySamples[key] = new BoundarySampleValue
             {
                 Elevation = elevation,
+                AuthorityExactElevation = authorityExactElevation,
                 Flag = flag,
                 Sequence = sequence
             };
@@ -544,7 +694,17 @@ namespace AERISFlightControl.Terrain
                 Width = definition.Width,
                 Height = definition.Height,
                 Elevation = state.SamplingElevation,
-                Flags = state.SamplingFlags
+                Flags = state.SamplingFlags,
+
+                AuthorityExact = state.SamplingAuthorityExact,
+                R040BMinmusSnapshot = state.R040BMinmusSnapshot,
+
+                Resolution = state.Request.Resolution,
+                SouthLatitudeDeg = state.Request.SouthLatitudeDeg,
+                NorthLatitudeDeg = state.Request.NorthLatitudeDeg,
+                WestLongitudeDeg = state.Request.WestLongitudeDeg,
+                EastLongitudeDeg = state.Request.EastLongitudeDeg,
+                R040BMainThreadId = r040bMainThreadId
             };
             Interlocked.Increment(ref state.PendingBlocks);
 
@@ -592,6 +752,7 @@ namespace AERISFlightControl.Terrain
             state.SamplingBlock = null;
             state.SamplingElevation = null;
             state.SamplingFlags = null;
+            state.SamplingAuthorityExact = null;
             state.SamplingIndex = 0;
             return true;
         }
@@ -669,8 +830,134 @@ namespace AERISFlightControl.Terrain
             return removed;
         }
 
+        static void ProcessR040BMinmusShadow(BlockPayload block)
+        {
+            if (block == null ||
+                block.R040BMinmusSnapshot == null ||
+                block.AuthorityExact == null)
+                return;
+
+            block.R040BWorkerThreadId =
+                Thread.CurrentThread.ManagedThreadId;
+
+            try
+            {
+                if (block.Elevation == null ||
+                    block.Flags == null ||
+                    block.AuthorityExact.Length != block.Elevation.Length ||
+                    block.Flags.Length != block.Elevation.Length)
+                {
+                    block.R040BShadowFailures = 1;
+                    block.R040BShadowMaxErrorMeters =
+                        double.PositiveInfinity;
+                    block.R040BShadowError =
+                        "SHADOW_ARRAY_LENGTH_MISMATCH";
+                    return;
+                }
+
+                for (int local = 0;
+                    local < block.AuthorityExact.Length;
+                    local++)
+                {
+                    if (block.Flags[local] == 0)
+                        continue;
+
+                    int localX = local % block.Width;
+                    int localY = local / block.Width;
+
+                    int x = block.X0 + localX;
+                    int y = block.Y0 + localY;
+
+                    double denominator =
+                        Math.Max(1, block.Resolution - 1);
+
+                    double u = x / denominator;
+                    double v = y / denominator;
+
+                    double latitude =
+                        block.SouthLatitudeDeg +
+                        (block.NorthLatitudeDeg -
+                            block.SouthLatitudeDeg) * v;
+
+                    double longitude =
+                        InterpolateLongitude(
+                            block.WestLongitudeDeg,
+                            block.EastLongitudeDeg,
+                            u);
+
+                    double latitudeRad =
+                        latitude * Math.PI / 180.0;
+
+                    double longitudeRad =
+                        longitude * Math.PI / 180.0;
+
+                    double cosineLatitude =
+                        Math.Cos(latitudeRad);
+
+                    // R040 certified body-relative convention:
+                    // X = cos(lat) * cos(lon)
+                    // Y = sin(lat)
+                    // Z = cos(lat) * sin(lon)
+                    double px =
+                        cosineLatitude * Math.Cos(longitudeRad);
+
+                    double py =
+                        Math.Sin(latitudeRad);
+
+                    double pz =
+                        cosineLatitude * Math.Sin(longitudeRad);
+
+                    double actual =
+                        AERISR039MinmusPureCpuExact.EvaluateVertexPlanet(
+                            block.R040BMinmusSnapshot,
+                            px,
+                            py,
+                            pz,
+                            0.0);
+
+                    double expected =
+                        block.AuthorityExact[local];
+
+                    block.R040BShadowSamples++;
+
+                    if (double.IsNaN(actual) ||
+                        double.IsInfinity(actual) ||
+                        double.IsNaN(expected) ||
+                        double.IsInfinity(expected))
+                    {
+                        block.R040BShadowFailures++;
+                        block.R040BShadowMaxErrorMeters =
+                            double.PositiveInfinity;
+                        continue;
+                    }
+
+                    double error =
+                        Math.Abs(actual - expected);
+
+                    block.R040BShadowMaxErrorMeters =
+                        Math.Max(
+                            block.R040BShadowMaxErrorMeters,
+                            error);
+
+                    if (error > R040BShadowToleranceMeters)
+                        block.R040BShadowFailures++;
+                }
+            }
+            catch (Exception ex)
+            {
+                block.R040BShadowFailures++;
+                block.R040BShadowMaxErrorMeters =
+                    double.PositiveInfinity;
+                block.R040BShadowError =
+                    ex.GetType().Name + ":" +
+                    (ex.Message ?? string.Empty);
+            }
+        }
+
         static void ProcessBlock(BlockPayload block)
         {
+            ProcessR040BMinmusShadow(block);
+
             block.Valid = 0;
             block.Minimum = float.PositiveInfinity;
             block.Maximum = float.NegativeInfinity;
@@ -686,6 +973,31 @@ namespace AERISFlightControl.Terrain
 
         void CommitBlock(TileState state, BlockPayload block)
         {
+            if (block.R040BShadowSamples > 0 ||
+                block.R040BShadowFailures > 0 ||
+                !string.IsNullOrEmpty(block.R040BShadowError))
+            {
+                state.R040BShadowSamples +=
+                    block.R040BShadowSamples;
+
+                state.R040BShadowFailures +=
+                    block.R040BShadowFailures;
+
+                state.R040BShadowMaxErrorMeters =
+                    Math.Max(
+                        state.R040BShadowMaxErrorMeters,
+                        block.R040BShadowMaxErrorMeters);
+
+                state.R040BAllWorkersOffMainThread =
+                    state.R040BAllWorkersOffMainThread &&
+                    block.R040BWorkerThreadId != r040bMainThreadId;
+
+                if (string.IsNullOrEmpty(state.R040BShadowError) &&
+                    !string.IsNullOrEmpty(block.R040BShadowError))
+                    state.R040BShadowError =
+                        block.R040BShadowError;
+            }
+
             int resolution = state.Request.Resolution;
             for (int y = 0; y < block.Height; y++)
             {
@@ -724,7 +1036,79 @@ namespace AERISFlightControl.Terrain
                 if (tile != null && state.Commit != null)
                     state.Commit(state.Request, tile, final);
             }
-            if (final) RemoveState(state, false);
+            if (final)
+            {
+                ReportR040BMinmusShadow(state);
+                RemoveState(state, false);
+            }
+        }
+
+        void ReportR040BMinmusShadow(TileState state)
+        {
+            if (state == null ||
+                state.R040BMinmusSnapshot == null)
+                return;
+
+            r040bShadowTiles++;
+            r040bShadowSamples += state.R040BShadowSamples;
+            r040bShadowFailures += state.R040BShadowFailures;
+
+            r040bShadowMaxErrorMeters =
+                Math.Max(
+                    r040bShadowMaxErrorMeters,
+                    state.R040BShadowMaxErrorMeters);
+
+            bool pass =
+                state.R040BShadowSamples > 0 &&
+                state.R040BShadowFailures == 0 &&
+                state.R040BAllWorkersOffMainThread &&
+                string.IsNullOrEmpty(state.R040BShadowError);
+
+            bool emit =
+                !pass ||
+                r040bShadowTiles == 1 ||
+                (r040bShadowTiles % 32L) == 0L;
+
+            if (!emit)
+                return;
+
+            string tileName =
+                state.Request == null ?
+                "<null>" :
+                state.Request.Key.FileStem;
+
+            AERISLogger.Info(
+                "[R040B][MINMUS_BLOCK_SHADOW]" +
+                "; pass=" + pass +
+                "; body=Minmus" +
+                "; tile=" + tileName +
+                "; completed_shadow_tiles=" +
+                    r040bShadowTiles +
+                "; tile_samples=" +
+                    state.R040BShadowSamples +
+                "; tile_failures=" +
+                    state.R040BShadowFailures +
+                "; tile_max_error_m=" +
+                    state.R040BShadowMaxErrorMeters.ToString(
+                        "R",
+                        System.Globalization.CultureInfo.InvariantCulture) +
+                "; cumulative_samples=" +
+                    r040bShadowSamples +
+                "; cumulative_failures=" +
+                    r040bShadowFailures +
+                "; cumulative_max_error_m=" +
+                    r040bShadowMaxErrorMeters.ToString(
+                        "R",
+                        System.Globalization.CultureInfo.InvariantCulture) +
+                "; tolerance_m=1E-08" +
+                "; all_workers_off_main_thread=" +
+                    state.R040BAllWorkersOffMainThread +
+                "; error=" +
+                    (string.IsNullOrEmpty(state.R040BShadowError) ?
+                     "-" : state.R040BShadowError) +
+                "; producer_switch=false" +
+                "; db_authority=PQS" +
+                "; worker_runtime_object_access=false");
         }
 
         static AERISTerrainHeightTile BuildTile(TileState state, bool partial)
