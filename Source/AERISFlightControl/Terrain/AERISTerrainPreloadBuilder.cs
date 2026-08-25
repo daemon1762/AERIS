@@ -44,8 +44,17 @@ namespace AERISFlightControl.Terrain
             internal long CoastlineScannedWithoutUpgrade;
             internal bool CoastlineComplete;
             internal long CoastlineTotalTiles;
-            internal readonly HashSet<string> CoastlineProcessedTileIds =
-                new HashSet<string>(StringComparer.Ordinal);
+            // R040 durable partial coastline progress. Bit identity follows the
+            // authoritative FAR scan linearization:
+            // latitudeIndex * longitudeTileCount + longitudeIndex.
+            internal long CoastlineProgressBodyRadiusMillimetres;
+            internal int CoastlineProgressTerrainFormatVersion;
+            internal int CoastlineProgressFormatVersion;
+            internal string CoastlineProgressEnvironmentHash = string.Empty;
+            internal int CoastlineProgressLatitudeTiles;
+            internal int CoastlineProgressLongitudeTiles;
+            internal byte[] CoastlineProcessedBitmap = new byte[0];
+            internal int CoastlineProcessedBitCount;
             internal int CompletedCoastlineFormatVersion;
             internal string CompletedCoastlineEnvironmentHash = string.Empty;
             // Transient cyclic scan counters. They are deliberately not persisted: after
@@ -86,6 +95,7 @@ namespace AERISFlightControl.Terrain
         sealed class DurableCoastlineCommitMarker
         {
             internal BodyPlan Plan;
+            internal AERISTerrainTileKey Key;
             internal string StableId = string.Empty;
             internal string EnvironmentHash = string.Empty;
             internal long PlanGeneration;
@@ -204,8 +214,10 @@ namespace AERISFlightControl.Terrain
         const int StandardEncodeCommitCeiling = 32;
         const int CoastlineScanBatchSize = 8;
         const int CoastlineSamplingActiveLimit = 2;
-        const int PreloadStateVersion = 5;
+        const int PreloadStateVersion = 6;
+        const int PointSetSignatureStateVersion = 5;
         const int LegacyPreloadStateVersion = 4;
+        const int MaxCoastlineBitmapBytes = 1024 * 1024;
 
         long encodeAdmissionBackpressure;
         long writeAdmissionBackpressure;
@@ -1012,7 +1024,7 @@ namespace AERISFlightControl.Terrain
             plan.CoastlineScannedWithoutUpgrade = 0L;
             if (plan.CoastlineTotalTiles > 0L)
                 plan.CoastlineCursor = plan.CoastlineTotalTiles;
-            plan.CoastlineProcessedTileIds.Clear();
+            ClearCoastlineProgress(plan);
         }
 
         static void InvalidateCoastlineCompletion(BodyPlan plan)
@@ -1024,19 +1036,194 @@ namespace AERISFlightControl.Terrain
             plan.CoastlineCursor = 0L;
             plan.CoastlineScannedWithoutUpgrade = 0L;
             plan.CoastlineTotalTiles = 0L;
-            plan.CoastlineProcessedTileIds.Clear();
+            ClearCoastlineProgress(plan);
         }
 
-        void MarkCoastlineTileProcessed(BodyPlan plan, string stableId)
+        static void ClearCoastlineProgress(BodyPlan plan)
         {
-            if (plan == null || string.IsNullOrEmpty(stableId)) return;
-            lock (sync) plan.CoastlineProcessedTileIds.Add(stableId);
+            if (plan == null) return;
+            plan.CoastlineProgressBodyRadiusMillimetres = 0L;
+            plan.CoastlineProgressTerrainFormatVersion = 0;
+            plan.CoastlineProgressFormatVersion = 0;
+            plan.CoastlineProgressEnvironmentHash = string.Empty;
+            plan.CoastlineProgressLatitudeTiles = 0;
+            plan.CoastlineProgressLongitudeTiles = 0;
+            plan.CoastlineProcessedBitmap = new byte[0];
+            plan.CoastlineProcessedBitCount = 0;
+        }
+
+        static int ExpectedCoastlineBitmapBytes(int latitudeTiles,
+            int longitudeTiles)
+        {
+            if (latitudeTiles <= 0 || longitudeTiles <= 0) return -1;
+            long total = (long)latitudeTiles * longitudeTiles;
+            long bytes = (total + 7L) / 8L;
+            if (bytes <= 0L || bytes > MaxCoastlineBitmapBytes)
+                return -1;
+            return (int)bytes;
+        }
+
+        static int CountSetBits(byte[] bitmap)
+        {
+            if (bitmap == null || bitmap.Length == 0) return 0;
+            int count = 0;
+            for (int i = 0; i < bitmap.Length; i++)
+            {
+                int value = bitmap[i];
+                while (value != 0)
+                {
+                    value &= value - 1;
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        static bool PersistedCoastlineProgressShapeValid(BodyPlan plan)
+        {
+            if (plan == null) return false;
+            byte[] bitmap = plan.CoastlineProcessedBitmap;
+            if (bitmap == null) return false;
+
+            if (bitmap.Length == 0)
+                return plan.CoastlineProgressBodyRadiusMillimetres == 0L &&
+                    plan.CoastlineProgressTerrainFormatVersion == 0 &&
+                    plan.CoastlineProgressFormatVersion == 0 &&
+                    string.IsNullOrEmpty(
+                        plan.CoastlineProgressEnvironmentHash) &&
+                    plan.CoastlineProgressLatitudeTiles == 0 &&
+                    plan.CoastlineProgressLongitudeTiles == 0 &&
+                    plan.CoastlineProcessedBitCount == 0;
+
+            int expected = ExpectedCoastlineBitmapBytes(
+                plan.CoastlineProgressLatitudeTiles,
+                plan.CoastlineProgressLongitudeTiles);
+            long total = (long)plan.CoastlineProgressLatitudeTiles *
+                plan.CoastlineProgressLongitudeTiles;
+            int actualBits = CountSetBits(bitmap);
+
+            if (expected != bitmap.Length ||
+                total <= 0L ||
+                actualBits != plan.CoastlineProcessedBitCount ||
+                actualBits > total)
+                return false;
+
+            // Padding bits in the final byte are not tile identities and must
+            // always remain zero, otherwise a damaged state could false-complete.
+            int usedFinalBits = (int)(total & 7L);
+            if (usedFinalBits != 0)
+            {
+                int allowedMask = (1 << usedFinalBits) - 1;
+                if ((bitmap[bitmap.Length - 1] & ~allowedMask) != 0)
+                    return false;
+            }
+
+            return plan.CoastlineProgressBodyRadiusMillimetres > 0L &&
+                plan.CoastlineProgressTerrainFormatVersion ==
+                    AERISTerrainTileFormat.Version &&
+                plan.CoastlineProgressFormatVersion ==
+                    AERISTerrainCoastlineExtractor.HighDensityFormatVersion &&
+                string.Equals(plan.CoastlineProgressEnvironmentHash,
+                    plan.EnvironmentHash, StringComparison.Ordinal);
+        }
+
+        void EnsureCoastlineProgressGrid(BodyPlan plan,
+            long bodyRadiusMillimetres, int latitudeTiles, int longitudeTiles)
+        {
+            if (plan == null) return;
+            int bytes = ExpectedCoastlineBitmapBytes(latitudeTiles,
+                longitudeTiles);
+            if (bytes <= 0) return;
+
+            lock (sync)
+            {
+                bool valid =
+                    plan.CoastlineProgressBodyRadiusMillimetres ==
+                        bodyRadiusMillimetres &&
+                    plan.CoastlineProgressTerrainFormatVersion ==
+                        AERISTerrainTileFormat.Version &&
+                    plan.CoastlineProgressFormatVersion ==
+                        AERISTerrainCoastlineExtractor.HighDensityFormatVersion &&
+                    string.Equals(plan.CoastlineProgressEnvironmentHash,
+                        plan.EnvironmentHash, StringComparison.Ordinal) &&
+                    plan.CoastlineProgressLatitudeTiles == latitudeTiles &&
+                    plan.CoastlineProgressLongitudeTiles == longitudeTiles &&
+                    plan.CoastlineProcessedBitmap != null &&
+                    plan.CoastlineProcessedBitmap.Length == bytes;
+
+                if (valid) return;
+
+                ClearCoastlineProgress(plan);
+                plan.CoastlineProgressBodyRadiusMillimetres =
+                    bodyRadiusMillimetres;
+                plan.CoastlineProgressTerrainFormatVersion =
+                    AERISTerrainTileFormat.Version;
+                plan.CoastlineProgressFormatVersion =
+                    AERISTerrainCoastlineExtractor.HighDensityFormatVersion;
+                plan.CoastlineProgressEnvironmentHash =
+                    plan.EnvironmentHash ?? string.Empty;
+                plan.CoastlineProgressLatitudeTiles = latitudeTiles;
+                plan.CoastlineProgressLongitudeTiles = longitudeTiles;
+                plan.CoastlineProcessedBitmap = new byte[bytes];
+                stateDirty = true;
+            }
+        }
+
+        bool MarkCoastlineTileProcessed(BodyPlan plan,
+            AERISTerrainTileKey key)
+        {
+            if (plan == null || key.Lod != AERISTerrainTileLod.Far)
+                return false;
+
+            lock (sync)
+            {
+                if (!string.Equals(plan.BodyName, key.BodyName,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(plan.EnvironmentHash,
+                        key.EnvironmentHash, StringComparison.Ordinal) ||
+                    plan.CoastlineProgressBodyRadiusMillimetres !=
+                        key.BodyRadiusMillimetres ||
+                    plan.CoastlineProgressTerrainFormatVersion !=
+                        key.FormatVersion ||
+                    plan.CoastlineProgressFormatVersion !=
+                        AERISTerrainCoastlineExtractor.HighDensityFormatVersion ||
+                    !string.Equals(plan.CoastlineProgressEnvironmentHash,
+                        key.EnvironmentHash, StringComparison.Ordinal) ||
+                    plan.CoastlineProcessedBitmap == null ||
+                    plan.CoastlineProgressLatitudeTiles <= 0 ||
+                    plan.CoastlineProgressLongitudeTiles <= 0 ||
+                    key.LatitudeIndex < 0 ||
+                    key.LatitudeIndex >=
+                        plan.CoastlineProgressLatitudeTiles ||
+                    key.LongitudeIndex < 0 ||
+                    key.LongitudeIndex >=
+                        plan.CoastlineProgressLongitudeTiles)
+                    return false;
+
+                long linear = (long)key.LatitudeIndex *
+                    plan.CoastlineProgressLongitudeTiles +
+                    key.LongitudeIndex;
+                int byteIndex = (int)(linear >> 3);
+                int mask = 1 << (int)(linear & 7L);
+
+                if (byteIndex < 0 ||
+                    byteIndex >= plan.CoastlineProcessedBitmap.Length)
+                    return false;
+                if ((plan.CoastlineProcessedBitmap[byteIndex] & mask) != 0)
+                    return false;
+
+                plan.CoastlineProcessedBitmap[byteIndex] =
+                    (byte)(plan.CoastlineProcessedBitmap[byteIndex] | mask);
+                plan.CoastlineProcessedBitCount++;
+                stateDirty = true;
+                return true;
+            }
         }
 
         int CoastlineProcessedCount(BodyPlan plan)
         {
             if (plan == null) return 0;
-            lock (sync) return plan.CoastlineProcessedTileIds.Count;
+            lock (sync) return plan.CoastlineProcessedBitCount;
         }
 
         double CoastlineCoverageRatio(BodyPlan plan, CelestialBody body)
@@ -1089,6 +1276,13 @@ namespace AERISFlightControl.Terrain
                 AERISTerrainTileLod.Far);
             long total = (long)latCount * lonCount;
             plan.CoastlineTotalTiles = total;
+            if (total > 0L)
+            {
+                long bodyRadiusMillimetres = (long)Math.Round(
+                    Math.Max(0.0, body.Radius) * 1000.0);
+                EnsureCoastlineProgressGrid(plan,
+                    bodyRadiusMillimetres, latCount, lonCount);
+            }
             if (total <= 0L)
             {
                 MarkCoastlineComplete(plan);
@@ -1162,12 +1356,12 @@ namespace AERISFlightControl.Terrain
                         }
                         if (AERISTerrainCoastlineExtractor.HasCurrentHighDensityPayload(tile))
                         {
-                            MarkCoastlineTileProcessed(plan, key.StableId);
+                            MarkCoastlineTileProcessed(plan, key);
                             continue;
                         }
                         if (!AERISTerrainCoastlineExtractor.ContainsLandWaterBoundary(tile))
                         {
-                            MarkCoastlineTileProcessed(plan, key.StableId);
+                            MarkCoastlineTileProcessed(plan, key);
                             continue;
                         }
                         if (TryEnqueueHighDensityCoastline(plan, body, tile)) upgrades++;
@@ -1484,11 +1678,13 @@ namespace AERISFlightControl.Terrain
             PendingEncodeWork work)
         {
             if (work == null || !work.DurableCoastlineCommit ||
-                work.Plan == null || string.IsNullOrEmpty(work.StableId))
+                work.Plan == null || work.Tile == null ||
+                string.IsNullOrEmpty(work.StableId))
                 return null;
             return new DurableCoastlineCommitMarker
             {
                 Plan = work.Plan,
+                Key = work.Tile.Key,
                 StableId = work.StableId,
                 EnvironmentHash = work.PqsHash ?? string.Empty,
                 PlanGeneration = work.PlanGeneration
@@ -1504,18 +1700,18 @@ namespace AERISFlightControl.Terrain
                 DurableCoastlineCommitMarker marker = markers[i];
                 if (marker == null || marker.Plan == null ||
                     string.IsNullOrEmpty(marker.StableId)) continue;
-                bool newlyProcessed = false;
+                BodyPlan plan = marker.Plan;
                 lock (sync)
                 {
-                    BodyPlan plan = marker.Plan;
                     if (plan.Generation != marker.PlanGeneration ||
                         !string.Equals(plan.EnvironmentHash,
-                            marker.EnvironmentHash, StringComparison.Ordinal))
+                            marker.EnvironmentHash, StringComparison.Ordinal) ||
+                        !string.Equals(marker.Key.StableId,
+                            marker.StableId, StringComparison.Ordinal))
                         continue;
-                    newlyProcessed =
-                        plan.CoastlineProcessedTileIds.Add(marker.StableId);
-                    if (newlyProcessed) stateDirty = true;
                 }
+                bool newlyProcessed =
+                    MarkCoastlineTileProcessed(plan, marker.Key);
                 if (newlyProcessed)
                     AERISLogger.Info("[PRELOAD_COAST_HD] body=" +
                         marker.Plan.BodyName + "; event=DURABLE; tile=" +
@@ -2386,7 +2582,9 @@ namespace AERISFlightControl.Terrain
             plan.CoastlineCursor = 0L;
             plan.CoastlineScannedWithoutUpgrade = 0L;
             plan.CoastlineTotalTiles = 0L;
-            plan.CoastlineProcessedTileIds.Clear();
+            // Durable coastline classification survives ordinary cursor/recovery
+            // resets. Environment/rebuild invalidation uses
+            // InvalidateCoastlineCompletion().
             plan.GlobalScannedWithoutMiss = 0L;
             plan.FarScannedWithoutMiss = 0L;
             plan.RouteScannedWithoutMiss = 0L;
@@ -2529,7 +2727,7 @@ namespace AERISFlightControl.Terrain
                 StringComparer.OrdinalIgnoreCase);
             AERISTerrainPreloadMode loadedMode;
             string loadedAppliedPointSetSignature = string.Empty;
-            bool loadedLegacyState = false;
+            bool loadedStateNeedsUpgrade = false;
             try
             {
                 using (var stream = new FileStream(path, FileMode.Open,
@@ -2541,13 +2739,15 @@ namespace AERISFlightControl.Terrain
                         StringComparison.Ordinal)) return false;
                     int version = reader.ReadInt32();
                     if (version != PreloadStateVersion &&
+                        version != PointSetSignatureStateVersion &&
                         version != LegacyPreloadStateVersion)
                         return false;
-                    loadedLegacyState = version == LegacyPreloadStateVersion;
+                    loadedStateNeedsUpgrade =
+                        version != PreloadStateVersion;
                     loadedMode = (AERISTerrainPreloadMode)reader.ReadInt32();
                     if (!Enum.IsDefined(typeof(AERISTerrainPreloadMode), loadedMode))
                         loadedMode = AERISTerrainPreloadMode.AggressiveIdle;
-                    if (version >= PreloadStateVersion)
+                    if (version >= PointSetSignatureStateVersion)
                         loadedAppliedPointSetSignature = reader.ReadString();
                     int count = reader.ReadInt32();
                     if (count < 0 || count > 10000) return false;
@@ -2579,6 +2779,43 @@ namespace AERISFlightControl.Terrain
                         plan.CoastlineComplete = reader.ReadBoolean();
                         plan.CompletedCoastlineFormatVersion = reader.ReadInt32();
                         plan.CompletedCoastlineEnvironmentHash = reader.ReadString();
+                        if (version >= PreloadStateVersion)
+                        {
+                            plan.CoastlineProgressBodyRadiusMillimetres =
+                                reader.ReadInt64();
+                            plan.CoastlineProgressTerrainFormatVersion =
+                                reader.ReadInt32();
+                            plan.CoastlineProgressFormatVersion =
+                                reader.ReadInt32();
+                            plan.CoastlineProgressEnvironmentHash =
+                                reader.ReadString();
+                            plan.CoastlineProgressLatitudeTiles =
+                                reader.ReadInt32();
+                            plan.CoastlineProgressLongitudeTiles =
+                                reader.ReadInt32();
+
+                            int bitmapLength = reader.ReadInt32();
+                            if (bitmapLength < 0 ||
+                                bitmapLength > MaxCoastlineBitmapBytes)
+                                return false;
+
+                            if (bitmapLength > 0 &&
+                                ExpectedCoastlineBitmapBytes(
+                                    plan.CoastlineProgressLatitudeTiles,
+                                    plan.CoastlineProgressLongitudeTiles) !=
+                                    bitmapLength)
+                                return false;
+
+                            plan.CoastlineProcessedBitmap =
+                                reader.ReadBytes(bitmapLength);
+                            if (plan.CoastlineProcessedBitmap.Length !=
+                                bitmapLength)
+                                return false;
+
+                            plan.CoastlineProcessedBitCount =
+                                CountSetBits(
+                                    plan.CoastlineProcessedBitmap);
+                        }
                         // Candidate 13 removes all per-body preload tuning. Legacy
                         // overrides and caps are discarded while progress/cursors remain.
                         plan.PriorityOverride = false;
@@ -2590,11 +2827,18 @@ namespace AERISFlightControl.Terrain
                         if (!Enum.IsDefined(typeof(AERISTerrainTileLod),
                             plan.CompletedQualityLimit))
                             InvalidateAutomaticCompletion(plan);
-                        if (plan.CompletedCoastlineFormatVersion !=
+                        if (plan.CoastlineComplete &&
+                            (plan.CompletedCoastlineFormatVersion !=
                                 AERISTerrainCoastlineExtractor.HighDensityFormatVersion ||
                             !string.Equals(plan.CompletedCoastlineEnvironmentHash,
-                                plan.EnvironmentHash, StringComparison.Ordinal))
+                                plan.EnvironmentHash, StringComparison.Ordinal)))
                             InvalidateCoastlineCompletion(plan);
+
+                        if (plan.CoastlineComplete)
+                            ClearCoastlineProgress(plan);
+                        else if (!PersistedCoastlineProgressShapeValid(plan))
+                            ClearCoastlineProgress(plan);
+
                         if (!string.IsNullOrEmpty(plan.BodyName))
                             loaded[plan.BodyName] = plan;
                     }
@@ -2615,7 +2859,7 @@ namespace AERISFlightControl.Terrain
                 speedProfile = AERISTerrainPreloadSpeedProfile.Balanced;
                 appliedPointSetSignature =
                     loadedAppliedPointSetSignature ?? string.Empty;
-                if (loadedLegacyState)
+                if (loadedStateNeedsUpgrade)
                     stateDirty = true;
             }
             return true;
@@ -2677,7 +2921,25 @@ namespace AERISFlightControl.Terrain
                         CompletedCoastlineFormatVersion =
                             plan.CompletedCoastlineFormatVersion,
                         CompletedCoastlineEnvironmentHash =
-                            plan.CompletedCoastlineEnvironmentHash
+                            plan.CompletedCoastlineEnvironmentHash,
+                        CoastlineProgressBodyRadiusMillimetres =
+                            plan.CoastlineProgressBodyRadiusMillimetres,
+                        CoastlineProgressTerrainFormatVersion =
+                            plan.CoastlineProgressTerrainFormatVersion,
+                        CoastlineProgressFormatVersion =
+                            plan.CoastlineProgressFormatVersion,
+                        CoastlineProgressEnvironmentHash =
+                            plan.CoastlineProgressEnvironmentHash,
+                        CoastlineProgressLatitudeTiles =
+                            plan.CoastlineProgressLatitudeTiles,
+                        CoastlineProgressLongitudeTiles =
+                            plan.CoastlineProgressLongitudeTiles,
+                        CoastlineProcessedBitmap =
+                            plan.CoastlineProcessedBitmap == null ?
+                            new byte[0] :
+                            (byte[])plan.CoastlineProcessedBitmap.Clone(),
+                        CoastlineProcessedBitCount =
+                            plan.CoastlineProcessedBitCount
                     });
             }
             return snapshot;
@@ -2728,6 +2990,23 @@ namespace AERISFlightControl.Terrain
                             writer.Write(plan.CompletedCoastlineFormatVersion);
                             writer.Write(plan.CompletedCoastlineEnvironmentHash ??
                                 string.Empty);
+                            writer.Write(
+                                plan.CoastlineProgressBodyRadiusMillimetres);
+                            writer.Write(
+                                plan.CoastlineProgressTerrainFormatVersion);
+                            writer.Write(plan.CoastlineProgressFormatVersion);
+                            writer.Write(
+                                plan.CoastlineProgressEnvironmentHash ??
+                                string.Empty);
+                            writer.Write(plan.CoastlineProgressLatitudeTiles);
+                            writer.Write(plan.CoastlineProgressLongitudeTiles);
+
+                            byte[] coastlineBitmap =
+                                plan.CoastlineProcessedBitmap ??
+                                new byte[0];
+                            writer.Write(coastlineBitmap.Length);
+                            if (coastlineBitmap.Length > 0)
+                                writer.Write(coastlineBitmap);
                         }
                     }
                     writer.Flush();
