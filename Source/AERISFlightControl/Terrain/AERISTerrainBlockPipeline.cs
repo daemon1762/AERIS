@@ -28,6 +28,26 @@ namespace AERISFlightControl.Terrain
             internal int Released;
         }
 
+        struct R040BFailureSample
+        {
+            internal int X;
+            internal int Y;
+            internal int LocalX;
+            internal int LocalY;
+            internal double LatitudeDeg;
+            internal double LongitudeDeg;
+            internal bool Boundary;
+            internal bool CacheHit;
+            internal double ExpectedPqsMeters;
+            internal double WorkerTrigMeters;
+            internal double ErrorMeters;
+            internal double TrigX;
+            internal double TrigY;
+            internal double TrigZ;
+            internal int BlockId;
+            internal int WorkerThreadId;
+        }
+
         sealed class BlockPayload
         {
             internal int Id;
@@ -56,6 +76,9 @@ namespace AERISFlightControl.Terrain
             internal int R040BShadowFailures;
             internal double R040BShadowMaxErrorMeters;
             internal string R040BShadowError;
+            internal byte[] R040BCacheHits;
+            internal R040BFailureSample[] R040BFailureSamples;
+            internal int R040BFailureSampleCount;
         }
 
         struct BoundarySampleKey : IEquatable<BoundarySampleKey>
@@ -132,6 +155,7 @@ namespace AERISFlightControl.Terrain
             internal float[] SamplingElevation;
             internal byte[] SamplingFlags;
             internal double[] SamplingAuthorityExact;
+            internal byte[] SamplingR040BCacheHits;
             internal int SamplingIndex;
 
             internal AERISR039MinmusPureCpuExact.VertexPlanetSnapshot
@@ -141,6 +165,7 @@ namespace AERISFlightControl.Terrain
             internal double R040BShadowMaxErrorMeters;
             internal bool R040BAllWorkersOffMainThread = true;
             internal string R040BShadowError = string.Empty;
+            internal int R040BDiagnosticSamplesEmitted;
 
             internal int Valid;
             internal float Minimum = float.PositiveInfinity;
@@ -167,6 +192,10 @@ namespace AERISFlightControl.Terrain
 
         // R040B Phase 1A is certification/shadow only.
         const double R040BShadowToleranceMeters = 1E-08;
+
+        // AERIS37 R040B candidate2 diagnostics are strictly bounded.
+        const int R040BMaximumFailureSamplesPerBlock = 8;
+        const int R040BMaximumFailureDiagnosticsPerTile = 24;
 
         volatile bool standardPreloadThroughput;
         int roundRobinIndex;
@@ -562,6 +591,10 @@ namespace AERISFlightControl.Terrain
                 state.R040BMinmusSnapshot == null ?
                 null : new double[count];
 
+            state.SamplingR040BCacheHits =
+                state.R040BMinmusSnapshot == null ?
+                null : new byte[count];
+
             state.SamplingIndex = 0;
         }
 
@@ -597,6 +630,9 @@ namespace AERISFlightControl.Terrain
                     if (state.SamplingAuthorityExact != null)
                         state.SamplingAuthorityExact[local] =
                             cached.AuthorityExactElevation;
+
+                    if (state.SamplingR040BCacheHits != null)
+                        state.SamplingR040BCacheHits[local] = 1;
 
                     state.SamplingIndex++;
                     return false;
@@ -698,6 +734,11 @@ namespace AERISFlightControl.Terrain
 
                 AuthorityExact = state.SamplingAuthorityExact,
                 R040BMinmusSnapshot = state.R040BMinmusSnapshot,
+                R040BCacheHits = state.SamplingR040BCacheHits,
+                R040BFailureSamples =
+                    state.R040BMinmusSnapshot == null ?
+                    null : new R040BFailureSample[
+                        R040BMaximumFailureSamplesPerBlock],
 
                 Resolution = state.Request.Resolution,
                 SouthLatitudeDeg = state.Request.SouthLatitudeDeg,
@@ -753,6 +794,7 @@ namespace AERISFlightControl.Terrain
             state.SamplingElevation = null;
             state.SamplingFlags = null;
             state.SamplingAuthorityExact = null;
+            state.SamplingR040BCacheHits = null;
             state.SamplingIndex = 0;
             return true;
         }
@@ -830,6 +872,63 @@ namespace AERISFlightControl.Terrain
             return removed;
         }
 
+        static void CaptureR040BFailureSample(
+            BlockPayload block,
+            int local,
+            int localX,
+            int localY,
+            int x,
+            int y,
+            double latitude,
+            double longitude,
+            double expected,
+            double actual,
+            double error,
+            double px,
+            double py,
+            double pz)
+        {
+            if (block == null ||
+                block.R040BFailureSamples == null ||
+                block.R040BFailureSampleCount >=
+                    block.R040BFailureSamples.Length)
+                return;
+
+            bool boundary =
+                x == 0 ||
+                y == 0 ||
+                x == block.Resolution - 1 ||
+                y == block.Resolution - 1;
+
+            bool cacheHit =
+                block.R040BCacheHits != null &&
+                local >= 0 &&
+                local < block.R040BCacheHits.Length &&
+                block.R040BCacheHits[local] != 0;
+
+            block.R040BFailureSamples[
+                block.R040BFailureSampleCount++] =
+                new R040BFailureSample
+                {
+                    X = x,
+                    Y = y,
+                    LocalX = localX,
+                    LocalY = localY,
+                    LatitudeDeg = latitude,
+                    LongitudeDeg = longitude,
+                    Boundary = boundary,
+                    CacheHit = cacheHit,
+                    ExpectedPqsMeters = expected,
+                    WorkerTrigMeters = actual,
+                    ErrorMeters = error,
+                    TrigX = px,
+                    TrigY = py,
+                    TrigZ = pz,
+                    BlockId = block.Id,
+                    WorkerThreadId = block.R040BWorkerThreadId
+                };
+        }
+
         static void ProcessR040BMinmusShadow(BlockPayload block)
         {
             if (block == null ||
@@ -845,7 +944,9 @@ namespace AERISFlightControl.Terrain
                 if (block.Elevation == null ||
                     block.Flags == null ||
                     block.AuthorityExact.Length != block.Elevation.Length ||
-                    block.Flags.Length != block.Elevation.Length)
+                    block.Flags.Length != block.Elevation.Length ||
+                    (block.R040BCacheHits != null &&
+                     block.R040BCacheHits.Length != block.Elevation.Length))
                 {
                     block.R040BShadowFailures = 1;
                     block.R040BShadowMaxErrorMeters =
@@ -928,6 +1029,23 @@ namespace AERISFlightControl.Terrain
                         block.R040BShadowFailures++;
                         block.R040BShadowMaxErrorMeters =
                             double.PositiveInfinity;
+
+                        CaptureR040BFailureSample(
+                            block,
+                            local,
+                            localX,
+                            localY,
+                            x,
+                            y,
+                            latitude,
+                            longitude,
+                            expected,
+                            actual,
+                            double.PositiveInfinity,
+                            px,
+                            py,
+                            pz);
+
                         continue;
                     }
 
@@ -940,7 +1058,25 @@ namespace AERISFlightControl.Terrain
                             error);
 
                     if (error > R040BShadowToleranceMeters)
+                    {
                         block.R040BShadowFailures++;
+
+                        CaptureR040BFailureSample(
+                            block,
+                            local,
+                            localX,
+                            localY,
+                            x,
+                            y,
+                            latitude,
+                            longitude,
+                            expected,
+                            actual,
+                            error,
+                            px,
+                            py,
+                            pz);
+                    }
                 }
             }
             catch (Exception ex)
@@ -971,6 +1107,198 @@ namespace AERISFlightControl.Terrain
             }
         }
 
+        static double R040BDiagnosticError(double first, double second)
+        {
+            if (double.IsNaN(first) ||
+                double.IsInfinity(first) ||
+                double.IsNaN(second) ||
+                double.IsInfinity(second))
+                return double.PositiveInfinity;
+
+            return Math.Abs(first - second);
+        }
+
+        static string R040BDiagnosticNumber(double value)
+        {
+            return value.ToString(
+                "R",
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        void DiagnoseR040BMinmusFailures(
+            TileState state,
+            BlockPayload block)
+        {
+            if (state == null ||
+                block == null ||
+                state.Body == null ||
+                state.R040BMinmusSnapshot == null ||
+                block.R040BFailureSamples == null ||
+                block.R040BFailureSampleCount <= 0)
+                return;
+
+            int currentThreadId =
+                Thread.CurrentThread.ManagedThreadId;
+
+            if (currentThreadId != r040bMainThreadId)
+            {
+                AERISLogger.Warn(
+                    "[R040B][MINMUS_FAILURE_DIAGNOSTIC_SKIP]" +
+                    "; reason=COMMIT_NOT_MAIN_THREAD" +
+                    "; current_thread_id=" + currentThreadId +
+                    "; expected_main_thread_id=" + r040bMainThreadId +
+                    "; producer_switch=false" +
+                    "; db_authority=PQS" +
+                    "; diagnostic_only=true");
+                return;
+            }
+
+            int count = Math.Min(
+                block.R040BFailureSampleCount,
+                block.R040BFailureSamples.Length);
+
+            for (int i = 0; i < count; i++)
+            {
+                if (state.R040BDiagnosticSamplesEmitted >=
+                    R040BMaximumFailureDiagnosticsPerTile)
+                    return;
+
+                R040BFailureSample sample =
+                    block.R040BFailureSamples[i];
+
+                state.R040BDiagnosticSamplesEmitted++;
+
+                try
+                {
+                    Vector3d native =
+                        state.Body.GetRelSurfaceNVector(
+                            sample.LatitudeDeg,
+                            sample.LongitudeDeg);
+
+                    double nativeMeters =
+                        AERISR039MinmusPureCpuExact.EvaluateVertexPlanet(
+                            state.R040BMinmusSnapshot,
+                            native.x,
+                            native.y,
+                            native.z,
+                            0.0);
+
+                    double errorAB =
+                        R040BDiagnosticError(
+                            sample.ExpectedPqsMeters,
+                            sample.WorkerTrigMeters);
+
+                    double errorAC =
+                        R040BDiagnosticError(
+                            sample.ExpectedPqsMeters,
+                            nativeMeters);
+
+                    double errorBC =
+                        R040BDiagnosticError(
+                            sample.WorkerTrigMeters,
+                            nativeMeters);
+
+                    bool aEqualsC =
+                        errorAC <= R040BShadowToleranceMeters;
+
+                    bool bEqualsC =
+                        errorBC <= R040BShadowToleranceMeters;
+
+                    string relation;
+                    if (aEqualsC && !bEqualsC)
+                        relation = "A_EQ_C_B_DIFF";
+                    else if (!aEqualsC && bEqualsC)
+                        relation = "B_EQ_C_A_DIFF";
+                    else if (!aEqualsC && !bEqualsC)
+                        relation = "ALL_DIFFER";
+                    else
+                        relation = "A_EQ_B_EQ_C";
+
+                    double vectorDelta = Math.Max(
+                        Math.Abs(native.x - sample.TrigX),
+                        Math.Max(
+                            Math.Abs(native.y - sample.TrigY),
+                            Math.Abs(native.z - sample.TrigZ)));
+
+                    string tileName =
+                        state.Request == null ?
+                        "<null>" :
+                        state.Request.Key.FileStem;
+
+                    AERISLogger.Info(
+                        "[R040B][MINMUS_FAILURE_DIAGNOSTIC]" +
+                        "; tile=" + tileName +
+                        "; resolution=" + block.Resolution +
+                        "; block_id=" + sample.BlockId +
+                        "; x=" + sample.X +
+                        "; y=" + sample.Y +
+                        "; local_x=" + sample.LocalX +
+                        "; local_y=" + sample.LocalY +
+                        "; latitude_deg=" +
+                            R040BDiagnosticNumber(sample.LatitudeDeg) +
+                        "; longitude_deg=" +
+                            R040BDiagnosticNumber(sample.LongitudeDeg) +
+                        "; boundary=" + sample.Boundary +
+                        "; cache_hit=" + sample.CacheHit +
+                        "; A_pqs_m=" +
+                            R040BDiagnosticNumber(
+                                sample.ExpectedPqsMeters) +
+                        "; B_trig_m=" +
+                            R040BDiagnosticNumber(
+                                sample.WorkerTrigMeters) +
+                        "; C_native_m=" +
+                            R040BDiagnosticNumber(nativeMeters) +
+                        "; error_AB_m=" +
+                            R040BDiagnosticNumber(errorAB) +
+                        "; error_AC_m=" +
+                            R040BDiagnosticNumber(errorAC) +
+                        "; error_BC_m=" +
+                            R040BDiagnosticNumber(errorBC) +
+                        "; trig_x=" +
+                            R040BDiagnosticNumber(sample.TrigX) +
+                        "; trig_y=" +
+                            R040BDiagnosticNumber(sample.TrigY) +
+                        "; trig_z=" +
+                            R040BDiagnosticNumber(sample.TrigZ) +
+                        "; native_x=" +
+                            R040BDiagnosticNumber(native.x) +
+                        "; native_y=" +
+                            R040BDiagnosticNumber(native.y) +
+                        "; native_z=" +
+                            R040BDiagnosticNumber(native.z) +
+                        "; vector_max_component_delta=" +
+                            R040BDiagnosticNumber(vectorDelta) +
+                        "; relation=" + relation +
+                        "; worker_thread_id=" +
+                            sample.WorkerThreadId +
+                        "; main_thread_id=" +
+                            r040bMainThreadId +
+                        "; diagnostic_index=" +
+                            state.R040BDiagnosticSamplesEmitted +
+                        "; diagnostic_limit=" +
+                            R040BMaximumFailureDiagnosticsPerTile +
+                        "; tolerance_m=1E-08" +
+                        "; producer_switch=false" +
+                        "; db_authority=PQS" +
+                        "; diagnostic_only=true");
+                }
+                catch (Exception ex)
+                {
+                    AERISLogger.Warn(
+                        "[R040B][MINMUS_FAILURE_DIAGNOSTIC_ERROR]" +
+                        "; block_id=" + sample.BlockId +
+                        "; x=" + sample.X +
+                        "; y=" + sample.Y +
+                        "; error=" +
+                            ex.GetType().Name + ":" +
+                            (ex.Message ?? string.Empty) +
+                        "; producer_switch=false" +
+                        "; db_authority=PQS" +
+                        "; diagnostic_only=true");
+                }
+            }
+        }
+
         void CommitBlock(TileState state, BlockPayload block)
         {
             if (block.R040BShadowSamples > 0 ||
@@ -997,6 +1325,8 @@ namespace AERISFlightControl.Terrain
                     state.R040BShadowError =
                         block.R040BShadowError;
             }
+
+            DiagnoseR040BMinmusFailures(state, block);
 
             int resolution = state.Request.Resolution;
             for (int y = 0; y < block.Height; y++)
