@@ -23,6 +23,7 @@ def ck(ok, label):
 for p in (R, Z, S, B):
     ck(p.is_file(), 'file ' + str(p.relative_to(ROOT)))
 r = R.read_text(); z = Z.read_text(); s = S.read_text(); b = B.read_text()
+r_flat = ' '.join(r.split())
 
 ck(R009 in r and R009 in z and R009 in s, 'R009 generated parent retained')
 ck(R010 in r, 'R010 renderer marker')
@@ -38,19 +39,38 @@ ck('List<PendingEntryCommit>' not in r and 'Queue<PendingEntryCommit>' not in r 
    'PendingEntryCommit[]' not in r,
    'no multi-pending lane introduced')
 
-# Non-authoritative Repaint now wakes on the existing R007 current-FAR FIFO.
-wake = re.search(
+# Non-authoritative Repaint wakes on the accepted current-FAR queue authority. Legacy R010
+# used only R007; R019 adds a visible-priority queue but keeps the same single staged lane.
+legacy_wake = re.search(
     r'if \(pendingEntryCommit != null \|\| rasterizer\.CompletedCount > 0 \|\|\s*'
     r'rev35R007FoundationQueue\.Count > 0\)', r, re.S)
-ck(wake is not None, 'R007 FIFO wakes non-authoritative staged pump')
+accepted_r019_wake = re.search(
+    r'if \(pendingEntryCommit != null \|\| rasterizer\.CompletedCount > 0 \|\|\s*'
+    r'rev35R019VisibleFoundationQueue\.Count > 0 \|\|\s*'
+    r'rev35R007FoundationQueue\.Count > 0\)', r, re.S)
+ck(legacy_wake is not None or accepted_r019_wake is not None,
+   'current-FAR FIFO authority wakes non-authoritative staged pump')
 
-# Adaptive budget and final backlog must account the real R007 FIFO.
-ck('int r010QueueBacklog = Math.Max(0, rev35R007FoundationQueue.Count);' in r,
-   'R007 FIFO included in adaptive backlog')
+# Adaptive budget and final backlog account the real queue authority. R019 splits visible
+# priority from hidden FAR while preserving the inherited 128 combined queue ceiling.
+legacy_queue_backlog = (
+    'int r010QueueBacklog = Math.Max(0, rev35R007FoundationQueue.Count);' in r
+)
+accepted_r019_queue_backlog = (
+    'int r010QueueBacklog = Math.Max(0, rev35R019VisibleFoundationQueue.Count) + Math.Max(0, rev35R007FoundationQueue.Count);' in r_flat
+)
+ck(legacy_queue_backlog or accepted_r019_queue_backlog,
+   'accepted current-FAR queues included in adaptive backlog')
 ck('(pendingEntryCommit == null ? 0 : 1) + r010QueueBacklog;' in r,
    'R004 backlog includes R010 queue term')
-ck('(pendingEntryCommit == null ? 0 : 1) +\n                Math.Max(0, rev35R007FoundationQueue.Count);' in r,
-   'main commit final backlog includes R007 FIFO')
+legacy_final_backlog = (
+    '(pendingEntryCommit == null ? 0 : 1) +\n                Math.Max(0, rev35R007FoundationQueue.Count);' in r
+)
+accepted_r019_final_backlog = (
+    '(pendingEntryCommit == null ? 0 : 1) + Math.Max(0, rev35R019VisibleFoundationQueue.Count) + Math.Max(0, rev35R007FoundationQueue.Count);' in r_flat
+)
+ck(legacy_final_backlog or accepted_r019_final_backlog,
+   'main commit final backlog includes accepted current-FAR queues')
 
 # Existing safety rails remain exact.
 ck('const double Rev35R004BudgetMaximumMilliseconds = 2.00;' in r,
@@ -62,9 +82,19 @@ ck('const int Rev35R007FoundationQueueMaximum = 128;' in r,
 ck('presentationNow + 0.10f' in r, 'fixed 10Hz presentation cadence retained')
 ck('RenderTextureFormat.ARGB32' in r and 'FilterMode.Bilinear' in r,
    'ARGB32/Bilinear visual contract retained')
-ck('foundationComplete = rendered && visible.FoundationComplete &&' in r and
-   'lastBackFoundationCoverage >= 0.999f' in r,
-   'strict complete-foundation swap gate retained')
+legacy_r010_foundation_gate = (
+    'foundationComplete = rendered && visible.FoundationComplete &&' in r and
+    'lastBackFoundationCoverage >= 0.999f' in r
+)
+accepted_r018_foundation_gate = (
+    'bool r018VisibleGpuComplete = operationHealthRev35R018VisiblePlanValid && operationHealthRev35R018VisibleRequiredFar > 0 && operationHealthRev35R018VisibleReadyFar >= operationHealthRev35R018VisibleRequiredFar;' in r_flat and
+    'bool r018OverscanGpuComplete = visible.FoundationComplete && lastBackFoundationCoverage >= 0.999f && readyFar >= visible.FarFoundationCount;' in r_flat and
+    'foundationComplete = rendered && r018VisibleGpuComplete;' in r_flat and
+    'if (!r018OverscanGpuComplete) operationHealthRev35R018OverscanHolAvoided++;' in r_flat and
+    'foundationComplete = rendered && r018VisibleGpuComplete && r018OverscanGpuComplete' not in r_flat
+)
+ck(legacy_r010_foundation_gate or accepted_r018_foundation_gate,
+   'foundation swap gate is legacy R010 strict coverage or exact accepted R018 visible-GPU descendant')
 
 # R009 remains intact; R010 does not touch scheduler/rasterizer semantics.
 ck('SubmitRequired(AERISRuntimeLane.GeneralCompute' in z,
@@ -88,5 +118,5 @@ ck('oh_rev35_r010_queue_kick=' not in r,
    'obsolete diagnostic queue-kick telemetry absent')
 
 print(PREFIX + ' ALL PASS')
-print('contract=single serial commit lane + continuous R007 FIFO wake + real backlog budgeting')
+print('contract=single serial commit lane + accepted current-FAR queue wake + real backlog budgeting')
 print('worker/scheduler/rasterizer semantics=R009 retained; quality/10Hz/range unchanged')
