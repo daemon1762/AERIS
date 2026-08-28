@@ -19,15 +19,43 @@ def ck(value, name):
     print(('[PASS] ' if ok else '[FAIL] ') + name)
 
 
-ck('internal const string Codename = "ADENOSINE";' in M and
-   'internal const string Revision = "OH_PHASE5_001";' in M and
-   'internal const string Candidate = "AERIS25_PERSISTENT_PRESENTATION_BATCHING";' in M and
-   'codename = ADENOSINE' in C,
-   'ADENOSINE OH_PHASE5_001 identity is authoritative')
-ck('CANDIDATE_NAME="AERIS25_PERSISTENT_PRESENTATION_BATCHING"' in U and
-   'OPERATION HEALTH PHASE 5 ADENOSINE PERSISTENT PRESENTATION BATCHING REV001' in U and
-   'OPERATION HEALTH PHASE 5 ADENOSINE — PERSISTENT PRESENTATION BATCHING — REV001' in U,
-   'build/in-game identity is AERIS25-2 ADENOSINE')
+# This verifier remains the inherited ADENOSINE path contract. It may be run on the
+# original Phase 5 authority or on the one explicitly admitted final descendant that
+# superseded it without changing the persistent-presentation invariants checked below.
+# Keep the descendant gate exact: later revisions must add their own explicit admission.
+adenosine_phase5_identity = (
+    'internal const string Codename = "ADENOSINE";' in M and
+    'internal const string Revision = "OH_PHASE5_001";' in M and
+    'internal const string Candidate = "AERIS25_PERSISTENT_PRESENTATION_BATCHING";' in M and
+    'codename = ADENOSINE' in C
+)
+
+norepinephrine_rev003_descendant_identity = (
+    'internal const string Codename = "NOREPINEPHRINE";' in M and
+    'internal const string Revision = "OH_PHASE6_003";' in M and
+    'internal const string Candidate = "AERIS25_MAIN_THREAD_COMMIT_GOVERNOR";' in M and
+    'codename = NOREPINEPHRINE' in C
+)
+
+ck(adenosine_phase5_identity or norepinephrine_rev003_descendant_identity,
+   'ADENOSINE OH_PHASE5_001 authority or exact NOREPINEPHRINE OH_PHASE6_003 descendant is authoritative')
+
+adenosine_phase5_build = (
+    'CANDIDATE_NAME="AERIS25_PERSISTENT_PRESENTATION_BATCHING"' in U and
+    'OPERATION HEALTH PHASE 5 ADENOSINE PERSISTENT PRESENTATION BATCHING REV001' in U and
+    'OPERATION HEALTH PHASE 5 ADENOSINE — PERSISTENT PRESENTATION BATCHING — REV001' in U
+)
+
+norepinephrine_rev003_build = (
+    'CANDIDATE_NAME="AERIS25_MAIN_THREAD_COMMIT_GOVERNOR"' in U and
+    'OPERATION HEALTH PHASE 6 NOREPINEPHRINE MAIN THREAD COMMIT GOVERNOR REV003 AUTHORITATIVE PUBLICATION' in U and
+    'verify_aeris25_authoritative_publication_lifetime_hotfix.py' in U
+)
+
+ck(adenosine_phase5_build or
+   (norepinephrine_rev003_descendant_identity and norepinephrine_rev003_build),
+   'build/in-game identity is ADENOSINE Phase5 or exact admitted NOREPINEPHRINE rev003 descendant')
+
 ck('AERIS25_PERSISTENT_PRESENTATION_BATCHING' in R and
    'struct PresentationPacket' in R and
    'internal AERISTerrainHeightTile Tile;' in R and
@@ -71,7 +99,8 @@ ck('oh_presentation_packet_count=' in R and
    'oh_presentation_packet_draw=' in R,
    'runtime publishes packet persistence/submission telemetry')
 
-# AERIS25-1 accepted invariants must remain present on the final ADENOSINE tree.
+# AERIS25-1 accepted invariants must remain present on the final ADENOSINE path and
+# on the explicitly admitted NOREPINEPHRINE rev003 descendant.
 ck('AERIS25_CONTENT_GENERATION_BURST_GOVERNOR' in R and
    'oh_content_commit_budget_hit=' in R and
    'oh_prune_budget_hit=' in R and
@@ -87,7 +116,7 @@ ck('AERIS25_CHUNK_CULL_GUARD' in R and
    'accepted cull guard/overscan path and rejected rev005 bypass state are preserved')
 ck('AERIS25_DYNAMIC_COLOUR_MODE_SPLIT' in SH and
    'AERIS25_PERSISTENT_PRESENTATION_BATCHING' not in SH,
-   'ADENOSINE changes no shader equations or shader bytes')
+   'inherited ADENOSINE path changes no shader equations or shader bytes')
 
 # Painter order is a hard Golden contract. Packetization may not reorder across layers.
 draw_start = R.find('        bool DrawEntry(Entry entry, Matrix4x4 mapMatrix, bool drawContours,')
@@ -109,11 +138,22 @@ ck('GPU_DYNAMIC_SEMANTIC' in R and 'oh_gpu_dynamic_colour=' in R,
 
 active = '\n'.join(line for line in U.splitlines()
                    if line.strip().startswith('PYTHONDONTWRITEBYTECODE=1 python3'))
-ck('verify_aeris25_persistent_presentation_batching.py' in active and
-   'verify_aeris25_content_generation_burst_governor_hotfix.py' not in active and
-   'verify_aeris25_chunk_cull_guard_hotfix.py' not in active and
-   'verify_aeris25_temporal_foundation_overscan_hotfix.py' not in active,
-   'Phase 5 build uses one final-tree verifier after inherited pre-promotion acceptance')
+phase5_active_contract = (
+    'verify_aeris25_persistent_presentation_batching.py' in active and
+    'verify_aeris25_content_generation_burst_governor_hotfix.py' not in active and
+    'verify_aeris25_chunk_cull_guard_hotfix.py' not in active and
+    'verify_aeris25_temporal_foundation_overscan_hotfix.py' not in active
+)
+rev003_active_contract = (
+    'verify_aeris25_authoritative_publication_lifetime_hotfix.py' in active and
+    'verify_aeris25_persistent_presentation_batching.py' not in active and
+    'verify_aeris25_content_generation_burst_governor_hotfix.py' not in active and
+    'verify_aeris25_chunk_cull_guard_hotfix.py' not in active and
+    'verify_aeris25_temporal_foundation_overscan_hotfix.py' not in active
+)
+ck((adenosine_phase5_identity and phase5_active_contract) or
+   (norepinephrine_rev003_descendant_identity and rev003_active_contract),
+   'active build uses the correct final-tree verifier for Phase5 or exact OH_PHASE6_003 descendant')
 
 frozen = ['Source/AERISFlightControl/AA', 'Source/AERISFlightControl/Autopilot',
           'Source/AERISFlightControl/Protect', 'Source/AERISFlightControl/Landing']
@@ -126,9 +166,11 @@ except Exception:
 ck(changed == [], 'AA/AP/PROTECT/LAND working-tree edits remain NONE')
 
 failed = [name for ok, name in checks if not ok]
-print('\n[AERIS25 ADENOSINE PHASE5_001 PERSISTENT PRESENTATION BATCHING] %d/%d PASS' %
-      (len(checks) - len(failed), len(checks)))
+mode = ('ADENOSINE_PHASE5_001' if adenosine_phase5_identity else
+        'NOREPINEPHRINE_OH_PHASE6_003_DESCENDANT')
+print('\n[AERIS25 ADENOSINE INHERITED PRESENTATION PATH] mode=%s %d/%d PASS' %
+      (mode, len(checks) - len(failed), len(checks)))
 if failed:
     print('FAILED: ' + '; '.join(failed))
     raise SystemExit(1)
-print('[AERIS25 ADENOSINE PHASE5_001 PERSISTENT PRESENTATION BATCHING] STATIC PASS')
+print('[AERIS25 ADENOSINE INHERITED PRESENTATION PATH] STATIC PASS')
