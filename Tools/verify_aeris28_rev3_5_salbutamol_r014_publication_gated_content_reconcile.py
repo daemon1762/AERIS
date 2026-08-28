@@ -22,6 +22,7 @@ for path in (R, O, P, N, A, B):
 
 renderer = R.read_text(); observer = O.read_text(); preload = P.read_text()
 nav = N.read_text(); applicator = A.read_text(); build = B.read_text()
+renderer_flat = ' '.join(renderer.split())
 checks = []
 
 def check(value, label):
@@ -51,8 +52,20 @@ check('if (rev35R014ReconcileRan)' in renderer,
       'R014 prune/full-reconcile witness present')
 check('rasterizer.ReconcileCurrentRequests(requested);' in renderer,
       'R008 current-request reconcile retained')
-check('for (int admissionPass = 0; admissionPass < 2; admissionPass++)' in renderer,
-      'R008 FAR-first admission retained')
+legacy_r008_admission = (
+    'for (int admissionPass = 0; admissionPass < 2; admissionPass++)' in renderer and
+    'bool r008Foundation = tile.Key.Lod == AERISTerrainTileLod.Far;' in renderer and
+    'if ((admissionPass == 0) != r008Foundation) continue;' in renderer
+)
+accepted_r023_admission = (
+    'for (int admissionPass = 0; admissionPass < 4; admissionPass++)' in renderer and
+    'bool r021Far = tile.Key.Lod == AERISTerrainTileLod.Far;' in renderer_flat and
+    'bool r021VisibleFar = r021Far && rev35R019VisibleFarKeys.Contains(tile.Key);' in renderer_flat and
+    'bool r022PrewarmFar = r021Far && !r021VisibleFar && rev35R022SuccessorPrewarmFarKeys.Contains(tile.Key);' in renderer_flat and
+    'bool r022Admit = admissionPass == 0 ? r021VisibleFar : admissionPass == 1 ? r022PrewarmFar : admissionPass == 2 ? (r021Far && !r021VisibleFar && !r022PrewarmFar) : !r021Far;' in renderer_flat
+)
+check(legacy_r008_admission or accepted_r023_admission,
+      'R008 FAR-first admission retained through legacy two-pass or accepted R023 four-pass descendant')
 check('const float ContentPlanningHeadingStepDeg = 6f;' in renderer,
       'REV009 6 degree planning authority retained')
 check('rev35R007FoundationQueue.Count > 0' in renderer,
