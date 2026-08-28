@@ -666,8 +666,6 @@ namespace AERISFlightControl.Terrain
             double latitudeDeg, double longitudeDeg)
         {
             double normalizedLongitude = NormalizeLongitude(longitudeDeg);
-            if (Math.Abs(normalizedLongitude - 180.0) <= 0.0000000005)
-                normalizedLongitude = -180.0;
             return new BoundarySampleKey
             {
                 BodyName = key.BodyName ?? string.Empty,
