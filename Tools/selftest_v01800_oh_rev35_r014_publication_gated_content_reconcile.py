@@ -146,8 +146,10 @@ reconcile_if = draw.find('if (!rev35R014ReconcileRequired)', gate)
 capture = draw.find('visible = system.CaptureVisible(', reconcile_if)
 requested = draw.find('requested.Clear();', capture)
 r008 = draw.find('rasterizer.ReconcileCurrentRequests(requested);', requested)
-far_first = draw.find('for (int admissionPass = 0; admissionPass < 2; admissionPass++)', r008)
-resolve = draw.find('ResolveRenderableEntries(', far_first)
+legacy_admission = draw.find('for (int admissionPass = 0; admissionPass < 2; admissionPass++)', r008)
+accepted_r023_admission = draw.find('for (int admissionPass = 0; admissionPass < 4; admissionPass++)', r008)
+admission = legacy_admission if legacy_admission >= 0 else accepted_r023_admission
+resolve = draw.find('ResolveRenderableEntries(', admission)
 measure = draw.find('contentFoundationCoverage = MeasureFoundationGpuReadiness(', resolve)
 reconciled = draw.find('rev35R014ReconciledPublicationSerial =', measure)
 check(pump >= 0 and gate > pump,
@@ -156,15 +158,21 @@ check(capture > reconcile_if,
       'CaptureVisible is behind R014 batching gate')
 check(requested > capture and r008 > requested,
       'requested rebuild and R008 reconcile are behind R014 batching gate')
-check(far_first > r008 and resolve > far_first and measure > resolve,
-      'R008 FAR-first resolve/foundation chain remains inside full reconcile')
+accepted_r023_shape = (
+    accepted_r023_admission > r008 and
+    'bool r021VisibleFar = r021Far &&' in draw[accepted_r023_admission:resolve] and
+    'rev35R019VisibleFarKeys.Contains(tile.Key);' in draw[accepted_r023_admission:resolve] and
+    'bool r022PrewarmFar = r021Far && !r021VisibleFar &&' in draw[accepted_r023_admission:resolve] and
+    'rev35R022SuccessorPrewarmFarKeys.Contains(tile.Key);' in draw[accepted_r023_admission:resolve]
+)
+check(admission > r008 and resolve > admission and measure > resolve and
+      (legacy_admission >= 0 or accepted_r023_shape),
+      'R008 FAR-first resolve/foundation chain remains inside full reconcile through accepted R023 descendant')
 check(reconciled > measure,
       'newest publication serial is acknowledged only after full reconcile')
 check(draw.count('system.CaptureVisible(') == 1,
       'single CaptureVisible authority retained')
 
-# Phase6_003's packet refresh -> deferred retirement ordering is a byte-stable inherited
-# lifetime contract. R014 wraps the block but must not re-indent or rewrite this sequence.
 phase6_packet_refresh = '''                RefreshPresentationPackets(tiles, drawEntriesScratch);
                 // Phase6_003: publication may detach the previously published Entry, but
                 // Mesh recycling is delayed until the authoritative packet refresh proves
@@ -173,8 +181,6 @@ phase6_packet_refresh = '''                RefreshPresentationPackets(tiles, dra
 check(phase6_packet_refresh in renderer,
       'Phase6_003 packet refresh -> deferred retirement textual contract retained')
 
-# Warm Visibility already owns the complete prune implementation. R014 may only gate that
-# block; it must not collapse it back to the historical two-call prune shape.
 ensure = draw.find('EnsureResources(plot, effectiveMode, currentPreset, virtualDetail);')
 prune_gate = draw.find('if (rev35R014ReconcileRan)', ensure)
 prune_open = draw.find('{', prune_gate) if prune_gate >= 0 else -1
@@ -225,8 +231,6 @@ for forbidden in ('Task.Run(', 'new Thread(', 'ThreadPool.', 'WaitManagedPrepara
                   'AERIS25_PHASE7_001_DIAZEPAM_RESIDENT_RAM_REUSE'):
     check(forbidden not in renderer, 'R014 renderer excludes ' + forbidden)
 
-# Geometry is the sole immediate bypass. Publication/retry work waits for the inherited
-# 0.20 s maintenance deadline; worker-only completion is never a full reconcile trigger.
 def full_reconcile(geometry, publication, retry, cadence_due):
     return geometry or (cadence_due and (publication or retry))
 
