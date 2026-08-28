@@ -153,9 +153,21 @@ check(legacy_r009_foundation_gate or accepted_r018_foundation_gate,
       'foundation publication gate is legacy R009 strict coverage or exact accepted R018 visible-GPU descendant')
 check('RenderTextureFormat.ARGB32' in r and 'FilterMode.Bilinear' in r,
       'ARGB32/Bilinear Golden target retained')
-check('for (int admissionPass = 0; admissionPass < 2; admissionPass++)' in r and
+legacy_r008_admission = (
+    'for (int admissionPass = 0; admissionPass < 2; admissionPass++)' in r and
+    'bool r008Foundation = tile.Key.Lod == AERISTerrainTileLod.Far;' in r and
+    'if ((admissionPass == 0) != r008Foundation) continue;' in r
+)
+accepted_r023_admission = (
+    'for (int admissionPass = 0; admissionPass < 4; admissionPass++)' in r and
+    'bool r021Far = tile.Key.Lod == AERISTerrainTileLod.Far;' in r_flat and
+    'bool r021VisibleFar = r021Far && rev35R019VisibleFarKeys.Contains(tile.Key);' in r_flat and
+    'bool r022PrewarmFar = r021Far && !r021VisibleFar && rev35R022SuccessorPrewarmFarKeys.Contains(tile.Key);' in r_flat and
+    'bool r022Admit = admissionPass == 0 ? r021VisibleFar : admissionPass == 1 ? r022PrewarmFar : admissionPass == 2 ? (r021Far && !r021VisibleFar && !r022PrewarmFar) : !r021Far;' in r_flat
+)
+check((legacy_r008_admission or accepted_r023_admission) and
       'rasterizer.ReconcileCurrentRequests(requested);' in r,
-      'R008 requested-first FAR-first admission retained')
+      'R008 requested-first FAR-first admission retained through legacy two-pass or accepted R023 four-pass descendant')
 check('TryBeginRev35R007QueuedFoundationCommit()' in r,
       'R007 chained admission retained')
 
