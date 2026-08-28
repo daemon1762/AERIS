@@ -18,7 +18,15 @@ check('BuildEntry reuses one clipping scratch buffer', 'SurfacePoint[] clipped =
 check('per-triangle SurfacePoint input array allocation removed', 'SurfacePoint[] input = { a, b, c };' not in renderer)
 check('native Mesh pool exists', 'readonly Queue<Mesh> meshPool' in renderer and 'Mesh AcquireMesh(' in renderer)
 check('native Mesh pool is tightly bounded', 'const int MaximumPooledMeshes = 24;' in renderer)
-check('ordinary entry removal recycles meshes', 'RecycleMesh(ref entry.LandMesh);' in renderer and 'RecycleMesh(ref entry.CoastlineMesh);' in renderer)
+legacy_remove = 'RecycleMesh(ref entry.LandMesh);' in renderer and 'RecycleMesh(ref entry.CoastlineMesh);' in renderer
+packed_remove = (
+    'RecycleMesh(ref entry.PackedTerrainMesh);' in renderer and
+    'RecycleMesh(ref entry.ContourMesh);' in renderer and
+    'RecycleMesh(ref entry.CoastlineMesh);' in renderer and
+    'void ReleaseDeferredEntryRetirements(bool force)' in renderer and
+    'if (!force && presentationEntryPins.Contains(entry))' in renderer
+)
+check('ordinary entry removal recycles meshes through legacy or accepted packed snapshot-safe descendant', legacy_remove or packed_remove)
 check('terrain suspension destroys pooled GPU resources', 'DestroyMeshPool();' in renderer and 'void ReleaseGpuResources()' in renderer)
 check('mesh-pool telemetry is published', 'oh_mesh_pool_hit=' in renderer and 'oh_mesh_recycle=' in renderer and 'oh_surface_builder_reuse=' in renderer)
 check('Standard water colour avoids redundant first upload', 'WaterColourPreset = AERISTerrainColourPreset.Standard' in renderer)
@@ -36,10 +44,20 @@ check('terrain BACK cadence remains 0.10 seconds or approved shared 10 Hz author
       ('nextBackRefreshRealtime = Time.realtimeSinceStartup + 0.10f;' in renderer) or
       ('nextBackRefreshRealtime = nextAuthoritativePresentationTickRealtime;' in renderer and
        'nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f;' in renderer))
-check('projection geometry still updates only when exact-dirty while subpixel motion avoids vertex rewrite',
+legacy_projection = (
       'bool exactProjectionDue =' in renderer and 'if (!exactProjectionDue)' in renderer and
       'Matrix4x4.Translate' in renderer and
+      'ProjectMesh(entry.LandMesh' in renderer and
       renderer.index('if (!exactProjectionDue)') < renderer.index('ProjectMesh(entry.LandMesh'))
+)
+packed_projection = (
+      'bool exactProjectionDue =' in renderer and 'if (!exactProjectionDue)' in renderer and
+      'Matrix4x4.Translate' in renderer and
+      'ProjectMesh(entry.PackedTerrainMesh,' in renderer and
+      'entry.PackedTerrainGeographicPoints,' in renderer and
+      'entry.PackedTerrainProjectedVertices, context);' in renderer and
+      renderer.index('if (!exactProjectionDue)') < renderer.index('ProjectMesh(entry.PackedTerrainMesh,'))
+check('projection geometry still updates only when exact-dirty while subpixel motion avoids vertex rewrite through legacy or accepted packed descendant', legacy_projection or packed_projection)
 check('Operation Health Hotfix 1 FRONT-synchronized symbology retained', 'terrainSymbologyFrontSwap' in nav and 'terrainTileRenderer.FrontBufferSwaps' in nav)
 check('Hotfix 1 prediction vector retains synchronized speed/track', 'terrainSymbologyGroundSpeedMps' in nav and 'terrainSymbologyGroundTrackDeg' in nav)
 
