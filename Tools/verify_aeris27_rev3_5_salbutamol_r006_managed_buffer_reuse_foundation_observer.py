@@ -239,14 +239,14 @@ legacy_r006_foundation_gate = (
     'readyFar >= visible.FarFoundationCount' in renderer
 )
 accepted_r018_foundation_gate = (
-    'bool visibleReady = contentFoundationCoverageReady && requestedViewReady && visibleFoundationComplete && shiftReady;' in renderer_flat and
-    'bool overscanReady = overscanFoundationComplete && plannerReady;' in renderer_flat and
-    'bool foundationReady = visibleReady;' in renderer_flat and
-    'bool swapReady = scrollCommitDue && hasFront && foundationReady;' in renderer_flat and
-    'foundationReady = visibleReady && overscanReady' not in renderer_flat
+    'bool r018VisibleGpuComplete = operationHealthRev35R018VisiblePlanValid && operationHealthRev35R018VisibleRequiredFar > 0 && operationHealthRev35R018VisibleReadyFar >= operationHealthRev35R018VisibleRequiredFar;' in renderer_flat and
+    'bool r018OverscanGpuComplete = visible.FoundationComplete && lastBackFoundationCoverage >= 0.999f && readyFar >= visible.FarFoundationCount;' in renderer_flat and
+    'foundationComplete = rendered && r018VisibleGpuComplete;' in renderer_flat and
+    'if (!r018OverscanGpuComplete) operationHealthRev35R018OverscanHolAvoided++;' in renderer_flat and
+    'foundationComplete = rendered && r018VisibleGpuComplete && r018OverscanGpuComplete' not in renderer_flat
 )
 check(legacy_r006_foundation_gate or accepted_r018_foundation_gate,
-      'foundation swap gate is legacy R006 or exact accepted R018 visible-foundation descendant')
+      'foundation swap gate is legacy R006 or exact accepted R018 visible-GPU descendant')
 check(renderer.count('Rev35R006ContourOnlyStyleDifference(') == 2,
       'contour-only fallback logic is observer-only helper plus one observer call')
 
