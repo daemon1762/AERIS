@@ -96,18 +96,36 @@ check('RequestIdentity = request.RequestIdentity' in z and
       'worker result preserves exact request identity')
 
 # Renderer must establish all exact current keys before scheduling any new worker job.
+# R023 is the accepted descendant of R008's original two-pass admission. It preserves
+# requested-first reconciliation, then refines the old FAR-first lane into four strict
+# classes: exact-visible FAR, successor-prewarm FAR, remaining hidden FAR, non-FAR.
 draw=method_body(r,'        internal AERISTerrainGpuDrawState Draw(Rect plot,')
 check(draw, 'Draw method resolved')
+draw_flat=' '.join(draw.split())
 prepass=draw.find('R008 phase 1: establish the complete current exact request set first')
 reconcile_call=draw.find('rasterizer.ReconcileCurrentRequests(requested);')
-admission=draw.find('for (int admissionPass = 0; admissionPass < 2; admissionPass++)')
+legacy_admission=draw.find('for (int admissionPass = 0; admissionPass < 2; admissionPass++)')
+r023_admission=draw.find('for (int admissionPass = 0; admissionPass < 4; admissionPass++)')
+admission_candidates=[p for p in (legacy_admission,r023_admission) if p >= 0]
+admission=min(admission_candidates) if admission_candidates else -1
 check(0 <= prepass < reconcile_call < admission,
-      'complete requested set -> raster reconcile -> new admission ordering is strict')
+      'complete requested set -> raster reconcile -> accepted admission ordering is strict')
 check('requested.Add(CacheKey(requestedTile.Key,' in draw,
       'all visible exact identities are established in prepass')
-check('bool r008Foundation = tile.Key.Lod == AERISTerrainTileLod.Far;' in draw and
-      'if ((admissionPass == 0) != r008Foundation) continue;' in draw,
-      'FAR foundation scheduling is first pass; other LODs second pass')
+legacy_r008_far_first=(
+    legacy_admission >= 0 and
+    'bool r008Foundation = tile.Key.Lod == AERISTerrainTileLod.Far;' in draw and
+    'if ((admissionPass == 0) != r008Foundation) continue;' in draw
+)
+accepted_r023_four_pass=(
+    r023_admission >= 0 and
+    'bool r021Far = tile.Key.Lod == AERISTerrainTileLod.Far;' in draw_flat and
+    'bool r021VisibleFar = r021Far && rev35R019VisibleFarKeys.Contains(tile.Key);' in draw_flat and
+    'bool r022PrewarmFar = r021Far && !r021VisibleFar && rev35R022SuccessorPrewarmFarKeys.Contains(tile.Key);' in draw_flat and
+    'bool r022Admit = admissionPass == 0 ? r021VisibleFar : admissionPass == 1 ? r022PrewarmFar : admissionPass == 2 ? (r021Far && !r021VisibleFar && !r022PrewarmFar) : !r021Far;' in draw_flat
+)
+check(legacy_r008_far_first or accepted_r023_four_pass,
+      'FAR-first admission is legacy R008 two-pass or exact accepted R023 four-pass descendant')
 check('!requested.Contains(pendingEntryCommit.CacheKey)' in draw and
       'CancelPendingEntryCommit();' in draw and
       'operationHealthRev35R008PendingCommitCancelled++' in draw,
