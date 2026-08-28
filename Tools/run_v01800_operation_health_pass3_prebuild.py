@@ -5,6 +5,7 @@ sys.dont_write_bytecode=True
 ROOT=Path(__file__).resolve().parents[1]
 suites=[
  ('Operation Health Step 2 Motion Content Split + Coastal Edge Refinement','selftest_v01800_operation_health_step2_motion_content_coastal_refinement.py'),
+ ('Operation Health R014 Publication-Gated Content Reconcile','selftest_v01800_oh_rev35_r014_publication_gated_content_reconcile.py'),
  ('Operation Health FRONT Presentation Fast Path','selftest_v01800_operation_health_front_presentation_fastpath.py'),
  ('Operation Health Retained FRONT Surface','selftest_v01800_operation_health_retained_surface.py'),
  ('Operation Health Conservative Entry Culling', 'selftest_v01800_operation_health_conservative_entry_culling.py'),
