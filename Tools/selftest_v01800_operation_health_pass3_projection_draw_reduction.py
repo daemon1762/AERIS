@@ -25,18 +25,42 @@ ck('Dictionary<int, Color32[]> uniformColourScratch' in R and
    'GetUniformColourScratch(mesh.vertexCount, colour)' in R,
    'uniform water-colour upload scratch is reusable')
 draw=R[R.index('bool DrawEntry('):R.index('void EnsureWaterColour',R.index('bool DrawEntry('))]
-ck(draw.count('terrainMaterial.SetPass(0)') == 1,
-   'terrain meshes share one material SetPass per entry')
-# Inspect actual draw submissions, not earlier null/count references to the same fields.
-order=[
+legacy_setpass = draw.count('terrainMaterial.SetPass(0)') == 1
+packed_setpass = (
+    'Material terrainDrawMaterial = gpuEntry ? gpuVertexProjection.TerrainMaterial : terrainMaterial;' in draw and
+    draw.count('terrainDrawMaterial.SetPass(0)') == 1 and
+    'Graphics.DrawMeshNow(entry.PackedTerrainMesh, mapMatrix)' in draw
+)
+ck(legacy_setpass or packed_setpass,
+   'terrain surfaces share one material SetPass per entry through legacy or accepted packed descendant')
+# Legacy used four distinct terrain meshes in painter order. The accepted packed
+# descendant preserves exactly that semantic order in one mesh by assigning contiguous
+# offsets and writing indices water -> land -> coastal water -> coastal land.
+legacy_order=[
  'Graphics.DrawMeshNow(entry.WaterMesh, mapMatrix)',
  'Graphics.DrawMeshNow(entry.LandMesh, mapMatrix)',
  'Graphics.DrawMeshNow(entry.CoastalWaterCorrectionMesh, mapMatrix)',
  'Graphics.DrawMeshNow(entry.CoastalLandCorrectionMesh, mapMatrix)'
 ]
-pos=[draw.find(x) for x in order]
-ck(all(x>=0 for x in pos) and pos==sorted(pos),
-   'Candidate8 terrain painter order remains unchanged')
+legacy_pos=[draw.find(x) for x in legacy_order]
+legacy_painter=all(x>=0 for x in legacy_pos) and legacy_pos==sorted(legacy_pos)
+packed_tokens=[
+ 'pending.PackedWaterOffset = 0;',
+ 'pending.PackedLandOffset = pending.PackedWaterCount;',
+ 'pending.PackedCoastalWaterOffset = pending.PackedLandOffset +',
+ 'pending.PackedCoastalLandOffset = pending.PackedCoastalWaterOffset +'
+]
+packed_pos=[R.find(x) for x in packed_tokens]
+packed_painter=(
+    all(x>=0 for x in packed_pos) and packed_pos==sorted(packed_pos) and
+    'pending.PackedIndices[pending.PackedIndexWriteCursor++] =\n                                pending.PackedWaterOffset +' in R and
+    'pending.PackedIndices[pending.PackedIndexWriteCursor++] =\n                                pending.PackedLandOffset +' in R and
+    'pending.PackedIndices[pending.PackedIndexWriteCursor++] =\n                                pending.PackedCoastalWaterOffset + pending.PrepareCursor++;' in R and
+    'pending.PackedIndices[pending.PackedIndexWriteCursor++] =\n                                pending.PackedCoastalLandOffset + pending.PrepareCursor++;' in R and
+    'Graphics.DrawMeshNow(entry.PackedTerrainMesh, mapMatrix)' in draw
+)
+ck(legacy_painter or packed_painter,
+   'Candidate8 terrain painter order remains unchanged through legacy or accepted packed mesh descendant')
 ck('oh_bounds_skip=' in R and 'oh_setpass_saved=' in R and
    'oh_identity_index_hit=' in R and 'oh_uniform_colour_reuse=' in R,
    'Pass 3 runtime telemetry is published')
