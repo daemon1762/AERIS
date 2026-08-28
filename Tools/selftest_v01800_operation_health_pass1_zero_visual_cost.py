@@ -47,7 +47,19 @@ ck(legacy_prepared_back or phase5_prepared_back,
    'back rendering consumes prepared draw entries directly or through persistent packets')
 # Check only the live Schedule implementation. The renderer comment intentionally
 # mentions the retired cacheKey + "|PENDING" representation for traceability.
-schedule=renderer[renderer.index('void Schedule('):renderer.index('void DrainCompleted(')]
+# Legacy Pass 1 ended this region at DrainCompleted(). Accepted descendants replaced
+# that monolithic drain with the bounded staged PumpStagedCompletedCommit() path.
+schedule_start=renderer.find('void Schedule(')
+schedule_end_candidates=[]
+if schedule_start >= 0:
+    for marker in ('void DrainCompleted(', 'void PumpStagedCompletedCommit('):
+        position=renderer.find(marker, schedule_start + 1)
+        if position >= 0:
+            schedule_end_candidates.append(position)
+schedule_end=min(schedule_end_candidates) if schedule_end_candidates else -1
+schedule=renderer[schedule_start:schedule_end] if schedule_start >= 0 and schedule_end > schedule_start else ''
+ck(bool(schedule),
+   'live Schedule region resolves through legacy drain or accepted staged-commit descendant')
 ck('scheduledThisFrame.Add(cacheKey)' in schedule and
    'requested.Contains(cacheKey + "|PENDING")' not in schedule and
    'requested.Add(cacheKey + "|PENDING")' not in schedule,
