@@ -48,7 +48,7 @@ legacy_projection = (
       'bool exactProjectionDue =' in renderer and 'if (!exactProjectionDue)' in renderer and
       'Matrix4x4.Translate' in renderer and
       'ProjectMesh(entry.LandMesh' in renderer and
-      renderer.index('if (!exactProjectionDue)') < renderer.index('ProjectMesh(entry.LandMesh'))
+      renderer.index('if (!exactProjectionDue)') < renderer.index('ProjectMesh(entry.LandMesh')
 )
 packed_projection = (
       'bool exactProjectionDue =' in renderer and 'if (!exactProjectionDue)' in renderer and
@@ -56,7 +56,8 @@ packed_projection = (
       'ProjectMesh(entry.PackedTerrainMesh,' in renderer and
       'entry.PackedTerrainGeographicPoints,' in renderer and
       'entry.PackedTerrainProjectedVertices, context);' in renderer and
-      renderer.index('if (!exactProjectionDue)') < renderer.index('ProjectMesh(entry.PackedTerrainMesh,'))
+      renderer.index('if (!exactProjectionDue)') < renderer.index('ProjectMesh(entry.PackedTerrainMesh,')
+)
 check('projection geometry still updates only when exact-dirty while subpixel motion avoids vertex rewrite through legacy or accepted packed descendant', legacy_projection or packed_projection)
 check('Operation Health Hotfix 1 FRONT-synchronized symbology retained', 'terrainSymbologyFrontSwap' in nav and 'terrainTileRenderer.FrontBufferSwaps' in nav)
 check('Hotfix 1 prediction vector retains synchronized speed/track', 'terrainSymbologyGroundSpeedMps' in nav and 'terrainSymbologyGroundTrackDeg' in nav)
