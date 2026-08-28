@@ -9,11 +9,34 @@ checks=[]
 def ck(v,n): checks.append((bool(v),n)); print(('[PASS] ' if v else '[FAIL] ')+n)
 ck('internal const float FixedNavigationDisplayUpdateHz = 10f' in S,'ND authoritative contract remains 10 Hz')
 draw=R[R.index('internal AERISTerrainGpuDrawState Draw('):R.index('bool NeedsContentRefresh(')]
-fast=draw[draw.index('float presentationNow'):draw.index('residentCache = system.CurrentBodyResidentCache;')]
-ck('TryPresentCoalescedFront(plot, vessel)' in fast,'retained FRONT gate exists before normal renderer work')
-ck(draw.index('TryPresentCoalescedFront(plot, vessel)') < draw.index('residentCache = system.CurrentBodyResidentCache;'),'retained gate precedes resident-cache access')
-ck(draw.index('TryPresentCoalescedFront(plot, vessel)') < draw.index('AERISTerrainGpuMode currentGpuMode'),'retained gate precedes settings/GPU-mode work')
-ck('CaptureVisible' not in fast and 'DrainCompleted' not in fast and 'EnsureResources' not in fast,'retained gate performs no content/resource work')
+presentation=draw.index('float presentationNow')
+gate=draw.index('TryPresentCoalescedFront(plot, vessel)')
+settings=draw.index('AERISTerrainGpuMode currentGpuMode')
+first_cache=draw.index('residentCache = system.CurrentBodyResidentCache;')
+legacy_retained_gate=(presentation < gate < first_cache < settings)
+accepted_staged_pump=(
+    presentation < first_cache < gate < settings and
+    'if (pendingEntryCommit != null || rasterizer.CompletedCount > 0 ||' in draw[presentation:gate] and
+    'rev35R019VisibleFoundationQueue.Count > 0 ||' in draw[presentation:gate] and
+    'rev35R007FoundationQueue.Count > 0)' in draw[presentation:gate] and
+    'PumpStagedCompletedCommit(system, false);' in draw[presentation:gate]
+)
+ck(legacy_retained_gate or accepted_staged_pump,
+   'retained FRONT gate exists before normal renderer work under legacy or accepted staged-pump descendant')
+ck(legacy_retained_gate or accepted_staged_pump,
+   'retained gate precedes normal settings/GPU work; only accepted bounded staged pump may access resident cache first')
+ck(gate < settings,'retained gate precedes settings/GPU-mode work')
+pre_gate=draw[presentation:gate]
+ck('CaptureVisible' not in pre_gate and 'DrainCompleted' not in pre_gate and
+   'EnsureResources' not in pre_gate and 'ResolveRenderableEntries' not in pre_gate and
+   'Schedule(tile' not in pre_gate,
+   'retained pre-gate path performs no content capture/resource rebuild/new scheduling work')
+if accepted_staged_pump:
+ ck(pre_gate.count('PumpStagedCompletedCommit(system, false);') == 1,
+    'accepted non-authoritative pre-gate work is exactly one staged pump call')
+else:
+ ck('PumpStagedCompletedCommit(system, false);' not in pre_gate,
+    'legacy retained path has no staged pump before gate')
 coalesced=R[R.index('bool TryPresentCoalescedFront('):R.index('void MarkGpuContentDirty(')]
 ck(coalesced.count('PresentFrontDirect(')==1,'retained path has exactly one unavoidable IMGUI blit')
 ck('CapturePresentedProjection(' not in coalesced,'retained path does not rebuild projection snapshot')
