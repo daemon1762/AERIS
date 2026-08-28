@@ -26,6 +26,7 @@ ck(B.is_file(), 'build exists')
 if not R.is_file() or not T.is_file() or not B.is_file():
     raise SystemExit(1)
 r = R.read_text(); t = T.read_text(); b = B.read_text()
+r_flat = ' '.join(r.split())
 
 # Parent/frozen identity.
 ck(HF4 in r, 'HF4 parent retained')
@@ -50,9 +51,19 @@ ck('tile.Key.Lod != AERISTerrainTileLod.Far' in queue,
 ck('requested.Contains(cacheKey)' in queue and
    'entries.ContainsKey(cacheKey)' in queue,
    'queue requires latest request and missing Entry')
-ck('rev35R007FoundationQueue.Count >= Rev35R007FoundationQueueMaximum' in queue and
-   'operationHealthRev35R007Overflow++' in queue,
-   'queue is bounded and overflow observable')
+legacy_r007_queue_bound = (
+    'rev35R007FoundationQueue.Count >= Rev35R007FoundationQueueMaximum' in queue and
+    'operationHealthRev35R007Overflow++' in queue
+)
+accepted_r019_queue_bound = (
+    'int combinedQueueCount = rev35R007FoundationQueue.Count +' in queue and
+    'rev35R019VisibleFoundationQueue.Count;' in queue and
+    'if (combinedQueueCount >= Rev35R007FoundationQueueMaximum)' in queue and
+    'operationHealthRev35R007Overflow++' in queue and
+    'rev35R019VisibleFoundationQueue.Enqueue(cacheKey);' in queue
+)
+ck(legacy_r007_queue_bound or accepted_r019_queue_bound,
+   'queue is bounded and overflow observable under legacy R007 or accepted R019 split-priority descendant')
 ck('!contentSnapshotValid || !requested.Contains(cacheKey)' in chain,
    'chain revalidates latest content/request authority')
 ck('entries.ContainsKey(cacheKey)' in chain and
@@ -132,14 +143,26 @@ ck('verify_aeris27_rev3_5_salbutamol_r007_foundation_chained_admission.py' in b,
 ck('rev3_5_r007_variant=%s' in b,
    'candidate identity records R007')
 
-# Frozen visual/publication behavior.
+# Frozen visual/publication behavior. R018 is an accepted descendant of the original
+# strict R007 FoundationComplete gate: exact visible FAR GPU readiness owns swap authority,
+# while overscan completeness remains observed but must not cause head-of-line blocking.
 ck('presentationNow + 0.10f' in r, 'fixed visible 10 Hz retained')
 ck('RenderTextureFormat.ARGB32' in r and 'FilterMode.Bilinear' in r,
    'ARGB32/Bilinear retained')
-ck('foundationComplete = rendered && visible.FoundationComplete &&' in r and
-   'lastBackFoundationCoverage >= 0.999f' in r and
-   'readyFar >= visible.FarFoundationCount' in r,
-   'strict FoundationComplete gate retained')
+legacy_r007_foundation_gate = (
+    'foundationComplete = rendered && visible.FoundationComplete &&' in r and
+    'lastBackFoundationCoverage >= 0.999f' in r and
+    'readyFar >= visible.FarFoundationCount' in r
+)
+accepted_r018_foundation_gate = (
+    'bool r018VisibleGpuComplete = operationHealthRev35R018VisiblePlanValid && operationHealthRev35R018VisibleRequiredFar > 0 && operationHealthRev35R018VisibleReadyFar >= operationHealthRev35R018VisibleRequiredFar;' in r_flat and
+    'bool r018OverscanGpuComplete = visible.FoundationComplete && lastBackFoundationCoverage >= 0.999f && readyFar >= visible.FarFoundationCount;' in r_flat and
+    'foundationComplete = rendered && r018VisibleGpuComplete;' in r_flat and
+    'if (!r018OverscanGpuComplete) operationHealthRev35R018OverscanHolAvoided++;' in r_flat and
+    'foundationComplete = rendered && r018VisibleGpuComplete && r018OverscanGpuComplete' not in r_flat
+)
+ck(legacy_r007_foundation_gate or accepted_r018_foundation_gate,
+   'foundation swap gate is legacy R007 strict coverage or exact accepted R018 visible-GPU descendant')
 ck('FinalizePendingEntryCommit(pending, system)' in r,
    'Finalize-only publication retained')
 ck('Rev35R003MaximumStaleSkipsPerWindow = 8' in r and
