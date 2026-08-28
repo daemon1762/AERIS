@@ -26,15 +26,26 @@ ck("Mathf.DeltaAngle(contentHeadingDeg" in helper and '>= 3f' in helper,'TRACK U
 draw=R[R.index('internal AERISTerrainGpuDrawState Draw('):R.index('bool NeedsContentRefresh(')]
 non_tick=draw[draw.index('if (!authoritativeTickDue)'):draw.index('operationHealthAuthoritativeTicks++')]
 ck('CaptureVisible' not in non_tick and 'DrainCompleted' not in non_tick,'non-tick Repaint remains cheap FRONT reuse only')
-ck('bool workerResultReady = rasterizer.CompletedCount > 0;' in draw,'worker completion wakes content maintenance')
+legacy_worker_wake='bool workerResultReady = rasterizer.CompletedCount > 0;' in draw
+accepted_worker_wake=('bool workerResultReady = pendingEntryCommit != null || rasterizer.CompletedCount > 0;' in draw)
+ck(legacy_worker_wake or accepted_worker_wake,'worker completion/pending staged work wakes content maintenance')
 ck('bool contentTickRequired = contentGeometryChanged || workerResultReady ||' in draw,'content maintenance has explicit gate')
 content=draw[draw.index('if (contentTickRequired)'):draw.index('AERISNdMapProjection projection')]
-ck('DrainCompleted(system);' in content and 'system.CaptureVisible(' in content,'worker drain and visible capture are content-only work')
+legacy_drain='DrainCompleted(system);' in content
+accepted_staged=('PumpStagedCompletedCommit(system, true);' in content and
+                 'bool rev35R014ReconcileRequired = contentGeometryChanged ||' in content)
+ck((legacy_drain or accepted_staged) and 'system.CaptureVisible(' in content,
+   'worker drain/staged progress and visible capture remain content-only work')
 ck('ResolveRenderableEntries' in content and 'Schedule(tile' in content,'entry resolve and worker schedule are content-only work')
 ck('contentFoundationCoverage = MeasureFoundationGpuReadiness' in content,'foundation readiness is cached during content maintenance')
 ck('operationHealthMotionOnlyTicks++;' in draw,'unchanged terrain uses motion-only path')
 post=R[R.index('EnsureResources(plot'):R.index('bool forceCenterProjectionRefresh;')]
-ck('if (contentTickRequired)' in post and 'Prune(' in post and 'PruneRenderReady(' in post,'pruning is content-only work')
+r014_prune_successor = ('AERIS28_REV3_5_SALBUTAMOL_SULFATE_R014_PUBLICATION_GATED_CONTENT_RECONCILE' in R and
+                        'if (rev35R014ReconcileRan)' in post)
+legacy_prune=('if (contentTickRequired)' in post)
+ck((legacy_prune or (r014_prune_successor and 'if (rev35R014ReconcileRan)' in post)) and
+   'Prune(' in post and 'PruneRenderReady(' in post,
+   'pruning remains content/full-reconcile-only work')
 ck(R.count('if (contentGpuReadyPending)') >= 2 and R.count('MarkVisibleGpuReady(tiles);') == 2,'visible GPU READY scan occurs only after changed-content commit')
 ck('nextAuthoritativePresentationTickRealtime = presentationNow + 0.10f' in R,'exact projection/presentation remains fixed 10 Hz')
 reset=R[R.index('void ResetFrontBufferState('):R.index('void Schedule(')]
@@ -63,11 +74,13 @@ ck(V.get('NAME') == name,'runtime identity is Operation Health Step 2')
 phase3='EPI'+'NEPHRINE'
 phase4='ATRO'+'PINE'
 phase5='ADE'+'NOSINE'
+phase6='NOREPI'+'NEPHRINE'
 ck(('OPERATION HEALTH STEP 2 MOTION CONTENT SPLIT COASTAL EDGE REFINEMENT' in B) or
    (('OPERATION HEALTH PHASE 3 '+phase3+' GPU VERTEX PROJECTION') in B) or
    (('AERIS25 OPERATION HEALTH PHASE 4 '+phase4+' GPU DYNAMIC TERRAIN COLOUR') in B) or
-   (('AERIS25 OPERATION HEALTH PHASE 5 '+phase5+' PERSISTENT PRESENTATION BATCHING') in B),
-   'Ubuntu build identifies Step 2 parent or approved Phase 3/4/5 successor')
+   (('AERIS25 OPERATION HEALTH PHASE 5 '+phase5+' PERSISTENT PRESENTATION BATCHING') in B) or
+   (('AERIS25 OPERATION HEALTH PHASE 6 '+phase6+' MAIN THREAD COMMIT GOVERNOR REV003 AUTHORITATIVE PUBLICATION') in B),
+   'Ubuntu build identifies Step 2 parent or approved Phase 3/4/5/6 successor')
 # Pure numerical guard for the presentation crossing contract. This mirrors the C# bounds
 # and proves every opposite-sign edge stays inside its source edge without a topology flip.
 def crossing(w0,w1,s0,s1):
