@@ -117,9 +117,15 @@ accepted_r029_recycle = (
     'Rev35R006GeographicPoolMaximumArrays' in rebalance and
     'Rev35R006GeographicPoolMaximumBytes' in rebalance and
     'Rev35R029GeographicPoolEvictionMaximumPerRecycle' in rebalance and
-    'rev35R006GeographicPoolArrays--' in rebalance and
-    'rev35R006GeographicPoolBytes -=' in rebalance and
-    'evictions++' in rebalance
+    'selectedStack.Pop()' in rebalance and
+    'rev35R006GeographicPoolBytes = Math.Max(0L,' in rebalance and
+    'rev35R006GeographicPoolBytes - selectedBytes' in rebalance and
+    'rev35R006GeographicPoolArrays = Math.Max(0,' in rebalance and
+    'rev35R006GeographicPoolArrays - 1' in rebalance and
+    'operationHealthRev35R029GeoPoolEvicted++' in rebalance and
+    'operationHealthRev35R029GeoPoolEvictedBytes += selectedBytes' in rebalance and
+    'evictions++' in rebalance and
+    'return fits;' in rebalance
 )
 check(legacy_r006_recycle or accepted_r029_recycle,
       'pool recycle path is legacy R006 bounded path or exact accepted R029 rebalance descendant')
