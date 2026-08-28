@@ -9,7 +9,21 @@ def ck(v,n): checks.append((bool(v),n)); print(('[PASS] ' if v else '[FAIL] ')+n
 render=R[R.index('bool RenderBackBuffer('):R.index('float MeasureFoundationGpuReadiness')]
 project=R[R.index('Matrix4x4 EnsureProjectedGeometry('):R.index('void ProjectMesh(')]
 ck('Matrix4x4 projectionBridge = EnsureProjectedGeometry' in render and 'mapRotation * projectionBridge' in render,'motion bridge precedes existing TRACK-UP map matrix')
-ck('ProjectMesh(entry.LandMesh' in project and 'mesh.vertices = projectedVertices' in R,'exact projection/upload path remains intact')
+legacy_exact_projection=('ProjectMesh(entry.LandMesh' in project and 'mesh.vertices = projectedVertices' in R)
+accepted_packed_exact_projection=(
+    'if (gpuVertexProjection.Active && EnsureGpuVertexProjectionAttributes(entry))' in project and
+    'operationHealthGpuVertexExactBypasses++' in project and
+    'ProjectMesh(entry.PackedTerrainMesh,' in project and
+    'entry.PackedTerrainGeographicPoints,' in project and
+    'entry.PackedTerrainProjectedVertices, context);' in project and
+    'ProjectMesh(entry.ContourMesh, entry.ContourGeographicPoints,' in project and
+    'entry.ContourProjectedVertices, context);' in project and
+    'ProjectMesh(entry.CoastlineMesh, entry.CoastlineGeographicPoints,' in project and
+    'entry.CoastlineProjectedVertices, context);' in project and
+    'mesh.vertices = projectedVertices;' in R
+)
+ck(legacy_exact_projection or accepted_packed_exact_projection,
+   'exact projection/upload path remains intact through legacy or accepted packed GPU/CPU descendant')
 ck('ProjectionBridgeThresholdScale = 0.80f' in R,'bridge distance is capped at 0.20 rendered pixel')
 ck('ProjectionBridgeLatitudeLimitDeg = 70f' in R and 'polarExactOnly' in project,'polar convergence disables motion approximation')
 ck('exactAge >= ProjectionRefreshAgeSeconds' in project and 'ProjectionRefreshAgeSeconds = 0.50f' in R,'moving bridge exact-refreshes within 0.50 seconds')
