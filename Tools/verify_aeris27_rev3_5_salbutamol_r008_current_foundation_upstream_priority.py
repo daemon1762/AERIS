@@ -60,6 +60,7 @@ for p,label in ((R,'renderer'),(Z,'rasterizer'),(S,'scheduler'),(T,'tile system'
     check(p.is_file(), label+' exists')
 if not all(p.is_file() for p in (R,Z,S,T,B)): raise SystemExit(1)
 r=R.read_text(); z=Z.read_text(); s=S.read_text(); t=T.read_text(); b=B.read_text()
+r_flat=' '.join(r.split())
 check(R007 in r, 'R007 parent retained')
 check(HF4 in r, 'HF4 parent retained')
 check(HF3 in t, 'HF3 parent retained')
@@ -149,14 +150,25 @@ for forbidden in ('SubmitLatestPriority', 'SubmitFront', 'FoundationPriority',
     check(forbidden not in r and forbidden not in z,
           'R008 runtime excludes rejected/new scheduler mechanism: '+forbidden)
 
-# Frozen visual/publication contract.
+# Frozen visual/publication contract. R018 is the accepted descendant of the original
+# strict R008 full-overscan swap gate: exact visible FAR GPU readiness owns publication.
 check('presentationNow + 0.10f' in r, 'fixed visible 10 Hz retained')
 check('RenderTextureFormat.ARGB32' in r and 'FilterMode.Bilinear' in r,
       'Golden ARGB32/Bilinear retained')
-check('foundationComplete = rendered && visible.FoundationComplete &&' in r and
-      'lastBackFoundationCoverage >= 0.999f' in r and
-      'readyFar >= visible.FarFoundationCount' in r,
-      'strict FoundationComplete swap gate retained')
+legacy_r008_foundation_gate=(
+    'foundationComplete = rendered && visible.FoundationComplete &&' in r and
+    'lastBackFoundationCoverage >= 0.999f' in r and
+    'readyFar >= visible.FarFoundationCount' in r
+)
+accepted_r018_foundation_gate=(
+    'bool r018VisibleGpuComplete = operationHealthRev35R018VisiblePlanValid && operationHealthRev35R018VisibleRequiredFar > 0 && operationHealthRev35R018VisibleReadyFar >= operationHealthRev35R018VisibleRequiredFar;' in r_flat and
+    'bool r018OverscanGpuComplete = visible.FoundationComplete && lastBackFoundationCoverage >= 0.999f && readyFar >= visible.FarFoundationCount;' in r_flat and
+    'foundationComplete = rendered && r018VisibleGpuComplete;' in r_flat and
+    'if (!r018OverscanGpuComplete) operationHealthRev35R018OverscanHolAvoided++;' in r_flat and
+    'foundationComplete = rendered && r018VisibleGpuComplete && r018OverscanGpuComplete' not in r_flat
+)
+check(legacy_r008_foundation_gate or accepted_r018_foundation_gate,
+      'foundation swap gate is legacy R008 strict coverage or exact accepted R018 visible-GPU descendant')
 check('FinalizePendingEntryCommit(pending, system)' in r,
       'Finalize-only publication retained')
 check('Rev35R003MaximumStaleSkipsPerWindow = 8' in r,
