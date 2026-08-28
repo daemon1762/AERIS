@@ -72,6 +72,7 @@ if not R.is_file() or not B.is_file():
     raise SystemExit(1)
 renderer = R.read_text()
 build = B.read_text()
+renderer_flat = ' '.join(renderer.split())
 for marker in MARKERS:
     check(marker in renderer, 'lineage marker retained: ' + marker)
 check('AERIS25_PHASE6_003_AUTHORITATIVE_PUBLICATION' in renderer and
@@ -80,24 +81,48 @@ check('AERIS25_PHASE6_003_AUTHORITATIVE_PUBLICATION' in renderer and
 
 check('Rev35R006GeographicPoolMaximumBytes = 8L * 1024L * 1024L' in renderer,
       'geographic reuse pool hard byte cap is exactly 8 MiB')
-check('Rev35R006GeographicPoolMaximumArrays = 16' in renderer,
-      'geographic reuse pool hard array cap is exactly 16')
+legacy_r006_pool_cap = 'Rev35R006GeographicPoolMaximumArrays = 16' in renderer
+accepted_r029_pool_cap = (
+    'Rev35R006GeographicPoolMaximumArrays = 128' in renderer and
+    'Rev35R029GeographicPoolEvictionMaximumPerRecycle = 4' in renderer
+)
+check(legacy_r006_pool_cap or accepted_r029_pool_cap,
+      'geographic reuse pool cap is legacy R006 or exact accepted R029 descendant')
 check('Dictionary<int, Stack<GeographicUnitPoint[]>> rev35R006GeographicPool' in renderer,
       'pool stores only exact-length bare GeographicUnitPoint arrays')
 acquire = method_body(renderer,
     '        GeographicUnitPoint[] AcquireRev35R006GeographicBuffer(int length)')
 recycle = method_body(renderer,
     '        void RecycleRev35R006GeographicBuffer(ref GeographicUnitPoint[] buffer)')
+rebalance = method_body(renderer,
+    '        bool TryMakeRoomRev35R029GeographicPool(int incomingLength, long incomingBytes)')
 check(acquire and 'new GeographicUnitPoint[length]' in acquire and
       'rev35R006GeographicPool.TryGetValue(length' in acquire and
       'operationHealthRev35R006GeoPoolHit++' in acquire and
       'operationHealthRev35R006GeoPoolMiss++' in acquire,
       'pool miss allocates exact length and pool hit reuses exact length')
-check(recycle and 'Rev35R006GeographicPoolMaximumArrays' in recycle and
-      'Rev35R006GeographicPoolMaximumBytes' in recycle and
-      'stack.Push(buffer)' in recycle and
-      'operationHealthRev35R006GeoPoolReject++' in recycle,
-      'pool recycle path is hard bounded and observable')
+legacy_r006_recycle = (
+    recycle and
+    'Rev35R006GeographicPoolMaximumArrays' in recycle and
+    'Rev35R006GeographicPoolMaximumBytes' in recycle and
+    'stack.Push(buffer)' in recycle and
+    'operationHealthRev35R006GeoPoolReject++' in recycle
+)
+accepted_r029_recycle = (
+    recycle and rebalance and accepted_r029_pool_cap and
+    'TryMakeRoomRev35R029GeographicPool(buffer.Length, bytes)' in recycle and
+    'stack.Push(buffer)' in recycle and
+    'operationHealthRev35R006GeoPoolReject++' in recycle and
+    'operationHealthRev35R006GeoPoolRecycle++' in recycle and
+    'Rev35R006GeographicPoolMaximumArrays' in rebalance and
+    'Rev35R006GeographicPoolMaximumBytes' in rebalance and
+    'Rev35R029GeographicPoolEvictionMaximumPerRecycle' in rebalance and
+    'rev35R006GeographicPoolArrays--' in rebalance and
+    'rev35R006GeographicPoolBytes -=' in rebalance and
+    'evictions++' in rebalance
+)
+check(legacy_r006_recycle or accepted_r029_recycle,
+      'pool recycle path is legacy R006 bounded path or exact accepted R029 rebalance descendant')
 check('Entry' not in acquire and 'Mesh' not in acquire and
       'Entry' not in recycle and 'Mesh' not in recycle,
       'pool is not a completed Entry or Unity Mesh presentation cache')
@@ -202,10 +227,20 @@ observe_anchor = 'ObserveRev35R006FoundationCriticalPath(visible, tiles,'
 check(measure_anchor in renderer and observe_anchor in renderer and
       renderer.find(measure_anchor) < renderer.find(observe_anchor),
       'foundation observer runs after accepted readiness measurement')
-check('foundationComplete = rendered && visible.FoundationComplete &&' in renderer and
-      'lastBackFoundationCoverage >= 0.999f' in renderer and
-      'readyFar >= visible.FarFoundationCount' in renderer,
-      'foundation-complete swap gate is byte-for-byte semantically retained')
+legacy_r006_foundation_gate = (
+    'foundationComplete = rendered && visible.FoundationComplete &&' in renderer and
+    'lastBackFoundationCoverage >= 0.999f' in renderer and
+    'readyFar >= visible.FarFoundationCount' in renderer
+)
+accepted_r018_foundation_gate = (
+    'bool visibleReady = contentFoundationCoverageReady && requestedViewReady && visibleFoundationComplete && shiftReady;' in renderer_flat and
+    'bool overscanReady = overscanFoundationComplete && plannerReady;' in renderer_flat and
+    'bool foundationReady = visibleReady;' in renderer_flat and
+    'bool swapReady = scrollCommitDue && hasFront && foundationReady;' in renderer_flat and
+    'foundationReady = visibleReady && overscanReady' not in renderer_flat
+)
+check(legacy_r006_foundation_gate or accepted_r018_foundation_gate,
+      'foundation swap gate is legacy R006 or exact accepted R018 visible-foundation descendant')
 check(renderer.count('Rev35R006ContourOnlyStyleDifference(') == 2,
       'contour-only fallback logic is observer-only helper plus one observer call')
 
