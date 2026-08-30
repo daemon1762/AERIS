@@ -138,6 +138,7 @@
     <Compile Include="Terrain\AERISR040PtcCoordinateConventionCertificationObserver.cs" />
     <Compile Include="Terrain\AERISR041AllBodyPqsCapabilityCensusObserver.cs" />
     <Compile Include="Terrain\AERISR041BHeightFormulaFamilyCensusObserver.cs" />
+    <Compile Include="Terrain\AERISR041CMohoDresHeightIlClosureObserver.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadCodec.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadDatabase.cs" />
     <Compile Include="Terrain\AERISTerrainBlockPipeline.cs" />
