@@ -5,6 +5,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BRANCH="agent/aeris39-r041-mapso-exact-cpu-shadow"
 MODE="${1:-auto}"
 
+# Human desktop must stay clean. All diagnostic/evidence artifacts go here.
+export AERIS_ARTIFACT_ROOT="${AERIS_ARTIFACT_ROOT:-$HOME/.cache/AERIS/artifacts}"
+mkdir -p "$AERIS_ARTIFACT_ROOT"
+
 case "$MODE" in
   desktop)
     KSP="$HOME/.steam/debian-installation/steamapps/common/Kerbal Space Program"
@@ -58,6 +62,7 @@ if [[ ! -f "$STAGE" ]]; then
 fi
 
 echo "KSP=$KSP"
+echo "artifact_root=$AERIS_ARTIFACT_ROOT"
 echo "HEAD=$(git rev-parse HEAD)"
 echo
 
