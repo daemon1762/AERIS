@@ -8,7 +8,7 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="MAPSO-3E-FIX1-VOID-COORDS-PIPELINE-ISOLATION"
+STAGE="MAPSO-3E-FIX2-EMBEDDED-OBSERVER-SELF-AUDIT"
 
 cd "$ROOT"
 
@@ -18,9 +18,9 @@ echo "KSP=$KSP"
 echo "HEAD=$(git rev-parse HEAD)"
 echo
 
-test -f "$ROOT/Tools/aeris39_mapso3e_fix1_void_coords.sh" || {
-  echo "STOP: MAPSO-3E Fix1 runner missing" >&2
+test -f "$ROOT/Tools/aeris39_mapso3e_fix2_embedded_observer.sh" || {
+  echo "STOP: MAPSO-3E Fix2 runner missing" >&2
   exit 20
 }
 
-bash "$ROOT/Tools/aeris39_mapso3e_fix1_void_coords.sh" "$KSP"
+bash "$ROOT/Tools/aeris39_mapso3e_fix2_embedded_observer.sh" "$KSP"
