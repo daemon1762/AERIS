@@ -89,7 +89,7 @@ namespace AERISFlightControl.Terrain
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        virtual Coords ConstructBilinearCoords(double x, double y)
+        internal virtual Coords ConstructBilinearCoords(double x, double y)
         {
             x = Math.Abs(x - Math.Floor(x));
             y = Math.Abs(y - Math.Floor(y));
@@ -116,13 +116,13 @@ namespace AERISFlightControl.Terrain
             return c;
         }
 
-        virtual int PixelIndex(int x, int y)
+        internal virtual int PixelIndex(int x, int y)
         {
             return unchecked(x * _bpp + y * _rowWidth);
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        virtual float GreyFloat(int x, int y)
+        internal virtual float GreyFloat(int x, int y)
         {
             return Byte2Float * (float)_data[PixelIndex(x, y)];
         }
