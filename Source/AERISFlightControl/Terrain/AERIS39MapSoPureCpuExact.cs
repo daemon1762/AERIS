@@ -10,18 +10,31 @@ namespace AERISFlightControl.Terrain
     // dependency closure certified by MAPSO-1 / MAPSO-2A / MAPSO-2B.
     //
     // MAPSO-3 Fix2: preserve the observable runtime evaluation boundaries of
-    // stock MapSO as closely as possible.  Stock GreyFloat,
+    // stock MapSO as closely as possible. Stock GreyFloat,
     // GetPixelFloat(int,int), ConstructBilinearCoords(double,double), and
-    // GetPixelFloat(double,double) are virtual/callvirt boundaries.  The pure
+    // GetPixelFloat(double,double) are virtual/callvirt boundaries. The pure
     // implementation therefore prevents the worker JIT from collapsing those
-    // boundaries.  Lerp and the bilinear call order mirror the captured stock
+    // boundaries. Lerp and the bilinear call order mirror the captured stock
     // IL instead of introducing algebraically equivalent temporary locals.
     //
-    // HARD RULE: do not algebraically simplify or reorder this code.
+    // MAPSO-3G: the real KSP runtime witness isolated the remaining mismatch to
+    // ConstructBilinearCoords. The captured stock double overload materializes
+    // centerXD/centerYD, min/max, and mid values through instance fields. A
+    // local-only reconstruction is mathematically equivalent but can expose a
+    // different Mono JIT intermediate-precision boundary. Preserve the stock
+    // field store/reload shape with one CLR-only scratch object per worker
+    // thread. No Unity/KSP/runtime object is stored here and no per-sample
+    // allocation occurs after the thread's first sample.
+    //
+    // HARD RULE: do not algebraically simplify, reorder, or localize the
+    // bilinear scratch field accesses without a new exact-bit witness.
     internal static class AERIS39MapSoPureCpuExact
     {
         const int Byte2FloatBits = unchecked((int)0x3B808081);
         static readonly float Byte2Float = FloatFromBits(Byte2FloatBits);
+
+        [ThreadStatic]
+        static BilinearScratch threadBilinearScratch;
 
         internal sealed class MapSnapshot
         {
@@ -56,8 +69,12 @@ namespace AERISFlightControl.Terrain
             }
         }
 
-        struct Coords
+        sealed class BilinearScratch
         {
+            internal int Width;
+            internal int Height;
+            internal double CenterXD;
+            internal double CenterYD;
             internal int MinX;
             internal int MaxX;
             internal int MinY;
@@ -74,8 +91,8 @@ namespace AERISFlightControl.Terrain
         {
             if (map == null) throw new ArgumentNullException("map");
 
-            Coords c = ConstructBilinearCoords(
-                x, y, map.Width, map.Height);
+            BilinearScratch c = AcquireBilinearScratch(map.Width, map.Height);
+            ConstructBilinearCoords(c, x, y);
 
             if (map.BytesPerPixel == 1)
             {
@@ -125,35 +142,46 @@ namespace AERISFlightControl.Terrain
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        static Coords ConstructBilinearCoords(
-            double x,
-            double y,
-            int width,
-            int height)
+        static BilinearScratch AcquireBilinearScratch(int width, int height)
         {
+            BilinearScratch c = threadBilinearScratch;
+            if (c == null)
+            {
+                c = new BilinearScratch();
+                threadBilinearScratch = c;
+            }
+
+            c.Width = width;
+            c.Height = height;
+            return c;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static void ConstructBilinearCoords(
+            BilinearScratch c,
+            double x,
+            double y)
+        {
+            // Stock MapSO.ConstructBilinearCoords(double,double), captured IL:
+            // - normalize by writing x/y back to their arguments;
+            // - materialize centerXD/centerYD through fields;
+            // - reload those fields for Floor/Ceiling and mid subtraction;
+            // - convert only the final mid result to float;
+            // - wrap max index only after mid is materialized.
             x = Math.Abs(x - Math.Floor(x));
             y = Math.Abs(y - Math.Floor(y));
 
-            double centerX = x * (double)width;
-            int minX = (int)Math.Floor(centerX);
-            int maxX = (int)Math.Ceiling(centerX);
-            float midX = (float)(centerX - (double)minX);
-            if (maxX == width) maxX = 0;
+            c.CenterXD = x * (double)c.Width;
+            c.MinX = (int)Math.Floor(c.CenterXD);
+            c.MaxX = (int)Math.Ceiling(c.CenterXD);
+            c.MidX = (float)(c.CenterXD - (double)c.MinX);
+            if (c.MaxX == c.Width) c.MaxX = 0;
 
-            double centerY = y * (double)height;
-            int minY = (int)Math.Floor(centerY);
-            int maxY = (int)Math.Ceiling(centerY);
-            float midY = (float)(centerY - (double)minY);
-            if (maxY == height) maxY = 0;
-
-            Coords c = new Coords();
-            c.MinX = minX;
-            c.MaxX = maxX;
-            c.MinY = minY;
-            c.MaxY = maxY;
-            c.MidX = midX;
-            c.MidY = midY;
-            return c;
+            c.CenterYD = y * (double)c.Height;
+            c.MinY = (int)Math.Floor(c.CenterYD);
+            c.MaxY = (int)Math.Ceiling(c.CenterYD);
+            c.MidY = (float)(c.CenterYD - (double)c.MinY);
+            if (c.MaxY == c.Height) c.MaxY = 0;
         }
 
         static int PixelIndex(MapSnapshot map, int x, int y)
