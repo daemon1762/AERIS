@@ -21,8 +21,9 @@ ASSEMBLY="$KSP/KSP_x64_Data/Managed/Assembly-CSharp.dll"
 CORE="$KSP/KSP_x64_Data/Managed/UnityEngine.CoreModule.dll"
 LOG="$KSP/GameData/AERISFlightControl/Logs/AERISFlightControl.log"
 GAME_DATA_ROOT="$KSP/GameData/AERISFlightControl"
-OUT="$HOME/Desktop/AERIS39_MAPSO3_RealBody_HeightMap_Witness"
-ARCHIVE="$HOME/Desktop/AERIS39_MAPSO3_RealBody_HeightMap_Witness.tar.gz"
+ARTIFACT_ROOT="${AERIS_ARTIFACT_ROOT:-$HOME/.cache/AERIS/artifacts}"
+OUT="$ARTIFACT_ROOT/AERIS39_MAPSO3_RealBody_HeightMap_Witness"
+ARCHIVE="$ARTIFACT_ROOT/AERIS39_MAPSO3_RealBody_HeightMap_Witness.tar.gz"
 
 KEY="$(printf '%s' "$KSP" | sha256sum | awk '{print substr($1,1,16)}')"
 STATE_DIR="$HOME/.cache/AERIS/mapso3-real-body-heightmap/$KEY"
@@ -86,6 +87,7 @@ write_artifacts() {
   local result="$2"
   local installed_sha="$3"
 
+  mkdir -p "$ARTIFACT_ROOT"
   rm -rf "$OUT"
   mkdir -p "$OUT"
 
@@ -117,7 +119,7 @@ EOF
   )
 
   rm -f "$ARCHIVE"
-  tar -C "$HOME/Desktop" -czf "$ARCHIVE" AERIS39_MAPSO3_RealBody_HeightMap_Witness
+  tar -C "$ARTIFACT_ROOT" -czf "$ARCHIVE" AERIS39_MAPSO3_RealBody_HeightMap_Witness
 }
 
 harvest_if_ready() {
