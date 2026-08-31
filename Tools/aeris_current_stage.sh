@@ -8,7 +8,7 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="MAPSO-3-REAL-BODY-HEIGHTMAP-WITNESS"
+STAGE="MAPSO-3D-DISPATCH-THREAD-TOPOLOGY-DIAGNOSTIC"
 
 cd "$ROOT"
 
@@ -18,9 +18,9 @@ echo "KSP=$KSP"
 echo "HEAD=$(git rev-parse HEAD)"
 echo
 
-test -f "$ROOT/Tools/aeris39_mapso3_real_body_heightmap_witness.sh" || {
-  echo "STOP: MAPSO-3 runner missing" >&2
+test -f "$ROOT/Tools/aeris39_mapso3_dispatch_thread_topology_diagnostic.sh" || {
+  echo "STOP: MAPSO-3D runner missing" >&2
   exit 20
 }
 
-bash "$ROOT/Tools/aeris39_mapso3_real_body_heightmap_witness.sh" "$KSP"
+bash "$ROOT/Tools/aeris39_mapso3_dispatch_thread_topology_diagnostic.sh" "$KSP"
