@@ -7,7 +7,7 @@ namespace AERISFlightControl.Terrain
     // Primitive-only instance topology shaped after stock MapSO so the embedded
     // KSP Mono JIT sees direct instance fields + virtual/callvirt boundaries.
     // No Unity/KSP/runtime object is stored or accessed here.
-    internal sealed class AERIS39MapSoPureCpuTopologyProbe
+    internal class AERIS39MapSoPureCpuTopologyProbe
     {
         const int Byte2FloatBits = unchecked((int)0x3B808081);
         static readonly float Byte2Float = FloatFromBits(Byte2FloatBits);
