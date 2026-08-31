@@ -18,7 +18,7 @@ namespace AERISFlightControl.Terrain
         readonly int _bpp;
         readonly int _rowWidth;
 
-        struct Coords
+        internal struct Coords
         {
             internal int MinX;
             internal int MaxX;
