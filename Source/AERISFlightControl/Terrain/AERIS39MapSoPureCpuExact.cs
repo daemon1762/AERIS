@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace AERISFlightControl.Terrain
 {
@@ -7,7 +8,16 @@ namespace AERISFlightControl.Terrain
     // This class is intentionally free of Unity/KSP/runtime-object types.
     // It reproduces the KSP 1.12.5 MapSO.GetPixelFloat(double,double)
     // dependency closure certified by MAPSO-1 / MAPSO-2A / MAPSO-2B.
-    // Do not algebraically simplify the operation order below.
+    //
+    // MAPSO-3 Fix2: preserve the observable runtime evaluation boundaries of
+    // stock MapSO as closely as possible.  Stock GreyFloat,
+    // GetPixelFloat(int,int), ConstructBilinearCoords(double,double), and
+    // GetPixelFloat(double,double) are virtual/callvirt boundaries.  The pure
+    // implementation therefore prevents the worker JIT from collapsing those
+    // boundaries.  Lerp and the bilinear call order mirror the captured stock
+    // IL instead of introducing algebraically equivalent temporary locals.
+    //
+    // HARD RULE: do not algebraically simplify or reorder this code.
     internal static class AERIS39MapSoPureCpuExact
     {
         const int Byte2FloatBits = unchecked((int)0x3B808081);
@@ -56,6 +66,7 @@ namespace AERISFlightControl.Terrain
             internal float MidY;
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         internal static float GetPixelFloat(
             MapSnapshot map,
             double x,
@@ -66,31 +77,31 @@ namespace AERISFlightControl.Terrain
             Coords c = ConstructBilinearCoords(
                 x, y, map.Width, map.Height);
 
-            float a;
-            float b;
-            float d;
-            float e;
-
             if (map.BytesPerPixel == 1)
             {
-                a = GreyFloat(map, c.MinX, c.MinY);
-                b = GreyFloat(map, c.MaxX, c.MinY);
-                d = GreyFloat(map, c.MinX, c.MaxY);
-                e = GreyFloat(map, c.MaxX, c.MaxY);
-            }
-            else
-            {
-                a = GetPixelFloat(map, c.MinX, c.MinY);
-                b = GetPixelFloat(map, c.MaxX, c.MinY);
-                d = GetPixelFloat(map, c.MinX, c.MaxY);
-                e = GetPixelFloat(map, c.MaxX, c.MaxY);
+                float low = Lerp(
+                    GreyFloat(map, c.MinX, c.MinY),
+                    GreyFloat(map, c.MaxX, c.MinY),
+                    c.MidX);
+                float high = Lerp(
+                    GreyFloat(map, c.MinX, c.MaxY),
+                    GreyFloat(map, c.MaxX, c.MaxY),
+                    c.MidX);
+                return Lerp(low, high, c.MidY);
             }
 
-            float low = Lerp(a, b, c.MidX);
-            float high = Lerp(d, e, c.MidX);
-            return Lerp(low, high, c.MidY);
+            float lowMulti = Lerp(
+                GetPixelFloat(map, c.MinX, c.MinY),
+                GetPixelFloat(map, c.MaxX, c.MinY),
+                c.MidX);
+            float highMulti = Lerp(
+                GetPixelFloat(map, c.MinX, c.MaxY),
+                GetPixelFloat(map, c.MaxX, c.MaxY),
+                c.MidX);
+            return Lerp(lowMulti, highMulti, c.MidY);
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         internal static float GetPixelFloat(
             MapSnapshot map,
             int x,
@@ -100,11 +111,12 @@ namespace AERISFlightControl.Terrain
 
             int index = PixelIndex(map, x, y);
             float retVal = 0f;
+            int itr = 0;
 
-            for (int i = 0; i < map.BytesPerPixel; i++)
+            while (itr < map.BytesPerPixel)
             {
-                float add = (float)map.Data[index + i];
-                retVal = retVal + add;
+                retVal = retVal + (float)map.Data[index + itr];
+                itr = itr + 1;
             }
 
             retVal = retVal / (float)map.BytesPerPixel;
@@ -112,22 +124,23 @@ namespace AERISFlightControl.Terrain
             return retVal;
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         static Coords ConstructBilinearCoords(
             double x,
             double y,
             int width,
             int height)
         {
-            double normalizedX = Math.Abs(x - Math.Floor(x));
-            double normalizedY = Math.Abs(y - Math.Floor(y));
+            x = Math.Abs(x - Math.Floor(x));
+            y = Math.Abs(y - Math.Floor(y));
 
-            double centerX = normalizedX * (double)width;
+            double centerX = x * (double)width;
             int minX = (int)Math.Floor(centerX);
             int maxX = (int)Math.Ceiling(centerX);
             float midX = (float)(centerX - (double)minX);
             if (maxX == width) maxX = 0;
 
-            double centerY = normalizedY * (double)height;
+            double centerY = y * (double)height;
             int minY = (int)Math.Floor(centerY);
             int maxY = (int)Math.Ceiling(centerY);
             float midY = (float)(centerY - (double)minY);
@@ -148,27 +161,28 @@ namespace AERISFlightControl.Terrain
             return unchecked(x * map.BytesPerPixel + y * map.RowWidth);
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         static float GreyFloat(MapSnapshot map, int x, int y)
         {
-            float b = (float)map.Data[PixelIndex(map, x, y)];
-            float result = Byte2Float * b;
-            return result;
+            return Byte2Float * (float)map.Data[PixelIndex(map, x, y)];
         }
 
         static float Lerp(float a, float b, float t)
         {
-            float delta = b - a;
-            float ct = Clamp01(t);
-            float scaled = delta * ct;
-            float result = a + scaled;
+            float result = a + (b - a) * Clamp01(t);
             return result;
         }
 
         static float Clamp01(float value)
         {
-            if (value < 0f) return 0f;
-            if (value > 1f) return 1f;
-            return value;
+            float result;
+            if (value < 0f)
+                result = 0f;
+            else if (value > 1f)
+                result = 1f;
+            else
+                result = value;
+            return result;
         }
 
         internal static int FloatBits(float value)
