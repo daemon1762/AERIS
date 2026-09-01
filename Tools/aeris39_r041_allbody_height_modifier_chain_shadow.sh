@@ -86,6 +86,7 @@ mapso_resolver_source_sha256=$(sha256sum "$SRC/Terrain/AERIS39MapSoRuntimeSemant
 heightmap_pure_source_sha256=$(sha256sum "$SRC/Terrain/AERIS39HeightMapPureCpuExact.cs" | awk '{print $1}')
 legacy_height_ops_source_sha256=$(sha256sum "$SRC/Terrain/AERISR041MohoDresPureCpuExact.cs" | awk '{print $1}')
 chain_pure_source_sha256=$(sha256sum "$SRC/Terrain/AERIS39AllBodyHeightModifierChainPureCpuExact.cs" | awk '{print $1}')
+mapdecal_pure_source_sha256=$(sha256sum "$SRC/Terrain/AERIS39MapDecalTangentPureCpuExact.cs" | awk '{print $1}')
 observer_source_sha256=$(sha256sum "$SRC/Terrain/AERIS39AllBodyHeightModifierChainShadowObserver.cs" | awk '{print $1}')
 reference=REAL_ORDERED_PQS_HEIGHT_CALLBACK_CHAIN
 callback_invocation_thread=MAIN_THREAD_ONLY
@@ -244,6 +245,7 @@ insert = (
     "    <Compile Include=\"Terrain\\AERIS39MapSoRuntimeSemanticsResolver.cs\" />\n"
     "    <Compile Include=\"Terrain\\AERIS39HeightMapPureCpuExact.cs\" />\n"
     "    <Compile Include=\"Terrain\\AERIS39AllBodyHeightModifierChainPureCpuExact.cs\" />\n"
+    "    <Compile Include=\"Terrain\\AERIS39MapDecalTangentPureCpuExact.cs\" />\n"
     "    <Compile Include=\"Terrain\\AERIS39AllBodyHeightModifierChainShadowObserver.cs\" />\n"
     "</ItemGroup><Import Project=\"$(MSBuildToolsPath)\\Microsoft.CSharp.targets\" /></Project>"
 )
