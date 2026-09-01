@@ -18,6 +18,8 @@ EXPECTED_BODY_CHECKS=2825
 SRC="$ROOT/Source/AERISFlightControl"
 CSPROJ="$SRC/AERISFlightControl.csproj"
 TMP_CSPROJ="$SRC/.AERIS39_R041_HEIGHT_CHAIN.csproj"
+OBSERVER_SRC="$SRC/Terrain/AERIS39AllBodyHeightModifierChainShadowObserver.cs"
+TMP_OBSERVER="$SRC/Terrain/.AERIS39AllBodyHeightModifierChainShadowObserver.LandControl.cs"
 BUILD_DLL="$SRC/bin/Release/AERISFlightControl.dll"
 ASSEMBLY="$KSP/KSP_x64_Data/Managed/Assembly-CSharp.dll"
 CORE="$KSP/KSP_x64_Data/Managed/UnityEngine.CoreModule.dll"
@@ -31,7 +33,7 @@ KEY="$(printf '%s' "$KSP" | sha256sum | awk '{print substr($1,1,16)}')"
 STATE_DIR="$HOME/.cache/AERIS/r041-allbody-height-chain/$KEY"
 STATE="$STATE_DIR/state.txt"
 
-cleanup() { rm -f "$TMP_CSPROJ"; }
+cleanup() { rm -f "$TMP_CSPROJ" "$TMP_OBSERVER"; }
 trap cleanup EXIT
 
 cd "$ROOT"
@@ -41,6 +43,8 @@ for cmd in git sha256sum python3 xbuild find stat grep tail tar install cp pgrep
 done
 
 [[ -f "$CSPROJ" ]] || { echo "STOP: missing project" >&2; exit 4; }
+[[ -f "$OBSERVER_SRC" ]] || { echo "STOP: missing observer source" >&2; exit 4; }
+[[ -f "$SRC/Terrain/AERIS39LandControlPureCpuExact.cs" ]] || { echo "STOP: missing LandControl pure source" >&2; exit 4; }
 [[ -f "$ASSEMBLY" ]] || { echo "STOP: missing Assembly-CSharp.dll" >&2; exit 4; }
 [[ -f "$CORE" ]] || { echo "STOP: missing UnityEngine.CoreModule.dll" >&2; exit 4; }
 [[ -d "$GAME_DATA_ROOT" ]] || { echo "STOP: missing AERIS GameData" >&2; exit 4; }
@@ -89,7 +93,10 @@ chain_pure_source_sha256=$(sha256sum "$SRC/Terrain/AERIS39AllBodyHeightModifierC
 mapdecal_tangent_pure_source_sha256=$(sha256sum "$SRC/Terrain/AERIS39MapDecalTangentPureCpuExact.cs" | awk '{print $1}')
 mapdecal_classic_pure_source_sha256=$(sha256sum "$SRC/Terrain/AERIS39MapDecalPureCpuExact.cs" | awk '{print $1}')
 flattenarea_pure_source_sha256=$(sha256sum "$SRC/Terrain/AERIS39FlattenAreaPureCpuExact.cs" | awk '{print $1}')
-observer_source_sha256=$(sha256sum "$SRC/Terrain/AERIS39AllBodyHeightModifierChainShadowObserver.cs" | awk '{print $1}')
+landcontrol_pure_source_sha256=$(sha256sum "$SRC/Terrain/AERIS39LandControlPureCpuExact.cs" | awk '{print $1}')
+observer_source_sha256=$(sha256sum "$OBSERVER_SRC" | awk '{print $1}')
+runner_source_sha256=$(sha256sum "$ROOT/Tools/aeris39_r041_allbody_height_modifier_chain_shadow.sh" | awk '{print $1}')
+observer_build_semantics=CANONICAL_PLUS_DETERMINISTIC_LANDCONTROL_CASE_INJECTION
 reference=REAL_ORDERED_PQS_HEIGHT_CALLBACK_CHAIN
 callback_invocation_thread=MAIN_THREAD_ONLY
 callback_data=ISOLATED_NEW_VERTEXBUILDDATA
@@ -238,6 +245,128 @@ echo "HEAD=$HEAD"
 echo "KSP=$KSP"
 echo "artifact_root=$ARTIFACT_ROOT"
 
+python3 - "$OBSERVER_SRC" "$TMP_OBSERVER" <<'PY'
+import pathlib, sys
+src = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+needle = '''                    default:\n                        throw new InvalidOperationException(\n                            bodyName + "_UNSUPPORTED_HEIGHT_MODIFIER:" + record.TypeName);'''
+case = r'''                    case "PQSLandControl":
+                    {
+                        bool useHeightMap = (bool)RequireMember(record.Mod, "useHeightMap");
+                        AERIS39MapSoPureCpuExact.MapSnapshot landHeightMap = null;
+                        string mapSemantics = "NONE";
+                        string mapEvidence = "USE_HEIGHT_MAP_FALSE";
+
+                        if (useHeightMap)
+                        {
+                            MapSO map = RequireMember(record.Mod, "heightMap") as MapSO;
+                            if (map == null)
+                                throw new InvalidOperationException(bodyName + "_LANDCONTROL_HEIGHTMAP_MISSING");
+                            byte[] data = RequireMember(map, "_data") as byte[];
+                            if (data == null)
+                                throw new InvalidOperationException(bodyName + "_LANDCONTROL_MAP_DATA_NOT_BYTE_ARRAY");
+                            int width = ReadInt(map, "_width");
+                            int mapHeight = ReadInt(map, "_height");
+                            int bpp = ReadInt(map, "_bpp");
+                            int rowWidth = ReadInt(map, "_rowWidth");
+                            if (width <= 0 || mapHeight <= 0 || bpp <= 0 || rowWidth <= 0)
+                                throw new InvalidOperationException(bodyName + "_LANDCONTROL_MAP_DIMENSIONS_INVALID");
+                            AERIS39MapSoPureCpuExact.CoordinateSemantics semantics =
+                                AERIS39MapSoRuntimeSemanticsResolver.Resolve(map, out mapEvidence);
+                            mapSemantics = semantics.ToString();
+                            landHeightMap = new AERIS39MapSoPureCpuExact.MapSnapshot(
+                                data, width, mapHeight, bpp, rowWidth, semantics);
+                        }
+
+                        Array classes = RequireMember(record.Mod, "landClasses") as Array;
+                        if (classes == null)
+                            throw new InvalidOperationException(bodyName + "_LANDCONTROL_CLASSES_MISSING");
+
+                        Func<object, AERIS39LandControlPureCpuExact.LerpRangeSnapshot> rangeSnapshot =
+                            delegate(object range)
+                            {
+                                if (range == null)
+                                    throw new InvalidOperationException(bodyName + "_LANDCONTROL_RANGE_MISSING");
+                                return new AERIS39LandControlPureCpuExact.LerpRangeSnapshot(
+                                    ReadDouble(range, "startStart"),
+                                    ReadDouble(range, "startEnd"),
+                                    ReadDouble(range, "endStart"),
+                                    ReadDouble(range, "endEnd"),
+                                    ReadDouble(range, "startDelta"),
+                                    ReadDouble(range, "endDelta"));
+                            };
+
+                        var pureClasses =
+                            new AERIS39LandControlPureCpuExact.LandClassSnapshot[classes.Length];
+                        for (int ci = 0; ci < classes.Length; ci++)
+                        {
+                            object lc = classes.GetValue(ci);
+                            if (lc == null)
+                                throw new InvalidOperationException(
+                                    bodyName + "_LANDCONTROL_NULL_CLASS_" +
+                                    ci.ToString(CultureInfo.InvariantCulture));
+
+                            pureClasses[ci] = new AERIS39LandControlPureCpuExact.LandClassSnapshot(
+                                rangeSnapshot(RequireMember(lc, "altitudeRange")),
+                                rangeSnapshot(RequireMember(lc, "latitudeRange")),
+                                (bool)RequireMember(lc, "latitudeDouble"),
+                                rangeSnapshot(RequireMember(lc, "latitudeDoubleRange")),
+                                rangeSnapshot(RequireMember(lc, "longitudeRange")),
+                                Convert.ToSingle(
+                                    RequireMember(lc, "coverageBlend"),
+                                    CultureInfo.InvariantCulture),
+                                SnapshotSimplex(RequireMember(lc, "coverageSimplex")),
+                                ReadDouble(lc, "minimumRealHeight"),
+                                ReadDouble(lc, "alterRealHeight"));
+                        }
+
+                        pureOps[i] = new AERIS39LandControlPureCpuExact.OpSnapshot(
+                            useHeightMap,
+                            landHeightMap,
+                            Convert.ToSingle(
+                                RequireMember(record.Mod, "vHeightMax"),
+                                CultureInfo.InvariantCulture),
+                            ReadDouble(pqs, "radius"),
+                            ReadDouble(pqs, "sx"),
+                            ReadDouble(pqs, "sy"),
+                            Convert.ToSingle(
+                                RequireMember(record.Mod, "altitudeBlend"),
+                                CultureInfo.InvariantCulture),
+                            Convert.ToSingle(
+                                RequireMember(record.Mod, "latitudeBlend"),
+                                CultureInfo.InvariantCulture),
+                            Convert.ToSingle(
+                                RequireMember(record.Mod, "longitudeBlend"),
+                                CultureInfo.InvariantCulture),
+                            SnapshotSimplex(RequireMember(record.Mod, "altitudeSimplex")),
+                            SnapshotSimplex(RequireMember(record.Mod, "latitudeSimplex")),
+                            SnapshotSimplex(RequireMember(record.Mod, "longitudeSimplex")),
+                            pureClasses);
+
+                        AERISLogger.Info(
+                            "[AERIS39][HEIGHT_CHAIN_DEPENDENCY]" +
+                            "; body=" + Safe(bodyName) +
+                            "; type=PQSLandControl" +
+                            "; dependency=LANDCLASS_RANGE_COVERAGE_SIMPLEX_HEIGHT" +
+                            "; use_height_map=" + Bool(useHeightMap) +
+                            "; map_semantics=" + Safe(mapSemantics) +
+                            "; semantics_evidence=" + Safe(mapEvidence) +
+                            "; land_classes=" + classes.Length.ToString(CultureInfo.InvariantCulture) +
+                            "; sphere_sx_sy=RUNTIME_SNAPSHOTTED" +
+                            "; range_setup_state=SNAPSHOTTED" +
+                            "; source_semantics=STOCK_ONVERTEXBUILDHEIGHT" +
+                            "; color_scatter_apparent_height=OUT_OF_HEIGHT_PATH" +
+                            "; exact_candidate=true" + Invariants());
+                        break;
+                    }
+
+                    default:
+                        throw new InvalidOperationException(
+                            bodyName + "_UNSUPPORTED_HEIGHT_MODIFIER:" + record.TypeName);'''
+if src.count(needle) != 1:
+    raise SystemExit("R041 LandControl observer insertion point not unique")
+pathlib.Path(sys.argv[2]).write_text(src.replace(needle, case, 1), encoding="utf-8")
+PY
+
 python3 - "$CSPROJ" "$TMP_CSPROJ" <<'PY'
 import pathlib, sys
 src = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -250,7 +379,8 @@ insert = (
     "    <Compile Include=\"Terrain\\AERIS39MapDecalTangentPureCpuExact.cs\" />\n"
     "    <Compile Include=\"Terrain\\AERIS39MapDecalPureCpuExact.cs\" />\n"
     "    <Compile Include=\"Terrain\\AERIS39FlattenAreaPureCpuExact.cs\" />\n"
-    "    <Compile Include=\"Terrain\\AERIS39AllBodyHeightModifierChainShadowObserver.cs\" />\n"
+    "    <Compile Include=\"Terrain\\AERIS39LandControlPureCpuExact.cs\" />\n"
+    "    <Compile Include=\"Terrain\\.AERIS39AllBodyHeightModifierChainShadowObserver.LandControl.cs\" />\n"
     "</ItemGroup><Import Project=\"$(MSBuildToolsPath)\\Microsoft.CSharp.targets\" /></Project>"
 )
 if needle not in src:
@@ -261,7 +391,7 @@ PY
 rm -rf "$SRC/bin/Release" "$SRC/obj/Release"
 (cd "$SRC" && xbuild /p:Configuration=Release /p:KSPDIR="$KSP" .AERIS39_R041_HEIGHT_CHAIN.csproj)
 [[ -f "$BUILD_DLL" ]] || { echo "STOP: build returned without DLL" >&2; exit 20; }
-rm -f "$TMP_CSPROJ"
+rm -f "$TMP_CSPROJ" "$TMP_OBSERVER"
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "STOP: build dirtied repository state" >&2
   git status -sb
