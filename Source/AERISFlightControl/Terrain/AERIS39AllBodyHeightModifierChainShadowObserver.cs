@@ -514,6 +514,35 @@ namespace AERISFlightControl.Terrain
                         break;
                     }
 
+                    case "PQSMod_FlattenArea":
+                    {
+                        object posNorm = RequireMember(record.Mod, "posNorm");
+                        pureOps[i] = new AERIS39FlattenAreaPureCpuExact.OpSnapshot(
+                            (bool)RequireMember(record.Mod, "overrideQuadBuildCheck"),
+                            (bool)RequireMember(record.Mod, "quadActive"),
+                            ReadDouble(posNorm, "x"),
+                            ReadDouble(posNorm, "y"),
+                            ReadDouble(posNorm, "z"),
+                            ReadDouble(record.Mod, "angleInner"),
+                            ReadDouble(record.Mod, "angleOuter"),
+                            ReadDouble(record.Mod, "angleQuadInclusion"),
+                            ReadDouble(record.Mod, "angleDelta"),
+                            ReadDouble(record.Mod, "flattenToRadius"),
+                            ReadDouble(record.Mod, "smoothStart"),
+                            ReadDouble(record.Mod, "smoothEnd"));
+
+                        AERISLogger.Info(
+                            "[AERIS39][HEIGHT_CHAIN_DEPENDENCY]" +
+                            "; body=" + Safe(bodyName) +
+                            "; type=PQSMod_FlattenArea" +
+                            "; dependency=ANGULAR_FLATTEN_CUBIC_HERMITE" +
+                            "; runtime_setup_state=SNAPSHOTTED" +
+                            "; source_semantics=STOCK_ONVERTEXBUILDHEIGHT" +
+                            "; remove_scatter_side_effect=REFERENCE_ONLY" +
+                            "; exact_candidate=true" + Invariants());
+                        break;
+                    }
+
                     default:
                         throw new InvalidOperationException(
                             bodyName + "_UNSUPPORTED_HEIGHT_MODIFIER:" + record.TypeName);
