@@ -16,7 +16,7 @@ namespace AERISFlightControl.Terrain
             LegacyHermiteBasisDouble = 2,
             LegacyPolynomialDouble = 3,
             AbsolutePolynomialDouble = 4,
-            CompiledAbsoluteFloatHorner = 5,
+            UnityNativeCacheFloat = 5,
             CompiledAbsoluteDoubleToFloatHorner = 6,
             CompiledAbsoluteDoubleToFloatDoubleHorner = 7,
             CompiledLocalDoubleToFloatHorner = 8,
@@ -199,43 +199,22 @@ namespace AERISFlightControl.Terrain
                     return (float)(d + td * (c + td * (b + td * a)));
                 }
 
-                case RidgedCurveEvaluationMode.CompiledAbsoluteFloatHorner:
-                case RidgedCurveEvaluationMode.CompiledAbsoluteFloatExpanded:
+                case RidgedCurveEvaluationMode.UnityNativeCacheFloat:
                 {
-                    float t0 = k0.Time;
-                    float p0 = k0.Value;
-                    float m0 = k0.OutTangent;
-                    float t1 = k1.Time;
-                    float p1 = k1.Value;
-                    float m1 = k1.InTangent;
-                    float t0Sq = t0 * t0;
-                    float t0Cu = t0Sq * t0;
-                    float t1Sq = t1 * t1;
-                    float t1Cu = t1Sq * t1;
-                    float divisor = t0Cu - t1Cu + 3f * t0 * t1 * (t1 - t0);
-                    if (divisor == 0f) return k1.Value;
-                    float a = ((m0 + m1) * (t0 - t1) + (p1 - p0) * 2f) / divisor;
-                    float b = (2f * (t1Sq * m0 - t0Sq * m1) - t0Sq * m0 +
-                        t1Sq * m1 + t0 * t1 * (m1 - m0) +
-                        3f * (t0 + t1) * (p0 - p1)) / divisor;
-                    float c = (t0Cu * m1 - t1Cu * m0 +
-                        t0 * t1 * (t0 * (2f * m0 + m1) - t1 * (m0 + 2f * m1)) +
-                        6f * t0 * t1 * (p1 - p0)) / divisor;
-                    float d = ((t0 * t1Sq - t0Sq * t1) * (t1 * m0 + t0 * m1) -
-                        p0 * t1Cu + t0Cu * p1 +
-                        3f * t0 * t1 * (t1 * p0 - t0 * p1)) / divisor;
-
-                    if (mode == RidgedCurveEvaluationMode.CompiledAbsoluteFloatExpanded)
-                    {
-                        float cubic = ((a * t) * t) * t;
-                        float quadratic = (b * t) * t;
-                        float result = cubic + quadratic;
-                        result = result + c * t;
-                        result = result + d;
-                        return result;
-                    }
-
-                    return d + t * (c + t * (b + t * a));
+                    // Unity native AnimationCurve cache path:
+                    // Runtime/Math/AnimationCurve.cpp CalculateCacheData + EvaluateCache.
+                    float dx = k1.Time - k0.Time;
+                    dx = Math.Max(dx, 0.0001f);
+                    float dy = k1.Value - k0.Value;
+                    float length = 1.0f / (dx * dx);
+                    float d1 = k0.OutTangent * dx;
+                    float d2 = k1.InTangent * dx;
+                    float c0 = (d1 + d2 - dy - dy) * length / dx;
+                    float c1 = (dy + dy + dy - d1 - d1 - d2) * length;
+                    float c2 = k0.OutTangent;
+                    float c3 = k0.Value;
+                    float localT = t - k0.Time;
+                    return (localT * (localT * (localT * c0 + c1) + c2)) + c3;
                 }
 
                 case RidgedCurveEvaluationMode.CompiledAbsoluteDoubleToFloatHorner:
@@ -319,6 +298,38 @@ namespace AERISFlightControl.Terrain
                     double ud = (double)u;
                     double result = (double)d + ud * ((double)c + ud * ((double)b + ud * (double)a));
                     return (float)result;
+                }
+
+                case RidgedCurveEvaluationMode.CompiledAbsoluteFloatExpanded:
+                {
+                    float t0 = k0.Time;
+                    float p0 = k0.Value;
+                    float m0 = k0.OutTangent;
+                    float t1 = k1.Time;
+                    float p1 = k1.Value;
+                    float m1 = k1.InTangent;
+                    float t0Sq = t0 * t0;
+                    float t0Cu = t0Sq * t0;
+                    float t1Sq = t1 * t1;
+                    float t1Cu = t1Sq * t1;
+                    float divisor = t0Cu - t1Cu + 3f * t0 * t1 * (t1 - t0);
+                    if (divisor == 0f) return k1.Value;
+                    float a = ((m0 + m1) * (t0 - t1) + (p1 - p0) * 2f) / divisor;
+                    float b = (2f * (t1Sq * m0 - t0Sq * m1) - t0Sq * m0 +
+                        t1Sq * m1 + t0 * t1 * (m1 - m0) +
+                        3f * (t0 + t1) * (p0 - p1)) / divisor;
+                    float c = (t0Cu * m1 - t1Cu * m0 +
+                        t0 * t1 * (t0 * (2f * m0 + m1) - t1 * (m0 + 2f * m1)) +
+                        6f * t0 * t1 * (p1 - p0)) / divisor;
+                    float d = ((t0 * t1Sq - t0Sq * t1) * (t1 * m0 + t0 * m1) -
+                        p0 * t1Cu + t0Cu * p1 +
+                        3f * t0 * t1 * (t1 * p0 - t0 * p1)) / divisor;
+                    float cubic = ((a * t) * t) * t;
+                    float quadratic = (b * t) * t;
+                    float result = cubic + quadratic;
+                    result = result + c * t;
+                    result = result + d;
+                    return result;
                 }
 
                 default:
