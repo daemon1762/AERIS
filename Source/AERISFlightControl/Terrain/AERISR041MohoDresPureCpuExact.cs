@@ -516,15 +516,15 @@ namespace AERISFlightControl.Terrain
             if (curve == null) throw new ArgumentNullException("curve");
             CurveKeySnapshot[] keys = curve.Keys;
             if (keys.Length == 1) return keys[0].Value;
-            if (t <= keys[0].Time) return keys[0].Value;
+            if (t < keys[0].Time) return keys[0].Value;
             if (t >= keys[keys.Length - 1].Time)
                 return keys[keys.Length - 1].Value;
 
+            // Unity FindIndexForSampling uses upper-bound semantics: an exact internal
+            // key time belongs to the following segment.
             int right = 1;
-            while (right < keys.Length && t > keys[right].Time)
+            while (right < keys.Length - 1 && t >= keys[right].Time)
                 right++;
-            if (right >= keys.Length)
-                return keys[keys.Length - 1].Value;
 
             CurveKeySnapshot k0 = keys[right - 1];
             CurveKeySnapshot k1 = keys[right];
@@ -534,6 +534,9 @@ namespace AERISFlightControl.Terrain
             if (float.IsInfinity(k0.OutTangent) ||
                 float.IsInfinity(k1.InTangent))
                 return k0.Value;
+
+            if (curve.Mode == CurveEvaluationMode.PolynomialFloat)
+                return EvaluateUnityNativeCacheStrict(k0, k1, t);
 
             if (curve.Mode == CurveEvaluationMode.HermiteBasisDouble ||
                 curve.Mode == CurveEvaluationMode.PolynomialDouble)
@@ -574,23 +577,6 @@ namespace AERISFlightControl.Terrain
             float uf = (t - k0.Time) / dt;
             float fm0 = k0.OutTangent * dt;
             float fm1 = k1.InTangent * dt;
-
-            if (curve.Mode == CurveEvaluationMode.PolynomialFloat)
-            {
-                float a = 2f * k0.Value;
-                a = a - 2f * k1.Value;
-                a = a + fm0;
-                a = a + fm1;
-                float b = -3f * k0.Value;
-                b = b + 3f * k1.Value;
-                b = b - 2f * fm0;
-                b = b - fm1;
-                float result = a * uf + b;
-                result = result * uf + fm0;
-                result = result * uf + k0.Value;
-                return result;
-            }
-
             float u2f = uf * uf;
             float u3f = u2f * uf;
             float h00f = 2f * u3f - 3f * u2f + 1f;
@@ -602,6 +588,58 @@ namespace AERISFlightControl.Terrain
             resultF = resultF + k1.Value * h01f;
             resultF = resultF + fm1 * h11f;
             return resultF;
+        }
+
+        static float EvaluateUnityNativeCacheStrict(
+            CurveKeySnapshot k0,
+            CurveKeySnapshot k1,
+            float t)
+        {
+            float dx = B32Sub(k1.Time, k0.Time);
+            if (dx < 0.0001f) dx = 0.0001f;
+            float dy = B32Sub(k1.Value, k0.Value);
+            float length = B32Div(1.0f, B32Mul(dx, dx));
+            float d1 = B32Mul(k0.OutTangent, dx);
+            float d2 = B32Mul(k1.InTangent, dx);
+
+            float n0 = B32Add(d1, d2);
+            n0 = B32Sub(n0, dy);
+            n0 = B32Sub(n0, dy);
+            float c0 = B32Div(B32Mul(n0, length), dx);
+
+            float n1 = B32Add(dy, dy);
+            n1 = B32Add(n1, dy);
+            n1 = B32Sub(n1, d1);
+            n1 = B32Sub(n1, d1);
+            n1 = B32Sub(n1, d2);
+            float c1 = B32Mul(n1, length);
+            float c2 = k0.OutTangent;
+            float c3 = k0.Value;
+            float local = B32Sub(t, k0.Time);
+
+            float s1 = B32Add(B32Mul(local, c0), c1);
+            float s2 = B32Add(B32Mul(local, s1), c2);
+            return B32Add(B32Mul(local, s2), c3);
+        }
+
+        static float B32Add(float a, float b)
+        {
+            return (float)((double)a + (double)b);
+        }
+
+        static float B32Sub(float a, float b)
+        {
+            return (float)((double)a - (double)b);
+        }
+
+        static float B32Mul(float a, float b)
+        {
+            return (float)((double)a * (double)b);
+        }
+
+        static float B32Div(float a, float b)
+        {
+            return (float)((double)a / (double)b);
         }
 
         static int FloorToInt(double value)
