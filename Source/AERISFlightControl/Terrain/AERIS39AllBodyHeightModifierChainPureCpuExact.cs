@@ -17,13 +17,13 @@ namespace AERISFlightControl.Terrain
             LegacyPolynomialDouble = 3,
             AbsolutePolynomialDouble = 4,
             UnityNativeCacheFloat = 5,
-            UnityNativeCacheFmaInner = 6,
-            UnityNativeCacheFmaMiddle = 7,
-            UnityNativeCacheFmaOuter = 8,
-            UnityNativeCacheFmaInnerMiddle = 9,
-            UnityNativeCacheFmaInnerOuter = 10,
-            UnityNativeCacheFmaMiddleOuter = 11,
-            UnityNativeCacheFmaAll = 12
+            UnityNativeCacheStrictBinary32 = 6,
+            NormalizedPolynomialStrictBinary32 = 7,
+            HermiteStrictBinary32 = 8,
+            NormalizedPolynomialStrictBinary32Reciprocal = 9,
+            UnityNativeCacheStrictBinary32Reciprocal = 10,
+            BezierDefaultWeightStrictBinary32 = 11,
+            BezierDefaultWeightDeCasteljauStrictBinary32 = 12
         }
 
         internal const int RidgedCurveEvaluationModeCount = 13;
@@ -201,16 +201,9 @@ namespace AERISFlightControl.Terrain
                 }
 
                 case RidgedCurveEvaluationMode.UnityNativeCacheFloat:
-                case RidgedCurveEvaluationMode.UnityNativeCacheFmaInner:
-                case RidgedCurveEvaluationMode.UnityNativeCacheFmaMiddle:
-                case RidgedCurveEvaluationMode.UnityNativeCacheFmaOuter:
-                case RidgedCurveEvaluationMode.UnityNativeCacheFmaInnerMiddle:
-                case RidgedCurveEvaluationMode.UnityNativeCacheFmaInnerOuter:
-                case RidgedCurveEvaluationMode.UnityNativeCacheFmaMiddleOuter:
-                case RidgedCurveEvaluationMode.UnityNativeCacheFmaAll:
                 {
-                    // Unity native AnimationCurve cache path:
-                    // Runtime/Math/AnimationCurve.cpp CalculateCacheData + EvaluateCache.
+                    // Historical Unity Runtime/Math/AnimationCurve.cpp cache path,
+                    // expressed directly in managed float arithmetic.
                     float dx = k1.Time - k0.Time;
                     dx = Math.Max(dx, 0.0001f);
                     float dy = k1.Value - k0.Value;
@@ -222,46 +215,198 @@ namespace AERISFlightControl.Terrain
                     float c2 = k0.OutTangent;
                     float c3 = k0.Value;
                     float localT = t - k0.Time;
-
-                    bool fuseInner =
-                        mode == RidgedCurveEvaluationMode.UnityNativeCacheFmaInner ||
-                        mode == RidgedCurveEvaluationMode.UnityNativeCacheFmaInnerMiddle ||
-                        mode == RidgedCurveEvaluationMode.UnityNativeCacheFmaInnerOuter ||
-                        mode == RidgedCurveEvaluationMode.UnityNativeCacheFmaAll;
-                    bool fuseMiddle =
-                        mode == RidgedCurveEvaluationMode.UnityNativeCacheFmaMiddle ||
-                        mode == RidgedCurveEvaluationMode.UnityNativeCacheFmaInnerMiddle ||
-                        mode == RidgedCurveEvaluationMode.UnityNativeCacheFmaMiddleOuter ||
-                        mode == RidgedCurveEvaluationMode.UnityNativeCacheFmaAll;
-                    bool fuseOuter =
-                        mode == RidgedCurveEvaluationMode.UnityNativeCacheFmaOuter ||
-                        mode == RidgedCurveEvaluationMode.UnityNativeCacheFmaInnerOuter ||
-                        mode == RidgedCurveEvaluationMode.UnityNativeCacheFmaMiddleOuter ||
-                        mode == RidgedCurveEvaluationMode.UnityNativeCacheFmaAll;
-
-                    float s1 = fuseInner
-                        ? FmaFloatViaDouble(localT, c0, c1)
-                        : localT * c0 + c1;
-                    float s2 = fuseMiddle
-                        ? FmaFloatViaDouble(localT, s1, c2)
-                        : localT * s1 + c2;
-                    return fuseOuter
-                        ? FmaFloatViaDouble(localT, s2, c3)
-                        : localT * s2 + c3;
+                    return (localT * (localT * (localT * c0 + c1) + c2)) + c3;
                 }
+
+                case RidgedCurveEvaluationMode.UnityNativeCacheStrictBinary32:
+                    return EvaluateUnityNativeCacheStrict(k0, k1, t, false);
+
+                case RidgedCurveEvaluationMode.UnityNativeCacheStrictBinary32Reciprocal:
+                    return EvaluateUnityNativeCacheStrict(k0, k1, t, true);
+
+                case RidgedCurveEvaluationMode.NormalizedPolynomialStrictBinary32:
+                    return EvaluateNormalizedPolynomialStrict(k0, k1, t, false);
+
+                case RidgedCurveEvaluationMode.NormalizedPolynomialStrictBinary32Reciprocal:
+                    return EvaluateNormalizedPolynomialStrict(k0, k1, t, true);
+
+                case RidgedCurveEvaluationMode.HermiteStrictBinary32:
+                    return EvaluateHermiteStrict(k0, k1, t);
+
+                case RidgedCurveEvaluationMode.BezierDefaultWeightStrictBinary32:
+                    return EvaluateBezierDefaultWeightStrict(k0, k1, t, false);
+
+                case RidgedCurveEvaluationMode.BezierDefaultWeightDeCasteljauStrictBinary32:
+                    return EvaluateBezierDefaultWeightStrict(k0, k1, t, true);
 
                 default:
                     throw new ArgumentOutOfRangeException("mode");
             }
         }
 
-        // Diagnostic software binary32 fused multiply-add candidate. The product of
-        // two binary32 values is exactly representable in binary64; the final cast
-        // applies one binary32 rounding after the multiply/add pair. Acceptance is
-        // still determined only by the live Unity bit witness, never by assumption.
-        private static float FmaFloatViaDouble(float a, float b, float c)
+        static float EvaluateUnityNativeCacheStrict(
+            AERISR041MohoDresPureCpuExact.CurveKeySnapshot k0,
+            AERISR041MohoDresPureCpuExact.CurveKeySnapshot k1,
+            float t,
+            bool reciprocalLocal)
         {
-            return (float)(((double)a * (double)b) + (double)c);
+            // Reproduce the C++ source one binary32 operation at a time. The B32*
+            // helpers prevent the CLR/JIT from retaining extra precision across a
+            // source-level operation boundary.
+            float dx = B32Sub(k1.Time, k0.Time);
+            if (dx < 0.0001f) dx = 0.0001f;
+            float dy = B32Sub(k1.Value, k0.Value);
+            float dx2 = B32Mul(dx, dx);
+            float length = B32Div(1.0f, dx2);
+            float d1 = B32Mul(k0.OutTangent, dx);
+            float d2 = B32Mul(k1.InTangent, dx);
+
+            float n0 = B32Add(d1, d2);
+            n0 = B32Sub(n0, dy);
+            n0 = B32Sub(n0, dy);
+            float c0 = B32Mul(n0, length);
+            c0 = B32Div(c0, dx);
+
+            float n1 = B32Add(dy, dy);
+            n1 = B32Add(n1, dy);
+            n1 = B32Sub(n1, d1);
+            n1 = B32Sub(n1, d1);
+            n1 = B32Sub(n1, d2);
+            float c1 = B32Mul(n1, length);
+            float c2 = k0.OutTangent;
+            float c3 = k0.Value;
+
+            float localT = B32Sub(t, k0.Time);
+            if (reciprocalLocal)
+            {
+                // Diagnostic alternate parameterization: preserve the same cubic but
+                // reconstruct local time through normalized u and dx using strict ops.
+                float invDx = B32Div(1.0f, dx);
+                float u = B32Mul(localT, invDx);
+                localT = B32Mul(u, dx);
+            }
+
+            float s1 = B32Add(B32Mul(localT, c0), c1);
+            float s2 = B32Add(B32Mul(localT, s1), c2);
+            return B32Add(B32Mul(localT, s2), c3);
+        }
+
+        static float EvaluateNormalizedPolynomialStrict(
+            AERISR041MohoDresPureCpuExact.CurveKeySnapshot k0,
+            AERISR041MohoDresPureCpuExact.CurveKeySnapshot k1,
+            float t,
+            bool reciprocal)
+        {
+            float dt = B32Sub(k1.Time, k0.Time);
+            float local = B32Sub(t, k0.Time);
+            float u = reciprocal
+                ? B32Mul(local, B32Div(1.0f, dt))
+                : B32Div(local, dt);
+            float m0 = B32Mul(k0.OutTangent, dt);
+            float m1 = B32Mul(k1.InTangent, dt);
+
+            float a = B32Mul(2.0f, k0.Value);
+            a = B32Sub(a, B32Mul(2.0f, k1.Value));
+            a = B32Add(a, m0);
+            a = B32Add(a, m1);
+
+            float b = B32Mul(-3.0f, k0.Value);
+            b = B32Add(b, B32Mul(3.0f, k1.Value));
+            b = B32Sub(b, B32Mul(2.0f, m0));
+            b = B32Sub(b, m1);
+
+            float result = B32Add(B32Mul(a, u), b);
+            result = B32Add(B32Mul(result, u), m0);
+            return B32Add(B32Mul(result, u), k0.Value);
+        }
+
+        static float EvaluateHermiteStrict(
+            AERISR041MohoDresPureCpuExact.CurveKeySnapshot k0,
+            AERISR041MohoDresPureCpuExact.CurveKeySnapshot k1,
+            float t)
+        {
+            float dt = B32Sub(k1.Time, k0.Time);
+            float u = B32Div(B32Sub(t, k0.Time), dt);
+            float m0 = B32Mul(k0.OutTangent, dt);
+            float m1 = B32Mul(k1.InTangent, dt);
+            float u2 = B32Mul(u, u);
+            float u3 = B32Mul(u2, u);
+
+            float h00 = B32Sub(B32Mul(2.0f, u3), B32Mul(3.0f, u2));
+            h00 = B32Add(h00, 1.0f);
+            float h10 = B32Sub(u3, B32Mul(2.0f, u2));
+            h10 = B32Add(h10, u);
+            float h11 = B32Sub(u3, u2);
+            float h01 = B32Sub(B32Mul(-2.0f, u3), B32Mul(-3.0f, u2));
+
+            float result = B32Mul(h00, k0.Value);
+            result = B32Add(result, B32Mul(h10, m0));
+            result = B32Add(result, B32Mul(h11, m1));
+            return B32Add(result, B32Mul(h01, k1.Value));
+        }
+
+        static float EvaluateBezierDefaultWeightStrict(
+            AERISR041MohoDresPureCpuExact.CurveKeySnapshot k0,
+            AERISR041MohoDresPureCpuExact.CurveKeySnapshot k1,
+            float t,
+            bool deCasteljau)
+        {
+            float dt = B32Sub(k1.Time, k0.Time);
+            float u = B32Div(B32Sub(t, k0.Time), dt);
+            float m0 = B32Mul(k0.OutTangent, dt);
+            float m1 = B32Mul(k1.InTangent, dt);
+            float w = B32Div(1.0f, 3.0f);
+            float p0 = k0.Value;
+            float p1 = B32Add(p0, B32Mul(w, m0));
+            float p3 = k1.Value;
+            float p2 = B32Sub(p3, B32Mul(w, m1));
+
+            if (deCasteljau)
+            {
+                float a = B32Add(p0, B32Mul(B32Sub(p1, p0), u));
+                float b = B32Add(p1, B32Mul(B32Sub(p2, p1), u));
+                float c = B32Add(p2, B32Mul(B32Sub(p3, p2), u));
+                float d = B32Add(a, B32Mul(B32Sub(b, a), u));
+                float e = B32Add(b, B32Mul(B32Sub(c, b), u));
+                return B32Add(d, B32Mul(B32Sub(e, d), u));
+            }
+
+            float u2 = B32Mul(u, u);
+            float u3 = B32Mul(u2, u);
+            float omt = B32Sub(1.0f, u);
+            float omt2 = B32Mul(omt, omt);
+            float omt3 = B32Mul(omt2, omt);
+            float result = B32Mul(omt3, p0);
+            result = B32Add(result,
+                B32Mul(B32Mul(B32Mul(3.0f, u), omt2), p1));
+            result = B32Add(result,
+                B32Mul(B32Mul(B32Mul(3.0f, u2), omt), p2));
+            return B32Add(result, B32Mul(u3, p3));
+        }
+
+        // These helpers model one IEEE-754 binary32 arithmetic operation followed by
+        // immediate round-to-nearest-even. Products and sums of binary32 operands are
+        // exactly representable in binary64; division is computed at binary64 precision
+        // before the explicit binary32 rounding, which is sufficient for this witness
+        // unless the live bit comparison proves otherwise.
+        static float B32Add(float a, float b)
+        {
+            return (float)((double)a + (double)b);
+        }
+
+        static float B32Sub(float a, float b)
+        {
+            return (float)((double)a - (double)b);
+        }
+
+        static float B32Mul(float a, float b)
+        {
+            return (float)((double)a * (double)b);
+        }
+
+        static float B32Div(float a, float b)
+        {
+            return (float)((double)a / (double)b);
         }
 
         internal sealed class ChainSnapshot
