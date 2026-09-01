@@ -87,8 +87,6 @@ namespace AERISFlightControl.Terrain
             internal readonly AERIS39MapSoPureCpuExact.MapSnapshot HeightMap;
             internal readonly float VHeightMax;
             internal readonly double SphereRadius;
-            internal readonly double SphereSx;
-            internal readonly double SphereSy;
             internal readonly float AltitudeBlend;
             internal readonly float LatitudeBlend;
             internal readonly float LongitudeBlend;
@@ -102,8 +100,6 @@ namespace AERISFlightControl.Terrain
                 AERIS39MapSoPureCpuExact.MapSnapshot heightMap,
                 float vHeightMax,
                 double sphereRadius,
-                double sphereSx,
-                double sphereSy,
                 float altitudeBlend,
                 float latitudeBlend,
                 float longitudeBlend,
@@ -123,8 +119,6 @@ namespace AERISFlightControl.Terrain
                 HeightMap = heightMap;
                 VHeightMax = vHeightMax;
                 SphereRadius = sphereRadius;
-                SphereSx = sphereSx;
-                SphereSy = sphereSy;
                 AltitudeBlend = altitudeBlend;
                 LatitudeBlend = latitudeBlend;
                 LongitudeBlend = longitudeBlend;
@@ -163,7 +157,11 @@ namespace AERISFlightControl.Terrain
 
                 double latitudeNoise = AERISR039MinmusPureCpuExact.SimplexNoise(
                     LatitudeSimplex, x, y, z, LatitudeSimplex.Persistence);
-                double vLat = SphereSy + ((double)LatitudeBlend * latitudeNoise);
+
+                // Stock PQS.BuildVertexMapCoords writes data.v = sphere.sy for the
+                // current vertex. Therefore v is the exact per-vertex LandControl
+                // latitude coordinate and must not be snapshotted once per body.
+                double vLat = v + ((double)LatitudeBlend * latitudeNoise);
                 if (vLat > 1d)
                     vLat = 1d;
                 else if (vLat < 0d)
@@ -171,7 +169,10 @@ namespace AERISFlightControl.Terrain
 
                 double longitudeNoise = AERISR039MinmusPureCpuExact.SimplexNoise(
                     LongitudeSimplex, x, y, z, LongitudeSimplex.Persistence);
-                double vLon = SphereSx + ((double)LongitudeBlend * longitudeNoise);
+
+                // Stock PQS.BuildVertexMapCoords writes data.u = sphere.sx for the
+                // current vertex. u is therefore the per-vertex longitude state.
+                double vLon = u + ((double)LongitudeBlend * longitudeNoise);
                 if (vLon > 1d)
                     vLon = 1d;
                 else if (vLon < 0d)
