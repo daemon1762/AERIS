@@ -8,7 +8,7 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="MAPSO-3I-MID-LOWERING-DIAGNOSTIC"
+STAGE="MAPSO-3J-KSPCF-AWARE-EFFECTIVE-SEMANTICS-ACCEPTANCE"
 
 cd "$ROOT"
 
@@ -18,9 +18,9 @@ echo "KSP=$KSP"
 echo "HEAD=$(git rev-parse HEAD)"
 echo
 
-test -f "$ROOT/Tools/aeris39_mapso3i_mid_lowering_diagnostic.sh" || {
-  echo "STOP: MAPSO-3I mid lowering diagnostic runner missing" >&2
+test -f "$ROOT/Tools/aeris39_mapso3j_effective_semantics_witness.sh" || {
+  echo "STOP: MAPSO-3J effective semantics runner missing" >&2
   exit 20
 }
 
-bash "$ROOT/Tools/aeris39_mapso3i_mid_lowering_diagnostic.sh" "$KSP"
+bash "$ROOT/Tools/aeris39_mapso3j_effective_semantics_witness.sh" "$KSP"
