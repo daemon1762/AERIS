@@ -437,6 +437,83 @@ namespace AERISFlightControl.Terrain
                         break;
                     }
 
+                    case "PQSMod_MapDecal":
+                    {
+                        MapSO map = ReadMember(record.Mod, "heightMap") as MapSO;
+                        AERIS39MapSoPureCpuExact.MapSnapshot mapSnapshot = null;
+                        string semanticsText = "NONE";
+                        string semanticsEvidence = "HEIGHT_MAP_NULL";
+
+                        if (map != null)
+                        {
+                            byte[] data = RequireMember(map, "_data") as byte[];
+                            if (data == null)
+                                throw new InvalidOperationException(
+                                    bodyName + "_MAPDECAL_CLASSIC_MAP_DATA_NOT_BYTE_ARRAY");
+
+                            int width = ReadInt(map, "_width");
+                            int height = ReadInt(map, "_height");
+                            int bpp = ReadInt(map, "_bpp");
+                            int rowWidth = ReadInt(map, "_rowWidth");
+                            if (width <= 0 || height <= 0 || bpp <= 0 || rowWidth <= 0)
+                                throw new InvalidOperationException(
+                                    bodyName + "_MAPDECAL_CLASSIC_MAP_DIMENSIONS_INVALID");
+
+                            AERIS39MapSoPureCpuExact.CoordinateSemantics semantics =
+                                AERIS39MapSoRuntimeSemanticsResolver.Resolve(
+                                    map, out semanticsEvidence);
+                            semanticsText = semantics.ToString();
+                            mapSnapshot = new AERIS39MapSoPureCpuExact.MapSnapshot(
+                                data, width, height, bpp, rowWidth, semantics);
+                        }
+
+                        object posNorm = RequireMember(record.Mod, "posNorm");
+                        object rot = RequireMember(record.Mod, "rot");
+
+                        pureOps[i] = new AERIS39MapDecalPureCpuExact.OpSnapshot(
+                            ReadDouble(record.Mod, "radius"),
+                            ReadDouble(pqs, "radius"),
+                            ReadDouble(record.Mod, "heightMapDeformity"),
+                            (bool)RequireMember(record.Mod, "cullBlack"),
+                            (bool)RequireMember(record.Mod, "useAlphaHeightSmoothing"),
+                            (bool)RequireMember(record.Mod, "absolute"),
+                            ReadDouble(record.Mod, "absoluteOffset"),
+                            Convert.ToSingle(
+                                RequireMember(record.Mod, "smoothHeight"),
+                                CultureInfo.InvariantCulture),
+                            Convert.ToSingle(
+                                RequireMember(record.Mod, "smoothHR"),
+                                CultureInfo.InvariantCulture),
+                            Convert.ToSingle(
+                                RequireMember(record.Mod, "smoothH1M"),
+                                CultureInfo.InvariantCulture),
+                            (bool)RequireMember(record.Mod, "quadActive"),
+                            (bool)RequireMember(record.Mod, "buildHeight"),
+                            (bool)RequireMember(pqs, "isBuildingMaps"),
+                            ReadDouble(record.Mod, "inclusionAngle"),
+                            ReadDouble(posNorm, "x"),
+                            ReadDouble(posNorm, "y"),
+                            ReadDouble(posNorm, "z"),
+                            Convert.ToSingle(RequireMember(rot, "x"), CultureInfo.InvariantCulture),
+                            Convert.ToSingle(RequireMember(rot, "y"), CultureInfo.InvariantCulture),
+                            Convert.ToSingle(RequireMember(rot, "z"), CultureInfo.InvariantCulture),
+                            Convert.ToSingle(RequireMember(rot, "w"), CultureInfo.InvariantCulture),
+                            mapSnapshot);
+
+                        AERISLogger.Info(
+                            "[AERIS39][HEIGHT_CHAIN_DEPENDENCY]" +
+                            "; body=" + Safe(bodyName) +
+                            "; type=PQSMod_MapDecal" +
+                            "; dependency=MAPSO_HEIGHT_ALPHA_DECAL" +
+                            "; map_semantics=" + Safe(semanticsText) +
+                            "; semantics_evidence=" + Safe(semanticsEvidence) +
+                            "; runtime_setup_state=SNAPSHOTTED" +
+                            "; source_semantics=STOCK_ONVERTEXBUILDHEIGHT" +
+                            "; remove_scatter_side_effect=REFERENCE_ONLY" +
+                            "; exact_candidate=true" + Invariants());
+                        break;
+                    }
+
                     default:
                         throw new InvalidOperationException(
                             bodyName + "_UNSUPPORTED_HEIGHT_MODIFIER:" + record.TypeName);
