@@ -6,28 +6,11 @@ namespace AERISFlightControl.Terrain
     // AERIS39 MAPSO-3 pure CLR MapSO sampling primitive.
     //
     // This class is intentionally free of Unity/KSP/runtime-object types.
-    // It reproduces the KSP 1.12.5 MapSO.GetPixelFloat(double,double)
-    // dependency closure certified by MAPSO-1 / MAPSO-2A / MAPSO-2B.
+    // Runtime effective coordinate semantics are captured on the main thread
+    // into the immutable snapshot as a primitive enum. Workers never inspect
+    // Harmony/KSPCF/runtime objects.
     //
-    // MAPSO-3 Fix2: preserve the observable runtime evaluation boundaries of
-    // stock MapSO as closely as possible. Stock GreyFloat,
-    // GetPixelFloat(int,int), ConstructBilinearCoords(double,double), and
-    // GetPixelFloat(double,double) are virtual/callvirt boundaries. The pure
-    // implementation therefore prevents the worker JIT from collapsing those
-    // boundaries. Lerp and the bilinear call order mirror the captured stock
-    // IL instead of introducing algebraically equivalent temporary locals.
-    //
-    // MAPSO-3G: the real KSP runtime witness isolated the remaining mismatch to
-    // ConstructBilinearCoords. The captured stock double overload materializes
-    // centerXD/centerYD, min/max, and mid values through instance fields. A
-    // local-only reconstruction is mathematically equivalent but can expose a
-    // different Mono JIT intermediate-precision boundary. Preserve the stock
-    // field store/reload shape with one CLR-only scratch object per worker
-    // thread. No Unity/KSP/runtime object is stored here and no per-sample
-    // allocation occurs after the thread's first sample.
-    //
-    // HARD RULE: do not algebraically simplify, reorder, or localize the
-    // bilinear scratch field accesses without a new exact-bit witness.
+    // HARD RULE: do not algebraically simplify or reorder the certified paths.
     internal static class AERIS39MapSoPureCpuExact
     {
         const int Byte2FloatBits = unchecked((int)0x3B808081);
@@ -36,6 +19,12 @@ namespace AERISFlightControl.Terrain
         [ThreadStatic]
         static BilinearScratch threadBilinearScratch;
 
+        internal enum CoordinateSemantics
+        {
+            StockWrapXY = 0,
+            KspCommunityFixesWrapXClampY = 1
+        }
+
         internal sealed class MapSnapshot
         {
             internal readonly byte[] Data;
@@ -43,6 +32,7 @@ namespace AERISFlightControl.Terrain
             internal readonly int Height;
             internal readonly int BytesPerPixel;
             internal readonly int RowWidth;
+            internal readonly CoordinateSemantics Semantics;
 
             internal MapSnapshot(
                 byte[] data,
@@ -50,6 +40,17 @@ namespace AERISFlightControl.Terrain
                 int height,
                 int bytesPerPixel,
                 int rowWidth)
+                : this(data, width, height, bytesPerPixel, rowWidth, CoordinateSemantics.StockWrapXY)
+            {
+            }
+
+            internal MapSnapshot(
+                byte[] data,
+                int width,
+                int height,
+                int bytesPerPixel,
+                int rowWidth,
+                CoordinateSemantics semantics)
             {
                 if (data == null) throw new ArgumentNullException("data");
                 if (width <= 0) throw new ArgumentOutOfRangeException("width");
@@ -60,12 +61,16 @@ namespace AERISFlightControl.Terrain
                     throw new ArgumentException("rowWidth is smaller than packed row", "rowWidth");
                 if (data.Length < rowWidth * height)
                     throw new ArgumentException("map data is incomplete", "data");
+                if (semantics != CoordinateSemantics.StockWrapXY &&
+                    semantics != CoordinateSemantics.KspCommunityFixesWrapXClampY)
+                    throw new ArgumentOutOfRangeException("semantics");
 
                 Data = (byte[])data.Clone();
                 Width = width;
                 Height = height;
                 BytesPerPixel = bytesPerPixel;
                 RowWidth = rowWidth;
+                Semantics = semantics;
             }
         }
 
@@ -92,7 +97,7 @@ namespace AERISFlightControl.Terrain
             if (map == null) throw new ArgumentNullException("map");
 
             BilinearScratch c = AcquireBilinearScratch(map.Width, map.Height);
-            ConstructBilinearCoords(c, x, y);
+            ConstructBilinearCoords(c, map.Semantics, x, y);
 
             if (map.BytesPerPixel == 1)
             {
@@ -159,15 +164,32 @@ namespace AERISFlightControl.Terrain
         [MethodImpl(MethodImplOptions.NoInlining)]
         static void ConstructBilinearCoords(
             BilinearScratch c,
+            CoordinateSemantics semantics,
             double x,
             double y)
         {
-            // Stock MapSO.ConstructBilinearCoords(double,double), captured IL:
-            // - normalize by writing x/y back to their arguments;
-            // - materialize centerXD/centerYD through fields;
-            // - reload those fields for Floor/Ceiling and mid subtraction;
-            // - convert only the final mid result to float;
-            // - wrap max index only after mid is materialized.
+            if (semantics == CoordinateSemantics.KspCommunityFixesWrapXClampY)
+            {
+                // KSPCommunityFixes MapSOCorrectWrapping double-prefix exact source order.
+                // X wraps as longitude.
+                x = Math.Abs(x - Math.Floor(x));
+                c.CenterXD = x * (double)c.Width;
+                c.MinX = (int)Math.Floor(c.CenterXD);
+                c.MaxX = (int)Math.Ceiling(c.CenterXD);
+                c.MidX = (float)c.CenterXD - c.MinX;
+                if (c.MaxX == c.Width) c.MaxX = 0;
+
+                // Y clamps as latitude; poles do not wrap.
+                y = Math.Min(Math.Max(y, 0.0), 0.99999);
+                c.CenterYD = y * (double)c.Height;
+                c.MinY = (int)Math.Floor(c.CenterYD);
+                c.MaxY = (int)Math.Ceiling(c.CenterYD);
+                c.MidY = (float)c.CenterYD - c.MinY;
+                if (c.MaxY >= c.Height) c.MaxY = c.Height - 1;
+                return;
+            }
+
+            // Stock KSP 1.12.5 MapSO.ConstructBilinearCoords(double,double).
             x = Math.Abs(x - Math.Floor(x));
             y = Math.Abs(y - Math.Floor(y));
 
