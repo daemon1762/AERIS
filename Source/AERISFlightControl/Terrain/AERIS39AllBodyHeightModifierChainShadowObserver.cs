@@ -299,6 +299,43 @@ namespace AERISFlightControl.Terrain
                         break;
                     }
 
+                    case "PQSMod_VertexRidgedAltitudeCurve":
+                    {
+                        AnimationCurve curve = RequireMember(record.Mod, "simplexCurve") as AnimationCurve;
+                        if (curve == null)
+                            throw new InvalidOperationException(bodyName + "_RIDGED_ALTITUDE_CURVE_MISSING");
+
+                        CurveSelection selection = SelectCurveSnapshot(bodyName, curve);
+                        curveExact &= selection.Exact;
+                        if (!selection.Exact)
+                            throw new InvalidOperationException(
+                                bodyName + "_RIDGED_ALTITUDE_ANIMATIONCURVE_NOT_BIT_EXACT");
+
+                        pureOps[i] =
+                            new AERIS39AllBodyHeightModifierChainPureCpuExact.RidgedAltitudeCurveOpSnapshot(
+                                Convert.ToSingle(
+                                    RequireMember(record.Mod, "deformity"),
+                                    CultureInfo.InvariantCulture),
+                                radiusMin,
+                                Convert.ToSingle(
+                                    RequireMember(record.Mod, "ridgedMinimum"),
+                                    CultureInfo.InvariantCulture),
+                                ReadDouble(record.Mod, "simplexHeightStart"),
+                                ReadDouble(record.Mod, "simplexHeightEnd"),
+                                ReadDouble(record.Mod, "hDeltaR"),
+                                SnapshotSimplex(RequireMember(record.Mod, "simplex")),
+                                SnapshotRidged(RequireMember(record.Mod, "ridgedAdd"), randomVectors),
+                                selection.Snapshot);
+
+                        AERISLogger.Info(
+                            "[AERIS39][HEIGHT_CHAIN_DEPENDENCY]" +
+                            "; body=" + Safe(bodyName) +
+                            "; type=PQSMod_VertexRidgedAltitudeCurve" +
+                            "; dependency=SIMPLEX_RIDGED_ANIMATION_CURVE" +
+                            "; exact=true" + Invariants());
+                        break;
+                    }
+
                     case "PQSMod_VertexSimplexHeightAbsolute":
                         pureOps[i] = new AERISR041MohoDresPureCpuExact.SimplexAbsoluteOpSnapshot(
                             ReadDouble(record.Mod, "deformity"),
