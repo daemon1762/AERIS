@@ -30,11 +30,9 @@ if src.count(old_root) != 1:
     raise SystemExit("MAPSO3J root patch point mismatch")
 src = src.replace(old_root, new_root, 1)
 
-old_compile = '    "    <Compile Include=\\"Terrain\\\\AERIS39MapSoRealBodyHeightMapWitnessObserver.cs\\" />\\n"\n'
-new_compile = (
-    '    "    <Compile Include=\\"Terrain\\\\AERIS39MapSoRuntimeSemanticsResolver.cs\\" />\\n"\n'
-    '    "    <Compile Include=\\"Terrain\\\\AERIS39MapSoEffectiveSemanticsWitnessObserver.cs\\" />\\n"\n'
-)
+old_compile = r'''    "    <Compile Include=\"Terrain\\AERIS39MapSoRealBodyHeightMapWitnessObserver.cs\" />\n"'''
+new_compile = r'''    "    <Compile Include=\"Terrain\\AERIS39MapSoRuntimeSemanticsResolver.cs\" />\n"
+    "    <Compile Include=\"Terrain\\AERIS39MapSoEffectiveSemanticsWitnessObserver.cs\" />\n"'''
 if src.count(old_compile) != 1:
     raise SystemExit("MAPSO3J compile patch point mismatch")
 src = src.replace(old_compile, new_compile, 1)
