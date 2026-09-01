@@ -15,14 +15,14 @@ namespace AERISFlightControl.Terrain
             LegacyPolynomialFloat = 1,
             LegacyHermiteBasisDouble = 2,
             LegacyPolynomialDouble = 3,
-            HermiteReciprocalFloat = 4,
-            HermiteGroupedFloat = 5,
-            PolynomialGroupedFloat = 6,
-            LocalPolynomialFloat = 7,
-            LocalPolynomialReciprocalFloat = 8,
-            LocalPolynomialDouble = 9,
-            AbsolutePolynomialDouble = 10,
-            AbsolutePolynomialFloat = 11
+            AbsolutePolynomialDouble = 4,
+            CompiledAbsoluteFloatHorner = 5,
+            CompiledAbsoluteDoubleToFloatHorner = 6,
+            CompiledAbsoluteDoubleToFloatDoubleHorner = 7,
+            CompiledLocalDoubleToFloatHorner = 8,
+            CompiledNormalizedDoubleToFloatHorner = 9,
+            CompiledNormalizedFloatDoubleHorner = 10,
+            CompiledAbsoluteFloatExpanded = 11
         }
 
         internal const int RidgedCurveEvaluationModeCount = 12;
@@ -171,84 +171,6 @@ namespace AERISFlightControl.Terrain
 
             switch (mode)
             {
-                case RidgedCurveEvaluationMode.HermiteReciprocalFloat:
-                {
-                    float invDt = 1f / dt;
-                    float uf = (t - k0.Time) * invDt;
-                    float m0 = k0.OutTangent * dt;
-                    float m1 = k1.InTangent * dt;
-                    float u2 = uf * uf;
-                    float u3 = u2 * uf;
-                    float h00 = 2f * u3 - 3f * u2 + 1f;
-                    float h10 = u3 - 2f * u2 + uf;
-                    float h01 = -2f * u3 + 3f * u2;
-                    float h11 = u3 - u2;
-                    float result = k0.Value * h00;
-                    result = result + m0 * h10;
-                    result = result + k1.Value * h01;
-                    result = result + m1 * h11;
-                    return result;
-                }
-
-                case RidgedCurveEvaluationMode.HermiteGroupedFloat:
-                {
-                    float uf = (t - k0.Time) / dt;
-                    float m0 = k0.OutTangent * dt;
-                    float m1 = k1.InTangent * dt;
-                    float u2 = uf * uf;
-                    float h00 = ((2f * uf - 3f) * u2) + 1f;
-                    float h10 = ((uf - 2f) * uf + 1f) * uf;
-                    float h01 = (-2f * uf + 3f) * u2;
-                    float h11 = (uf - 1f) * u2;
-                    float left = k0.Value * h00 + m0 * h10;
-                    float rightValue = k1.Value * h01 + m1 * h11;
-                    return left + rightValue;
-                }
-
-                case RidgedCurveEvaluationMode.PolynomialGroupedFloat:
-                {
-                    float uf = (t - k0.Time) / dt;
-                    float m0 = k0.OutTangent * dt;
-                    float m1 = k1.InTangent * dt;
-                    float a = 2f * (k0.Value - k1.Value) + m0 + m1;
-                    float b = 3f * (k1.Value - k0.Value) - 2f * m0 - m1;
-                    return ((a * uf + b) * uf + m0) * uf + k0.Value;
-                }
-
-                case RidgedCurveEvaluationMode.LocalPolynomialFloat:
-                {
-                    float x = t - k0.Time;
-                    float dy = k1.Value - k0.Value;
-                    float slope = dy / dt;
-                    float c3 = (k0.OutTangent + k1.InTangent - 2f * slope) / (dt * dt);
-                    float c2 = (3f * slope - 2f * k0.OutTangent - k1.InTangent) / dt;
-                    return ((c3 * x + c2) * x + k0.OutTangent) * x + k0.Value;
-                }
-
-                case RidgedCurveEvaluationMode.LocalPolynomialReciprocalFloat:
-                {
-                    float x = t - k0.Time;
-                    float invDt = 1f / dt;
-                    float slope = (k1.Value - k0.Value) * invDt;
-                    float c3 = (k0.OutTangent + k1.InTangent - 2f * slope) * invDt * invDt;
-                    float c2 = (3f * slope - 2f * k0.OutTangent - k1.InTangent) * invDt;
-                    return ((c3 * x + c2) * x + k0.OutTangent) * x + k0.Value;
-                }
-
-                case RidgedCurveEvaluationMode.LocalPolynomialDouble:
-                {
-                    double x = (double)t - (double)k0.Time;
-                    double dtd = (double)k1.Time - (double)k0.Time;
-                    double slope = ((double)k1.Value - (double)k0.Value) / dtd;
-                    double c3 = ((double)k0.OutTangent + (double)k1.InTangent - 2.0 * slope) /
-                        (dtd * dtd);
-                    double c2 = (3.0 * slope - 2.0 * (double)k0.OutTangent -
-                        (double)k1.InTangent) / dtd;
-                    double result = ((c3 * x + c2) * x + (double)k0.OutTangent) * x +
-                        (double)k0.Value;
-                    return (float)result;
-                }
-
                 case RidgedCurveEvaluationMode.AbsolutePolynomialDouble:
                 {
                     double t0 = (double)k0.Time;
@@ -277,20 +199,126 @@ namespace AERISFlightControl.Terrain
                     return (float)(d + td * (c + td * (b + td * a)));
                 }
 
-                case RidgedCurveEvaluationMode.AbsolutePolynomialFloat:
+                case RidgedCurveEvaluationMode.CompiledAbsoluteFloatHorner:
+                case RidgedCurveEvaluationMode.CompiledAbsoluteFloatExpanded:
                 {
-                    float localC = k0.OutTangent;
-                    float slope = (k1.Value - k0.Value) / dt;
-                    float localA = (k0.OutTangent + k1.InTangent - 2f * slope) / (dt * dt);
-                    float localB = (3f * slope - 2f * k0.OutTangent - k1.InTangent) / dt;
                     float t0 = k0.Time;
+                    float p0 = k0.Value;
+                    float m0 = k0.OutTangent;
+                    float t1 = k1.Time;
+                    float p1 = k1.Value;
+                    float m1 = k1.InTangent;
                     float t0Sq = t0 * t0;
-                    float absoluteA = localA;
-                    float absoluteB = localB - 3f * localA * t0;
-                    float absoluteC = localC - 2f * localB * t0 + 3f * localA * t0Sq;
-                    float absoluteD = k0.Value - localC * t0 + localB * t0Sq -
-                        localA * t0Sq * t0;
-                    return absoluteD + t * (absoluteC + t * (absoluteB + t * absoluteA));
+                    float t0Cu = t0Sq * t0;
+                    float t1Sq = t1 * t1;
+                    float t1Cu = t1Sq * t1;
+                    float divisor = t0Cu - t1Cu + 3f * t0 * t1 * (t1 - t0);
+                    if (divisor == 0f) return k1.Value;
+                    float a = ((m0 + m1) * (t0 - t1) + (p1 - p0) * 2f) / divisor;
+                    float b = (2f * (t1Sq * m0 - t0Sq * m1) - t0Sq * m0 +
+                        t1Sq * m1 + t0 * t1 * (m1 - m0) +
+                        3f * (t0 + t1) * (p0 - p1)) / divisor;
+                    float c = (t0Cu * m1 - t1Cu * m0 +
+                        t0 * t1 * (t0 * (2f * m0 + m1) - t1 * (m0 + 2f * m1)) +
+                        6f * t0 * t1 * (p1 - p0)) / divisor;
+                    float d = ((t0 * t1Sq - t0Sq * t1) * (t1 * m0 + t0 * m1) -
+                        p0 * t1Cu + t0Cu * p1 +
+                        3f * t0 * t1 * (t1 * p0 - t0 * p1)) / divisor;
+
+                    if (mode == RidgedCurveEvaluationMode.CompiledAbsoluteFloatExpanded)
+                    {
+                        float cubic = ((a * t) * t) * t;
+                        float quadratic = (b * t) * t;
+                        float result = cubic + quadratic;
+                        result = result + c * t;
+                        result = result + d;
+                        return result;
+                    }
+
+                    return d + t * (c + t * (b + t * a));
+                }
+
+                case RidgedCurveEvaluationMode.CompiledAbsoluteDoubleToFloatHorner:
+                case RidgedCurveEvaluationMode.CompiledAbsoluteDoubleToFloatDoubleHorner:
+                {
+                    double t0 = (double)k0.Time;
+                    double p0 = (double)k0.Value;
+                    double m0 = (double)k0.OutTangent;
+                    double t1 = (double)k1.Time;
+                    double p1 = (double)k1.Value;
+                    double m1 = (double)k1.InTangent;
+                    double t0Sq = t0 * t0;
+                    double t0Cu = t0Sq * t0;
+                    double t1Sq = t1 * t1;
+                    double t1Cu = t1Sq * t1;
+                    double divisor = t0Cu - t1Cu + 3.0 * t0 * t1 * (t1 - t0);
+                    if (divisor == 0.0) return k1.Value;
+                    float a = (float)(((m0 + m1) * (t0 - t1) + (p1 - p0) * 2.0) / divisor);
+                    float b = (float)((2.0 * (t1Sq * m0 - t0Sq * m1) - t0Sq * m0 +
+                        t1Sq * m1 + t0 * t1 * (m1 - m0) +
+                        3.0 * (t0 + t1) * (p0 - p1)) / divisor);
+                    float c = (float)((t0Cu * m1 - t1Cu * m0 +
+                        t0 * t1 * (t0 * (2.0 * m0 + m1) - t1 * (m0 + 2.0 * m1)) +
+                        6.0 * t0 * t1 * (p1 - p0)) / divisor);
+                    float d = (float)(((t0 * t1Sq - t0Sq * t1) * (t1 * m0 + t0 * m1) -
+                        p0 * t1Cu + t0Cu * p1 +
+                        3.0 * t0 * t1 * (t1 * p0 - t0 * p1)) / divisor);
+
+                    if (mode == RidgedCurveEvaluationMode.CompiledAbsoluteDoubleToFloatDoubleHorner)
+                    {
+                        double td = (double)t;
+                        double result = (double)d + td * ((double)c + td * ((double)b + td * (double)a));
+                        return (float)result;
+                    }
+
+                    return d + t * (c + t * (b + t * a));
+                }
+
+                case RidgedCurveEvaluationMode.CompiledLocalDoubleToFloatHorner:
+                {
+                    double t0 = (double)k0.Time;
+                    double t1 = (double)k1.Time;
+                    double dtd = t1 - t0;
+                    double p0 = (double)k0.Value;
+                    double p1 = (double)k1.Value;
+                    double m0 = (double)k0.OutTangent;
+                    double m1 = (double)k1.InTangent;
+                    double slope = (p1 - p0) / dtd;
+                    float a = (float)((m0 + m1 - 2.0 * slope) / (dtd * dtd));
+                    float b = (float)((3.0 * slope - 2.0 * m0 - m1) / dtd);
+                    float c = (float)m0;
+                    float d = (float)p0;
+                    float x = t - k0.Time;
+                    return d + x * (c + x * (b + x * a));
+                }
+
+                case RidgedCurveEvaluationMode.CompiledNormalizedDoubleToFloatHorner:
+                {
+                    double dtd = (double)k1.Time - (double)k0.Time;
+                    double p0 = (double)k0.Value;
+                    double p1 = (double)k1.Value;
+                    double m0 = (double)k0.OutTangent * dtd;
+                    double m1 = (double)k1.InTangent * dtd;
+                    float a = (float)(2.0 * (p0 - p1) + m0 + m1);
+                    float b = (float)(3.0 * (p1 - p0) - 2.0 * m0 - m1);
+                    float c = (float)m0;
+                    float d = (float)p0;
+                    float u = (t - k0.Time) / dt;
+                    return d + u * (c + u * (b + u * a));
+                }
+
+                case RidgedCurveEvaluationMode.CompiledNormalizedFloatDoubleHorner:
+                {
+                    float m0 = k0.OutTangent * dt;
+                    float m1 = k1.InTangent * dt;
+                    float a = 2f * (k0.Value - k1.Value) + m0 + m1;
+                    float b = 3f * (k1.Value - k0.Value) - 2f * m0 - m1;
+                    float c = m0;
+                    float d = k0.Value;
+                    float u = (t - k0.Time) / dt;
+                    double ud = (double)u;
+                    double result = (double)d + ud * ((double)c + ud * ((double)b + ud * (double)a));
+                    return (float)result;
                 }
 
                 default:
