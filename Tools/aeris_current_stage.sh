@@ -8,7 +8,7 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="MAPSO-3J-KSPCF-AWARE-EFFECTIVE-SEMANTICS-ACCEPTANCE"
+STAGE="R041-HEIGHTMAP-FULL-FORMULA-SHADOW"
 
 cd "$ROOT"
 
@@ -18,9 +18,9 @@ echo "KSP=$KSP"
 echo "HEAD=$(git rev-parse HEAD)"
 echo
 
-test -f "$ROOT/Tools/aeris39_mapso3j_effective_semantics_witness.sh" || {
-  echo "STOP: MAPSO-3J effective semantics runner missing" >&2
+test -f "$ROOT/Tools/aeris39_r041_heightmap_full_formula_shadow.sh" || {
+  echo "STOP: R041 HeightMap full formula shadow runner missing" >&2
   exit 20
 }
 
-bash "$ROOT/Tools/aeris39_mapso3j_effective_semantics_witness.sh" "$KSP"
+bash "$ROOT/Tools/aeris39_r041_heightmap_full_formula_shadow.sh" "$KSP"
