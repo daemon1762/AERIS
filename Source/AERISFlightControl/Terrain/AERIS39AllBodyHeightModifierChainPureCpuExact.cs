@@ -275,7 +275,7 @@ namespace AERISFlightControl.Terrain
                     throw new ArgumentException("height modifier chain requires ops", "ops");
 
                 Ops = new AERISR041MohoDresPureCpuExact.HeightOpSnapshot[ops.Length];
-                for (int i = 0; i < snapshot.Ops.Length; i++)
+                for (int i = 0; i < ops.Length; i++)
                 {
                     if (ops[i] == null)
                         throw new ArgumentException("height modifier op is null", "ops");
