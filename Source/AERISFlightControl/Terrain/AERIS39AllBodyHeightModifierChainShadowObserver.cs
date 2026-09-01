@@ -73,6 +73,7 @@ namespace AERISFlightControl.Terrain
         sealed class CurveSelection
         {
             internal AERISR041MohoDresPureCpuExact.CurveSnapshot Snapshot;
+            internal AERIS39AllBodyHeightModifierChainPureCpuExact.RidgedCurveEvaluationMode RidgedMode;
             internal bool Exact;
             internal int Matches;
             internal int Tests;
@@ -305,7 +306,7 @@ namespace AERISFlightControl.Terrain
                         if (curve == null)
                             throw new InvalidOperationException(bodyName + "_RIDGED_ALTITUDE_CURVE_MISSING");
 
-                        CurveSelection selection = SelectCurveSnapshot(bodyName, curve);
+                        CurveSelection selection = SelectRidgedCurveSnapshot(bodyName, curve);
                         curveExact &= selection.Exact;
                         if (!selection.Exact)
                             throw new InvalidOperationException(
@@ -325,13 +326,15 @@ namespace AERISFlightControl.Terrain
                                 ReadDouble(record.Mod, "hDeltaR"),
                                 SnapshotSimplex(RequireMember(record.Mod, "simplex")),
                                 SnapshotRidged(RequireMember(record.Mod, "ridgedAdd"), randomVectors),
-                                selection.Snapshot);
+                                selection.Snapshot,
+                                selection.RidgedMode);
 
                         AERISLogger.Info(
                             "[AERIS39][HEIGHT_CHAIN_DEPENDENCY]" +
                             "; body=" + Safe(bodyName) +
                             "; type=PQSMod_VertexRidgedAltitudeCurve" +
                             "; dependency=SIMPLEX_RIDGED_ANIMATION_CURVE" +
+                            "; curve_mode=" + selection.RidgedMode +
                             "; exact=true" + Invariants());
                         break;
                     }
@@ -770,6 +773,101 @@ namespace AERISFlightControl.Terrain
             return new CurveSelection
             {
                 Snapshot = selected,
+                Exact = exact,
+                Matches = bestMatches,
+                Tests = tests,
+                MaxAbsError = bestMaxError
+            };
+        }
+
+        CurveSelection SelectRidgedCurveSnapshot(string bodyName, AnimationCurve curve)
+        {
+            Keyframe[] keys = curve.keys;
+            if (keys == null || keys.Length == 0)
+                throw new InvalidOperationException(bodyName + "_RIDGED_CURVE_NO_KEYS");
+
+            var pureKeys = new AERISR041MohoDresPureCpuExact.CurveKeySnapshot[keys.Length];
+            for (int i = 0; i < keys.Length; i++)
+            {
+                int weightedMode = ReadStructIntDefault(keys[i], "weightedMode", 0);
+                pureKeys[i] = new AERISR041MohoDresPureCpuExact.CurveKeySnapshot(
+                    keys[i].time,
+                    keys[i].value,
+                    keys[i].inTangent,
+                    keys[i].outTangent,
+                    weightedMode);
+            }
+
+            var snapshot = new AERISR041MohoDresPureCpuExact.CurveSnapshot(
+                pureKeys,
+                AERISR041MohoDresPureCpuExact.CurveEvaluationMode.PolynomialFloat,
+                (int)curve.preWrapMode,
+                (int)curve.postWrapMode);
+
+            int bestMode = 0;
+            int bestMatches = -1;
+            double bestMaxError = double.PositiveInfinity;
+            const int tests = 129;
+
+            for (int mode = 0;
+                mode < AERIS39AllBodyHeightModifierChainPureCpuExact.RidgedCurveEvaluationModeCount;
+                mode++)
+            {
+                var curveMode =
+                    (AERIS39AllBodyHeightModifierChainPureCpuExact.RidgedCurveEvaluationMode)mode;
+                int matches = 0;
+                double maxError = 0.0;
+
+                for (int i = 0; i < tests; i++)
+                {
+                    float t = i / (float)(tests - 1);
+                    float live = curve.Evaluate(t);
+                    float pure = AERIS39AllBodyHeightModifierChainPureCpuExact.EvaluateRidgedCurve(
+                        snapshot, curveMode, t);
+                    if (FloatBits(live) == FloatBits(pure)) matches++;
+                    maxError = Math.Max(maxError, Math.Abs((double)live - (double)pure));
+                }
+
+                AERISLogger.Info(
+                    "[AERIS39][HEIGHT_CHAIN_CURVE_CANDIDATE]" +
+                    "; body=" + Safe(bodyName) +
+                    "; type=PQSMod_VertexRidgedAltitudeCurve" +
+                    "; evaluation_mode=" + curveMode +
+                    "; matches=" + matches.ToString(CultureInfo.InvariantCulture) +
+                    "; tests=" + tests.ToString(CultureInfo.InvariantCulture) +
+                    "; max_abs_error=" + R(maxError) +
+                    "; exact=" + Bool(matches == tests) +
+                    "; live_calls_thread=MAIN_THREAD_ONLY" + Invariants());
+
+                if (matches > bestMatches ||
+                    (matches == bestMatches && maxError < bestMaxError))
+                {
+                    bestMode = mode;
+                    bestMatches = matches;
+                    bestMaxError = maxError;
+                }
+            }
+
+            var selectedMode =
+                (AERIS39AllBodyHeightModifierChainPureCpuExact.RidgedCurveEvaluationMode)bestMode;
+            bool exact = bestMatches == tests;
+
+            AERISLogger.Info(
+                "[AERIS39][HEIGHT_CHAIN_DEPENDENCY]" +
+                "; body=" + Safe(bodyName) +
+                "; dependency=ANIMATION_CURVE_RIDGED_EXACT" +
+                "; evaluation_mode=" + selectedMode +
+                "; matches=" + bestMatches.ToString(CultureInfo.InvariantCulture) +
+                "; tests=" + tests.ToString(CultureInfo.InvariantCulture) +
+                "; max_abs_error=" + R(bestMaxError) +
+                "; weighted_keys=" + Bool(snapshot.HasWeightedKeys) +
+                "; exact=" + Bool(exact) +
+                "; live_calls_thread=MAIN_THREAD_ONLY" + Invariants());
+
+            return new CurveSelection
+            {
+                Snapshot = snapshot,
+                RidgedMode = selectedMode,
                 Exact = exact,
                 Matches = bestMatches,
                 Tests = tests,
