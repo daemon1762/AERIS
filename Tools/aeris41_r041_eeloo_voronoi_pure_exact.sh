@@ -59,9 +59,19 @@ src = source_path.read_text(encoding="utf-8")
 
 root_old = 'ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"'
 root_new = 'ROOT="${AERIS41_OUTER_ROOT:?}"'
-if src.count(root_old) != 1:
-    raise SystemExit("AERIS41 outer-wrapper root marker not unique")
-src = src.replace(root_old, root_new, 1)
+lines = src.splitlines(True)
+root_matches = [
+    i for i, line in enumerate(lines)
+    if line.rstrip("\r\n") == root_old
+]
+if len(root_matches) != 1:
+    raise SystemExit(
+        "AERIS41 outer-wrapper root shell-line marker not unique: " +
+        str(len(root_matches)))
+idx = root_matches[0]
+newline = "\r\n" if lines[idx].endswith("\r\n") else "\n"
+lines[idx] = root_new + newline
+src = "".join(lines)
 
 marker = 'chmod 0700 "$SHADOW_RUNNER"'
 if src.count(marker) != 1:
@@ -73,8 +83,8 @@ inject = (
 )
 src = src.replace(marker, inject + marker, 1)
 
-if 'AERIS41_OUTER_ROOT' not in src:
-    raise SystemExit("AERIS41 transformed wrapper lost root handoff")
+if src.splitlines()[8] != root_new:
+    raise SystemExit("AERIS41 transformed wrapper root handoff landed on wrong line")
 if 'aeris41_inject_voronoi_into_generated.py' not in src:
     raise SystemExit("AERIS41 transformed wrapper lost Voronoi injector")
 
