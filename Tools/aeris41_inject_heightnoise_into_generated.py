@@ -79,8 +79,8 @@ case = r'''                    case "PQSMod_VertexHeightNoiseVertHeight":
                             RequireMember(record.Mod, "heightEnd"),
                             CultureInfo.InvariantCulture);
                         double hDeltaR = ReadDouble(record.Mod, "hDeltaR");
-                        double radiusMin = ReadDouble(pqs, "radiusMin");
-                        double radiusDelta = ReadDouble(pqs, "radiusDelta");
+                        double heightNoiseRadiusMin = ReadDouble(pqs, "radiusMin");
+                        double heightNoiseRadiusDelta = ReadDouble(pqs, "radiusDelta");
 
                         var ridged = SnapshotRidged(runtimeNoise, randomVectors);
                         if (BitConverter.DoubleToInt64Bits((double)frequency) !=
@@ -96,8 +96,8 @@ case = r'''                    case "PQSMod_VertexHeightNoiseVertHeight":
                         pureOps[i] =
                             new AERIS41VertexHeightNoiseVertHeightPureCpuExact.OpSnapshot(
                                 deformity,
-                                radiusMin,
-                                radiusDelta,
+                                heightNoiseRadiusMin,
+                                heightNoiseRadiusDelta,
                                 heightStart,
                                 heightEnd,
                                 hDeltaR,
@@ -255,6 +255,19 @@ accept_insert = r'''  local heightnoise_audit
 if run.count(accept_marker) != 1:
     raise SystemExit("AERIS41 HeightNoise acceptance insertion marker not unique")
 run = run.replace(accept_marker, accept_insert + accept_marker, 1)
+
+# Generated-source collision gate: CaptureBody already owns the canonical
+# radiusMin local. HeightNoise must use uniquely-prefixed locals so Mono's C#
+# scoping rules cannot reject the generated switch case with CS0136.
+canonical_radius_local = 'double radiusMin = ReadDouble(pqs, "radiusMin");'
+if obs.count(canonical_radius_local) != 1:
+    raise SystemExit(
+        "AERIS41 generated observer canonical radiusMin local count=" +
+        str(obs.count(canonical_radius_local)))
+if obs.count('double heightNoiseRadiusMin = ReadDouble(pqs, "radiusMin");') != 1:
+    raise SystemExit("AERIS41 generated observer HeightNoise radiusMin local missing")
+if obs.count('double heightNoiseRadiusDelta = ReadDouble(pqs, "radiusDelta");') != 1:
+    raise SystemExit("AERIS41 generated observer HeightNoise radiusDelta local missing")
 
 for token in [
     new_candidate,
