@@ -61,10 +61,10 @@ injection = r'''# AERIS41 Phase B: after the already-accepted LandControl manage
 # pure snapshot/evaluator path. Production Voronoi remains the real reference
 # callback target; only the worker path is reconstructed.
 python3 - "$SHADOW_OBSERVER" "$SHADOW_RUNNER" <<'AERIS41_VORONOI_PY'
-import pathlib
+import pathlib, sys
 
-observer_path = pathlib.Path("$SHADOW_OBSERVER")
-runner_path = pathlib.Path("$SHADOW_RUNNER")
+observer_path = pathlib.Path(sys.argv[1])
+runner_path = pathlib.Path(sys.argv[2])
 obs = observer_path.read_text(encoding="utf-8")
 run = runner_path.read_text(encoding="utf-8")
 
