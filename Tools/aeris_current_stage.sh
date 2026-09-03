@@ -8,7 +8,7 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="R041-EELOO-VORONOI-IL-CLOSURE"
+STAGE="R041-EELOO-VORONOI-PURE-CPU-EXACT"
 
 cd "$ROOT"
 
@@ -18,9 +18,9 @@ echo "KSP=$KSP"
 echo "HEAD=$(git rev-parse HEAD)"
 echo
 
-test -f "$ROOT/Tools/aeris41_r041_eeloo_voronoi_il_closure.sh" || {
-  echo "STOP: AERIS41 R041 Eeloo Voronoi IL closure runner missing" >&2
+test -f "$ROOT/Tools/aeris41_r041_eeloo_voronoi_pure_exact.sh" || {
+  echo "STOP: AERIS41 R041 Eeloo Voronoi exact runner missing" >&2
   exit 20
 }
 
-bash "$ROOT/Tools/aeris41_r041_eeloo_voronoi_il_closure.sh" "$KSP"
+bash "$ROOT/Tools/aeris41_r041_eeloo_voronoi_pure_exact.sh" "$KSP"
