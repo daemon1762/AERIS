@@ -8,7 +8,7 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="R041-LANDCONTROL-WITNESS-REPAIR-V2"
+STAGE="R041-EELOO-VORONOI-IL-CLOSURE"
 
 cd "$ROOT"
 
@@ -18,9 +18,9 @@ echo "KSP=$KSP"
 echo "HEAD=$(git rev-parse HEAD)"
 echo
 
-test -f "$ROOT/Tools/aeris41_r041_landcontrol_witness_repair.sh" || {
-  echo "STOP: AERIS41 R041 LandControl witness repair runner missing" >&2
+test -f "$ROOT/Tools/aeris41_r041_eeloo_voronoi_il_closure.sh" || {
+  echo "STOP: AERIS41 R041 Eeloo Voronoi IL closure runner missing" >&2
   exit 20
 }
 
-bash "$ROOT/Tools/aeris41_r041_landcontrol_witness_repair.sh" "$KSP"
+bash "$ROOT/Tools/aeris41_r041_eeloo_voronoi_il_closure.sh" "$KSP"
