@@ -8,7 +8,7 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="R041-ALLBODY-PQS-TERRAINALTITUDE-RADIUSMIN-WITNESS"
+STAGE="R041-ALLBODY-PQS-TERRAINALTITUDE-STOCK-PQS-UV-WITNESS"
 
 cd "$ROOT"
 
@@ -19,7 +19,7 @@ echo "HEAD=$(git rev-parse HEAD)"
 echo
 
 test -f "$ROOT/Tools/aeris41_r041_eeloo_voronoi_pure_exact.sh" || {
-  echo "STOP: AERIS41 R041 TerrainAltitude radiusMin witness runner missing" >&2
+  echo "STOP: AERIS41 R041 TerrainAltitude stock PQS UV witness runner missing" >&2
   exit 20
 }
 
