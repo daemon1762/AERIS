@@ -12,6 +12,7 @@ BRANCH="agent/aeris39-r041-mapso-exact-cpu-shadow"
 LAND_WRAPPER="$ROOT/Tools/aeris41_r041_landcontrol_witness_repair.sh"
 VORONOI_INJECTOR="$ROOT/Tools/aeris41_inject_voronoi_into_generated.py"
 HEIGHTNOISE_INJECTOR="$ROOT/Tools/aeris41_inject_heightnoise_into_generated.py"
+PREFIX_INJECTOR="$ROOT/Tools/aeris41_inject_prefix_diagnostic_into_generated.py"
 VORONOI_PURE="$ROOT/Source/AERISFlightControl/Terrain/AERIS41VertexVoronoiPureCpuExact.cs"
 HEIGHTNOISE_PURE="$ROOT/Source/AERISFlightControl/Terrain/AERIS41VertexHeightNoiseVertHeightPureCpuExact.cs"
 
@@ -32,20 +33,21 @@ test -z "$(git status --porcelain)" || {
 [[ -f "$LAND_WRAPPER" ]] || { echo "STOP: LandControl repair wrapper missing" >&2; exit 12; }
 [[ -f "$VORONOI_INJECTOR" ]] || { echo "STOP: Voronoi injector missing" >&2; exit 13; }
 [[ -f "$HEIGHTNOISE_INJECTOR" ]] || { echo "STOP: HeightNoise injector missing" >&2; exit 14; }
-[[ -f "$VORONOI_PURE" ]] || { echo "STOP: VertexVoronoi pure source missing" >&2; exit 15; }
-[[ -f "$HEIGHTNOISE_PURE" ]] || { echo "STOP: VertexHeightNoiseVertHeight pure source missing" >&2; exit 16; }
+[[ -f "$PREFIX_INJECTOR" ]] || { echo "STOP: prefix localization injector missing" >&2; exit 15; }
+[[ -f "$VORONOI_PURE" ]] || { echo "STOP: VertexVoronoi pure source missing" >&2; exit 16; }
+[[ -f "$HEIGHTNOISE_PURE" ]] || { echo "STOP: VertexHeightNoiseVertHeight pure source missing" >&2; exit 17; }
 
 grep -Fq 'static int VoronoiCell(double value)' "$VORONOI_PURE" || {
   echo "STOP: VertexVoronoi exact cell semantics missing" >&2
-  exit 17
+  exit 18
 }
 grep -Fq 'AERISR039MinmusPureCpuExact.RidgedGetValue' "$HEIGHTNOISE_PURE" || {
   echo "STOP: HeightNoise R039 Ridged exact reuse missing" >&2
-  exit 18
+  exit 19
 }
 grep -Fq '0c6ef5f07a24e18ecb86404c162a79872d583da0cfa46e16c8c31cbfa92ad7fc' "$HEIGHTNOISE_PURE" || {
   echo "STOP: HeightNoise captured IL identity missing" >&2
-  exit 19
+  exit 20
 }
 
 TMPDIR="$(mktemp -d /tmp/AERIS41_R041_EELOO_EXACT.XXXXXX)"
@@ -85,6 +87,8 @@ inject = (
     'python3 "$ROOT/Tools/aeris41_inject_voronoi_into_generated.py" '
     '"$SHADOW_OBSERVER" "$SHADOW_RUNNER"\n'
     'python3 "$ROOT/Tools/aeris41_inject_heightnoise_into_generated.py" '
+    '"$SHADOW_OBSERVER" "$SHADOW_RUNNER"\n'
+    'python3 "$ROOT/Tools/aeris41_inject_prefix_diagnostic_into_generated.py" '
     '"$SHADOW_OBSERVER" "$SHADOW_RUNNER"\n\n'
 )
 src = src.replace(marker, inject + marker, 1)
@@ -94,6 +98,7 @@ if src.splitlines()[8] != root_new:
 for token in (
     'aeris41_inject_voronoi_into_generated.py',
     'aeris41_inject_heightnoise_into_generated.py',
+    'aeris41_inject_prefix_diagnostic_into_generated.py',
 ):
     if token not in src:
         raise SystemExit("AERIS41 transformed wrapper lost injector: " + token)
