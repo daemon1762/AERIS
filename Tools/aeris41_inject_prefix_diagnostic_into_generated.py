@@ -190,10 +190,10 @@ if report.count(complete_marker) != 1:
 # Append diagnostic-completion evidence immediately after the existing complete log
 # statement. Locate the statement's terminating Invariants()); inside Report.
 complete_start = report.find(complete_marker)
-complete_tail = report.find("                    Invariants());", complete_start)
+complete_tail = report.find("                Invariants());", complete_start)
 if complete_tail < 0:
     raise SystemExit("AERIS41 prefix complete-log terminator missing")
-complete_tail += len("                    Invariants());")
+complete_tail += len("                Invariants());")
 diagnostic = r'''
 
             bool prefixDiagnosticComplete = true;
