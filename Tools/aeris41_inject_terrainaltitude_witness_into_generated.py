@@ -20,8 +20,6 @@ if obs.count(old_candidate) != 1:
 obs = obs.replace(old_candidate, new_candidate, 1)
 run = run.replace(old_candidate, new_candidate)
 
-# Primitive-only public-PQS reference payload. ExpectedAsl is captured on the
-# main thread through the exact AERIS production terrain-sampling entry point.
 expected_marker = '''        sealed class ModRecord'''
 terrain_class = r'''        sealed class TerrainAltitudeCheck
         {
@@ -76,11 +74,6 @@ if obs.count(body_result_old) != 1:
     raise SystemExit("AERIS41 TerrainAltitude BodyResult marker not unique")
 obs = obs.replace(body_result_old, body_result_new, 1)
 
-# All direct-callback managed-shadow audits must complete before invoking the
-# real public PQS TerrainAltitude path. TerrainAltitude is a normal production
-# PQS query and may use PQS-owned transient scratch state; we do not mislabel it
-# as a mutation-free diagnostic callback. Only copied scalar values cross to the
-# worker.
 capture_marker = '''            AuditLandControlReferenceIsolation(bodyName, mods);
             AuditCurve2ReferenceIsolation(bodyName, mods);
             AuditHeightNoiseReferenceIsolation(bodyName, mods);
@@ -94,9 +87,9 @@ capture_replacement = r'''            AuditLandControlReferenceIsolation(bodyNam
             for (int tc = 0; tc < coords.Count; tc++)
             {
                 CoordinateSample coord = coords[tc];
-                // Public TerrainAltitude takes geodetic degrees. The height-chain
-                // census also contains deliberate MapSO periodic/out-of-domain
-                // probes; exclude those from this public-PQS integration witness.
+                // The callback-chain census contains deliberate periodic MapSO
+                // probes outside the public geodetic domain. TerrainAltitude is
+                // witnessed only at canonical latitude/longitude coordinates.
                 if (coord.Latitude < -90.0 || coord.Latitude > 90.0 ||
                     coord.Longitude < -180.0 || coord.Longitude > 180.0)
                     continue;
@@ -158,9 +151,6 @@ if obs.count(return_old) != 1:
     raise SystemExit("AERIS41 TerrainAltitude BodyCase return marker not unique")
 obs = obs.replace(return_old, return_new, 1)
 
-# Worker evaluates the already-certified pure chain from the physical body
-# radius, then compares two explicit public-ASL semantics. No Unity/KSP/runtime
-# object is present in this loop.
 eval_marker = '''            result.FirstMismatches = mismatches.ToArray();'''
 eval_insert = r'''            var terrainMismatches = new List<string>();
             const double TerrainToleranceMeters = 1E-08;
@@ -223,9 +213,6 @@ if obs.count(eval_marker) != 1:
     raise SystemExit("AERIS41 TerrainAltitude worker insertion marker not unique")
 obs = obs.replace(eval_marker, eval_insert + eval_marker, 1)
 
-# Keep HEIGHT_CHAIN_COMPLETE as the immutable bit-exact callback-chain result.
-# Emit a separate public-PQS integration verdict. A single semantics must close
-# every reference value on all six bodies; ambiguity is deliberately fail-closed.
 report_tail = '''                Invariants());
         }
 
@@ -343,7 +330,6 @@ if obs.count(report_tail) != 1:
     raise SystemExit("AERIS41 TerrainAltitude report-tail marker not unique")
 obs = obs.replace(report_tail, terrain_report, 1)
 
-# Preserve both families of evidence in the artifact excerpt.
 grep_old = '''  grep '\\[AERIS39\\]\\[HEIGHT_CHAIN_' "$segment" > "$OUT/height_chain_runtime_excerpt.txt" || true'''
 grep_new = '''  grep -E '\\[AERIS39\\]\\[HEIGHT_CHAIN_|\\[AERIS41\\]\\[TERRAINALTITUDE_' "$segment" > "$OUT/height_chain_runtime_excerpt.txt" || true'''
 if run.count(grep_old) != 1:
@@ -361,8 +347,6 @@ if run.count(provenance_marker) != 1:
     raise SystemExit("AERIS41 TerrainAltitude provenance marker not unique")
 run = run.replace(provenance_marker, provenance_new, 1)
 
-# The generated runner already validates the 16950 bit-exact chain and all
-# managed-shadow audits. Add the public-PQS witness as an additional gate.
 accept_marker = '''  write_artifacts "$segment" "$([[ "$pass" -eq 1 ]] && echo PASS || echo FAIL_ACCEPTANCE)" "$installed_sha"'''
 accept_insert = r'''  local terrain_complete terrain_total_checks terrain_semantics
   terrain_complete="$(grep -F "[AERIS41][TERRAINALTITUDE_COMPLETE]" "$segment" | tail -n 1 || true)"
@@ -377,9 +361,11 @@ accept_insert = r'''  local terrain_complete terrain_total_checks terrain_semant
   [[ "$terrain_complete" == *"; allow_negative=false;"* ]] || pass=0
   [[ "$terrain_complete" == *"; terrain_tolerance_m=1E-08;"* ]] || pass=0
   [[ "$terrain_complete" == *"; snapshot_payload=PRIMITIVES_ONLY;"* ]] || pass=0
-  terrain_total_checks="$(printf '%s\n' "$terrain_complete" | sed -n 's/.*; total_checks=\\([0-9][0-9]*\\);.*/\\1/p')"
+  terrain_total_checks="${terrain_complete#*; total_checks=}"
+  terrain_total_checks="${terrain_total_checks%%;*}"
   [[ -n "$terrain_total_checks" && "$terrain_total_checks" -ge 3000 ]] || pass=0
-  terrain_semantics="$(printf '%s\n' "$terrain_complete" | sed -n 's/.*; selected_semantics=\\([^;]*\\);.*/\\1/p')"
+  terrain_semantics="${terrain_complete#*; selected_semantics=}"
+  terrain_semantics="${terrain_semantics%%;*}"
   [[ "$terrain_semantics" = "RAW_CHAIN_ASL" || "$terrain_semantics" = "CLAMP_NEGATIVE_TO_ZERO" ]] || pass=0
   for terrain_body in Kerbin Eve Duna Dres Moho Eeloo; do
     local terrain_body_line
@@ -392,7 +378,6 @@ if run.count(accept_marker) != 1:
     raise SystemExit("AERIS41 TerrainAltitude acceptance insertion marker not unique")
 run = run.replace(accept_marker, accept_insert + accept_marker, 1)
 
-# Add explicit stage success after the inherited exact-chain success lines.
 success_old = '''  echo "AERIS39_R041_ALLBODY_HEIGHT_MODIFIER_CHAIN_SHADOW=PASS"
   echo "AERIS_CURRENT_STAGE=PASS"
   echo "next=R041_ALLBODY_PQS_TERRAINALTITUDE_WITNESS"'''
