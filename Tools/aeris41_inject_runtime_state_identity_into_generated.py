@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import pathlib
+import re
 import sys
 
 if len(sys.argv) != 3:
@@ -11,16 +12,24 @@ runner_path = pathlib.Path(sys.argv[2])
 obs = observer_path.read_text(encoding="utf-8")
 run = runner_path.read_text(encoding="utf-8")
 
-candidate = "AERIS39_R041_ALLBODY_HEIGHT_MODIFIER_CHAIN_SHADOW_V5_CURVE2_EXACT_REPAIR"
-if candidate not in obs:
+# Generated R041 stages share one on-disk state directory. Derive identity from
+# the concrete generated candidate instead of hard-coding a stage name here.
+# This makes the gate survive V5 -> V6 -> later diagnostic/acceptance stages.
+observer_match = re.search(r'const string Candidate = "([^"]+)";', obs)
+runner_match = re.search(r'^CANDIDATE="([^"]+)"$', run, re.MULTILINE)
+if observer_match is None:
     raise SystemExit("AERIS41 state-identity observer candidate marker missing")
-if candidate not in run:
+if runner_match is None:
     raise SystemExit("AERIS41 state-identity runner candidate marker missing")
+candidate = observer_match.group(1)
+runner_candidate = runner_match.group(1)
+if candidate != runner_candidate:
+    raise SystemExit(
+        "AERIS41 state-identity candidate mismatch: observer=" + candidate +
+        " runner=" + runner_candidate)
+if not candidate.startswith("AERIS39_R041_"):
+    raise SystemExit("AERIS41 state-identity unexpected candidate: " + candidate)
 
-# The generated R041 stages share one on-disk state directory. HEAD + DLL SHA is
-# insufficient identity for generated candidates: a different generated recipe
-# can exist at the same canonical HEAD. Bind state to the concrete candidate and
-# fail closed if the installed managed DLL does not actually contain that marker.
 state_locals_old = '''  local state_head state_sha state_offset state_log
   state_head="$(state_value head || true)"
   state_sha="$(state_value installed_dll_sha || true)"
@@ -152,5 +161,10 @@ for token in (
 ):
     if token not in run:
         raise SystemExit("AERIS41 state-identity generated runner lost token: " + token)
+
+# Ensure the concrete candidate derived above still appears in both generated
+# artifacts after the transformation.
+if candidate not in obs or candidate not in run:
+    raise SystemExit("AERIS41 state-identity concrete candidate lost after injection")
 
 runner_path.write_text(run, encoding="utf-8")
