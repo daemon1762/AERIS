@@ -8,7 +8,7 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="R041-EELOO-HEIGHTNOISE-VERTHEIGHT-PURE-CPU-EXACT"
+STAGE="R041-EVE-DUNA-PREFIX-LOCALIZATION"
 
 cd "$ROOT"
 
@@ -19,7 +19,7 @@ echo "HEAD=$(git rev-parse HEAD)"
 echo
 
 test -f "$ROOT/Tools/aeris41_r041_eeloo_voronoi_pure_exact.sh" || {
-  echo "STOP: AERIS41 R041 Eeloo exact runner missing" >&2
+  echo "STOP: AERIS41 R041 prefix localization runner missing" >&2
   exit 20
 }
 
