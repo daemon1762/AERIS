@@ -1,0 +1,72 @@
+AERIS41 / R041 ALL-BODY HEIGHT MODIFIER CHAIN — RUNTIME ACCEPTANCE
+Date: 2026-09-04
+
+ACCEPTED RUNTIME HEAD
+2e4f6e943fdc87b2fb12ab38ab8a38f24b1323c0
+
+Candidate:
+AERIS39_R041_ALLBODY_HEIGHT_MODIFIER_CHAIN_SHADOW_V5_CURVE2_EXACT_REPAIR
+
+Installed DLL SHA256:
+39e53ffdfacf4747d1704a88348996d07926b2115618941fb253ea8a2f791b11
+
+Reference:
+REAL_ORDERED_PQS_HEIGHT_CALLBACK_CHAIN_LANDCONTROL_CURVE2_HEIGHTNOISE_MANAGED_SHADOW
+
+RESULT
+Kerbin  checks=2825 value_matches=2825 mismatch_count=0 bit_exact=true
+Eve     checks=2825 value_matches=2825 mismatch_count=0 bit_exact=true
+Duna    checks=2825 value_matches=2825 mismatch_count=0 bit_exact=true
+Dres    checks=2825 value_matches=2825 mismatch_count=0 bit_exact=true
+Moho    checks=2825 value_matches=2825 mismatch_count=0 bit_exact=true
+Eeloo   checks=2825 value_matches=2825 mismatch_count=0 bit_exact=true
+
+total_checks=16950
+value_matches=16950
+exception_match_count=0
+exception_mismatch_count=0
+mismatch_count=0
+bit_exact=true
+worker_thread_id=45
+main_thread_id=1
+worker_not_main=true
+
+INVARIANTS REPORTED BY ACCEPTED WITNESS
+callback_invocation_thread=MAIN_THREAD_ONLY
+callback_data=ISOLATED_NEW_VERTEXBUILDDATA
+live_pqs_state_mutation=false
+snapshot_payload=PRIMITIVES_ONLY
+production_authority=PQS
+db_authority=PQS
+producer_switch=false
+db_write=false
+preload_mutation=false
+production_worker_runtime_object_access=false
+
+MANAGED-SHADOW REPAIRS INCLUDED
+- PQSLandControl: isolated modifier/sphere/landclass/list state; per-vertex sx/sy
+- PQSMod_VertexHeightNoiseVertHeightCurve2: isolated h/r/s/t scratch state
+- PQSMod_VertexHeightNoiseVertHeight: isolated h/n scratch state
+- PQSMod_VertexVoronoi: exact LibNoise/ValueNoise reconstruction
+- AnimationCurve generic Curve2 selection: PolynomialFloat tie preferred
+
+RUNTIME ARTIFACT
+height_chain_runtime_excerpt.txt SHA256:
+06d5f9a41ae7716420ac10da2ed2d439a00f13c6d9d818c738e5dee654e51e53
+
+provenance.txt SHA256:
+f5eb795ed2391a33d34009bad7095cc282824eb1bc65442e99b2c9f0cf306103
+
+Runtime archive location on witness machine:
+~/.cache/AERIS/artifacts/AERIS39_R041_AllBody_Height_Modifier_Chain_Shadow.tar.gz
+
+VERDICT
+AERIS39_R041_ALLBODY_HEIGHT_MODIFIER_CHAIN_SHADOW=PASS
+
+NEXT INTENDED STAGE
+R041_ALLBODY_PQS_TERRAINALTITUDE_WITNESS
+
+NOTE
+This acceptance certifies the six-body exact height-modifier callback-chain shadow.
+The following TerrainAltitude stage is a separate public-PQS integration witness and
+must not retroactively replace the 16950 bit-exact callback-chain requirement.
