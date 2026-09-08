@@ -34,6 +34,7 @@ sources=(
   AERIS39HeightMapPureCpuExact.cs
   AERIS39MapDecalPureCpuExact.cs
   AERIS39MapDecalTangentPureCpuExact.cs
+  AERIS39FlattenAreaPureCpuExact.cs
   AERIS39LandControlPureCpuExact.cs
   AERIS41VertexHeightNoiseVertHeightPureCpuExact.cs
   AERIS41VertexVoronoiPureCpuExact.cs
