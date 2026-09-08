@@ -4,8 +4,11 @@ Baseline: agent/aeris41-r041-allbody-pqs-terrainaltitude-exact-accepted
 Baseline commit: 7a85fb975fd6b70f00479312473ea79bbb86f869
 Roadmap: CPU Shadow Production -> Preload/PTC completion -> Terrain/ND final optimization -> New NAV -> LAND
 Phase 1: PASS - nine certified pure exact sources compile successfully in candidate project
-Phase 2: ACTIVE - nine certified pure exact sources permanently included in production csproj
+Phase 2: PASS - nine certified pure exact sources permanently included in production csproj
+Phase 3: ACTIVE - candidate-only source resolver contract with mandatory runtime snapshot certification gate
+Certified candidates: Minmus + Kerbin/Eve/Duna/Dres/Moho/Eeloo (7 total)
+Body name alone authorizes shadow: false
 Production authority: PQS
 Producer switch: false
 DB write switch: false
-Status: PHASE2_PERMANENT_COMPILE_VALIDATION
+Status: PHASE3_SOURCE_RESOLVER_CONTRACT_VALIDATION
