@@ -2,15 +2,19 @@ AERIS42 / R042
 Stage: R041 Exact CPU Shadow -> Production
 Baseline: agent/aeris41-r041-allbody-pqs-terrainaltitude-exact-accepted
 Baseline commit: 7a85fb975fd6b70f00479312473ea79bbb86f869
-Roadmap: CPU Shadow Production -> Preload/PTC completion -> Terrain/ND final optimization -> New NAV -> LAND
+Roadmap: CPU Shadow Production -> Preload/PTC completion -> Terrain/ND final optimization -> LAND -> New NAV
 Phase 1: PASS - nine certified pure exact sources compile successfully in candidate project
 Phase 2: PASS - nine certified pure exact sources permanently included in production csproj
 Phase 3: PASS - candidate-only source resolver contract; runtime snapshot gate mandatory
-Phase 4A: ACTIVE - immutable worker snapshot contract + final R041 V5 provenance lock
+Phase 4A: PASS - immutable worker snapshot contract; runtime_object_fields=0; final R041 V5 provenance locked
+Phase 4B: ACTIVE - permanent main-thread runtime snapshot capture for seven certified bodies
 Certified candidates: Minmus + Kerbin/Eve/Duna/Dres/Moho/Eeloo (7 total)
 Body name alone authorizes shadow: false
-Final R041 V5 generation chain is source of truth for Phase 4B capture implementation
+R041 topology gate: exact accepted V5 runtime topology required
+Capture thread: MAIN_THREAD_ONLY
+Runtime callback invocation during capture: false
+Runtime state mutation during capture: false
 Production authority: PQS
 Producer switch: false
 DB write switch: false
-Status: PHASE4A_IMMUTABLE_SNAPSHOT_CONTRACT_VALIDATION
+Status: PHASE4B_MAIN_THREAD_RUNTIME_CAPTURE
