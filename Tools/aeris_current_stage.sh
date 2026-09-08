@@ -8,7 +8,7 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="R041-TERRAINALTITUDE-ARGUMENT-ORDER-DIAGNOSTIC"
+STAGE="R041-TERRAINALTITUDE-IL-CLOSURE"
 
 cd "$ROOT"
 
@@ -18,9 +18,9 @@ echo "KSP=$KSP"
 echo "HEAD=$(git rev-parse HEAD)"
 echo
 
-test -f "$ROOT/Tools/aeris41_r041_eeloo_voronoi_pure_exact.sh" || {
-  echo "STOP: AERIS41 R041 TerrainAltitude argument-order diagnostic runner missing" >&2
+test -f "$ROOT/Tools/aeris41_r041_terrainaltitude_il_closure.sh" || {
+  echo "STOP: AERIS41 R041 TerrainAltitude IL closure runner missing" >&2
   exit 20
 }
 
-bash "$ROOT/Tools/aeris41_r041_eeloo_voronoi_pure_exact.sh" "$KSP"
+bash "$ROOT/Tools/aeris41_r041_terrainaltitude_il_closure.sh" "$KSP"
