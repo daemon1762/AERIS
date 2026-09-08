@@ -8,8 +8,8 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="R042-PHASE1-EXACT-COMPILE-CLOSURE"
-RUNNER="$ROOT/Tools/aeris42_r042_phase1_compile_closure.sh"
+STAGE="R042-PHASE2-PERMANENT-EXACT-COMPILE"
+RUNNER="$ROOT/Tools/aeris42_r042_phase2_permanent_compile.sh"
 
 cd "$ROOT"
 
@@ -21,7 +21,7 @@ echo "roadmap=CPU_SHADOW_PRODUCTION -> PRELOAD_PTC -> TERRAIN_ND -> NEW_NAV -> L
 echo
 
 [[ -f "$RUNNER" ]] || {
-  echo "STOP: R042 phase1 runner missing" >&2
+  echo "STOP: R042 phase2 runner missing" >&2
   exit 20
 }
 
@@ -30,7 +30,8 @@ bash "$RUNNER" "$KSP"
 echo
 echo "=== AERIS42 CURRENT STAGE RESULT ==="
 echo "R041_FINAL_ACCEPTANCE=PRESERVED"
+echo "exact_pure_permanent_compile=true"
 echo "production_authority=PQS"
 echo "producer_switch=false"
 echo "AERIS_CURRENT_STAGE=PASS"
-echo "next=R042_PERMANENT_CSPROJ_PROMOTION_AFTER_COMPILE_PROOF"
+echo "next=R042_SNAPSHOT_AND_SOURCE_RESOLVER_DESIGN"
