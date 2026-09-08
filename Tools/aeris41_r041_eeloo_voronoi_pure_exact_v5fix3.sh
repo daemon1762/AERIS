@@ -61,21 +61,23 @@ newline = "\r\n" if lines[idx].endswith("\r\n") else "\n"
 lines[idx] = root_new + newline
 src = "".join(lines)
 
-identity = (
-    'python3 "$ROOT/Tools/aeris41_inject_runtime_state_identity_into_generated.py" '
-    '"$SHADOW_OBSERVER" "$SHADOW_RUNNER"')
-if src.count(identity) != 1:
+identity_block = '''    'python3 "$ROOT/Tools/aeris41_inject_runtime_state_identity_into_generated.py" '
+    '"$SHADOW_OBSERVER" "$SHADOW_RUNNER"\\n\\n'
+'''
+if src.count(identity_block) != 1:
     raise SystemExit(
-        "AERIS41 V5 fix3 state-identity injection marker not unique: " +
-        str(src.count(identity)))
-fix3 = (
-    'python3 "$ROOT/Tools/aeris41_inject_terrainaltitude_exact_public_pqs_fix3_pqsradius_into_generated.py" '
-    '"$SHADOW_OBSERVER" "$SHADOW_RUNNER"\n')
-src = src.replace(identity, fix3 + identity, 1)
+        "AERIS41 V5 fix3 embedded state-identity marker not unique: " +
+        str(src.count(identity_block)))
+fix3_block = '''    'python3 "$ROOT/Tools/aeris41_inject_terrainaltitude_exact_public_pqs_fix3_pqsradius_into_generated.py" '
+    '"$SHADOW_OBSERVER" "$SHADOW_RUNNER"\\n'
+'''
+src = src.replace(identity_block, fix3_block + identity_block, 1)
 
 required_token = 'aeris41_inject_terrainaltitude_exact_public_pqs_fix3_pqsradius_into_generated.py'
-if required_token not in src:
-    raise SystemExit("AERIS41 V5 fix3 transformed wrapper lost fix3 injector")
+if src.count(required_token) != 1:
+    raise SystemExit(
+        "AERIS41 V5 fix3 transformed wrapper token not unique: " +
+        str(src.count(required_token)))
 
 out_path.write_text(src, encoding="utf-8")
 PY
