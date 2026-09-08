@@ -141,6 +141,15 @@
     <Compile Include="Terrain\AERISR041CMohoDresHeightIlClosureObserver.cs" />
     <Compile Include="Terrain\AERISR041MohoDresPureCpuExact.cs" />
     <Compile Include="Terrain\AERISR041MohoDresPureCpuExactShadowObserver.cs" />
+    <Compile Include="Terrain\AERIS39MapSoPureCpuExact.cs" />
+    <Compile Include="Terrain\AERIS39HeightMapPureCpuExact.cs" />
+    <Compile Include="Terrain\AERIS39MapDecalPureCpuExact.cs" />
+    <Compile Include="Terrain\AERIS39MapDecalTangentPureCpuExact.cs" />
+    <Compile Include="Terrain\AERIS39FlattenAreaPureCpuExact.cs" />
+    <Compile Include="Terrain\AERIS39LandControlPureCpuExact.cs" />
+    <Compile Include="Terrain\AERIS41VertexHeightNoiseVertHeightPureCpuExact.cs" />
+    <Compile Include="Terrain\AERIS41VertexVoronoiPureCpuExact.cs" />
+    <Compile Include="Terrain\AERIS39AllBodyHeightModifierChainPureCpuExact.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadCodec.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadDatabase.cs" />
     <Compile Include="Terrain\AERISTerrainBlockPipeline.cs" />
