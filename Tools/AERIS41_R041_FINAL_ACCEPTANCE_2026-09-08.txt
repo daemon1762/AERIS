@@ -1,0 +1,127 @@
+AERIS41 / R041 FINAL ACCEPTANCE — ALL-BODY EXACT HEIGHT CHAIN + PUBLIC PQS TERRAINALTITUDE
+Date: 2026-09-08
+
+PURPOSE
+This record closes R041 by preserving two independent runtime proofs:
+1. exact six-body height-modifier callback-chain reconstruction, and
+2. public CelestialBody.TerrainAltitude integration against the production PQS query path.
+The public-PQS witness does not replace or weaken the 16950 bit-exact callback-chain requirement.
+
+ACCEPTED RUNTIME HEAD
+77270832fd3a271530ca1c7c96efafdf610248de
+
+Candidate:
+AERIS39_R041_ALLBODY_PQS_TERRAINALTITUDE_WITNESS_V5_EXACT_PUBLIC_PQS
+
+Installed DLL SHA256:
+1196160f5f4c2045d25dcac974055da14ac662fdbfb29fdaa89cd8ffeacebc9a
+
+Reference callback chain:
+REAL_ORDERED_PQS_HEIGHT_CALLBACK_CHAIN_LANDCONTROL_CURVE2_HEIGHTNOISE_MANAGED_SHADOW
+
+PART A — HEIGHT-MODIFIER CALLBACK-CHAIN EXACTNESS
+Kerbin  checks=2825 value_matches=2825 mismatch_count=0 bit_exact=true
+Eve     checks=2825 value_matches=2825 mismatch_count=0 bit_exact=true
+Duna    checks=2825 value_matches=2825 mismatch_count=0 bit_exact=true
+Dres    checks=2825 value_matches=2825 mismatch_count=0 bit_exact=true
+Moho    checks=2825 value_matches=2825 mismatch_count=0 bit_exact=true
+Eeloo   checks=2825 value_matches=2825 mismatch_count=0 bit_exact=true
+
+total_checks=16950
+value_matches=16950
+exception_match_count=0
+exception_mismatch_count=0
+mismatch_count=0
+bit_exact=true
+worker_thread_id=34
+main_thread_id=1
+worker_not_main=true
+
+PART B — PUBLIC PQS TERRAINALTITUDE INTEGRATION
+reference=AERIS_TERRAINAWARENESS_TRYSAMPLETERRAINASLSHARED
+reference_input_order=LATITUDE_THEN_LONGITUDE_STOCK_IL
+terrainaltitude_total_checks=3360
+terrainaltitude_semantics=PQS_RADIUS_CLAMP_NEGATIVE_TO_ZERO
+terrainaltitude_initial_vert_height=PQS_RADIUS
+terrainaltitude_uv_source=STOCK_PQS_BUILDVERTEXMAPCOORDS
+allow_negative=false
+production_helper_code_unchanged=true
+AERIS41_R041_ALLBODY_PQS_TERRAINALTITUDE_WITNESS=PASS
+
+The runtime acceptance gate required the public-PQS witness to report pass=true,
+pqs_public_global_pass=true, worker_not_main=true, six target bodies, the captured stock
+reference identity, 1E-08 meter witness tolerance, primitive-only worker payload, and the
+selected semantics PQS_RADIUS_CLAMP_NEGATIVE_TO_ZERO. The successful terminal verdict
+reported terrainaltitude_total_checks=3360.
+
+CAPTURED STOCK-IL CLOSURE USED BY PART B
+Assembly-CSharp.dll SHA256:
+d9e42483f25ee80a9c11d6c1c0a0d29b4ec78c1e08d76c971b71580c9cce51e4
+
+CelestialBody.TerrainAltitude IL SHA256:
+cc031fe01c2988f752a62e66c607366c71d9b0ff56fc09e15301382c75cddec1
+
+CelestialBody.GetRelSurfaceNVector IL SHA256:
+184e6c8cacba2476abb0dc0cce72fdb4bf59a4b2d1c3c479ea793d6bafe6120b
+
+Planetarium.SphericalVector IL SHA256:
+2a291df8912b57f4af7a341e49ef8883cc61f90ffd2a6cd4bc188d8b485c3028
+
+PQS.GetSurfaceHeight IL SHA256:
+51ff0d770beb616d8444b6d48df5419e9830217a1731d5ec83a4cae2cab021f0
+
+PQS.BuildVertexMapCoords IL SHA256:
+2efa254d046be67c1d6dbcf45bc4964c9f6dd3ee07416b35e27830425a65ca18
+
+PQS.Mod_OnVertexBuildHeight IL SHA256:
+c41033e5b177545f6619f4c8ae3ad12f26709d11517902ebd3d6aeaa3fe54d7f
+
+PQS.VertexBuildData.Reset IL SHA256:
+789cc45dddb8f4143876ebd6757da2bdb31deea350a65fad5dde581609aceb33
+
+PUBLIC-PQS RECONSTRUCTION SEMANTICS
+- TerrainAltitude receives latitude then longitude.
+- GetRelSurfaceNVector uses the stock spherical-vector path.
+- PQS.GetSurfaceHeight normalizes the radial vector.
+- PQS.GetSurfaceHeight initializes VertexBuildData.vertHeight from PQS.radius.
+- PQS.Mod_OnVertexBuildHeight invokes BuildVertexMapCoords before modifier dispatch when required.
+- BuildVertexMapCoords supplies the stock PQS u/v convention.
+- TerrainAltitude returns finalHeight - PQS.radius.
+- allowNegative=false clamps negative ASL to zero.
+
+INVARIANTS PRESERVED
+callback_invocation_thread=MAIN_THREAD_ONLY
+callback_data=ISOLATED_NEW_VERTEXBUILDDATA
+live_pqs_state_mutation=false
+snapshot_payload=PRIMITIVES_ONLY
+production_authority=PQS
+db_authority=PQS
+producer_switch=false
+db_write=false
+preload_mutation=false
+production_worker_runtime_object_access=false
+
+MANAGED-SHADOW / EXACT REPAIRS INCLUDED
+- PQSLandControl: isolated modifier/sphere/landclass/list state; per-vertex sx/sy.
+- PQSMod_VertexHeightNoiseVertHeightCurve2: isolated h/r/s/t scratch state.
+- PQSMod_VertexHeightNoiseVertHeight: isolated h/n scratch state.
+- PQSMod_VertexVoronoi: exact LibNoise/ValueNoise reconstruction.
+- Curve2 AnimationCurve selection: PolynomialFloat tie preferred.
+- Public-PQS TerrainAltitude witness: exact stock-IL entry reconstruction with reflected PQS.radius snapshot copied as a primitive.
+
+RUNTIME ARTIFACT
+height_chain_runtime_excerpt.txt SHA256:
+6ed545e2e26d2b87680828f311b35c39673e3621e8a606ab11a00d205446798f
+
+provenance.txt SHA256:
+2e03b9e5081829480d91ba144d4c7e7c0babccffdba43f700b42f1687c7764b1
+
+Runtime archive location on witness machine:
+~/.cache/AERIS/artifacts/AERIS39_R041_AllBody_Height_Modifier_Chain_Shadow.tar.gz
+
+FINAL VERDICT
+AERIS39_R041_ALLBODY_HEIGHT_MODIFIER_CHAIN_SHADOW=PASS
+AERIS41_R041_ALLBODY_PQS_TERRAINALTITUDE_WITNESS=PASS
+R041_FINAL_ACCEPTANCE=PASS
+
+R041 is closed at this acceptance record. Future work must preserve both independent proofs unless a deliberate architecture revision explicitly supersedes them with equal-or-stronger evidence.
