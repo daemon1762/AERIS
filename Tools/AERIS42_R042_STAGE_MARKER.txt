@@ -1,0 +1,6 @@
+AERIS42 / R042
+Stage: R041 Exact CPU Shadow -> Production
+Baseline: agent/aeris41-r041-allbody-pqs-terrainaltitude-exact-accepted
+Baseline commit: 7a85fb975fd6b70f00479312473ea79bbb86f869
+Roadmap: CPU Shadow Production -> Preload/PTC completion -> Terrain/ND final optimization -> New NAV -> LAND
+Status: STARTED
