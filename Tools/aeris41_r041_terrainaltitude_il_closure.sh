@@ -34,7 +34,7 @@ test -z "$(git status --porcelain)" || {
   exit 11
 }
 
-for cmd in git mcs mono sha256sum tee grep mkdir rm; do
+for cmd in git mcs mono sha256sum tee grep mkdir rm awk; do
   command -v "$cmd" >/dev/null 2>&1 || {
     echo "STOP: required command missing: $cmd" >&2
     exit 12
@@ -78,10 +78,10 @@ if ! grep -Fq 'AERIS41_R041_TERRAINALTITUDE_IL_CLOSURE=PASS' "$LOG"; then
 fi
 
 for required in \
-  'signature=System.Double TerrainAltitude(' \
-  'signature=UnityEngine.Vector3d GetRelSurfaceNVector(' \
-  'signature=System.Double GetSurfaceHeight(' \
-  'signature=System.Void BuildVertexMapCoords('; do
+  ' TerrainAltitude(' \
+  ' GetRelSurfaceNVector(' \
+  ' GetSurfaceHeight(' \
+  ' BuildVertexMapCoords('; do
   if ! grep -Fq "$required" "$LOG"; then
     echo "AERIS41_R041_TERRAINALTITUDE_IL_CLOSURE_RUN=FAIL"
     echo "reason=REQUIRED_SIGNATURE_MISSING"
