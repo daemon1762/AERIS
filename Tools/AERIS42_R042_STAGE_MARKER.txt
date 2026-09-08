@@ -5,10 +5,12 @@ Baseline commit: 7a85fb975fd6b70f00479312473ea79bbb86f869
 Roadmap: CPU Shadow Production -> Preload/PTC completion -> Terrain/ND final optimization -> New NAV -> LAND
 Phase 1: PASS - nine certified pure exact sources compile successfully in candidate project
 Phase 2: PASS - nine certified pure exact sources permanently included in production csproj
-Phase 3: ACTIVE - candidate-only source resolver contract with mandatory runtime snapshot certification gate
+Phase 3: PASS - candidate-only source resolver contract; runtime snapshot gate mandatory
+Phase 4A: ACTIVE - immutable worker snapshot contract + final R041 V5 provenance lock
 Certified candidates: Minmus + Kerbin/Eve/Duna/Dres/Moho/Eeloo (7 total)
 Body name alone authorizes shadow: false
+Final R041 V5 generation chain is source of truth for Phase 4B capture implementation
 Production authority: PQS
 Producer switch: false
 DB write switch: false
-Status: PHASE3_SOURCE_RESOLVER_CONTRACT_VALIDATION
+Status: PHASE4A_IMMUTABLE_SNAPSHOT_CONTRACT_VALIDATION
