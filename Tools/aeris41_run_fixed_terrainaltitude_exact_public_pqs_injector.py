@@ -2,11 +2,11 @@
 import pathlib
 import sys
 
-# Runtime shim for the V5 injector. The V5 source first normalizes the runner
-# metadata token LONGITUDE_THEN_LATITUDE_DIAGNOSTIC ->
-# LATITUDE_THEN_LONGITUDE_STOCK_IL, then its success_old marker still searches
-# for the pre-normalization token. Patch only that source-string marker in
-# memory before executing the canonical injector.
+# Runtime shim for the V5 injector. The canonical V5 source first normalizes
+# LONGITUDE_THEN_LATITUDE_DIAGNOSTIC -> LATITUDE_THEN_LONGITUDE_STOCK_IL in
+# the generated runner, then its success_old marker still searches for the
+# pre-normalization token. Patch only the success_old source block in memory
+# before executing the canonical injector.
 #
 # Required provenance tokens retained here for the outer wrapper gates:
 # AERIS39_R041_ALLBODY_PQS_TERRAINALTITUDE_WITNESS_V5_EXACT_PUBLIC_PQS
@@ -22,14 +22,22 @@ root = pathlib.Path(__file__).resolve().parent
 canonical = root / "aeris41_inject_terrainaltitude_exact_public_pqs_into_generated.py"
 source = canonical.read_text(encoding="utf-8")
 
-old = '''success_old = \'\'\'  echo \\\"AERIS41_R041_TERRAINALTITUDE_ARGUMENT_ORDER_DIAGNOSTIC=PASS\\\"\n  echo \\\"terrainaltitude_reference_input_order=LONGITUDE_THEN_LATITUDE_DIAGNOSTIC\\\"'''
-new = '''success_old = \'\'\'  echo \\\"AERIS41_R041_TERRAINALTITUDE_ARGUMENT_ORDER_DIAGNOSTIC=PASS\\\"\n  echo \\\"terrainaltitude_reference_input_order=LATITUDE_THEN_LONGITUDE_STOCK_IL\\\"'''
+block_start = source.find("success_old = '''")
+if block_start < 0:
+    raise SystemExit("AERIS41 TerrainAltitude V5 shim success_old block missing")
+block_end = source.find("success_new = '''", block_start)
+if block_end < 0:
+    raise SystemExit("AERIS41 TerrainAltitude V5 shim success_new boundary missing")
 
-count = source.count(old)
+old_token = "terrainaltitude_reference_input_order=LONGITUDE_THEN_LATITUDE_DIAGNOSTIC"
+new_token = "terrainaltitude_reference_input_order=LATITUDE_THEN_LONGITUDE_STOCK_IL"
+block = source[block_start:block_end]
+count = block.count(old_token)
 if count != 1:
     raise SystemExit(
-        "AERIS41 TerrainAltitude V5 shim marker not unique: " + str(count))
-source = source.replace(old, new, 1)
+        "AERIS41 TerrainAltitude V5 shim token not unique in success_old: " + str(count))
+block = block.replace(old_token, new_token, 1)
+source = source[:block_start] + block + source[block_end:]
 
 namespace = {
     "__name__": "__main__",
