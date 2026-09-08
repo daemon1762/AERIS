@@ -18,9 +18,9 @@ echo "KSP=$KSP"
 echo "HEAD=$(git rev-parse HEAD)"
 echo
 
-test -f "$ROOT/Tools/aeris41_r041_eeloo_voronoi_pure_exact.sh" || {
-  echo "STOP: AERIS41 R041 exact public-PQS TerrainAltitude runner missing" >&2
+test -f "$ROOT/Tools/aeris41_r041_eeloo_voronoi_pure_exact_v5shim.sh" || {
+  echo "STOP: AERIS41 R041 exact public-PQS TerrainAltitude V5 shim runner missing" >&2
   exit 20
 }
 
-bash "$ROOT/Tools/aeris41_r041_eeloo_voronoi_pure_exact.sh" "$KSP"
+bash "$ROOT/Tools/aeris41_r041_eeloo_voronoi_pure_exact_v5shim.sh" "$KSP"
