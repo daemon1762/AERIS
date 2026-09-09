@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BRANCH="agent/aeris42-r042-exact-cpu-shadow-production"
+BRANCH="agent/aeris42-r042-phase5-worker-parity"
 MODE="${1:-auto}"
 
 # Human desktop must stay clean. All diagnostic/evidence artifacts go here.
