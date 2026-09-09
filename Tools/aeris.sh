@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BRANCH="agent/aeris42-r042-phase5-worker-parity"
+REMOTE_URL="https://github.com/daemon1762/AERIS.git"
 MODE="${1:-auto}"
 
 # Human desktop must stay clean. All diagnostic/evidence artifacts go here.
@@ -49,7 +50,8 @@ test -z "$(git status --porcelain)" || {
 }
 
 if [[ "${AERIS_AFTER_SYNC:-0}" != "1" ]]; then
-  git pull --ff-only origin "$BRANCH"
+  git fetch "$REMOTE_URL" "refs/heads/$BRANCH"
+  git merge --ff-only FETCH_HEAD
   export AERIS_AFTER_SYNC=1
   exec bash "$ROOT/Tools/aeris.sh" "$MODE"
 fi
