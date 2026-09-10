@@ -229,6 +229,9 @@ harvest_if_ready() {
 
   echo "=== R042 PHASE5 WORKER PARITY HARVEST ==="
   grep -F '[AERIS42][R042_PHASE5_BODY]' "$segment" || true
+  if [[ "$pass" -ne 1 ]]; then
+    grep -F '[AERIS42][R042_PHASE5_GEODETIC_EXCLUDED]' "$segment" || true
+  fi
   echo "$complete"
   rm -f "$segment"
 
