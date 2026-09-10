@@ -11,7 +11,7 @@ namespace AERISFlightControl.Terrain
     // Shared incremental PQS fallback/preload producer. PQS sampling stays on the KSP
     // main thread, while block statistics and immutable commit preparation use the
     // existing Performance Runtime scheduler. Jobs rotate by block, never by whole tile.
-    internal sealed class AERISTerrainBlockPipeline : IDisposable
+    internal sealed partial class AERISTerrainBlockPipeline : IDisposable
     {
         sealed class BlockDefinition
         {
@@ -79,6 +79,9 @@ namespace AERISFlightControl.Terrain
             internal byte[] R040BCacheHits;
             internal R040BFailureSample[] R040BFailureSamples;
             internal int R040BFailureSampleCount;
+
+            // R043 PRELOAD_PTC shadow integration payload. Pure managed data only.
+            internal R043ShadowBlockPayload R043Shadow;
         }
 
         struct BoundarySampleKey : IEquatable<BoundarySampleKey>
@@ -166,6 +169,9 @@ namespace AERISFlightControl.Terrain
             internal bool R040BAllWorkersOffMainThread = true;
             internal string R040BShadowError = string.Empty;
             internal int R040BDiagnosticSamplesEmitted;
+
+            // R043 PRELOAD_PTC: only populated for PreloadBuilder-owned certified bodies.
+            internal R043ShadowTileState R043Shadow;
 
             internal int Valid;
             internal float Minimum = float.PositiveInfinity;
@@ -298,6 +304,9 @@ namespace AERISFlightControl.Terrain
             AERISR039MinmusPureCpuExact.VertexPlanetSnapshot r040bSnapshot = null;
             TryGetR040BMinmusSnapshot(body, out r040bSnapshot);
 
+            R043ShadowTileState r043Shadow =
+                TryCreateR043ShadowState(body, request, pqsHash);
+
             string id = WorkId(request);
             lock (sync)
             {
@@ -337,6 +346,7 @@ namespace AERISFlightControl.Terrain
                     Flags = new byte[count],
                     Blocks = BuildBlocks(request.Resolution),
                     R040BMinmusSnapshot = r040bSnapshot,
+                    R043Shadow = r043Shadow,
                     IsCurrent = isCurrent,
                     Commit = commit
                 };
@@ -595,6 +605,8 @@ namespace AERISFlightControl.Terrain
                 state.R040BMinmusSnapshot == null ?
                 null : new byte[count];
 
+            BeginR043ShadowBlock(state, count);
+
             state.SamplingIndex = 0;
         }
 
@@ -634,6 +646,10 @@ namespace AERISFlightControl.Terrain
                     if (state.SamplingR040BCacheHits != null)
                         state.SamplingR040BCacheHits[local] = 1;
 
+                    CaptureR043ShadowSample(
+                        state, local, latitude, longitude,
+                        cached.AuthorityExactElevation);
+
                     state.SamplingIndex++;
                     return false;
                 }
@@ -650,6 +666,9 @@ namespace AERISFlightControl.Terrain
 
                 if (state.SamplingAuthorityExact != null)
                     state.SamplingAuthorityExact[local] = elevation;
+
+                CaptureR043ShadowSample(
+                    state, local, latitude, longitude, elevation);
 
                 if (boundary)
                     PutBoundarySample(
@@ -743,7 +762,8 @@ namespace AERISFlightControl.Terrain
                 NorthLatitudeDeg = state.Request.NorthLatitudeDeg,
                 WestLongitudeDeg = state.Request.WestLongitudeDeg,
                 EastLongitudeDeg = state.Request.EastLongitudeDeg,
-                R040BMainThreadId = r040bMainThreadId
+                R040BMainThreadId = r040bMainThreadId,
+                R043Shadow = BuildR043ShadowBlockPayload(state)
             };
             Interlocked.Increment(ref state.PendingBlocks);
 
@@ -793,6 +813,7 @@ namespace AERISFlightControl.Terrain
             state.SamplingFlags = null;
             state.SamplingAuthorityExact = null;
             state.SamplingR040BCacheHits = null;
+            ReleaseR043SamplingBlock(state);
             state.SamplingIndex = 0;
             return true;
         }
@@ -1091,6 +1112,7 @@ namespace AERISFlightControl.Terrain
         static void ProcessBlock(BlockPayload block)
         {
             ProcessR040BMinmusShadow(block);
+            ProcessR043ShadowBlock(block == null ? null : block.R043Shadow);
 
             block.Valid = 0;
             block.Minimum = float.PositiveInfinity;
@@ -1325,6 +1347,7 @@ namespace AERISFlightControl.Terrain
             }
 
             DiagnoseR040BMinmusFailures(state, block);
+            CommitR043ShadowBlock(state, block.R043Shadow);
 
             int resolution = state.Request.Resolution;
             for (int y = 0; y < block.Height; y++)
@@ -1367,6 +1390,7 @@ namespace AERISFlightControl.Terrain
             if (final)
             {
                 ReportR040BMinmusShadow(state);
+                ReportR043ShadowTile(state);
                 RemoveState(state, false);
             }
         }
