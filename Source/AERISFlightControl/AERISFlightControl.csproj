@@ -155,6 +155,8 @@
     <Compile Include="Terrain\AERISR042ExactCpuShadowRuntimeSnapshot.cs" />
     <Compile Include="Terrain\AERISR042ExactCpuShadowRuntimeSnapshotBuilder.cs" />
     <Compile Include="Terrain\AERISR042ExactCpuShadowRuntimeCaptureObserver.cs" />
+    <Compile Include="Terrain\AERISR042ExactCpuShadowWorkerParityObserver.cs" />
+    <Compile Include="Terrain\AERISR042Phase5GeodeticCensusDiagnostic.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadCodec.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadDatabase.cs" />
     <Compile Include="Terrain\AERISTerrainBlockPipeline.cs" />
