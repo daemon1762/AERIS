@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BRANCH="agent/aeris42-r042-phase5-worker-parity"
+BRANCH="agent/aeris43-r042-phase5-legal-geodetic-parity"
 REMOTE_URL="https://github.com/daemon1762/AERIS.git"
 MODE="${1:-auto}"
 
