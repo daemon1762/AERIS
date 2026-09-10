@@ -208,7 +208,22 @@ namespace AERISFlightControl.Terrain
                     Sample sample = census[s];
                     if (sample.Latitude < -90.0 || sample.Latitude > 90.0 ||
                         sample.Longitude < -180.0 || sample.Longitude > 180.0)
+                    {
+                        AERISLogger.Info(
+                            "[AERIS42][R042_PHASE5_GEODETIC_EXCLUDED]" +
+                            "; body=" + Safe(bodyName) +
+                            "; label=" + Safe(sample.Label) +
+                            "; latitude=" + R(sample.Latitude) +
+                            "; longitude=" + R(sample.Longitude) +
+                            "; latitude_bits=0x" +
+                                unchecked((ulong)BitConverter.DoubleToInt64Bits(sample.Latitude))
+                                    .ToString("x16", CultureInfo.InvariantCulture) +
+                            "; longitude_bits=0x" +
+                                unchecked((ulong)BitConverter.DoubleToInt64Bits(sample.Longitude))
+                                    .ToString("x16", CultureInfo.InvariantCulture) +
+                            Invariants());
                         continue;
+                    }
 
                     Vector3d inputDirection = body.GetRelSurfaceNVector(
                         sample.Latitude, sample.Longitude);
