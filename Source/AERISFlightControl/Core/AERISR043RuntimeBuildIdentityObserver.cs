@@ -12,12 +12,12 @@ namespace AERISFlightControl.Core
         {
             AERISLogger.Info(
                 "[AERIS43][R043_BUILD_IDENTITY]" +
-                "; semantic=" + Safe(AERISBuildVersion.Semantic) +
-                "; display=" + Safe(AERISBuildVersion.Display) +
-                "; checkpoint=" + Safe(AERISBuildVersion.UiCheckpoint) +
-                "; candidate=" + Safe(AERISBuildVersion.CandidateName) +
-                "; source_git_sha=" + Safe(AERISBuildVersion.SourceGitSha) +
-                "; source_tree_sha256=" + Safe(AERISBuildVersion.SourceTreeSha256) +
+                "; semantic=" + Safe(AERISFlightControl.AERISBuildVersion.Semantic) +
+                "; display=" + Safe(AERISFlightControl.AERISBuildVersion.Display) +
+                "; checkpoint=" + Safe(AERISFlightControl.AERISBuildVersion.UiCheckpoint) +
+                "; candidate=" + Safe(AERISFlightControl.AERISBuildVersion.CandidateName) +
+                "; source_git_sha=" + Safe(AERISFlightControl.AERISBuildVersion.SourceGitSha) +
+                "; source_tree_sha256=" + Safe(AERISFlightControl.AERISBuildVersion.SourceTreeSha256) +
                 "; realtime=" + Time.realtimeSinceStartup.ToString("R", CultureInfo.InvariantCulture));
         }
 
