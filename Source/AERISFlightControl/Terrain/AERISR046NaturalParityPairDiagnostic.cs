@@ -63,6 +63,13 @@ namespace AERISFlightControl.Terrain
                 return false;
             }
 
+            if (!AERISTerrainTileSystem.GameDataHashReady ||
+                string.IsNullOrEmpty(AERISTerrainTileSystem.GameDataHash))
+            {
+                failure = "ENVIRONMENT_HASH_NOT_READY";
+                return false;
+            }
+
             EnsureEnvironment(plan, body);
             if (string.IsNullOrEmpty(plan.EnvironmentHash))
             {
