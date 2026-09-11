@@ -121,6 +121,14 @@ namespace AERISFlightControl.Terrain
                         out request,
                         out failure))
                     {
+                        if (string.Equals(failure, "GAMEDATA_HASH_NOT_READY",
+                                StringComparison.Ordinal) ||
+                            string.Equals(failure, "DATABASE_INDEX_NOT_READY",
+                                StringComparison.Ordinal) ||
+                            string.Equals(failure, "DATABASE_KEY_MISSING",
+                                StringComparison.Ordinal))
+                            return;
+
                         Fail("PREPARE_" + proofs[i].BodyName + ":" + failure);
                         return;
                     }
