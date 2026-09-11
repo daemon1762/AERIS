@@ -276,6 +276,28 @@ namespace AERISFlightControl.Terrain
             InvalidatePreloadStatusUiSnapshot();
         }
 
+        // R043 PRELOAD_PTC live proof seam. Dormant unless the temporary
+        // MainMenu observer explicitly requests it.
+        internal bool R043RequestLivePreloadProof(
+            string bodyName, out string stableId, out string failure)
+        {
+            stableId = string.Empty;
+            failure = string.Empty;
+            if (preloadBuilder == null)
+            {
+                failure = "PRELOAD_BUILDER_NULL";
+                return false;
+            }
+            return preloadBuilder.R043RequestLivePreloadProof(
+                bodyName, out stableId, out failure);
+        }
+
+        internal bool R043LivePreloadProofDurable(string bodyName)
+        {
+            return preloadBuilder != null &&
+                preloadBuilder.R043LivePreloadProofDurable(bodyName);
+        }
+
         internal void PreloadPause(string bodyName)
         {
             if (preloadBuilder != null) preloadBuilder.Pause(bodyName);
