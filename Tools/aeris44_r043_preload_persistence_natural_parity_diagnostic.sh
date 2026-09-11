@@ -74,14 +74,15 @@ src=pathlib.Path(sys.argv[1])
 dst=pathlib.Path(sys.argv[2])
 text=src.read_text(encoding="utf-8")
 v='    <Compile Include="Properties\\AERISBuildVersion.generated.cs" />\n'
-vr='    <Compile Include="Properties\\AERISBuildVersion.R044Diagnostic.generated.cs" />\n'
-marker='  </ItemGroup>\n  <Import Project="$(MSBuildToolsPath)\\Microsoft.CSharp.targets" />'
-if text.count(v)!=1: raise SystemExit("version marker not unique")
-if text.count(marker)!=1: raise SystemExit("compile itemgroup marker not unique")
-text=text.replace(v,vr,1)
-# Add only runtime identity observer to the existing compile ItemGroup.
-text=text.replace(marker,
-    '    <Compile Include="Core\\AERISR043RuntimeBuildIdentityObserver.cs" />\n'+marker,1)
+replacement=(
+    '    <Compile Include="Properties\\AERISBuildVersion.R044Diagnostic.generated.cs" />\n'
+    '    <Compile Include="Core\\AERISR043RuntimeBuildIdentityObserver.cs" />\n'
+)
+if text.count(v)!=1:
+    raise SystemExit("version marker not unique")
+if 'AERISR043RuntimeBuildIdentityObserver.cs' in text:
+    raise SystemExit("identity observer unexpectedly in canonical csproj")
+text=text.replace(v,replacement,1)
 dst.write_text(text,encoding="utf-8")
 PY
 
