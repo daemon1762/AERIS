@@ -8,8 +8,8 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="R043-PRELOAD-PTC-SHADOW-LIVE-PRELOAD"
-RUNNER="$ROOT/Tools/aeris43_r043_preload_ptc_shadow_live_preload.sh"
+STAGE="R043-PRELOAD-PTC-DB-RESTART-REPRO"
+RUNNER="$ROOT/Tools/aeris43_r043_preload_ptc_db_restart_repro.sh"
 
 cd "$ROOT"
 
@@ -21,11 +21,12 @@ echo "roadmap=CPU_SHADOW_PRODUCTION -> PRELOAD_PTC -> TERRAIN_ND -> NEW_NAV -> L
 echo
 
 [[ -f "$RUNNER" ]] || {
-  echo "STOP: R043 PRELOAD_PTC live-preload runner missing" >&2
+  echo "STOP: R043 PRELOAD_PTC DB restart-repro runner missing" >&2
   exit 20
 }
 
-# R043 Phase3 exercises the persistent AERIS PreloadBuilder -> real BlockPipeline
-# -> encode -> SaveEncodedBatch DB path. Existing DB content is not deleted or
-# rebuilt; exact CPU remains shadow-only and PQS remains production/DB authority.
+# R043 Phase4 proves restart persistence and official codec/readback equivalence.
+# It reads the previously committed Minmus/Kerbin GLOBAL tiles through the
+# production TryLoadBatch path and compares them against fresh PQS -> official codec
+# references. No DB write or producer switch is permitted.
 exec bash "$RUNNER" "$KSP"
