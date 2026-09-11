@@ -8,8 +8,8 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="R043-PRELOAD-ENVIRONMENT-HASH-STABLE-V2"
-RUNNER="$ROOT/Tools/aeris44_r043_preload_environment_hash_stability.sh"
+STAGE="R043-PRELOAD-CLEAN-REBUILD-ENV2-RESTART-VERIFY"
+RUNNER="$ROOT/Tools/aeris45_r043_preload_clean_rebuild_env2_restart_verify.sh"
 
 cd "$ROOT"
 
@@ -21,11 +21,11 @@ echo "roadmap=CPU_SHADOW_PRODUCTION -> PRELOAD_PTC -> TERRAIN_ND -> NEW_NAV -> L
 echo
 
 [[ -f "$RUNNER" ]] || {
-  echo "STOP: AERIS44 ENV2 stability runner missing" >&2
+  echo "STOP: AERIS45 clean rebuild verifier missing" >&2
   exit 20
 }
 
-# AERIS44 ENV2: prove the persistent terrain environment key is stable across
-# two process restarts before any controlled full Preload rebuild. The runner
-# preserves a pre-ENV2 DB backup and never deletes/rebuilds the DB itself.
+# AERIS45: move the current DB to a timestamped backup, create a clean ENV2
+# preload from zero, then prove all-body completion survives a process restart.
+# Exact CPU remains shadow-only; PQS remains production and DB authority.
 exec bash "$RUNNER" "$KSP"
