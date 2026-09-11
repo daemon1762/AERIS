@@ -162,6 +162,8 @@ namespace AERISFlightControl.Terrain
             new HashSet<string>(StringComparer.Ordinal);
         readonly HashSet<string> validatedEnvironments =
             new HashSet<string>(StringComparer.Ordinal);
+        readonly HashSet<string> r044EnvironmentObserved =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         readonly Dictionary<string, AERISTerrainHeightTile> pendingCoastlineBaseTiles =
             new Dictionary<string, AERISTerrainHeightTile>(StringComparer.Ordinal);
         readonly string statePath;
@@ -246,6 +248,7 @@ namespace AERISFlightControl.Terrain
             statePath = Path.Combine(root, "preload_state.aps");
             stateTemporaryPath = statePath + ".tmp";
             LoadState();
+            LogR044LoadedStateSnapshot();
             // AERISSettings is the user-visible source of truth. The state file preserves
             // progress, but an older persisted mode must not override a newer CFG choice.
             mode = configuredMode;
@@ -2215,11 +2218,136 @@ namespace AERISFlightControl.Terrain
             return AERISTerrainBodyPriority.Low;
         }
 
+        void LogR044LoadedStateSnapshot()
+        {
+            try
+            {
+                bool primaryExists = !string.IsNullOrEmpty(statePath) &&
+                    File.Exists(statePath);
+                bool backupExists = !string.IsNullOrEmpty(statePath) &&
+                    File.Exists(statePath + ".bak");
+                long primaryBytes = primaryExists ?
+                    new FileInfo(statePath).Length : 0L;
+                long backupBytes = backupExists ?
+                    new FileInfo(statePath + ".bak").Length : 0L;
+
+                lock (sync)
+                {
+                    AERISLogger.Info(
+                        "[AERIS44][R043_PRELOAD_STATE_LOAD]" +
+                        "; plans=" +
+                            plans.Count.ToString(CultureInfo.InvariantCulture) +
+                        "; primary_exists=" + R044Bool(primaryExists) +
+                        "; primary_bytes=" +
+                            primaryBytes.ToString(CultureInfo.InvariantCulture) +
+                        "; backup_exists=" + R044Bool(backupExists) +
+                        "; backup_bytes=" +
+                            backupBytes.ToString(CultureInfo.InvariantCulture) +
+                        "; applied_point_signature=" +
+                            R044Safe(appliedPointSetSignature));
+
+                    foreach (BodyPlan plan in plans.Values)
+                    {
+                        if (plan == null) continue;
+                        AERISLogger.Info(
+                            "[AERIS44][R043_PRELOAD_STATE_BODY]" +
+                            "; body=" + R044Safe(plan.BodyName) +
+                            "; persisted_environment=" +
+                                R044Safe(plan.EnvironmentHash) +
+                            "; completed_environment=" +
+                                R044Safe(plan.CompletedEnvironmentHash) +
+                            "; automatic_complete=" +
+                                R044Bool(plan.AutomaticComplete) +
+                            "; completed_quality=" +
+                                plan.CompletedQualityLimit +
+                            "; global_cursor=" +
+                                plan.GlobalCursor.ToString(CultureInfo.InvariantCulture) +
+                            "; far_cursor=" +
+                                plan.FarCursor.ToString(CultureInfo.InvariantCulture) +
+                            "; route_cursor=" +
+                                plan.RouteCursor.ToString(CultureInfo.InvariantCulture) +
+                            "; point_cursor=" +
+                                plan.PointCursor.ToString(CultureInfo.InvariantCulture) +
+                            "; coastline_cursor=" +
+                                plan.CoastlineCursor.ToString(CultureInfo.InvariantCulture) +
+                            "; coastline_complete=" +
+                                R044Bool(plan.CoastlineComplete) +
+                            "; coastline_environment=" +
+                                R044Safe(plan.CompletedCoastlineEnvironmentHash));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AERISLogger.Warn(
+                    "[AERIS44][R043_PRELOAD_STATE_LOAD]" +
+                    "; failure=" + R044Safe(
+                        ex.GetType().Name + ":" + (ex.Message ?? string.Empty)));
+            }
+        }
+
+        static string R044Safe(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            return value.Replace(';', ',').Replace('|', '/')
+                .Replace('\r', ' ').Replace('\n', ' ');
+        }
+
+        static string R044Bool(bool value)
+        {
+            return value ? "true" : "false";
+        }
+
         void EnsureEnvironment(BodyPlan plan, CelestialBody body)
         {
             string environment = AERISTerrainTileSystem.EnvironmentHashForBody(body);
+            if (r044EnvironmentObserved.Add(body == null ? string.Empty : body.name))
+            {
+                AERISLogger.Info(
+                    "[AERIS44][R043_PRELOAD_ENV_OBSERVED]" +
+                    "; body=" + R044Safe(body == null ? string.Empty : body.name) +
+                    "; persisted_environment=" + R044Safe(plan == null ? string.Empty : plan.EnvironmentHash) +
+                    "; live_environment=" + R044Safe(environment) +
+                    "; environment_match=" +
+                        R044Bool(plan != null && string.Equals(
+                            plan.EnvironmentHash, environment,
+                            StringComparison.Ordinal)) +
+                    "; completed_environment=" +
+                        R044Safe(plan == null ? string.Empty : plan.CompletedEnvironmentHash) +
+                    "; automatic_complete=" +
+                        R044Bool(plan != null && plan.AutomaticComplete) +
+                    "; global_cursor=" +
+                        (plan == null ? "0" : plan.GlobalCursor.ToString(CultureInfo.InvariantCulture)) +
+                    "; far_cursor=" +
+                        (plan == null ? "0" : plan.FarCursor.ToString(CultureInfo.InvariantCulture)) +
+                    "; route_cursor=" +
+                        (plan == null ? "0" : plan.RouteCursor.ToString(CultureInfo.InvariantCulture)) +
+                    "; coastline_cursor=" +
+                        (plan == null ? "0" : plan.CoastlineCursor.ToString(CultureInfo.InvariantCulture)) +
+                    "; coastline_complete=" +
+                        R044Bool(plan != null && plan.CoastlineComplete));
+            }
             if (string.Equals(plan.EnvironmentHash, environment,
                 StringComparison.Ordinal)) return;
+
+            string previousEnvironment = plan.EnvironmentHash ?? string.Empty;
+            AERISLogger.Warn(
+                "[AERIS44][R043_PRELOAD_ENV_TRANSITION]" +
+                "; body=" + R044Safe(body == null ? string.Empty : body.name) +
+                "; previous_environment=" + R044Safe(previousEnvironment) +
+                "; new_environment=" + R044Safe(environment) +
+                "; action=RESET_SCAN_AND_SCHEDULE_DB_INVALIDATION" +
+                "; previous_global_cursor=" +
+                    plan.GlobalCursor.ToString(CultureInfo.InvariantCulture) +
+                "; previous_far_cursor=" +
+                    plan.FarCursor.ToString(CultureInfo.InvariantCulture) +
+                "; previous_route_cursor=" +
+                    plan.RouteCursor.ToString(CultureInfo.InvariantCulture) +
+                "; previous_completed_environment=" +
+                    R044Safe(plan.CompletedEnvironmentHash) +
+                "; previous_automatic_complete=" +
+                    R044Bool(plan.AutomaticComplete));
+
             plan.EnvironmentHash = environment;
             InvalidateAutomaticCompletion(plan);
             InvalidateCoastlineCompletion(plan);
