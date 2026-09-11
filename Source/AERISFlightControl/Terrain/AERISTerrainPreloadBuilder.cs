@@ -568,6 +568,13 @@ namespace AERISFlightControl.Terrain
             }
             activeBodyName = plan.BodyName;
             EnsureEnvironment(plan, body);
+            if (!AERISTerrainTileSystem.GameDataHashReady ||
+                string.IsNullOrEmpty(plan.EnvironmentHash))
+            {
+                status = "PRELOAD WAITING FOR TERRAIN ENVIRONMENT HASH";
+                UpdateTelemetry(idle, qps, samples, milliseconds);
+                return;
+            }
             bool queued = false;
             int workers = ResolveWorkerCount();
             int queueTarget = Math.Min(48, Math.Max(8, workers * 4));
@@ -2306,7 +2313,11 @@ namespace AERISFlightControl.Terrain
                 LogR044LoadedStateSnapshot();
             }
 
+            if (!AERISTerrainTileSystem.GameDataHashReady) return;
+
             string environment = AERISTerrainTileSystem.EnvironmentHashForBody(body);
+            if (string.IsNullOrEmpty(environment)) return;
+
             if (r044EnvironmentObserved.Add(body == null ? string.Empty : body.name))
             {
                 AERISLogger.Info(
