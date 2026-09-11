@@ -37,6 +37,9 @@ namespace AERISFlightControl.Terrain
             internal int Samples;
             internal int Mismatches;
             internal int NonFinite;
+            internal int BoundaryCacheHitSamples;
+            internal int BoundaryCacheHitMismatches;
+            internal int NonBoundaryCacheHitMismatches;
             internal double MaxAbsError;
             internal int Blocks;
             internal bool AllWorkersOffMainThread = true;
@@ -102,6 +105,9 @@ namespace AERISFlightControl.Terrain
             internal int Samples;
             internal int Mismatches;
             internal int NonFinite;
+            internal int BoundaryCacheHitSamples;
+            internal int BoundaryCacheHitMismatches;
+            internal int NonBoundaryCacheHitMismatches;
             internal double MaxAbsError;
             internal string Error = string.Empty;
 
@@ -482,6 +488,9 @@ namespace AERISFlightControl.Terrain
                         block.MaxAbsError = error;
 
                     block.Samples++;
+                    bool boundaryCacheHit = block.BoundaryCacheHit[i] != 0;
+                    if (boundaryCacheHit)
+                        block.BoundaryCacheHitSamples++;
                     if (!finite)
                         block.NonFinite++;
 
@@ -492,6 +501,10 @@ namespace AERISFlightControl.Terrain
                     if (!finite || actualBits != expectedBits)
                     {
                         block.Mismatches++;
+                        if (boundaryCacheHit)
+                            block.BoundaryCacheHitMismatches++;
+                        else
+                            block.NonBoundaryCacheHitMismatches++;
                         if (block.FirstMismatchIndex < 0)
                         {
                             block.FirstMismatchIndex = i;
@@ -547,6 +560,11 @@ namespace AERISFlightControl.Terrain
             shadow.Samples += block.Samples;
             shadow.Mismatches += block.Mismatches;
             shadow.NonFinite += block.NonFinite;
+            shadow.BoundaryCacheHitSamples += block.BoundaryCacheHitSamples;
+            shadow.BoundaryCacheHitMismatches +=
+                block.BoundaryCacheHitMismatches;
+            shadow.NonBoundaryCacheHitMismatches +=
+                block.NonBoundaryCacheHitMismatches;
             if (block.MaxAbsError > shadow.MaxAbsError)
                 shadow.MaxAbsError = block.MaxAbsError;
             shadow.AllWorkersOffMainThread =
@@ -622,6 +640,15 @@ namespace AERISFlightControl.Terrain
                     shadow.ExpectedSamples.ToString(CultureInfo.InvariantCulture) +
                 "; mismatch_count=" +
                     shadow.Mismatches.ToString(CultureInfo.InvariantCulture) +
+                "; boundary_cache_hit_samples=" +
+                    shadow.BoundaryCacheHitSamples.ToString(
+                        CultureInfo.InvariantCulture) +
+                "; boundary_cache_hit_mismatch_count=" +
+                    shadow.BoundaryCacheHitMismatches.ToString(
+                        CultureInfo.InvariantCulture) +
+                "; non_boundary_cache_hit_mismatch_count=" +
+                    shadow.NonBoundaryCacheHitMismatches.ToString(
+                        CultureInfo.InvariantCulture) +
                 "; nonfinite_count=" +
                     shadow.NonFinite.ToString(CultureInfo.InvariantCulture) +
                 "; bit_exact=" +
