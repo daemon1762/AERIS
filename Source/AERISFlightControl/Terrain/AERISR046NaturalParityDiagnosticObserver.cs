@@ -58,6 +58,13 @@ namespace AERISFlightControl.Terrain
                 return;
             }
 
+            if (!AERISTerrainTileSystem.GameDataHashReady ||
+                string.IsNullOrEmpty(AERISTerrainTileSystem.GameDataHash))
+            {
+                TimeoutOrReturn("ENVIRONMENT_HASH_TIMEOUT");
+                return;
+            }
+
             AERISTerrainPreloadBuilder builder = ResolveBuilder(tiles);
             if (builder == null)
             {
