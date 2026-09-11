@@ -8,8 +8,8 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="R043-PRELOAD-PERSISTENCE-NATURAL-PARITY-DIAGNOSTIC"
-RUNNER="$ROOT/Tools/aeris44_r043_preload_persistence_natural_parity_diagnostic.sh"
+STAGE="R043-PRELOAD-ENVIRONMENT-HASH-STABLE-V2"
+RUNNER="$ROOT/Tools/aeris44_r043_preload_environment_hash_stability.sh"
 
 cd "$ROOT"
 
@@ -21,11 +21,11 @@ echo "roadmap=CPU_SHADOW_PRODUCTION -> PRELOAD_PTC -> TERRAIN_ND -> NEW_NAV -> L
 echo
 
 [[ -f "$RUNNER" ]] || {
-  echo "STOP: AERIS44 preload diagnostic runner missing" >&2
+  echo "STOP: AERIS44 ENV2 stability runner missing" >&2
   exit 20
 }
 
-# AERIS44 diagnostic hold. Do not delete/rebuild the existing preload DB.
-# Capture persisted/live environment identity and the first natural Kerbin
-# bit mismatch before resuming DB restart/promotion work.
+# AERIS44 ENV2: prove the persistent terrain environment key is stable across
+# two process restarts before any controlled full Preload rebuild. The runner
+# preserves a pre-ENV2 DB backup and never deletes/rebuilds the DB itself.
 exec bash "$RUNNER" "$KSP"
