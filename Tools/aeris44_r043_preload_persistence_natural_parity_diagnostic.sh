@@ -98,7 +98,10 @@ harvest(){
   h="$(state_value head || true)"
   sha="$(state_value dll_sha || true)"
   off="$(state_value log_offset || true)"
-  [[ "$h" = "$(git rev-parse HEAD)" && -n "$sha" && -n "$off" ]] || return 1
+  # Runner-only hotfixes may advance Git HEAD after the diagnostic DLL was
+  # installed. Bind harvest to the recorded installed DLL instead of discarding
+  # already-collected runtime evidence merely because tooling changed.
+  [[ -n "$h" && -n "$sha" && -n "$off" ]] || return 1
   [[ -f "$TARGET" && "$(sha256sum "$TARGET"|awk '{print $1}')" = "$sha" ]] || return 1
   [[ -f "$LOG" ]] || return 1
 
