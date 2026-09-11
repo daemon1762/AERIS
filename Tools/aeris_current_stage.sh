@@ -8,8 +8,8 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="R043-PRELOAD-PTC-SHADOW-INTEGRATION"
-RUNNER="$ROOT/Tools/aeris43_r043_preload_ptc_shadow_integration.sh"
+STAGE="R043-PRELOAD-PTC-SHADOW-LIVE-PRELOAD"
+RUNNER="$ROOT/Tools/aeris43_r043_preload_ptc_shadow_live_preload.sh"
 
 cd "$ROOT"
 
@@ -21,11 +21,11 @@ echo "roadmap=CPU_SHADOW_PRODUCTION -> PRELOAD_PTC -> TERRAIN_ND -> NEW_NAV -> L
 echo
 
 [[ -f "$RUNNER" ]] || {
-  echo "STOP: R043 PRELOAD_PTC integration runner missing" >&2
+  echo "STOP: R043 PRELOAD_PTC live-preload runner missing" >&2
   exit 20
 }
 
-# R043 Phase2 exercises the real BlockPipeline path for PreloadBuilder-owned
-# requests while PQS remains production/DB authority. The proof harness commits
-# to RAM only; the runner owns WAITING/PASS/FAIL and remains the final process.
+# R043 Phase3 exercises the persistent AERIS PreloadBuilder -> real BlockPipeline
+# -> encode -> SaveEncodedBatch DB path. Existing DB content is not deleted or
+# rebuilt; exact CPU remains shadow-only and PQS remains production/DB authority.
 exec bash "$RUNNER" "$KSP"
