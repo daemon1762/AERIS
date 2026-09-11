@@ -69,6 +69,9 @@ grep -Fq 'non_boundary_cache_hit_mismatch_count=' "$SHADOW" || exit 19
 grep -Fq 'adjacent_shared_boundary=true' "$PAIR" || exit 20
 grep -Fq 'db_write=false' "$PAIR" || exit 21
 grep -Fq 'AERISR046NaturalParityDiagnosticObserver' "$OBSERVER" || exit 22
+grep -Fq 'AERIS_TERRAIN_ENV3_TERRAIN_CFG_PQS'   "$PROJECT_DIR/Terrain/AERISTerrainTileSystem.cs" || exit 23
+grep -Fq 'automatic_db_invalidation=false'   "$PROJECT_DIR/Terrain/AERISTerrainPreloadBuilder.cs" || exit 24
+grep -Fq 'evaluationLatitude = boundaryCacheHit' "$SHADOW" || exit 25
 
 HEAD_SHA="$(git rev-parse HEAD)"
 TREE_SHA256="$(git archive --format=tar HEAD | sha256sum | awk '{print $1}')"
@@ -141,6 +144,8 @@ harvest(){
   fi
 
   echo "=== AERIS46 NATURAL PAIR RAW EVIDENCE ==="
+  grep -F '[AERIS44][R043_PRELOAD_ENV_TRANSITION]' "$seg" || true
+  grep -F '[AERIS46][R043_PRELOAD_ENV_OLD_DB_PRESERVED]' "$seg" || true
   grep -F '[AERIS46][R043_NATURAL_PAIR_REQUEST]' "$seg" || true
   grep -F '[AERIS43][R043_PRELOAD_PTC_INTEGRATED_TILE]' "$seg" |
     grep -F '; live_preload_proof=true;' || true
@@ -185,8 +190,10 @@ print("first_mismatch_source_coordinate_diff_tiles=%d" % coord_diff)
 
 if len(rows) < 4:
     verdict="EVIDENCE_INCOMPLETE"
+elif total_mismatch == 0 and cache_samples > 0:
+    verdict="NATURAL_PARITY_REPAIR_PASS"
 elif total_mismatch == 0:
-    verdict="BOUNDARY_CACHE_HYPOTHESIS_NOT_REPRODUCED"
+    verdict="NO_CACHE_HIT_EVIDENCE"
 elif cache_mismatch == total_mismatch and noncache_mismatch == 0 and coord_diff == len(m):
     verdict="BOUNDARY_CACHE_PROVENANCE_CONFIRMED"
 elif noncache_mismatch > 0:
@@ -197,6 +204,9 @@ print("AERIS46_DIAGNOSTIC_VERDICT="+verdict)
 PY
 
   rm -f "$seg"
+  echo "environment_contract=ENV3_TERRAIN_CFG_PQS"
+  echo "automatic_db_invalidation=false"
+  echo "old_environment_chunks_preserved=true"
   echo "production_authority=PQS"
   echo "producer_switch=false"
   echo "db_write=false"
@@ -257,6 +267,9 @@ echo "adjacent_shared_boundary=true"
 echo "database_deleted=false"
 echo "database_rebuilt=false"
 echo "diagnostic_db_write=false"
+echo "environment_contract=ENV3_TERRAIN_CFG_PQS"
+echo "automatic_db_invalidation=false"
+echo "old_environment_chunks_preserved=true"
 echo "production_authority=PQS"
 echo "producer_switch=false"
 echo "exact_cpu_db_write=false"
