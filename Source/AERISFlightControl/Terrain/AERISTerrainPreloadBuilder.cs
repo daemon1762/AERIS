@@ -3216,7 +3216,60 @@ namespace AERISFlightControl.Terrain
                 out finalAppliedPointSetSignature);
             WriteStateSnapshot(finalSnapshot, mode,
                 finalAppliedPointSetSignature);
+            LogR045FinalStateSnapshot(finalSnapshot);
             disposed = true;
+        }
+
+        void LogR045FinalStateSnapshot(IList<BodyPlan> snapshot)
+        {
+            try
+            {
+                AERISLogger.Info(
+                    "[AERIS45][R043_PRELOAD_FINAL_STATE]" +
+                    "; plans=" +
+                    (snapshot == null ? 0 : snapshot.Count)
+                        .ToString(CultureInfo.InvariantCulture) +
+                    "; environment_contract=ENV2_STABLE");
+
+                if (snapshot == null) return;
+                for (int i = 0; i < snapshot.Count; i++)
+                {
+                    BodyPlan plan = snapshot[i];
+                    if (plan == null) continue;
+                    AERISLogger.Info(
+                        "[AERIS45][R043_PRELOAD_FINAL_STATE_BODY]" +
+                        "; body=" + R044Safe(plan.BodyName) +
+                        "; environment=" + R044Safe(plan.EnvironmentHash) +
+                        "; automatic_complete=" +
+                            R044Bool(plan.AutomaticComplete) +
+                        "; completed_environment=" +
+                            R044Safe(plan.CompletedEnvironmentHash) +
+                        "; completed_quality=" +
+                            plan.CompletedQualityLimit +
+                        "; coastline_complete=" +
+                            R044Bool(plan.CoastlineComplete) +
+                        "; coastline_environment=" +
+                            R044Safe(plan.CompletedCoastlineEnvironmentHash) +
+                        "; global_cursor=" +
+                            plan.GlobalCursor.ToString(CultureInfo.InvariantCulture) +
+                        "; far_cursor=" +
+                            plan.FarCursor.ToString(CultureInfo.InvariantCulture) +
+                        "; route_cursor=" +
+                            plan.RouteCursor.ToString(CultureInfo.InvariantCulture) +
+                        "; point_cursor=" +
+                            plan.PointCursor.ToString(CultureInfo.InvariantCulture) +
+                        "; coastline_cursor=" +
+                            plan.CoastlineCursor.ToString(CultureInfo.InvariantCulture));
+                }
+            }
+            catch (Exception ex)
+            {
+                AERISLogger.Warn(
+                    "[AERIS45][R043_PRELOAD_FINAL_STATE]" +
+                    "; failure=" + R044Safe(
+                        ex.GetType().Name + ":" +
+                        (ex.Message ?? string.Empty)));
+            }
         }
 
         void FlushPendingBatchesSynchronously()
