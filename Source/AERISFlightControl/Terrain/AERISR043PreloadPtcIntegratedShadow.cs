@@ -42,12 +42,27 @@ namespace AERISFlightControl.Terrain
             internal bool AllWorkersOffMainThread = true;
             internal string Error = string.Empty;
 
+            internal int FirstMismatchIndex = -1;
+            internal long FirstExpectedBits;
+            internal long FirstActualBits;
+            internal double FirstExpected;
+            internal double FirstActual;
+            internal double FirstLatitude;
+            internal double FirstLongitude;
+            internal double FirstX;
+            internal double FirstY;
+            internal double FirstZ;
+            internal double FirstU;
+            internal double FirstV;
+
             internal double[] SamplingExpected;
             internal double[] SamplingX;
             internal double[] SamplingY;
             internal double[] SamplingZ;
             internal double[] SamplingU;
             internal double[] SamplingV;
+            internal double[] SamplingLatitude;
+            internal double[] SamplingLongitude;
             internal byte[] SamplingActive;
         }
 
@@ -61,6 +76,8 @@ namespace AERISFlightControl.Terrain
             internal double[] Z;
             internal double[] U;
             internal double[] V;
+            internal double[] Latitude;
+            internal double[] Longitude;
             internal byte[] Active;
             internal int MainThreadId;
             internal int WorkerThreadId;
@@ -69,6 +86,19 @@ namespace AERISFlightControl.Terrain
             internal int NonFinite;
             internal double MaxAbsError;
             internal string Error = string.Empty;
+
+            internal int FirstMismatchIndex = -1;
+            internal long FirstExpectedBits;
+            internal long FirstActualBits;
+            internal double FirstExpected;
+            internal double FirstActual;
+            internal double FirstLatitude;
+            internal double FirstLongitude;
+            internal double FirstX;
+            internal double FirstY;
+            internal double FirstZ;
+            internal double FirstU;
+            internal double FirstV;
         }
 
         readonly Dictionary<string, AERISR042ExactCpuShadowRuntimeSnapshot>
@@ -216,6 +246,8 @@ namespace AERISFlightControl.Terrain
             shadow.SamplingZ = new double[count];
             shadow.SamplingU = new double[count];
             shadow.SamplingV = new double[count];
+            shadow.SamplingLatitude = new double[count];
+            shadow.SamplingLongitude = new double[count];
             shadow.SamplingActive = new byte[count];
         }
 
@@ -234,6 +266,8 @@ namespace AERISFlightControl.Terrain
                 shadow.SamplingZ == null ||
                 shadow.SamplingU == null ||
                 shadow.SamplingV == null ||
+                shadow.SamplingLatitude == null ||
+                shadow.SamplingLongitude == null ||
                 shadow.SamplingActive == null ||
                 local < 0 || local >= shadow.SamplingExpected.Length)
             {
@@ -266,6 +300,8 @@ namespace AERISFlightControl.Terrain
                 shadow.SamplingZ[local] = direction.z;
                 shadow.SamplingU[local] = mapU;
                 shadow.SamplingV[local] = mapV;
+                shadow.SamplingLatitude[local] = latitude;
+                shadow.SamplingLongitude[local] = longitude;
                 shadow.SamplingActive[local] = 1;
             }
             catch (Exception ex)
@@ -289,6 +325,8 @@ namespace AERISFlightControl.Terrain
                 Z = shadow.SamplingZ,
                 U = shadow.SamplingU,
                 V = shadow.SamplingV,
+                Latitude = shadow.SamplingLatitude,
+                Longitude = shadow.SamplingLongitude,
                 Active = shadow.SamplingActive,
                 MainThreadId = shadow.Snapshot == null ?
                     0 : shadow.Snapshot.CaptureThreadId,
@@ -306,6 +344,8 @@ namespace AERISFlightControl.Terrain
             shadow.SamplingZ = null;
             shadow.SamplingU = null;
             shadow.SamplingV = null;
+            shadow.SamplingLatitude = null;
+            shadow.SamplingLongitude = null;
             shadow.SamplingActive = null;
         }
 
@@ -325,7 +365,9 @@ namespace AERISFlightControl.Terrain
                     throw new InvalidOperationException("WORKER_IS_MAIN");
                 if (block.Expected == null ||
                     block.X == null || block.Y == null || block.Z == null ||
-                    block.U == null || block.V == null || block.Active == null)
+                    block.U == null || block.V == null ||
+                    block.Latitude == null || block.Longitude == null ||
+                    block.Active == null)
                     throw new InvalidOperationException("PAYLOAD_ARRAY_NULL");
 
                 int count = block.Expected.Length;
@@ -334,6 +376,8 @@ namespace AERISFlightControl.Terrain
                     block.Z.Length != count ||
                     block.U.Length != count ||
                     block.V.Length != count ||
+                    block.Latitude.Length != count ||
+                    block.Longitude.Length != count ||
                     block.Active.Length != count)
                     throw new InvalidOperationException("PAYLOAD_ARRAY_LENGTH");
 
@@ -384,10 +428,29 @@ namespace AERISFlightControl.Terrain
                     if (!finite)
                         block.NonFinite++;
 
-                    if (!finite ||
-                        BitConverter.DoubleToInt64Bits(actualAsl) !=
-                            BitConverter.DoubleToInt64Bits(expectedAsl))
+                    long expectedBits =
+                        BitConverter.DoubleToInt64Bits(expectedAsl);
+                    long actualBits =
+                        BitConverter.DoubleToInt64Bits(actualAsl);
+                    if (!finite || actualBits != expectedBits)
+                    {
                         block.Mismatches++;
+                        if (block.FirstMismatchIndex < 0)
+                        {
+                            block.FirstMismatchIndex = i;
+                            block.FirstExpectedBits = expectedBits;
+                            block.FirstActualBits = actualBits;
+                            block.FirstExpected = expectedAsl;
+                            block.FirstActual = actualAsl;
+                            block.FirstLatitude = block.Latitude[i];
+                            block.FirstLongitude = block.Longitude[i];
+                            block.FirstX = block.X[i];
+                            block.FirstY = block.Y[i];
+                            block.FirstZ = block.Z[i];
+                            block.FirstU = block.U[i];
+                            block.FirstV = block.V[i];
+                        }
+                    }
                 }
             }
             catch (Exception ex)
@@ -412,6 +475,22 @@ namespace AERISFlightControl.Terrain
                 shadow.AllWorkersOffMainThread &&
                 block.WorkerThreadId > 0 &&
                 block.WorkerThreadId != block.MainThreadId;
+            if (shadow.FirstMismatchIndex < 0 &&
+                block.FirstMismatchIndex >= 0)
+            {
+                shadow.FirstMismatchIndex = block.FirstMismatchIndex;
+                shadow.FirstExpectedBits = block.FirstExpectedBits;
+                shadow.FirstActualBits = block.FirstActualBits;
+                shadow.FirstExpected = block.FirstExpected;
+                shadow.FirstActual = block.FirstActual;
+                shadow.FirstLatitude = block.FirstLatitude;
+                shadow.FirstLongitude = block.FirstLongitude;
+                shadow.FirstX = block.FirstX;
+                shadow.FirstY = block.FirstY;
+                shadow.FirstZ = block.FirstZ;
+                shadow.FirstU = block.FirstU;
+                shadow.FirstV = block.FirstV;
+            }
             if (string.IsNullOrEmpty(shadow.Error) &&
                 !string.IsNullOrEmpty(block.Error))
                 shadow.Error = block.Error;
@@ -462,6 +541,30 @@ namespace AERISFlightControl.Terrain
                     BoolR043(shadow.Mismatches == 0 && shadow.NonFinite == 0) +
                 "; max_abs_error=" +
                     shadow.MaxAbsError.ToString("R", CultureInfo.InvariantCulture) +
+                "; first_mismatch_index=" +
+                    shadow.FirstMismatchIndex.ToString(CultureInfo.InvariantCulture) +
+                "; first_expected_bits=" +
+                    shadow.FirstExpectedBits.ToString("x16", CultureInfo.InvariantCulture) +
+                "; first_actual_bits=" +
+                    shadow.FirstActualBits.ToString("x16", CultureInfo.InvariantCulture) +
+                "; first_expected=" +
+                    shadow.FirstExpected.ToString("R", CultureInfo.InvariantCulture) +
+                "; first_actual=" +
+                    shadow.FirstActual.ToString("R", CultureInfo.InvariantCulture) +
+                "; first_lat=" +
+                    shadow.FirstLatitude.ToString("R", CultureInfo.InvariantCulture) +
+                "; first_lon=" +
+                    shadow.FirstLongitude.ToString("R", CultureInfo.InvariantCulture) +
+                "; first_x=" +
+                    shadow.FirstX.ToString("R", CultureInfo.InvariantCulture) +
+                "; first_y=" +
+                    shadow.FirstY.ToString("R", CultureInfo.InvariantCulture) +
+                "; first_z=" +
+                    shadow.FirstZ.ToString("R", CultureInfo.InvariantCulture) +
+                "; first_u=" +
+                    shadow.FirstU.ToString("R", CultureInfo.InvariantCulture) +
+                "; first_v=" +
+                    shadow.FirstV.ToString("R", CultureInfo.InvariantCulture) +
                 "; blocks=" +
                     shadow.Blocks.ToString(CultureInfo.InvariantCulture) +
                 "; worker_not_main=" +
