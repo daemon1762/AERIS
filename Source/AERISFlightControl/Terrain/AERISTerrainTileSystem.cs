@@ -2991,58 +2991,109 @@ namespace AERISFlightControl.Terrain
         internal static string EnvironmentHashForBody(CelestialBody body)
         {
             if (!GameDataHashReady) return string.Empty;
+            string gameDataHash = GameDataHash;
             string cacheKey = (body == null ? string.Empty : body.name) + "|" +
                 (body == null ? 0.0 : body.Radius).ToString("R",
                     CultureInfo.InvariantCulture) + "|" +
-                (body != null && body.ocean ? "1" : "0") + "|" + GameDataHash;
+                (body != null && body.ocean ? "1" : "0") + "|" + gameDataHash;
             lock (environmentSync)
             {
                 string cached;
                 if (cachedBodyEnvironmentHashes.TryGetValue(cacheKey, out cached))
                     return cached;
             }
+
             var builder = new System.Text.StringBuilder(4096);
+            builder.Append("AERIS_TERRAIN_ENV2_STABLE|");
             builder.Append(AERISTerrainTileFormat.Version).Append('|');
             builder.Append(AERISTerrainPreloadFormat.DatabaseFormatVersion).Append('|');
+            builder.Append(gameDataHash).Append('|');
             builder.Append(body == null ? string.Empty : body.name).Append('|');
             builder.Append((body == null ? 0.0 : body.Radius).ToString("R",
                 CultureInfo.InvariantCulture)).Append('|');
             builder.Append(body != null && body.ocean ? "1" : "0").Append('|');
-            AppendPqsConfigurationFingerprint(builder, body);
+            AppendStablePqsTopologyFingerprint(builder, body);
+
             string result = AERISTerrainHash.Fnv1A64Hex(builder.ToString());
             lock (environmentSync) cachedBodyEnvironmentHashes[cacheKey] = result;
             return result;
         }
 
-        static void AppendPqsConfigurationFingerprint(System.Text.StringBuilder builder,
-            CelestialBody body)
+        static void AppendStablePqsTopologyFingerprint(
+            System.Text.StringBuilder builder, CelestialBody body)
         {
             if (builder == null || body == null) return;
             try
             {
                 FieldInfo field = body.GetType().GetField("pqsController",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    BindingFlags.Instance | BindingFlags.Public |
+                    BindingFlags.NonPublic);
                 PropertyInfo property = body.GetType().GetProperty("pqsController",
-                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    BindingFlags.Instance | BindingFlags.Public |
+                    BindingFlags.NonPublic);
                 object pqs = field != null ? field.GetValue(body) :
                     property == null ? null : property.GetValue(body, null);
-                if (pqs == null) return;
-                builder.Append(pqs.GetType().AssemblyQualifiedName).Append('|');
-                AppendStablePrimitiveMembers(builder, pqs, 96);
+                if (pqs == null)
+                {
+                    builder.Append("PQS:<null>|");
+                    return;
+                }
+
+                AppendStableTypeIdentity(builder, "PQS", pqs.GetType());
                 object mods = ReadMemberValue(pqs, "mods");
-                System.Collections.IEnumerable enumerable = mods as System.Collections.IEnumerable;
-                if (enumerable == null) return;
+                System.Collections.IEnumerable enumerable =
+                    mods as System.Collections.IEnumerable;
+                if (enumerable == null)
+                {
+                    builder.Append("MODS:<null>|");
+                    return;
+                }
+
                 int count = 0;
                 foreach (object mod in enumerable)
                 {
-                    if (mod == null || count++ >= 128) break;
-                    builder.Append("MOD:").Append(mod.GetType().AssemblyQualifiedName).Append('|');
-                    AppendStablePrimitiveMembers(builder, mod, 64);
+                    if (mod == null) continue;
+                    if (count >= 256)
+                    {
+                        builder.Append("MODS:TRUNCATED|");
+                        break;
+                    }
+                    AppendStableTypeIdentity(builder, "MOD", mod.GetType());
+                    count++;
                 }
+                builder.Append("MODCOUNT=").Append(count).Append('|');
             }
             catch (Exception ex)
             {
-                builder.Append("PQS_HASH_ERROR:").Append(ex.GetType().FullName).Append('|');
+                builder.Append("PQS_TOPOLOGY_ERROR:")
+                    .Append(ex.GetType().FullName).Append('|');
+            }
+        }
+
+        static void AppendStableTypeIdentity(System.Text.StringBuilder builder,
+            string role, Type type)
+        {
+            if (builder == null) return;
+            builder.Append(role ?? string.Empty).Append(':');
+            if (type == null)
+            {
+                builder.Append("<null>|");
+                return;
+            }
+
+            builder.Append(type.AssemblyQualifiedName ?? type.FullName ??
+                type.Name ?? string.Empty).Append('|');
+            try
+            {
+                Module module = type.Module;
+                builder.Append("MVID=")
+                    .Append(module == null ? Guid.Empty.ToString("D") :
+                        module.ModuleVersionId.ToString("D"))
+                    .Append('|');
+            }
+            catch
+            {
+                builder.Append("MVID=<unavailable>|");
             }
         }
 
