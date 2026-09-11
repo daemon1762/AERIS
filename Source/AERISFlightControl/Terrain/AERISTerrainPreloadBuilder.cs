@@ -2313,7 +2313,7 @@ namespace AERISFlightControl.Terrain
                     "[AERIS44][R043_PRELOAD_ENV_OBSERVED]" +
                     "; body=" + R044Safe(body == null ? string.Empty : body.name) +
                     "; game_data_hash=" + R044Safe(AERISTerrainTileSystem.GameDataHash) +
-                    "; environment_contract=ENV2_STABLE" +
+                    "; environment_contract=ENV3_TERRAIN_CFG_PQS" +
                     "; persisted_environment=" + R044Safe(plan == null ? string.Empty : plan.EnvironmentHash) +
                     "; live_environment=" + R044Safe(environment) +
                     "; environment_match=" +
@@ -2343,10 +2343,10 @@ namespace AERISFlightControl.Terrain
                 "[AERIS44][R043_PRELOAD_ENV_TRANSITION]" +
                 "; body=" + R044Safe(body == null ? string.Empty : body.name) +
                 "; game_data_hash=" + R044Safe(AERISTerrainTileSystem.GameDataHash) +
-                "; environment_contract=ENV2_STABLE" +
+                "; environment_contract=ENV3_TERRAIN_CFG_PQS" +
                 "; previous_environment=" + R044Safe(previousEnvironment) +
                 "; new_environment=" + R044Safe(environment) +
-                "; action=RESET_SCAN_AND_SCHEDULE_DB_INVALIDATION" +
+                "; action=RESET_SCAN_PRESERVE_OLD_DB" +
                 "; previous_global_cursor=" +
                     plan.GlobalCursor.ToString(CultureInfo.InvariantCulture) +
                 "; previous_far_cursor=" +
@@ -2367,19 +2367,19 @@ namespace AERISFlightControl.Terrain
             string validationKey = body.name + "|" + environment;
             if (validatedEnvironments.Contains(validationKey)) return;
             validatedEnvironments.Add(validationKey);
-            ScheduleEnvironmentInvalidation(body.name, environment);
-        }
 
-        void ScheduleEnvironmentInvalidation(string bodyName, string environmentHash)
-        {
-            if (database == null) return;
-            AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
-            if (runtime == null) return;
-            runtime.Scheduler.SubmitLatest(AERISRuntimeLane.ArchiveCompression,
-                "preload-environment:" + bodyName, runtime.CaptureStamp(), context =>
-                {
-                    return database.InvalidateBodyEnvironment(bodyName, environmentHash);
-                }, value => { }, false);
+            // AERIS46 ENV3 safety contract: an environment transition may reset
+            // scan/completion state, but it must never destroy the prior
+            // environment automatically. Stable IDs already segregate
+            // environments, so old chunks remain recoverable until an explicit
+            // maintenance/rebuild operation removes them.
+            AERISLogger.Warn(
+                "[AERIS46][R043_PRELOAD_ENV_OLD_DB_PRESERVED]" +
+                "; body=" + R044Safe(body.name) +
+                "; previous_environment=" + R044Safe(previousEnvironment) +
+                "; new_environment=" + R044Safe(environment) +
+                "; automatic_db_invalidation=false" +
+                "; old_environment_chunks_preserved=true");
         }
 
         void ScheduleIndexRecovery()
@@ -3229,7 +3229,7 @@ namespace AERISFlightControl.Terrain
                     "; plans=" +
                     (snapshot == null ? 0 : snapshot.Count)
                         .ToString(CultureInfo.InvariantCulture) +
-                    "; environment_contract=ENV2_STABLE");
+                    "; environment_contract=ENV3_TERRAIN_CFG_PQS");
 
                 if (snapshot == null) return;
                 for (int i = 0; i < snapshot.Count; i++)
