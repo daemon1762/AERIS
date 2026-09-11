@@ -2949,43 +2949,68 @@ namespace AERISFlightControl.Terrain
 
         static string ComputeGameDataHash(string applicationRoot)
         {
-            var builder = new System.Text.StringBuilder(256);
-            builder.Append("PRELOAD_DB_")
+            // ENV3: terrain identity must not depend on unrelated GameData config
+            // churn. ModuleManager.ConfigSHA describes the entire GameData tree,
+            // so a weapon/part/UI config edit used to invalidate every body's
+            // terrain preload. Hash only configs that can plausibly alter the
+            // celestial/PQS terrain authority; the live PQS topology is appended
+            // separately by EnvironmentHashForBody().
+            var builder = new System.Text.StringBuilder(4096);
+            builder.Append("PRELOAD_TERRAIN_CFG_")
                 .Append(AERISTerrainPreloadFormat.DatabaseFormatVersion).Append('|');
             try
             {
                 string gameData = Path.Combine(applicationRoot ?? string.Empty,
                     "GameData");
-                string configSha = Path.Combine(gameData, "ModuleManager.ConfigSHA");
-                if (File.Exists(configSha))
+                string[] files = Directory.Exists(gameData) ?
+                    Directory.GetFiles(gameData, "*.cfg",
+                        SearchOption.AllDirectories) : new string[0];
+                Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+
+                int relevant = 0;
+                for (int i = 0; i < files.Length; i++)
                 {
-                    string text = File.ReadAllText(configSha);
-                    builder.Append(text.Length).Append('|')
-                        .Append(AERISTerrainHash.Fnv1A64Hex(text));
+                    string relative = files[i].StartsWith(gameData,
+                        StringComparison.OrdinalIgnoreCase) ?
+                        files[i].Substring(gameData.Length) : files[i];
+                    string text = File.ReadAllText(files[i]);
+                    if (!IsTerrainRelevantConfig(relative, text)) continue;
+
+                    builder.Append(relative).Append('|').Append(text.Length)
+                        .Append('|').Append(AERISTerrainHash.Fnv1A64Hex(text))
+                        .Append(';');
+                    relevant++;
                 }
-                else
-                {
-                    string[] files = Directory.Exists(gameData) ?
-                        Directory.GetFiles(gameData, "*.cfg",
-                            SearchOption.AllDirectories) : new string[0];
-                    Array.Sort(files, StringComparer.OrdinalIgnoreCase);
-                    for (int i = 0; i < files.Length; i++)
-                    {
-                        string relative = files[i].StartsWith(gameData,
-                            StringComparison.OrdinalIgnoreCase) ?
-                            files[i].Substring(gameData.Length) : files[i];
-                        string text = File.ReadAllText(files[i]);
-                        builder.Append(relative).Append('|').Append(text.Length)
-                            .Append('|').Append(AERISTerrainHash.Fnv1A64Hex(text))
-                            .Append(';');
-                    }
-                }
+                builder.Append("COUNT=").Append(relevant).Append('|');
             }
             catch (Exception ex)
             {
                 builder.Append("UNKNOWN|").Append(ex.GetType().FullName);
             }
             return AERISTerrainHash.Fnv1A64Hex(builder.ToString());
+        }
+
+        static bool IsTerrainRelevantConfig(string relativePath, string text)
+        {
+            string path = (relativePath ?? string.Empty).Replace('\\', '/');
+            if (path.IndexOf("Kopernicus", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+            if (string.IsNullOrEmpty(text)) return false;
+
+            return text.IndexOf("PQS", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("PQSMod_", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("Kopernicus", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("VertexHeight", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("VertexSimplex", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("VertexVoronoi", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("LandControl", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("MapDecal", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("FlattenArea", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("FlattenOcean", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("HeightMap", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("@Body[", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("%Body[", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("+Body[", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         internal static string EnvironmentHashForBody(CelestialBody body)
@@ -3004,7 +3029,7 @@ namespace AERISFlightControl.Terrain
             }
 
             var builder = new System.Text.StringBuilder(4096);
-            builder.Append("AERIS_TERRAIN_ENV2_STABLE|");
+            builder.Append("AERIS_TERRAIN_ENV3_TERRAIN_CFG_PQS|");
             builder.Append(AERISTerrainTileFormat.Version).Append('|');
             builder.Append(AERISTerrainPreloadFormat.DatabaseFormatVersion).Append('|');
             builder.Append(gameDataHash).Append('|');
