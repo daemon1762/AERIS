@@ -274,28 +274,47 @@ EOFSTATE
 
 harvest_restart(){
   local off="$1"
-  local seg body state_line env_line first_env persisted completed coast_env auto coast live match failures
+  local seg parsed body row env_line first_env persisted completed coast_env auto coast live match failures
   seg="$(mktemp /tmp/AERIS45_RESTART.XXXXXX)"
+  parsed="$(mktemp /tmp/AERIS45_RESTART_STATE.XXXXXX)"
   segment_from_offset "$off" "$seg"
   failures=0
 
+  if [[ ! -f "$PRELOAD_STATE" ]]; then
+    rm -f "$seg" "$parsed"
+    echo "AERIS_CURRENT_STAGE=POST_REBUILD_RESTART_FAIL"
+    echo "reason=preload_state_missing_after_restart"
+    exit 41
+  fi
+
+  if ! parse_preload_state "$PRELOAD_STATE" "$parsed"; then
+    rm -f "$seg" "$parsed"
+    echo "AERIS_CURRENT_STAGE=POST_REBUILD_RESTART_FAIL"
+    echo "reason=preload_state_parse_failed_after_restart"
+    exit 41
+  fi
+
   echo "=== AERIS45 POST-REBUILD RESTART VERIFY ==="
+  echo "persistence_authority=preload_state.aps"
+  grep -E '^(STATE_VERSION|PLAN_COUNT)' "$parsed" || true
+
   for body in "${BODIES[@]}"; do
-    state_line="$(latest_state_body "$seg" "$body")"
+    row="$(awk -F '\t' -v b="$body" '$1=="BODY" && $2==b {print; exit}' "$parsed")"
     env_line="$(latest_env_body "$seg" "$body")"
     first_env="$(grep -m1 "^$body=" "$FINAL_HASHES" | cut -d= -f2-)"
 
-    if [[ -z "$state_line" || -z "$env_line" || -z "$first_env" ]]; then
-      echo "FAIL body=$body reason=missing_restart_witness"
+    if [[ -z "$row" || -z "$env_line" || -z "$first_env" ]]; then
+      echo "FAIL body=$body reason=missing_restart_witness state_row=$([[ -n "$row" ]] && echo true || echo false) env_log=$([[ -n "$env_line" ]] && echo true || echo false) baseline=$([[ -n "$first_env" ]] && echo true || echo false)"
       failures=$((failures+1))
       continue
     fi
 
-    persisted="$(field_value "$state_line" persisted_environment)"
-    completed="$(field_value "$state_line" completed_environment)"
-    coast_env="$(field_value "$state_line" coastline_environment)"
-    auto="$(field_value "$state_line" automatic_complete)"
-    coast="$(field_value "$state_line" coastline_complete)"
+    persisted="$(printf '%s\n' "$row" | cut -f3)"
+    auto="$(printf '%s\n' "$row" | cut -f4)"
+    completed="$(printf '%s\n' "$row" | cut -f5)"
+    coast="$(printf '%s\n' "$row" | cut -f7)"
+    coast_env="$(printf '%s\n' "$row" | cut -f8)"
+
     live="$(field_value "$env_line" live_environment)"
     match="$(field_value "$env_line" environment_match)"
 
@@ -322,7 +341,7 @@ harvest_restart(){
   after_bytes="$(du -sb "$DB" 2>/dev/null | awk '{print $1}' || echo 0)"
   after_files="$(find "$DB" -type f 2>/dev/null | wc -l | tr -d ' ')"
 
-  rm -f "$seg"
+  rm -f "$seg" "$parsed"
 
   if (( failures != 0 )); then
     echo "AERIS_CURRENT_STAGE=POST_REBUILD_RESTART_FAIL"
