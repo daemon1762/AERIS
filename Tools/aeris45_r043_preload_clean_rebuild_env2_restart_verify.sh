@@ -22,6 +22,7 @@ GAME_DATA="$KSP/GameData/AERISFlightControl"
 TARGET="$GAME_DATA/Plugins/AERISFlightControl.dll"
 LOG="$GAME_DATA/Logs/AERISFlightControl.log"
 DB="$GAME_DATA/PluginData/TerrainPreloadDatabaseV3"
+PRELOAD_STATE="$DB/preload_state.aps"
 
 KEY="$(printf '%s' "$KSP" | sha256sum | awk '{print substr($1,1,16)}')"
 STATE_DIR="$HOME/.cache/AERIS/r045-clean-rebuild/$KEY"
@@ -70,28 +71,153 @@ segment_from_offset(){
   if (( current >= off )); then tail -c +"$start" "$LOG" > "$out"; else cp "$LOG" "$out"; fi
 }
 
+parse_preload_state(){
+  local input="$1" output="$2"
+  python3 - "$input" "$output" <<'PY'
+import struct, sys
+
+src, dst = sys.argv[1], sys.argv[2]
+
+class Reader:
+    def __init__(self, data):
+        self.data = data
+        self.p = 0
+    def take(self, n):
+        if n < 0 or self.p + n > len(self.data):
+            raise ValueError("truncated preload state")
+        out = self.data[self.p:self.p+n]
+        self.p += n
+        return out
+    def u8(self):
+        return self.take(1)[0]
+    def i32(self):
+        return struct.unpack("<i", self.take(4))[0]
+    def i64(self):
+        return struct.unpack("<q", self.take(8))[0]
+    def boolean(self):
+        return self.u8() != 0
+    def seven(self):
+        value = 0
+        shift = 0
+        for _ in range(5):
+            b = self.u8()
+            value |= (b & 0x7f) << shift
+            if (b & 0x80) == 0:
+                return value
+            shift += 7
+        raise ValueError("invalid 7-bit length")
+    def string(self):
+        n = self.seven()
+        return self.take(n).decode("utf-8")
+
+data = open(src, "rb").read()
+r = Reader(data)
+magic = r.string()
+if magic != "AERIS_PRELOAD_TERRAIN_STATE_V2":
+    raise SystemExit("bad state magic: " + repr(magic))
+version = r.i32()
+if version not in (4,5,6):
+    raise SystemExit("unsupported state version: %d" % version)
+mode = r.i32()
+if version >= 5:
+    applied_point_signature = r.string()
+else:
+    applied_point_signature = ""
+count = r.i32()
+if count < 0 or count > 10000:
+    raise SystemExit("invalid plan count: %d" % count)
+
+rows = []
+for _ in range(count):
+    body = r.string()
+    priority = r.i32()
+    priority_override = r.boolean()
+    quality_limit = r.i32()
+    quality_override = r.boolean()
+    auto_point_only = r.boolean()
+    automatic_complete = r.boolean()
+    completed_quality = r.i32()
+    completed_point_only = r.boolean()
+    completed_environment = r.string()
+    storage_limit = r.i64()
+    last_visited = r.i64()
+    global_cursor = r.i64()
+    far_cursor = r.i64()
+    route_cursor = r.i64()
+    point_cursor = r.i32()
+    environment = r.string()
+    paused = r.boolean()
+    coastline_cursor = r.i64()
+    coastline_complete = r.boolean()
+    coastline_format = r.i32()
+    coastline_environment = r.string()
+
+    if version >= 6:
+        coast_radius_mm = r.i64()
+        coast_terrain_version = r.i32()
+        coast_format_version = r.i32()
+        coast_progress_environment = r.string()
+        coast_lat_tiles = r.i32()
+        coast_lon_tiles = r.i32()
+        bitmap_len = r.i32()
+        if bitmap_len < 0 or bitmap_len > 1024 * 1024:
+            raise SystemExit("invalid coastline bitmap length for %s" % body)
+        r.take(bitmap_len)
+
+    rows.append((
+        body, environment, "true" if automatic_complete else "false",
+        completed_environment, str(completed_quality),
+        "true" if coastline_complete else "false",
+        coastline_environment, str(global_cursor), str(far_cursor),
+        str(route_cursor), str(point_cursor), str(coastline_cursor)
+    ))
+
+with open(dst, "w", encoding="utf-8") as out:
+    out.write("STATE_VERSION\t%d\n" % version)
+    out.write("PLAN_COUNT\t%d\n" % count)
+    for row in rows:
+        out.write("BODY\t" + "\t".join(row) + "\n")
+PY
+}
+
 harvest_rebuild(){
   local off="$1"
-  local seg current body line env completed coast_env auto coast incomplete
-  seg="$(mktemp /tmp/AERIS45_REBUILD.XXXXXX)"
-  segment_from_offset "$off" "$seg"
-  current="$(stat -c %s "$LOG")"
+  local parsed body row env auto completed coast coast_env incomplete
+  parsed="$(mktemp /tmp/AERIS45_STATE.XXXXXX)"
+
+  if [[ ! -f "$PRELOAD_STATE" ]]; then
+    rm -f "$parsed"
+    echo "AERIS_CURRENT_STAGE=REBUILD_INCOMPLETE"
+    echo "reason=preload_state_missing"
+    echo "human_action=Launch KSP and continue Automatic Preload, then exit cleanly and run the same command again."
+    return 0
+  fi
+
+  if ! parse_preload_state "$PRELOAD_STATE" "$parsed"; then
+    rm -f "$parsed"
+    echo "AERIS_CURRENT_STAGE=REBUILD_STATE_PARSE_FAIL"
+    echo "state=$PRELOAD_STATE"
+    exit 40
+  fi
+
+  echo "=== AERIS45 CLEAN REBUILD PERSISTED STATE CHECK ==="
+  grep -E '^(STATE_VERSION|PLAN_COUNT)' "$parsed" || true
+
   incomplete=0
   : > "$FINAL_HASHES"
-
-  echo "=== AERIS45 CLEAN REBUILD COMPLETION CHECK ==="
   for body in "${BODIES[@]}"; do
-    line="$(latest_final_body "$seg" "$body")"
-    if [[ -z "$line" ]]; then
-      echo "WAIT body=$body reason=no_final_shutdown_snapshot"
+    row="$(awk -F '\t' -v b="$body" '$1=="BODY" && $2==b {print; exit}' "$parsed")"
+    if [[ -z "$row" ]]; then
+      echo "WAIT body=$body reason=missing_persisted_plan"
       incomplete=$((incomplete+1))
       continue
     fi
-    env="$(field_value "$line" environment)"
-    completed="$(field_value "$line" completed_environment)"
-    coast_env="$(field_value "$line" coastline_environment)"
-    auto="$(field_value "$line" automatic_complete)"
-    coast="$(field_value "$line" coastline_complete)"
+
+    env="$(printf '%s\n' "$row" | cut -f3)"
+    auto="$(printf '%s\n' "$row" | cut -f4)"
+    completed="$(printf '%s\n' "$row" | cut -f5)"
+    coast="$(printf '%s\n' "$row" | cut -f7)"
+    coast_env="$(printf '%s\n' "$row" | cut -f8)"
 
     if [[ "$auto" != "true" || "$coast" != "true" ||
           -z "$env" || "$completed" != "$env" || "$coast_env" != "$env" ]]; then
@@ -99,22 +225,29 @@ harvest_rebuild(){
       incomplete=$((incomplete+1))
       continue
     fi
+
     printf '%s=%s\n' "$body" "$env" >> "$FINAL_HASHES"
     echo "PASS body=$body environment=$env"
   done
 
+  rm -f "$parsed"
+
   if (( incomplete != 0 )); then
-    rm -f "$seg" "$FINAL_HASHES"
+    rm -f "$FINAL_HASHES"
     echo "AERIS_CURRENT_STAGE=REBUILD_INCOMPLETE"
     echo "incomplete_bodies=$incomplete"
-    echo "human_action=Launch KSP and leave Main Menu Automatic Preload running until every body reaches 100 percent. Exit KSP cleanly, then run the same command again."
+    echo "human_action=Continue Main Menu Automatic Preload until all reported bodies complete, exit KSP cleanly, then run the same command again."
     return 0
   fi
 
-  local transitions
+  local current transitions db_bytes db_files
+  current="$(stat -c %s "$LOG")"
+  local seg
+  seg="$(mktemp /tmp/AERIS45_REBUILD_LOG.XXXXXX)"
+  segment_from_offset "$off" "$seg"
   transitions="$(awk '/\\[AERIS44\\]\\[R043_PRELOAD_ENV_TRANSITION\\]/ && /environment_contract=ENV2_STABLE/ { c++ } END { print c+0 }' "$seg")"
+  rm -f "$seg"
 
-  local db_bytes db_files
   db_bytes="$(du -sb "$DB" 2>/dev/null | awk '{print $1}' || echo 0)"
   db_files="$(find "$DB" -type f 2>/dev/null | wc -l | tr -d ' ')"
 
@@ -128,9 +261,9 @@ db_bytes=$db_bytes
 db_files=$db_files
 EOFSTATE
   mv "$STATE.tmp" "$STATE"
-  rm -f "$seg"
 
   echo "=== AERIS45 CLEAN REBUILD COMPLETE ==="
+  echo "completion_authority=preload_state.aps"
   echo "bodies=${#BODIES[@]}"
   echo "environment_transitions_during_rebuild=$transitions"
   echo "db_bytes=$db_bytes"
@@ -250,7 +383,14 @@ if [[ -f "$STATE" && -f "$TARGET" && -f "$LOG" ]]; then
   RECORDED_HEAD="$(state_value head || true)"
   RECORDED_SHA="$(state_value dll_sha || true)"
   PHASE="$(state_value phase || true)"
-  if [[ "$RECORDED_HEAD" = "$HEAD_SHA" &&
+  SOURCE_COMPATIBLE=false
+  if [[ "$RECORDED_HEAD" = "$HEAD_SHA" ]]; then
+    SOURCE_COMPATIBLE=true
+  elif [[ -n "$RECORDED_HEAD" ]] &&
+       git diff --quiet "$RECORDED_HEAD" HEAD -- Source/AERISFlightControl; then
+    SOURCE_COMPATIBLE=true
+  fi
+  if [[ "$SOURCE_COMPATIBLE" = "true" &&
         -n "$RECORDED_SHA" &&
         "$(sha256sum "$TARGET" | awk '{print $1}')" = "$RECORDED_SHA" ]]; then
     if pgrep -f "$KSP/KSP.x86_64" >/dev/null 2>&1; then
