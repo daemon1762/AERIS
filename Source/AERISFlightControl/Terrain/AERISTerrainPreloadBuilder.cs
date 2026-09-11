@@ -13,7 +13,7 @@ namespace AERISFlightControl.Terrain
     // Non-Flight terrain producer. It owns no thread: PQS sampling is a bounded main-thread
     // input stage, block processing uses GeneralCompute, and compression/commit uses the
     // existing ArchiveCompression lane so Flight reads always win the I/O arbitration.
-    internal sealed class AERISTerrainPreloadBuilder : IDisposable
+    internal sealed partial class AERISTerrainPreloadBuilder : IDisposable
     {
         sealed class BodyPlan
         {
@@ -1822,6 +1822,7 @@ namespace AERISFlightControl.Terrain
                         lock (sync)
                             for (int i = 0; i < payload.StableIds.Length; i++)
                                 pendingWrites.Remove(payload.StableIds[i]);
+                        R043NoteDurableBatch(payload);
                         CommitDurableCoastlineMarkers(
                             payload.CoastlineCommitMarkers);
                         long bytes = (long)result[1];
