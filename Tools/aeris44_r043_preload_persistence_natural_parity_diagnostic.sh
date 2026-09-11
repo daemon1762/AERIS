@@ -108,19 +108,28 @@ harvest(){
   start=$((off+1))
   if (( current >= off )); then tail -c +"$start" "$LOG" > "$seg"; else cp "$LOG" "$seg"; fi
 
-  local identity state_load env mismatch transition
+  local identity state_load env mismatch transition kerbin_tile
+  local kerbin_tiles kerbin_failures kerbin_passes
   identity="$(grep -F '[AERIS43][R043_BUILD_IDENTITY]' "$seg" | tail -n1 || true)"
   state_load="$(grep -F '[AERIS44][R043_PRELOAD_STATE_LOAD]' "$seg" | tail -n1 || true)"
   env="$(grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$seg" | grep -F '; body=Kerbin;' | tail -n1 || true)"
   transition="$(grep -F '[AERIS44][R043_PRELOAD_ENV_TRANSITION]' "$seg" | tail -n1 || true)"
+  kerbin_tile="$(grep -F '[AERIS43][R043_PRELOAD_PTC_INTEGRATED_TILE]' "$seg" |
+    grep -F '; body=Kerbin;' | head -n1 || true)"
   mismatch="$(grep -F '[AERIS43][R043_PRELOAD_PTC_INTEGRATED_TILE]' "$seg" |
     grep -F '; body=Kerbin;' | grep -F '; pass=false;' |
     grep -F 'first_mismatch_index=' | head -n1 || true)"
+  kerbin_tiles="$( (grep -F '[AERIS43][R043_PRELOAD_PTC_INTEGRATED_TILE]' "$seg" || true) |
+    grep -F '; body=Kerbin;' | wc -l | tr -d ' ' )"
+  kerbin_failures="$( (grep -F '[AERIS43][R043_PRELOAD_PTC_INTEGRATED_TILE]' "$seg" || true) |
+    grep -F '; body=Kerbin;' | grep -F '; pass=false;' | wc -l | tr -d ' ' )"
+  kerbin_passes="$( (grep -F '[AERIS43][R043_PRELOAD_PTC_INTEGRATED_TILE]' "$seg" || true) |
+    grep -F '; body=Kerbin;' | grep -F '; pass=true;' | wc -l | tr -d ' ' )"
 
-  if [[ -z "$identity" || -z "$state_load" || -z "$env" || -z "$mismatch" ]]; then
+  if [[ -z "$identity" || -z "$state_load" || -z "$env" || -z "$kerbin_tile" ]]; then
     rm -f "$seg"
     echo "AERIS_CURRENT_STAGE=WAITING_FOR_DIAGNOSTIC_EVIDENCE"
-    echo "human_action=Launch KSP to Main Menu with Automatic Preload enabled. Wait until Kerbin preload advances and at least one natural parity mismatch is logged, then exit KSP and run the same command again."
+    echo "human_action=Launch KSP to Main Menu with Automatic Preload enabled. Wait until Kerbin preload advances, then exit KSP and run the same command again."
     return 0
   fi
 
@@ -135,12 +144,22 @@ harvest(){
   else
     echo "environment_transition_detected=false"
   fi
-  echo "=== FIRST KERBIN NATURAL PARITY FAILURE ==="
-  echo "$mismatch"
+  echo "kerbin_natural_tiles_logged=$kerbin_tiles"
+  echo "kerbin_natural_passes_logged=$kerbin_passes"
+  echo "kerbin_natural_failures_logged=$kerbin_failures"
+  if [[ -n "$mismatch" ]]; then
+    echo "natural_mismatch_reproduced=true"
+    echo "=== FIRST KERBIN NATURAL PARITY FAILURE ==="
+    echo "$mismatch"
+  else
+    echo "natural_mismatch_reproduced=false"
+    echo "=== FIRST KERBIN NATURAL PARITY SAMPLE ==="
+    echo "$kerbin_tile"
+  fi
   rm -f "$seg"
 
   echo "AERIS_CURRENT_STAGE=DIAGNOSTIC_CAPTURED"
-  echo "next=ANALYZE_PRELOAD_PERSISTENCE_AND_FIRST_NATURAL_MISMATCH"
+  echo "next=ANALYZE_PRELOAD_PERSISTENCE_AND_NATURAL_PARITY"
   return 0
 }
 
