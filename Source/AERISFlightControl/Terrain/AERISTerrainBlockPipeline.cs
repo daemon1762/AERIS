@@ -129,6 +129,10 @@ namespace AERISFlightControl.Terrain
             internal float Elevation;
             // Preserve the original PQS double for R040B exactness comparison.
             internal double AuthorityExactElevation;
+            // AERIS46 diagnostic provenance: exact geodetic input that produced
+            // AuthorityExactElevation. Observation-only; never used for tile output.
+            internal double SourceLatitude;
+            internal double SourceLongitude;
             internal byte Flag;
             internal long Sequence;
         }
@@ -648,7 +652,9 @@ namespace AERISFlightControl.Terrain
 
                     CaptureR043ShadowSample(
                         state, local, latitude, longitude,
-                        cached.AuthorityExactElevation);
+                        cached.AuthorityExactElevation,
+                        cached.SourceLatitude, cached.SourceLongitude,
+                        true);
 
                     state.SamplingIndex++;
                     return false;
@@ -668,14 +674,17 @@ namespace AERISFlightControl.Terrain
                     state.SamplingAuthorityExact[local] = elevation;
 
                 CaptureR043ShadowSample(
-                    state, local, latitude, longitude, elevation);
+                    state, local, latitude, longitude, elevation,
+                    latitude, longitude, false);
 
                 if (boundary)
                     PutBoundarySample(
                         cacheKey,
                         storedElevation,
                         elevation,
-                        flag);
+                        flag,
+                        latitude,
+                        longitude);
             }
             state.SamplingIndex++;
             return true;
@@ -700,7 +709,9 @@ namespace AERISFlightControl.Terrain
             BoundarySampleKey key,
             float elevation,
             double authorityExactElevation,
-            byte flag)
+            byte flag,
+            double sourceLatitude,
+            double sourceLongitude)
         {
             BoundarySampleValue existing;
             if (boundarySamples.TryGetValue(key, out existing)) return;
@@ -709,6 +720,8 @@ namespace AERISFlightControl.Terrain
             {
                 Elevation = elevation,
                 AuthorityExactElevation = authorityExactElevation,
+                SourceLatitude = sourceLatitude,
+                SourceLongitude = sourceLongitude,
                 Flag = flag,
                 Sequence = sequence
             };
