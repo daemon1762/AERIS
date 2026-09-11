@@ -72,6 +72,9 @@ grep -Fq 'AERISR046NaturalParityDiagnosticObserver' "$OBSERVER" || exit 22
 grep -Fq 'AERIS_TERRAIN_ENV3_TERRAIN_CFG_PQS'   "$PROJECT_DIR/Terrain/AERISTerrainTileSystem.cs" || exit 23
 grep -Fq 'automatic_db_invalidation=false'   "$PROJECT_DIR/Terrain/AERISTerrainPreloadBuilder.cs" || exit 24
 grep -Fq 'evaluationLatitude = boundaryCacheHit' "$SHADOW" || exit 25
+grep -Fq 'PRELOAD WAITING FOR TERRAIN ENVIRONMENT HASH'   "$PROJECT_DIR/Terrain/AERISTerrainPreloadBuilder.cs" || exit 26
+grep -Fq 'ENVIRONMENT_HASH_TIMEOUT' "$OBSERVER" || exit 27
+grep -Fq 'ENVIRONMENT_HASH_NOT_READY' "$PAIR" || exit 28
 
 HEAD_SHA="$(git rev-parse HEAD)"
 TREE_SHA256="$(git archive --format=tar HEAD | sha256sum | awk '{print $1}')"
