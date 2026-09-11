@@ -18,7 +18,7 @@ namespace AERISFlightControl.Terrain
     // rotated ND viewport authoritative and admits a complete Global/Far foundation
     // before any exact refinement or predictive work. Route/Local are transitional
     // exact bridges only; no ND-owned thread or unbounded queue is created here.
-    internal sealed class AERISTerrainTileSystem : IDisposable
+    internal sealed partial class AERISTerrainTileSystem : IDisposable
     {
         static readonly object environmentSync = new object();
         static string cachedGameDataHash = string.Empty;
