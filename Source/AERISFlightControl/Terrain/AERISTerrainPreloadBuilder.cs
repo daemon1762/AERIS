@@ -164,6 +164,7 @@ namespace AERISFlightControl.Terrain
             new HashSet<string>(StringComparer.Ordinal);
         readonly HashSet<string> r044EnvironmentObserved =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        bool r044LoadedStateSnapshotLogged;
         readonly Dictionary<string, AERISTerrainHeightTile> pendingCoastlineBaseTiles =
             new Dictionary<string, AERISTerrainHeightTile>(StringComparer.Ordinal);
         readonly string statePath;
@@ -248,7 +249,6 @@ namespace AERISFlightControl.Terrain
             statePath = Path.Combine(root, "preload_state.aps");
             stateTemporaryPath = statePath + ".tmp";
             LoadState();
-            LogR044LoadedStateSnapshot();
             // AERISSettings is the user-visible source of truth. The state file preserves
             // progress, but an older persisted mode must not override a newer CFG choice.
             mode = configuredMode;
@@ -2300,6 +2300,12 @@ namespace AERISFlightControl.Terrain
 
         void EnsureEnvironment(BodyPlan plan, CelestialBody body)
         {
+            if (!r044LoadedStateSnapshotLogged)
+            {
+                r044LoadedStateSnapshotLogged = true;
+                LogR044LoadedStateSnapshot();
+            }
+
             string environment = AERISTerrainTileSystem.EnvironmentHashForBody(body);
             if (r044EnvironmentObserved.Add(body == null ? string.Empty : body.name))
             {
