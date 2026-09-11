@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BRANCH="agent/aeris43-r043-preload-ptc-shadow-live-preload"
+BRANCH="agent/aeris44-r043-preload-persistence-natural-parity-diagnostic"
 REMOTE_URL="https://github.com/daemon1762/AERIS.git"
 MODE="${1:-auto}"
 
