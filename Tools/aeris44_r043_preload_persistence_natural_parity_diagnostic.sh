@@ -130,9 +130,21 @@ harvest(){
     grep -F '; body=Kerbin;' | grep -F '; pass=true;' | wc -l | tr -d ' ' )"
 
   if [[ -z "$identity" || -z "$state_load" || -z "$env" || -z "$kerbin_tile" ]]; then
+    echo "=== AERIS44 DIAGNOSTIC EVIDENCE STATUS ==="
+    echo "segment_bytes=$(wc -c < "$seg" | tr -d ' ')"
+    echo "identity_present=$([[ -n "$identity" ]] && echo true || echo false)"
+    echo "state_load_present=$([[ -n "$state_load" ]] && echo true || echo false)"
+    echo "kerbin_environment_present=$([[ -n "$env" ]] && echo true || echo false)"
+    echo "kerbin_natural_tile_present=$([[ -n "$kerbin_tile" ]] && echo true || echo false)"
+    echo "kerbin_natural_tiles_logged=$kerbin_tiles"
+    echo "kerbin_natural_passes_logged=$kerbin_passes"
+    echo "kerbin_natural_failures_logged=$kerbin_failures"
+    echo
+    echo "=== LATEST RELEVANT RUNTIME LINES ==="
+    (grep -E '\[AERIS44\]|\[AERIS43\]\[R043_BUILD_IDENTITY\]|\[AERIS43\]\[R043_PRELOAD_PTC_INTEGRATED_TILE\]' "$seg" || true) | tail -80
     rm -f "$seg"
-    echo "AERIS_CURRENT_STAGE=WAITING_FOR_DIAGNOSTIC_EVIDENCE"
-    echo "human_action=Launch KSP to Main Menu with Automatic Preload enabled. Wait until Kerbin preload advances, then exit KSP and run the same command again."
+    echo "AERIS_CURRENT_STAGE=DIAGNOSTIC_EVIDENCE_INCOMPLETE"
+    echo "human_action=Do not rebuild or delete Preload. Send this evidence-status output; it identifies exactly which runtime witness is missing."
     return 0
   fi
 
