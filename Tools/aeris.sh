@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BRANCH="agent/aeris44-r043-preload-environment-hash-stable-v2"
+BRANCH="agent/aeris45-r043-preload-clean-rebuild-env2-restart-verify"
 REMOTE_URL="https://github.com/daemon1762/AERIS.git"
 MODE="${1:-auto}"
 
