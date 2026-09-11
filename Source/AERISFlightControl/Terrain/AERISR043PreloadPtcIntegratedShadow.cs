@@ -54,6 +54,13 @@ namespace AERISFlightControl.Terrain
             internal double FirstZ;
             internal double FirstU;
             internal double FirstV;
+            internal int FirstBlockId = -1;
+            internal int FirstGlobalX = -1;
+            internal int FirstGlobalY = -1;
+            internal bool FirstBoundary;
+            internal bool FirstBoundaryCacheHit;
+            internal double FirstExpectedSourceLatitude;
+            internal double FirstExpectedSourceLongitude;
 
             internal double[] SamplingExpected;
             internal double[] SamplingX;
@@ -63,6 +70,9 @@ namespace AERISFlightControl.Terrain
             internal double[] SamplingV;
             internal double[] SamplingLatitude;
             internal double[] SamplingLongitude;
+            internal double[] SamplingExpectedSourceLatitude;
+            internal double[] SamplingExpectedSourceLongitude;
+            internal byte[] SamplingBoundaryCacheHit;
             internal byte[] SamplingActive;
         }
 
@@ -78,7 +88,15 @@ namespace AERISFlightControl.Terrain
             internal double[] V;
             internal double[] Latitude;
             internal double[] Longitude;
+            internal double[] ExpectedSourceLatitude;
+            internal double[] ExpectedSourceLongitude;
+            internal byte[] BoundaryCacheHit;
             internal byte[] Active;
+            internal int BlockId;
+            internal int BlockX0;
+            internal int BlockY0;
+            internal int BlockWidth;
+            internal int Resolution;
             internal int MainThreadId;
             internal int WorkerThreadId;
             internal int Samples;
@@ -99,6 +117,13 @@ namespace AERISFlightControl.Terrain
             internal double FirstZ;
             internal double FirstU;
             internal double FirstV;
+            internal int FirstBlockId = -1;
+            internal int FirstGlobalX = -1;
+            internal int FirstGlobalY = -1;
+            internal bool FirstBoundary;
+            internal bool FirstBoundaryCacheHit;
+            internal double FirstExpectedSourceLatitude;
+            internal double FirstExpectedSourceLongitude;
         }
 
         readonly Dictionary<string, AERISR042ExactCpuShadowRuntimeSnapshot>
@@ -248,6 +273,9 @@ namespace AERISFlightControl.Terrain
             shadow.SamplingV = new double[count];
             shadow.SamplingLatitude = new double[count];
             shadow.SamplingLongitude = new double[count];
+            shadow.SamplingExpectedSourceLatitude = new double[count];
+            shadow.SamplingExpectedSourceLongitude = new double[count];
+            shadow.SamplingBoundaryCacheHit = new byte[count];
             shadow.SamplingActive = new byte[count];
         }
 
@@ -256,7 +284,10 @@ namespace AERISFlightControl.Terrain
             int local,
             double latitude,
             double longitude,
-            double expectedAsl)
+            double expectedAsl,
+            double expectedSourceLatitude,
+            double expectedSourceLongitude,
+            bool boundaryCacheHit)
         {
             if (state == null || state.R043Shadow == null) return;
             R043ShadowTileState shadow = state.R043Shadow;
@@ -268,6 +299,9 @@ namespace AERISFlightControl.Terrain
                 shadow.SamplingV == null ||
                 shadow.SamplingLatitude == null ||
                 shadow.SamplingLongitude == null ||
+                shadow.SamplingExpectedSourceLatitude == null ||
+                shadow.SamplingExpectedSourceLongitude == null ||
+                shadow.SamplingBoundaryCacheHit == null ||
                 shadow.SamplingActive == null ||
                 local < 0 || local >= shadow.SamplingExpected.Length)
             {
@@ -302,6 +336,12 @@ namespace AERISFlightControl.Terrain
                 shadow.SamplingV[local] = mapV;
                 shadow.SamplingLatitude[local] = latitude;
                 shadow.SamplingLongitude[local] = longitude;
+                shadow.SamplingExpectedSourceLatitude[local] =
+                    expectedSourceLatitude;
+                shadow.SamplingExpectedSourceLongitude[local] =
+                    expectedSourceLongitude;
+                shadow.SamplingBoundaryCacheHit[local] =
+                    boundaryCacheHit ? (byte)1 : (byte)0;
                 shadow.SamplingActive[local] = 1;
             }
             catch (Exception ex)
@@ -327,7 +367,15 @@ namespace AERISFlightControl.Terrain
                 V = shadow.SamplingV,
                 Latitude = shadow.SamplingLatitude,
                 Longitude = shadow.SamplingLongitude,
+                ExpectedSourceLatitude = shadow.SamplingExpectedSourceLatitude,
+                ExpectedSourceLongitude = shadow.SamplingExpectedSourceLongitude,
+                BoundaryCacheHit = shadow.SamplingBoundaryCacheHit,
                 Active = shadow.SamplingActive,
+                BlockId = state.SamplingBlock == null ? -1 : state.SamplingBlock.Id,
+                BlockX0 = state.SamplingBlock == null ? -1 : state.SamplingBlock.X0,
+                BlockY0 = state.SamplingBlock == null ? -1 : state.SamplingBlock.Y0,
+                BlockWidth = state.SamplingBlock == null ? 0 : state.SamplingBlock.Width,
+                Resolution = state.Request == null ? 0 : state.Request.Resolution,
                 MainThreadId = shadow.Snapshot == null ?
                     0 : shadow.Snapshot.CaptureThreadId,
                 Error = shadow.Error
@@ -346,6 +394,9 @@ namespace AERISFlightControl.Terrain
             shadow.SamplingV = null;
             shadow.SamplingLatitude = null;
             shadow.SamplingLongitude = null;
+            shadow.SamplingExpectedSourceLatitude = null;
+            shadow.SamplingExpectedSourceLongitude = null;
+            shadow.SamplingBoundaryCacheHit = null;
             shadow.SamplingActive = null;
         }
 
@@ -367,6 +418,9 @@ namespace AERISFlightControl.Terrain
                     block.X == null || block.Y == null || block.Z == null ||
                     block.U == null || block.V == null ||
                     block.Latitude == null || block.Longitude == null ||
+                    block.ExpectedSourceLatitude == null ||
+                    block.ExpectedSourceLongitude == null ||
+                    block.BoundaryCacheHit == null ||
                     block.Active == null)
                     throw new InvalidOperationException("PAYLOAD_ARRAY_NULL");
 
@@ -378,6 +432,9 @@ namespace AERISFlightControl.Terrain
                     block.V.Length != count ||
                     block.Latitude.Length != count ||
                     block.Longitude.Length != count ||
+                    block.ExpectedSourceLatitude.Length != count ||
+                    block.ExpectedSourceLongitude.Length != count ||
+                    block.BoundaryCacheHit.Length != count ||
                     block.Active.Length != count)
                     throw new InvalidOperationException("PAYLOAD_ARRAY_LENGTH");
 
@@ -449,6 +506,27 @@ namespace AERISFlightControl.Terrain
                             block.FirstZ = block.Z[i];
                             block.FirstU = block.U[i];
                             block.FirstV = block.V[i];
+                            block.FirstBlockId = block.BlockId;
+                            int localX = block.BlockWidth > 0 ?
+                                i % block.BlockWidth : -1;
+                            int localY = block.BlockWidth > 0 ?
+                                i / block.BlockWidth : -1;
+                            block.FirstGlobalX = localX < 0 ?
+                                -1 : block.BlockX0 + localX;
+                            block.FirstGlobalY = localY < 0 ?
+                                -1 : block.BlockY0 + localY;
+                            block.FirstBoundary =
+                                block.Resolution > 0 &&
+                                (block.FirstGlobalX == 0 ||
+                                 block.FirstGlobalY == 0 ||
+                                 block.FirstGlobalX == block.Resolution - 1 ||
+                                 block.FirstGlobalY == block.Resolution - 1);
+                            block.FirstBoundaryCacheHit =
+                                block.BoundaryCacheHit[i] != 0;
+                            block.FirstExpectedSourceLatitude =
+                                block.ExpectedSourceLatitude[i];
+                            block.FirstExpectedSourceLongitude =
+                                block.ExpectedSourceLongitude[i];
                         }
                     }
                 }
@@ -490,6 +568,15 @@ namespace AERISFlightControl.Terrain
                 shadow.FirstZ = block.FirstZ;
                 shadow.FirstU = block.FirstU;
                 shadow.FirstV = block.FirstV;
+                shadow.FirstBlockId = block.FirstBlockId;
+                shadow.FirstGlobalX = block.FirstGlobalX;
+                shadow.FirstGlobalY = block.FirstGlobalY;
+                shadow.FirstBoundary = block.FirstBoundary;
+                shadow.FirstBoundaryCacheHit = block.FirstBoundaryCacheHit;
+                shadow.FirstExpectedSourceLatitude =
+                    block.FirstExpectedSourceLatitude;
+                shadow.FirstExpectedSourceLongitude =
+                    block.FirstExpectedSourceLongitude;
             }
             if (string.IsNullOrEmpty(shadow.Error) &&
                 !string.IsNullOrEmpty(block.Error))
@@ -565,6 +652,38 @@ namespace AERISFlightControl.Terrain
                     shadow.FirstU.ToString("R", CultureInfo.InvariantCulture) +
                 "; first_v=" +
                     shadow.FirstV.ToString("R", CultureInfo.InvariantCulture) +
+                "; first_block_id=" +
+                    shadow.FirstBlockId.ToString(CultureInfo.InvariantCulture) +
+                "; first_global_x=" +
+                    shadow.FirstGlobalX.ToString(CultureInfo.InvariantCulture) +
+                "; first_global_y=" +
+                    shadow.FirstGlobalY.ToString(CultureInfo.InvariantCulture) +
+                "; first_boundary=" +
+                    BoolR043(shadow.FirstBoundary) +
+                "; first_boundary_cache_hit=" +
+                    BoolR043(shadow.FirstBoundaryCacheHit) +
+                "; first_expected_source_lat=" +
+                    shadow.FirstExpectedSourceLatitude.ToString(
+                        "R", CultureInfo.InvariantCulture) +
+                "; first_expected_source_lon=" +
+                    shadow.FirstExpectedSourceLongitude.ToString(
+                        "R", CultureInfo.InvariantCulture) +
+                "; first_lat_bits=0x" +
+                    unchecked((ulong)BitConverter.DoubleToInt64Bits(
+                        shadow.FirstLatitude)).ToString(
+                            "x16", CultureInfo.InvariantCulture) +
+                "; first_lon_bits=0x" +
+                    unchecked((ulong)BitConverter.DoubleToInt64Bits(
+                        shadow.FirstLongitude)).ToString(
+                            "x16", CultureInfo.InvariantCulture) +
+                "; first_expected_source_lat_bits=0x" +
+                    unchecked((ulong)BitConverter.DoubleToInt64Bits(
+                        shadow.FirstExpectedSourceLatitude)).ToString(
+                            "x16", CultureInfo.InvariantCulture) +
+                "; first_expected_source_lon_bits=0x" +
+                    unchecked((ulong)BitConverter.DoubleToInt64Bits(
+                        shadow.FirstExpectedSourceLongitude)).ToString(
+                            "x16", CultureInfo.InvariantCulture) +
                 "; blocks=" +
                     shadow.Blocks.ToString(CultureInfo.InvariantCulture) +
                 "; worker_not_main=" +
