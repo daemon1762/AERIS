@@ -81,6 +81,23 @@ namespace AERISFlightControl.Terrain
             new HashSet<string>(StringComparer.Ordinal);
         readonly HashSet<string> r043NaturalBodiesReported =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        static readonly object r043LiveProofSync = new object();
+        static readonly HashSet<string> r043LiveProofStableIds =
+            new HashSet<string>(StringComparer.Ordinal);
+
+        internal static void R043RegisterLivePreloadProofStableId(string stableId)
+        {
+            if (string.IsNullOrEmpty(stableId)) return;
+            lock (r043LiveProofSync)
+                r043LiveProofStableIds.Add(stableId);
+        }
+
+        static bool IsR043LivePreloadProofStableId(string stableId)
+        {
+            if (string.IsNullOrEmpty(stableId)) return false;
+            lock (r043LiveProofSync)
+                return r043LiveProofStableIds.Contains(stableId);
+        }
 
         R043ShadowTileState TryCreateR043ShadowState(
             CelestialBody body,
@@ -415,7 +432,10 @@ namespace AERISFlightControl.Terrain
                 shadow.AllWorkersOffMainThread &&
                 string.IsNullOrEmpty(shadow.Error);
 
-            bool emit = shadow.ProofRequest || !pass ||
+            string stableId = state.Request.Key.StableId;
+            bool livePreloadProof =
+                IsR043LivePreloadProofStableId(stableId);
+            bool emit = shadow.ProofRequest || livePreloadProof || !pass ||
                 r043NaturalBodiesReported.Add(shadow.BodyName);
             if (!emit) return;
 
@@ -423,7 +443,9 @@ namespace AERISFlightControl.Terrain
                 "[AERIS43][R043_PRELOAD_PTC_INTEGRATED_TILE]" +
                 "; pass=" + BoolR043(pass) +
                 "; proof_request=" + BoolR043(shadow.ProofRequest) +
+                "; live_preload_proof=" + BoolR043(livePreloadProof) +
                 "; body=" + SafeR043(shadow.BodyName) +
+                "; stable_id=" + SafeR043(stableId) +
                 "; tile=" + SafeR043(state.Request.Key.FileStem) +
                 "; lod=" + state.Request.Key.Lod +
                 "; resolution=" +
