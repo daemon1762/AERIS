@@ -321,8 +321,18 @@ namespace AERISFlightControl.Terrain
                 if (state.Body == null)
                     throw new InvalidOperationException("BODY_NULL");
 
+                // AERIS46 natural-parity repair: on a boundary-cache hit,
+                // expectedAsl belongs to the exact source coordinate that first
+                // populated the cache entry. Evaluate the shadow at that same
+                // source coordinate rather than at the current rounded-key peer.
+                // Production sampling/tile output remain unchanged.
+                double evaluationLatitude = boundaryCacheHit ?
+                    expectedSourceLatitude : latitude;
+                double evaluationLongitude = boundaryCacheHit ?
+                    expectedSourceLongitude : longitude;
+
                 Vector3d inputDirection = state.Body.GetRelSurfaceNVector(
-                    latitude, longitude);
+                    evaluationLatitude, evaluationLongitude);
                 Vector3d direction = inputDirection.normalized;
 
                 if (!FiniteR043(direction.x) ||
