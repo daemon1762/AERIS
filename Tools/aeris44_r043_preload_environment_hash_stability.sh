@@ -90,8 +90,7 @@ harvest_first(){
   fi
 
   local transitions
-  transitions="$(grep -F '[AERIS44][R043_PRELOAD_ENV_TRANSITION]' "$seg" |
-    grep -F '; environment_contract=ENV2_STABLE;' | wc -l | tr -d ' ')"
+  transitions="$(awk '/\\[AERIS44\\]\\[R043_PRELOAD_ENV_TRANSITION\\]/ && /environment_contract=ENV2_STABLE/ { c++ } END { print c+0 }' "$seg")"
 
   echo "=== AERIS44 ENV2 FIRST LAUNCH CAPTURED ==="
   echo "game_data_hash=$gd"
@@ -153,8 +152,7 @@ harvest_second(){
   done
 
   local transitions
-  transitions="$(grep -F '[AERIS44][R043_PRELOAD_ENV_TRANSITION]' "$seg" |
-    grep -F '; environment_contract=ENV2_STABLE;' | wc -l | tr -d ' ')"
+  transitions="$(awk '/\\[AERIS44\\]\\[R043_PRELOAD_ENV_TRANSITION\\]/ && /environment_contract=ENV2_STABLE/ { c++ } END { print c+0 }' "$seg")"
   if [[ "$transitions" != "0" ]]; then
     echo "FAIL second_launch_environment_transitions=$transitions"
     failures=$((failures+1))
