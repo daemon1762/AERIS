@@ -215,10 +215,17 @@ namespace AERISFlightControl.Terrain
             }
 
             topology = Topology(mods);
-            if (!string.Equals(topology, expectedTopology, StringComparison.Ordinal))
+            string semanticTopology = SemanticTopology(mods);
+            string expectedSemanticTopology =
+                SemanticTopologyFromLegacyExpected(expectedTopology);
+            if (!string.Equals(
+                semanticTopology, expectedSemanticTopology,
+                StringComparison.Ordinal))
             {
                 failure = "R041_TOPOLOGY_MISMATCH:expected=" + expectedTopology +
-                    ":actual=" + topology;
+                    ":actual=" + topology +
+                    ":expected_semantic=" + expectedSemanticTopology +
+                    ":actual_semantic=" + semanticTopology;
                 return false;
             }
 
@@ -809,6 +816,39 @@ namespace AERISFlightControl.Terrain
                 parts[i] = mods[i].Index.ToString(CultureInfo.InvariantCulture) + ":" +
                     mods[i].ShortTypeName + "@" +
                     mods[i].Order.ToString(CultureInfo.InvariantCulture);
+            }
+            return string.Join(",", parts);
+        }
+
+        // R049: raw PQS modifier indices are diagnostic only. Non-height modifiers
+        // can be inserted into the runtime PQS list without changing the height callback
+        // chain. Exact certification therefore keys on the complete enabled height-chain
+        // sequence after the existing (order, raw-index) sort: type + order + relative
+        // position. Unknown/extra height callbacks, order changes, or same-order reorders
+        // still change this signature and fail closed.
+        static string SemanticTopology(List<ModRecord> mods)
+        {
+            if (mods == null || mods.Count == 0) return string.Empty;
+            var parts = new string[mods.Count];
+            for (int i = 0; i < mods.Count; i++)
+            {
+                parts[i] = mods[i].ShortTypeName + "@" +
+                    mods[i].Order.ToString(CultureInfo.InvariantCulture);
+            }
+            return string.Join(",", parts);
+        }
+
+        static string SemanticTopologyFromLegacyExpected(string topology)
+        {
+            if (string.IsNullOrEmpty(topology)) return string.Empty;
+            string[] raw = topology.Split(',');
+            var parts = new string[raw.Length];
+            for (int i = 0; i < raw.Length; i++)
+            {
+                string item = raw[i] ?? string.Empty;
+                int colon = item.IndexOf(':');
+                parts[i] = colon >= 0 && colon + 1 < item.Length ?
+                    item.Substring(colon + 1) : item;
             }
             return string.Join(",", parts);
         }
