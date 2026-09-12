@@ -76,9 +76,11 @@ harvest(){
     fi
   done
 
-  fallback_count="$(grep -F '[AERIS47][R043_EXACT_CPU_FALLBACK]' "$seg" | wc -l | tr -d ' ')"
-  env4_transitions="$(grep -F '[AERIS44][R043_PRELOAD_ENV_TRANSITION]' "$seg" |
-    grep -F '; environment_contract=ENV4_EXACTCPU_HYBRID;' | wc -l | tr -d ' ')"
+  fallback_count="$(grep -Fc '[AERIS47][R043_EXACT_CPU_FALLBACK]' "$seg" || true)"
+  env4_transitions="$(
+    grep -F '[AERIS44][R043_PRELOAD_ENV_TRANSITION]' "$seg" |
+    grep -Fc '; environment_contract=ENV4_EXACTCPU_HYBRID;' || true
+  )"
 
   echo "exact_selected_bodies=$exact_selected"
   echo "exact_db_write_bodies=$exact_tile_bodies"
