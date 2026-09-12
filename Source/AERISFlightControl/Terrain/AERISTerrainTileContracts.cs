@@ -197,6 +197,10 @@ namespace AERISFlightControl.Terrain
         internal string PqsConfigurationHash = string.Empty;
         internal string GameDataHash = string.Empty;
         internal long TerrainGenerationId;
+        // Runtime-only producer provenance. These fields are intentionally not serialized;
+        // the environment hash remains the persistent producer identity boundary.
+        internal bool RuntimeExactCpuPolicyExpected;
+        internal bool RuntimeExactCpuProduced;
         // CP3.75 Candidate7: coastal tiles carry a high-density boundary authority.
         // Coordinates are normalized tile-local x/y segment pairs (x0,y0,x1,y1...).
         // The 33x33/17x17 height field remains the elevation/contour authority; the
@@ -242,6 +246,8 @@ namespace AERISFlightControl.Terrain
                 PqsConfigurationHash = PqsConfigurationHash ?? string.Empty,
                 GameDataHash = GameDataHash ?? string.Empty,
                 TerrainGenerationId = TerrainGenerationId,
+                RuntimeExactCpuPolicyExpected = RuntimeExactCpuPolicyExpected,
+                RuntimeExactCpuProduced = RuntimeExactCpuProduced,
                 HighDensityCoastlineResolution = HighDensityCoastlineResolution,
                 HighDensityCoastlineSegments = HighDensityCoastlineSegments == null ? null :
                     (float[])HighDensityCoastlineSegments.Clone(),
