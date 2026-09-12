@@ -152,6 +152,7 @@ namespace AERISFlightControl.Terrain
             internal string PqsHash = string.Empty;
             internal string GameDataHash = string.Empty;
             internal long TerrainGenerationId;
+            internal bool ExactCpuPolicyExpected;
             internal float[] Elevation;
             internal byte[] Flags;
             internal BlockDefinition[] Blocks;
@@ -174,7 +175,8 @@ namespace AERISFlightControl.Terrain
             internal string R040BShadowError = string.Empty;
             internal int R040BDiagnosticSamplesEmitted;
 
-            // R043 PRELOAD_PTC: only populated for PreloadBuilder-owned certified bodies.
+            // R043 PTC shared production state for certified persistent producers.
+            // Both PreloadBuilder and FlightFallback can carry Exact CPU authority.
             internal R043PtcTileState R043Ptc;
 
             internal int Valid;
@@ -308,6 +310,8 @@ namespace AERISFlightControl.Terrain
             AERISR039MinmusPureCpuExact.VertexPlanetSnapshot r040bSnapshot = null;
             TryGetR040BMinmusSnapshot(body, out r040bSnapshot);
 
+            bool exactCpuPolicyExpected =
+                R047ExactCpuPolicyExpected(body);
             R043PtcTileState r043Ptc =
                 TryCreateR043PtcState(body, request, pqsHash);
 
@@ -346,6 +350,7 @@ namespace AERISFlightControl.Terrain
                     PqsHash = pqsHash ?? string.Empty,
                     GameDataHash = gameDataHash ?? string.Empty,
                     TerrainGenerationId = terrainGenerationId,
+                    ExactCpuPolicyExpected = exactCpuPolicyExpected,
                     Elevation = new float[count],
                     Flags = new byte[count],
                     Blocks = BuildBlocks(request.Resolution),
@@ -1528,7 +1533,9 @@ namespace AERISFlightControl.Terrain
                 Source = state.Source,
                 PqsConfigurationHash = state.PqsHash,
                 GameDataHash = state.GameDataHash,
-                TerrainGenerationId = state.TerrainGenerationId
+                TerrainGenerationId = state.TerrainGenerationId,
+                RuntimeExactCpuPolicyExpected = state.ExactCpuPolicyExpected,
+                RuntimeExactCpuProduced = R047ExactCpuProductionActive(state)
             };
         }
 
