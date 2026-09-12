@@ -39,7 +39,7 @@ db_bytes(){
   du -sb "$DB" 2>/dev/null | awk '{print $1}'
 }
 db_files(){
-  find "$DB" -type f -print0 2>/dev/null | tr -cd '\0' | wc -c | tr -d ' '
+  find "$DB" -type f -printf '.' 2>/dev/null | wc -c | tr -d ' '
 }
 db_tree_sha(){
   (
