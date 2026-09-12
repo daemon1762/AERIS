@@ -72,7 +72,7 @@ namespace AERISFlightControl.Core
                     RangeGeneration = 1,
                     PlanGeneration = 1,
                     DatabaseGeneration = 1,
-                    ReadLane = AERISTerrainReadLane.Viewport,
+                    ReadLane = AERISTerrainReadLane.Critical,
                     WorkOwner = AERISTerrainWorkOwner.FlightFallback,
                     Visible = true
                 };
