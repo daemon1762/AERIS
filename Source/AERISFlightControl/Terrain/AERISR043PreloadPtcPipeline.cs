@@ -9,18 +9,19 @@ namespace AERISFlightControl.Terrain
 {
     // R043 PRELOAD_PTC shared pipeline.
     //
-    // This partial augments the real AERISTerrainBlockPipeline without changing
-    // production terrain authority. Only PreloadBuilder-owned requests are eligible.
+    // This partial augments the real AERISTerrainBlockPipeline for
+    // PreloadBuilder-owned requests only.
     //
     // Main thread:
     // - certifies/caches the R042 immutable pure snapshot;
-    // - keeps PQS/TerrainAwareness as the authority sampled into the existing tile;
+    // - selects Exact CPU or fail-closed PQS authority;
     // - reconstructs stock PQS direction/map coordinates and copies primitives.
     //
     // GeneralCompute worker:
     // - evaluates the accepted pure CLR exact source from immutable data only;
-    // - compares the PQS authority double bit-for-bit;
-    // - never writes Elevation/Flags/DB state and never touches Unity/KSP runtime objects.
+    // - in validation mode, compares PQS authority bit-for-bit;
+    // - in R047 production mode, writes the Exact CPU sample into the production tile;
+    // - never touches Unity/KSP mutable runtime objects.
     //
     // Historical note:
     // - this seam began as a PQS-vs-Exact shadow validator;
