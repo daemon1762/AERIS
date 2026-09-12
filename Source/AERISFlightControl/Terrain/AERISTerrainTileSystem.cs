@@ -2045,6 +2045,24 @@ namespace AERISFlightControl.Terrain
             telemetry.FinalGenerated++;
             status = tile.Key.Lod >= AERISTerrainTileLod.Local ?
                 "LOCAL TERRAIN AVAILABLE" : "GLOBAL TERRAIN AVAILABLE";
+
+            // AERIS49 producer-identity hardening: an ENV4 Exact CPU policy tile may
+            // fall back to PQS for RAM-only continuity, but it must never be persisted
+            // under the Exact CPU environment identity.
+            if (tile.RuntimeExactCpuPolicyExpected && !tile.RuntimeExactCpuProduced)
+            {
+                status = "EXACT CPU FALLBACK RAM ONLY / DB WRITE SUPPRESSED";
+                AERISLogger.Warn(
+                    "[AERIS49][ENV4_DB_WRITE_SUPPRESSED]" +
+                    "; owner=FlightFallback" +
+                    "; body=" + (tile.Key.BodyName ?? string.Empty) +
+                    "; stable_id=" + (tile.Key.StableId ?? string.Empty) +
+                    "; expected=EXACT_CPU" +
+                    "; actual=PQS" +
+                    "; persisted=false");
+                return;
+            }
+
             ScheduleDiskWrite(tile.CloneImmutable());
         }
 
@@ -3033,7 +3051,7 @@ namespace AERISFlightControl.Terrain
                 AERISR042ExactCpuShadowSourceResolver.ProducerSwitchEnabled &&
                 decision != null && decision.IsCandidate;
             return exactCandidate ?
-                "EXACT_CPU_IF_RUNTIME_CERTIFIED_V1" :
+                "EXACT_CPU_ALL_PERSISTENT_OWNERS_V2" :
                 "PQS_V1";
         }
 
