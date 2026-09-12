@@ -33,6 +33,10 @@ namespace AERISFlightControl.Terrain
             internal string BodyName = string.Empty;
             internal string PqsHash = string.Empty;
             internal bool ProofRequest;
+            internal bool ProductionEnabled;
+            internal bool HasOcean;
+            internal int ProductionSamples;
+            internal int ProductionFailures;
             internal int ExpectedSamples;
             internal int Samples;
             internal int Mismatches;
@@ -95,6 +99,12 @@ namespace AERISFlightControl.Terrain
             internal double[] ExpectedSourceLongitude;
             internal byte[] BoundaryCacheHit;
             internal byte[] Active;
+            internal bool ProductionEnabled;
+            internal bool HasOcean;
+            internal float[] ProductionElevation;
+            internal byte[] ProductionFlags;
+            internal int ProductionSamples;
+            internal int ProductionFailures;
             internal int BlockId;
             internal int BlockX0;
             internal int BlockY0;
@@ -202,6 +212,10 @@ namespace AERISFlightControl.Terrain
                 r043SnapshotCache[cacheKey] = snapshot;
             }
 
+            bool productionEnabled =
+                R047ShouldUseExactCpuProduction(decision, snapshot, bodyName);
+            R047LogProducerSelection(bodyName, snapshot, productionEnabled);
+
             if (r043SnapshotCaptureLogged.Add(cacheKey))
             {
                 AERISLogger.Info(
@@ -216,10 +230,12 @@ namespace AERISFlightControl.Terrain
                     "; capture_thread_is_main=" +
                         BoolR043(snapshot.CaptureThreadId == r040bMainThreadId) +
                     "; snapshot_payload=PRIMITIVES_PLUS_ACCEPTED_PURE_SNAPSHOTS_ONLY" +
-                    "; production_authority=PQS" +
-                    "; producer_switch=false" +
-                    "; db_authority=PQS" +
-                    "; exact_cpu_db_write=false" +
+                    "; production_authority=" +
+                        (productionEnabled ? "EXACT_CPU" : "PQS") +
+                    "; producer_switch=" + BoolR043(productionEnabled) +
+                    "; db_authority=" +
+                        (productionEnabled ? "EXACT_CPU" : "PQS") +
+                    "; exact_cpu_db_write=" + BoolR043(productionEnabled) +
                     "; worker_runtime_object_access=false");
             }
 
@@ -239,6 +255,8 @@ namespace AERISFlightControl.Terrain
                 BodyName = bodyName,
                 PqsHash = authorityHash,
                 ProofRequest = IsR043ProofRequest(request),
+                ProductionEnabled = productionEnabled,
+                HasOcean = body.ocean,
                 ExpectedSamples = expectedSamples
             };
         }
@@ -387,6 +405,10 @@ namespace AERISFlightControl.Terrain
                 ExpectedSourceLongitude = shadow.SamplingExpectedSourceLongitude,
                 BoundaryCacheHit = shadow.SamplingBoundaryCacheHit,
                 Active = shadow.SamplingActive,
+                ProductionEnabled = shadow.ProductionEnabled,
+                HasOcean = shadow.HasOcean,
+                ProductionElevation = state.SamplingElevation,
+                ProductionFlags = state.SamplingFlags,
                 BlockId = state.SamplingBlock == null ? -1 : state.SamplingBlock.Id,
                 BlockX0 = state.SamplingBlock == null ? -1 : state.SamplingBlock.X0,
                 BlockY0 = state.SamplingBlock == null ? -1 : state.SamplingBlock.Y0,
@@ -437,7 +459,10 @@ namespace AERISFlightControl.Terrain
                     block.ExpectedSourceLatitude == null ||
                     block.ExpectedSourceLongitude == null ||
                     block.BoundaryCacheHit == null ||
-                    block.Active == null)
+                    block.Active == null ||
+                    (block.ProductionEnabled &&
+                     (block.ProductionElevation == null ||
+                      block.ProductionFlags == null)))
                     throw new InvalidOperationException("PAYLOAD_ARRAY_NULL");
 
                 int count = block.Expected.Length;
@@ -451,7 +476,10 @@ namespace AERISFlightControl.Terrain
                     block.ExpectedSourceLatitude.Length != count ||
                     block.ExpectedSourceLongitude.Length != count ||
                     block.BoundaryCacheHit.Length != count ||
-                    block.Active.Length != count)
+                    block.Active.Length != count ||
+                    (block.ProductionEnabled &&
+                     (block.ProductionElevation.Length != count ||
+                      block.ProductionFlags.Length != count)))
                     throw new InvalidOperationException("PAYLOAD_ARRAY_LENGTH");
 
                 for (int i = 0; i < count; i++)
@@ -487,6 +515,14 @@ namespace AERISFlightControl.Terrain
 
                     double actualAsl = absolute - block.Snapshot.PqsRadius;
                     if (actualAsl < 0.0) actualAsl = 0.0;
+
+                    if (block.ProductionEnabled)
+                    {
+                        R047WriteExactCpuProductionSample(block, i, actualAsl);
+                        block.Samples++;
+                        continue;
+                    }
+
                     double expectedAsl = block.Expected[i];
 
                     bool finite =
@@ -568,6 +604,8 @@ namespace AERISFlightControl.Terrain
             R043ShadowTileState shadow = state.R043Shadow;
             shadow.Blocks++;
             shadow.Samples += block.Samples;
+            shadow.ProductionSamples += block.ProductionSamples;
+            shadow.ProductionFailures += block.ProductionFailures;
             shadow.Mismatches += block.Mismatches;
             shadow.NonFinite += block.NonFinite;
             shadow.BoundaryCacheHitSamples += block.BoundaryCacheHitSamples;
@@ -723,16 +761,26 @@ namespace AERISFlightControl.Terrain
                             "x16", CultureInfo.InvariantCulture) +
                 "; blocks=" +
                     shadow.Blocks.ToString(CultureInfo.InvariantCulture) +
+                "; production_mode=" + BoolR043(shadow.ProductionEnabled) +
+                "; production_samples=" +
+                    shadow.ProductionSamples.ToString(CultureInfo.InvariantCulture) +
+                "; production_failures=" +
+                    shadow.ProductionFailures.ToString(CultureInfo.InvariantCulture) +
+                "; comparison_mode=" +
+                    (shadow.ProductionEnabled ? "PRODUCTION_NO_PQS" : "PQS_BIT_EXACT") +
                 "; worker_not_main=" +
                     BoolR043(shadow.AllWorkersOffMainThread) +
                 "; snapshot_candidate=" + shadow.Snapshot.Candidate +
                 "; error=" + SafeR043(shadow.Error) +
                 "; work_owner=PreloadBuilder" +
-                "; tile_commit_authority=PQS" +
-                "; production_authority=PQS" +
-                "; producer_switch=false" +
-                "; db_authority=PQS" +
-                "; exact_cpu_db_write=false" +
+                "; tile_commit_authority=" +
+                    (shadow.ProductionEnabled ? "EXACT_CPU" : "PQS") +
+                "; production_authority=" +
+                    (shadow.ProductionEnabled ? "EXACT_CPU" : "PQS") +
+                "; producer_switch=" + BoolR043(shadow.ProductionEnabled) +
+                "; db_authority=" +
+                    (shadow.ProductionEnabled ? "EXACT_CPU" : "PQS") +
+                "; exact_cpu_db_write=" + BoolR043(shadow.ProductionEnabled) +
                 "; worker_runtime_object_access=false");
         }
 
