@@ -156,6 +156,7 @@
     <Compile Include="Terrain\AERISR042ExactCpuShadowRuntimeSnapshotBuilder.cs" />
     <Compile Include="Terrain\AERISR042ExactCpuShadowRuntimeCaptureObserver.cs" />
     <Compile Include="Terrain\AERISR043PreloadPtcIntegratedShadow.cs" />
+    <Compile Include="Terrain\AERISR047ExactCpuProduction.cs" />
     <Compile Include="Terrain\AERISR043PreloadPtcLiveProof.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadCodec.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadDatabase.cs" />
