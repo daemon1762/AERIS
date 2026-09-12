@@ -1832,7 +1832,6 @@ namespace AERISFlightControl.Terrain
                         lock (sync)
                             for (int i = 0; i < payload.StableIds.Length; i++)
                                 pendingWrites.Remove(payload.StableIds[i]);
-                        R043NoteDurableBatch(payload);
                         CommitDurableCoastlineMarkers(
                             payload.CoastlineCommitMarkers);
                         long bytes = (long)result[1];
