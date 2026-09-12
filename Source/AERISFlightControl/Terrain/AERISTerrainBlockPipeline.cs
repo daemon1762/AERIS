@@ -608,13 +608,15 @@ namespace AERISFlightControl.Terrain
             state.SamplingElevation = new float[count];
             state.SamplingFlags = new byte[count];
 
+            bool legacyMinmusShadow =
+                state.R040BMinmusSnapshot != null &&
+                !R047ExactCpuProductionActive(state);
+
             state.SamplingAuthorityExact =
-                state.R040BMinmusSnapshot == null ?
-                null : new double[count];
+                legacyMinmusShadow ? new double[count] : null;
 
             state.SamplingR040BCacheHits =
-                state.R040BMinmusSnapshot == null ?
-                null : new byte[count];
+                legacyMinmusShadow ? new byte[count] : null;
 
             BeginR043ShadowBlock(state, count);
 
@@ -1141,7 +1143,9 @@ namespace AERISFlightControl.Terrain
 
         static void ProcessBlock(BlockPayload block)
         {
-            ProcessR040BMinmusShadow(block);
+            if (block == null || block.R043Shadow == null ||
+                !block.R043Shadow.ProductionEnabled)
+                ProcessR040BMinmusShadow(block);
             ProcessR043ShadowBlock(block == null ? null : block.R043Shadow);
 
             block.Valid = 0;
@@ -1424,7 +1428,8 @@ namespace AERISFlightControl.Terrain
             }
             if (final)
             {
-                ReportR040BMinmusShadow(state);
+                if (!R047ExactCpuProductionActive(state))
+                    ReportR040BMinmusShadow(state);
                 ReportR043ShadowTile(state);
                 RemoveState(state, false);
             }
