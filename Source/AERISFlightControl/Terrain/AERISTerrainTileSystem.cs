@@ -3017,10 +3017,12 @@ namespace AERISFlightControl.Terrain
         {
             if (!GameDataHashReady) return string.Empty;
             string gameDataHash = GameDataHash;
+            string producerPolicy = TerrainProducerPolicyForBody(body);
             string cacheKey = (body == null ? string.Empty : body.name) + "|" +
                 (body == null ? 0.0 : body.Radius).ToString("R",
                     CultureInfo.InvariantCulture) + "|" +
-                (body != null && body.ocean ? "1" : "0") + "|" + gameDataHash;
+                (body != null && body.ocean ? "1" : "0") + "|" +
+                gameDataHash + "|" + producerPolicy;
             lock (environmentSync)
             {
                 string cached;
@@ -3029,7 +3031,7 @@ namespace AERISFlightControl.Terrain
             }
 
             var builder = new System.Text.StringBuilder(4096);
-            builder.Append("AERIS_TERRAIN_ENV3_TERRAIN_CFG_PQS|");
+            builder.Append("AERIS_TERRAIN_ENV4_EXACTCPU_HYBRID|");
             builder.Append(AERISTerrainTileFormat.Version).Append('|');
             builder.Append(AERISTerrainPreloadFormat.DatabaseFormatVersion).Append('|');
             builder.Append(gameDataHash).Append('|');
@@ -3037,11 +3039,24 @@ namespace AERISFlightControl.Terrain
             builder.Append((body == null ? 0.0 : body.Radius).ToString("R",
                 CultureInfo.InvariantCulture)).Append('|');
             builder.Append(body != null && body.ocean ? "1" : "0").Append('|');
+            builder.Append(producerPolicy).Append('|');
             AppendStablePqsTopologyFingerprint(builder, body);
 
             string result = AERISTerrainHash.Fnv1A64Hex(builder.ToString());
             lock (environmentSync) cachedBodyEnvironmentHashes[cacheKey] = result;
             return result;
+        }
+
+        static string TerrainProducerPolicyForBody(CelestialBody body)
+        {
+            AERISR042ExactCpuShadowSourceResolver.Decision decision =
+                AERISR042ExactCpuShadowSourceResolver.ResolveCandidate(body);
+            bool exactCandidate =
+                AERISR042ExactCpuShadowSourceResolver.ProducerSwitchEnabled &&
+                decision != null && decision.IsCandidate;
+            return exactCandidate ?
+                "EXACT_CPU_IF_RUNTIME_CERTIFIED_V1" :
+                "PQS_V1";
         }
 
         static void AppendStablePqsTopologyFingerprint(
