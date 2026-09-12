@@ -8,8 +8,8 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="R043-PRELOAD-PTC-PRODUCTION-CLEANUP2"
-RUNNER="$ROOT/Tools/aeris48_r043_preload_ptc_production_cleanup2.sh"
+STAGE="TERRAIN_ND-INTEGRATION-AUDIT"
+RUNNER="$ROOT/Tools/aeris49_terrain_nd_integration_audit.sh"
 
 cd "$ROOT"
 
@@ -17,14 +17,14 @@ echo "=== AERIS CURRENT STAGE ==="
 echo "stage=$STAGE"
 echo "KSP=$KSP"
 echo "HEAD=$(git rev-parse HEAD)"
-echo "roadmap=CPU_SHADOW_PRODUCTION[ACCEPTED] -> PRELOAD_PTC[CLEANUP2] -> TERRAIN_ND -> NEW_NAV -> LAND"
+echo "roadmap=CPU_SHADOW_PRODUCTION[ACCEPTED] -> PRELOAD_PTC[ACCEPTED] -> TERRAIN_ND[ACTIVE] -> NEW_NAV -> LAND"
 echo
 
 [[ -f "$RUNNER" ]] || {
-  echo "STOP: AERIS48 Preload PTC cleanup2 runner missing" >&2
+  echo "STOP: AERIS49 TERRAIN_ND integration audit runner missing" >&2
   exit 20
 }
 
-# Cleanup2 is a semantics-preserving rename of the shared R043 PTC pipeline state.
-# Exact CPU production, PQS fallback, ENV4 identity and DB semantics remain unchanged.
+# No behavior change in this gate. It certifies that the accepted R023 ND core still
+# consumes the evolved TileSystem/Resident/ENV4 chain after PRELOAD_PTC production.
 exec bash "$RUNNER" "$KSP"
