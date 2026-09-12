@@ -66,8 +66,8 @@ namespace AERISFlightControl.Terrain
 
         static bool R047ExactCpuProductionActive(TileState state)
         {
-            return state != null && state.R043Shadow != null &&
-                state.R043Shadow.ProductionEnabled;
+            return state != null && state.R043Ptc != null &&
+                state.R043Ptc.ProductionEnabled;
         }
 
         bool R047TryCaptureExactCpuProductionSample(
@@ -77,7 +77,7 @@ namespace AERISFlightControl.Terrain
             double longitude)
         {
             if (!R047ExactCpuProductionActive(state)) return false;
-            R043ShadowTileState shadow = state.R043Shadow;
+            R043PtcTileState shadow = state.R043Ptc;
 
             try
             {
@@ -137,7 +137,7 @@ namespace AERISFlightControl.Terrain
         }
 
         static void R047WriteExactCpuProductionSample(
-            R043ShadowBlockPayload block,
+            R043PtcBlockPayload block,
             int index,
             double actualAsl)
         {
@@ -161,9 +161,9 @@ namespace AERISFlightControl.Terrain
 
         bool R047HandleExactCpuProductionBlockFailure(
             TileState state,
-            R043ShadowBlockPayload block)
+            R043PtcBlockPayload block)
         {
-            if (state == null || state.R043Shadow == null ||
+            if (state == null || state.R043Ptc == null ||
                 block == null || !block.ProductionEnabled)
                 return false;
 
@@ -179,14 +179,14 @@ namespace AERISFlightControl.Terrain
                 "PRODUCTION_SAMPLE_COUNT:" +
                 block.ProductionSamples.ToString(CultureInfo.InvariantCulture);
 
-            R047DisableExactCpuBody(state.R043Shadow.BodyName, reason);
+            R047DisableExactCpuBody(state.R043Ptc.BodyName, reason);
 
             // Exact production states are limited to one outstanding block, so this
             // reset cannot race another block from the same tile. Restart the complete
             // tile using the existing PQS producer and preserve the immutable snapshot
             // so PQS-vs-Exact shadow comparison remains available.
-            state.R043Shadow.ProductionEnabled = false;
-            ResetR047ShadowEvidence(state.R043Shadow);
+            state.R043Ptc.ProductionEnabled = false;
+            ResetR047PtcEvidence(state.R043Ptc);
             state.NextBlock = 0;
             state.CompletedBlocks = 0;
             state.Valid = 0;
@@ -228,7 +228,7 @@ namespace AERISFlightControl.Terrain
             return count;
         }
 
-        static void ResetR047ShadowEvidence(R043ShadowTileState shadow)
+        static void ResetR047PtcEvidence(R043PtcTileState shadow)
         {
             if (shadow == null) return;
             shadow.Samples = 0;
