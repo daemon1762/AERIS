@@ -988,6 +988,27 @@ namespace AERISFlightControl.Terrain
                 telemetry.BuilderPqsMilliseconds = blockPipeline.LastBatchMilliseconds;
                 return;
             }
+            // AERIS49 producer-identity hardening. If an Exact CPU policy body
+            // had to fall back to PQS, keep the fallback out of the persistent Exact
+            // environment. Pause this body so the failure is explicit and retriable.
+            if (tile.RuntimeExactCpuPolicyExpected && !tile.RuntimeExactCpuProduced)
+            {
+                plan.Paused = true;
+                plan.Generation++;
+                status = "PRELOAD EXACT CPU FALLBACK / DB WRITE SUPPRESSED: " +
+                    plan.BodyName;
+                AERISLogger.Warn(
+                    "[AERIS49][ENV4_DB_WRITE_SUPPRESSED]" +
+                    "; owner=PreloadBuilder" +
+                    "; body=" + (plan.BodyName ?? string.Empty) +
+                    "; stable_id=" + (tile.Key.StableId ?? string.Empty) +
+                    "; expected=EXACT_CPU" +
+                    "; actual=PQS" +
+                    "; persisted=false" +
+                    "; plan_paused=true");
+                return;
+            }
+
             string id = tile.Key.StableId;
             var work = new PendingEncodeWork
             {
