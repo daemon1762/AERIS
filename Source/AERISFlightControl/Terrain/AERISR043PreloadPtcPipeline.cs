@@ -10,7 +10,7 @@ namespace AERISFlightControl.Terrain
     // R043 PRELOAD_PTC shared pipeline.
     //
     // This partial augments the real AERISTerrainBlockPipeline for
-    // PreloadBuilder-owned requests only.
+    // persistent terrain requests owned by PreloadBuilder or FlightFallback.
     //
     // Main thread:
     // - certifies/caches the R042 immutable pure snapshot;
@@ -159,7 +159,8 @@ namespace AERISFlightControl.Terrain
             string pqsHash)
         {
             if (body == null || request == null ||
-                request.WorkOwner != AERISTerrainWorkOwner.PreloadBuilder)
+                (request.WorkOwner != AERISTerrainWorkOwner.PreloadBuilder &&
+                 request.WorkOwner != AERISTerrainWorkOwner.FlightFallback))
                 return null;
 
             AERISR042ExactCpuShadowSourceResolver.Decision decision =
