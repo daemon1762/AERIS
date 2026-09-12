@@ -59,9 +59,11 @@ namespace AERISFlightControl.Terrain
             }
         }
 
-        // Deliberately false until snapshot capture, worker execution and DB parity
-        // gates have independently passed in R042.
-        internal const bool ProducerSwitchEnabled = false;
+        // AERIS47 promotion gate: R042 snapshot/runtime certification, R043 live-preload
+        // integration, AERIS46 natural boundary provenance repair and ENV3 persistence
+        // have passed. Only the seven explicitly certified bodies may select Exact CPU;
+        // every other body remains fail-closed on PQS.
+        internal const bool ProducerSwitchEnabled = true;
 
         internal const int AcceptedCandidateBodyCount = 7;
         internal const int R039CandidateBodyCount = 1;
