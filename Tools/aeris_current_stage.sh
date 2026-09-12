@@ -8,8 +8,8 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="TERRAIN_ND-FLIGHTFALLBACK-EXACT-PROBE"
-RUNNER="$ROOT/Tools/aeris49_flightfallback_exact_probe.sh"
+STAGE="TERRAIN_ND-FINAL-RUNTIME-CERT"
+RUNNER="$ROOT/Tools/aeris49_terrain_nd_final_runtime_cert.sh"
 
 cd "$ROOT"
 
@@ -17,11 +17,11 @@ echo "=== AERIS CURRENT STAGE ==="
 echo "stage=$STAGE"
 echo "KSP=$KSP"
 echo "HEAD=$(git rev-parse HEAD)"
-echo "roadmap=CPU_SHADOW_PRODUCTION[ACCEPTED] -> PRELOAD_PTC[ACCEPTED] -> TERRAIN_ND[PROBE] -> NEW_NAV -> LAND"
+echo "roadmap=CPU_SHADOW_PRODUCTION[ACCEPTED] -> PRELOAD_PTC[ACCEPTED] -> TERRAIN_ND[FINAL_CERT] -> NEW_NAV -> LAND"
 echo
 
 [[ -f "$RUNNER" ]] || {
-  echo "STOP: AERIS49 FlightFallback Exact probe runner missing" >&2
+  echo "STOP: AERIS49 final TERRAIN_ND runtime certification runner missing" >&2
   exit 20
 }
 
