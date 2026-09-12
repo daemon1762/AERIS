@@ -80,7 +80,7 @@ namespace AERISFlightControl.Terrain
             internal R040BFailureSample[] R040BFailureSamples;
             internal int R040BFailureSampleCount;
 
-            // R043 PRELOAD_PTC shadow integration payload. Pure managed data only.
+            // R043 PRELOAD_PTC immutable worker payload. Pure managed data only.
             internal R043PtcBlockPayload R043Ptc;
         }
 
