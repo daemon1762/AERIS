@@ -8,8 +8,8 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="TERRAIN_ND-INTEGRATION-AUDIT"
-RUNNER="$ROOT/Tools/aeris49_terrain_nd_integration_audit.sh"
+STAGE="TERRAIN_ND-RUNTIME-GATE"
+RUNNER="$ROOT/Tools/aeris49_terrain_nd_runtime_gate.sh"
 
 cd "$ROOT"
 
@@ -17,14 +17,13 @@ echo "=== AERIS CURRENT STAGE ==="
 echo "stage=$STAGE"
 echo "KSP=$KSP"
 echo "HEAD=$(git rev-parse HEAD)"
-echo "roadmap=CPU_SHADOW_PRODUCTION[ACCEPTED] -> PRELOAD_PTC[ACCEPTED] -> TERRAIN_ND[ACTIVE] -> NEW_NAV -> LAND"
+echo "roadmap=CPU_SHADOW_PRODUCTION[ACCEPTED] -> PRELOAD_PTC[ACCEPTED] -> TERRAIN_ND[RUNTIME] -> NEW_NAV -> LAND"
 echo
 
 [[ -f "$RUNNER" ]] || {
-  echo "STOP: AERIS49 TERRAIN_ND integration audit runner missing" >&2
+  echo "STOP: AERIS49 TERRAIN_ND runtime gate missing" >&2
   exit 20
 }
 
-# No behavior change in this gate. It certifies that the accepted R023 ND core still
-# consumes the evolved TileSystem/Resident/ENV4 chain after PRELOAD_PTC production.
+# Runtime-only proof: no source/DLL mutation. The accepted PRELOAD_PTC DLL remains installed.
 exec bash "$RUNNER" "$KSP"
