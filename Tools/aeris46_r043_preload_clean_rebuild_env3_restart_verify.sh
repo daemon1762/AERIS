@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
-  echo "usage: bash Tools/aeris45_r043_preload_clean_rebuild_env2_restart_verify.sh <KSP root>" >&2
+  echo "usage: bash Tools/aeris46_r043_preload_clean_rebuild_env3_restart_verify.sh <KSP root>" >&2
   exit 2
 fi
 
@@ -183,7 +183,7 @@ PY
 harvest_rebuild(){
   local off="$1"
   local parsed body row env auto completed coast coast_env incomplete
-  parsed="$(mktemp /tmp/AERIS45_STATE.XXXXXX)"
+  parsed="$(mktemp /tmp/AERIS46_ENV3_STATE.XXXXXX)"
 
   if [[ ! -f "$PRELOAD_STATE" ]]; then
     rm -f "$parsed"
@@ -243,7 +243,7 @@ harvest_rebuild(){
   local current transitions db_bytes db_files
   current="$(stat -c %s "$LOG")"
   local seg
-  seg="$(mktemp /tmp/AERIS45_REBUILD_LOG.XXXXXX)"
+  seg="$(mktemp /tmp/AERIS46_ENV3_REBUILD_LOG.XXXXXX)"
   segment_from_offset "$off" "$seg"
   transitions="$(awk '/\\[AERIS44\\]\\[R043_PRELOAD_ENV_TRANSITION\\]/ && /environment_contract=ENV3_TERRAIN_CFG_PQS/ { c++ } END { print c+0 }' "$seg")"
   rm -f "$seg"
@@ -275,8 +275,8 @@ EOFSTATE
 harvest_restart(){
   local off="$1"
   local seg parsed body row env_line first_env persisted completed coast_env auto coast live match failures
-  seg="$(mktemp /tmp/AERIS45_RESTART.XXXXXX)"
-  parsed="$(mktemp /tmp/AERIS45_RESTART_STATE.XXXXXX)"
+  seg="$(mktemp /tmp/AERIS46_ENV3_RESTART.XXXXXX)"
+  parsed="$(mktemp /tmp/AERIS46_ENV3_RESTART_STATE.XXXXXX)"
   segment_from_offset "$off" "$seg"
   failures=0
 
