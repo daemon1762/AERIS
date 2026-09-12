@@ -530,7 +530,9 @@ namespace AERISFlightControl.Terrain
             double budget = Math.Max(0.05, mainThreadBudgetMilliseconds);
             int queriedPqs = 0;
             int processed = 0;
-            int maximumProcessed = Math.Max(target, maximum * 4);
+            int maximumProcessed = standardPreloadThroughput ?
+                Math.Max(target, maximum * 32) :
+                Math.Max(target, maximum * 4);
             long batchStartTicks = Stopwatch.GetTimestamp();
             long budgetTicks = Math.Max(1L, (long)Math.Ceiling(
                 budget * Stopwatch.Frequency / 1000.0));
@@ -585,7 +587,12 @@ namespace AERISFlightControl.Terrain
                     if (roundRobinIndex >= roundRobin.Count) roundRobinIndex = 0;
                     TileState state = roundRobin[roundRobinIndex++];
                     if (state == null || state.Cancelled) continue;
-                    if (state.PendingBlocks >= 2 && state.PendingBlocks >= PendingBlockLimit) continue;
+                    if (R047ExactCpuProductionActive(state))
+                    {
+                        if (state.PendingBlocks >= 1) continue;
+                    }
+                    else if (state.PendingBlocks >= 2 &&
+                        state.PendingBlocks >= PendingBlockLimit) continue;
                     if (state.SamplingBlock != null || state.NextBlock < state.Blocks.Length)
                         return state;
                 }
@@ -631,6 +638,16 @@ namespace AERISFlightControl.Terrain
                 state.Request.EastLongitudeDeg, u);
             bool boundary = x == 0 || y == 0 || x == resolution - 1 ||
                 y == resolution - 1;
+
+            // AERIS47 Exact CPU production: capture only immutable coordinate inputs
+            // on the main thread. No PQS terrain-height callback is issued.
+            if (R047TryCaptureExactCpuProductionSample(
+                state, local, latitude, longitude))
+            {
+                state.SamplingIndex++;
+                return false;
+            }
+
             BoundarySampleKey cacheKey = default(BoundarySampleKey);
             BoundarySampleValue cached;
             if (boundary)
@@ -1360,6 +1377,11 @@ namespace AERISFlightControl.Terrain
             }
 
             DiagnoseR040BMinmusFailures(state, block);
+
+            if (R047HandleExactCpuProductionBlockFailure(
+                state, block.R043Shadow))
+                return;
+
             CommitR043ShadowBlock(state, block.R043Shadow);
 
             int resolution = state.Request.Resolution;
