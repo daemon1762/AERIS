@@ -23,6 +23,17 @@ namespace AERISFlightControl.Terrain
         readonly HashSet<string> r047ExactCpuSelectionLogged =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        static bool R047ExactCpuPolicyExpected(CelestialBody body)
+        {
+            if (body == null ||
+                !AERISR042ExactCpuShadowSourceResolver.ProducerSwitchEnabled)
+                return false;
+
+            AERISR042ExactCpuShadowSourceResolver.Decision decision =
+                AERISR042ExactCpuShadowSourceResolver.ResolveCandidate(body);
+            return decision != null && decision.IsCandidate;
+        }
+
         bool R047ShouldUseExactCpuProduction(
             AERISR042ExactCpuShadowSourceResolver.Decision decision,
             AERISR042ExactCpuShadowRuntimeSnapshot snapshot,
