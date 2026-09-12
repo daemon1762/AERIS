@@ -32,7 +32,6 @@ namespace AERISFlightControl.Terrain
             internal AERISR042ExactCpuShadowRuntimeSnapshot Snapshot;
             internal string BodyName = string.Empty;
             internal string PqsHash = string.Empty;
-            internal bool ProofRequest;
             internal bool ProductionEnabled;
             internal bool HasOcean;
             internal int ProductionSamples;
@@ -152,24 +151,6 @@ namespace AERISFlightControl.Terrain
             new HashSet<string>(StringComparer.Ordinal);
         readonly HashSet<string> r043NaturalBodiesReported =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        static readonly object r043LiveProofSync = new object();
-        static readonly HashSet<string> r043LiveProofStableIds =
-            new HashSet<string>(StringComparer.Ordinal);
-
-        internal static void R043RegisterLivePreloadProofStableId(string stableId)
-        {
-            if (string.IsNullOrEmpty(stableId)) return;
-            lock (r043LiveProofSync)
-                r043LiveProofStableIds.Add(stableId);
-        }
-
-        static bool IsR043LivePreloadProofStableId(string stableId)
-        {
-            if (string.IsNullOrEmpty(stableId)) return false;
-            lock (r043LiveProofSync)
-                return r043LiveProofStableIds.Contains(stableId);
-        }
-
         R043ShadowTileState TryCreateR043ShadowState(
             CelestialBody body,
             AERISTerrainTileRequest request,
@@ -254,7 +235,6 @@ namespace AERISFlightControl.Terrain
                 Snapshot = snapshot,
                 BodyName = bodyName,
                 PqsHash = authorityHash,
-                ProofRequest = IsR043ProofRequest(request),
                 ProductionEnabled = productionEnabled,
                 HasOcean = body.ocean,
                 ExpectedSamples = expectedSamples
@@ -274,15 +254,6 @@ namespace AERISFlightControl.Terrain
                 "; producer_switch=false" +
                 "; db_authority=PQS" +
                 "; exact_cpu_db_write=false");
-        }
-
-        static bool IsR043ProofRequest(AERISTerrainTileRequest request)
-        {
-            return request != null &&
-                request.Key.EnvironmentHash != null &&
-                request.Key.EnvironmentHash.StartsWith(
-                    "R043_INTEGRATION_PROOF:",
-                    StringComparison.Ordinal);
         }
 
         static void BeginR043ShadowBlock(TileState state, int count)
@@ -665,17 +636,15 @@ namespace AERISFlightControl.Terrain
                 string.IsNullOrEmpty(shadow.Error);
 
             string stableId = state.Request.Key.StableId;
-            bool livePreloadProof =
-                IsR043LivePreloadProofStableId(stableId);
-            bool emit = shadow.ProofRequest || livePreloadProof || !pass ||
+            bool emit = !pass ||
                 r043NaturalBodiesReported.Add(shadow.BodyName);
             if (!emit) return;
 
             AERISLogger.Info(
                 "[AERIS43][R043_PRELOAD_PTC_INTEGRATED_TILE]" +
                 "; pass=" + BoolR043(pass) +
-                "; proof_request=" + BoolR043(shadow.ProofRequest) +
-                "; live_preload_proof=" + BoolR043(livePreloadProof) +
+                "; proof_request=false" +
+                "; live_preload_proof=false" +
                 "; body=" + SafeR043(shadow.BodyName) +
                 "; stable_id=" + SafeR043(stableId) +
                 "; tile=" + SafeR043(state.Request.Key.FileStem) +
