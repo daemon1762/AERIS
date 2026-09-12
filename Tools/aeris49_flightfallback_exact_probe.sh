@@ -156,6 +156,13 @@ fi
 HEAD_SHA="$(git rev-parse HEAD)"
 TREE_SHA256="$(git archive --format=tar HEAD | sha256sum | awk '{print $1}')"
 
+# A failed probe from an older source HEAD must not pin the next diagnostic run.
+# Its synthetic tile was nonpersistent, so re-arming only needs to discard probe state.
+if [[ -f "$STATE" && "$(state_value head || true)" != "$HEAD_SHA" ]]; then
+  echo "AERIS49_PROBE_STATE_RESET=SOURCE_HEAD_CHANGED"
+  rm -f "$STATE" "$DONE"
+fi
+
 if [[ ! -f "$STATE" ]]; then
   if pgrep -f "$KSP/KSP.x86_64" >/dev/null 2>&1; then
     echo "STOP: KSP must be fully exited before installing probe build" >&2
