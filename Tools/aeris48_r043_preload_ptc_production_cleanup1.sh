@@ -71,6 +71,8 @@ static_gate(){
   ! grep -Fq 'ProofRequest'     "$PROJECT_DIR/Terrain/AERISR043PreloadPtcIntegratedShadow.cs" || fail=$((fail+1))
   ! grep -Fq 'r043LiveProof'     "$PROJECT_DIR/Terrain/AERISR043PreloadPtcIntegratedShadow.cs" || fail=$((fail+1))
   ! grep -Fq 'R043RegisterLivePreloadProofStableId'     "$PROJECT_DIR/Terrain/AERISR043PreloadPtcIntegratedShadow.cs" || fail=$((fail+1))
+  ! grep -Fq 'R043RequestLivePreloadProof'     "$PROJECT_DIR/Terrain/AERISTerrainTileSystem.cs" || fail=$((fail+1))
+  ! grep -Fq 'R043LivePreloadProofDurable'     "$PROJECT_DIR/Terrain/AERISTerrainTileSystem.cs" || fail=$((fail+1))
   grep -Fq 'R047ShouldUseExactCpuProduction'     "$PROJECT_DIR/Terrain/AERISR043PreloadPtcIntegratedShadow.cs" || fail=$((fail+1))
   grep -Fq 'ProductionElevation = state.SamplingElevation'     "$PROJECT_DIR/Terrain/AERISR043PreloadPtcIntegratedShadow.cs" || fail=$((fail+1))
   grep -Fq 'R047TryCaptureExactCpuProductionSample'     "$PROJECT_DIR/Terrain/AERISTerrainBlockPipeline.cs" || fail=$((fail+1))
