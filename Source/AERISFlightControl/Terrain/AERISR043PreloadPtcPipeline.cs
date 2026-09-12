@@ -34,6 +34,7 @@ namespace AERISFlightControl.Terrain
             internal AERISR042ExactCpuShadowRuntimeSnapshot Snapshot;
             internal string BodyName = string.Empty;
             internal string PqsHash = string.Empty;
+            internal AERISTerrainWorkOwner WorkOwner;
             internal bool ProductionEnabled;
             internal bool HasOcean;
             internal int ProductionSamples;
@@ -238,6 +239,7 @@ namespace AERISFlightControl.Terrain
                 Snapshot = snapshot,
                 BodyName = bodyName,
                 PqsHash = authorityHash,
+                WorkOwner = request.WorkOwner,
                 ProductionEnabled = productionEnabled,
                 HasOcean = body.ocean,
                 ExpectedSamples = expectedSamples
@@ -639,8 +641,9 @@ namespace AERISFlightControl.Terrain
                 string.IsNullOrEmpty(shadow.Error);
 
             string stableId = state.Request.Key.StableId;
+            string reportKey = shadow.BodyName + "|" + shadow.WorkOwner;
             bool emit = !pass ||
-                r043NaturalBodiesReported.Add(shadow.BodyName);
+                r043NaturalBodiesReported.Add(reportKey);
             if (!emit) return;
 
             AERISLogger.Info(
@@ -744,7 +747,7 @@ namespace AERISFlightControl.Terrain
                     BoolR043(shadow.AllWorkersOffMainThread) +
                 "; snapshot_candidate=" + shadow.Snapshot.Candidate +
                 "; error=" + SafeR043(shadow.Error) +
-                "; work_owner=PreloadBuilder" +
+                "; work_owner=" + shadow.WorkOwner +
                 "; tile_commit_authority=" +
                     (shadow.ProductionEnabled ? "EXACT_CPU" : "PQS") +
                 "; production_authority=" +
