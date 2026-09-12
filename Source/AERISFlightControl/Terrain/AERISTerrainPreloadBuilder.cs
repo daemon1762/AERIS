@@ -2324,7 +2324,7 @@ namespace AERISFlightControl.Terrain
                     "[AERIS44][R043_PRELOAD_ENV_OBSERVED]" +
                     "; body=" + R044Safe(body == null ? string.Empty : body.name) +
                     "; game_data_hash=" + R044Safe(AERISTerrainTileSystem.GameDataHash) +
-                    "; environment_contract=ENV3_TERRAIN_CFG_PQS" +
+                    "; environment_contract=ENV4_EXACTCPU_HYBRID" +
                     "; persisted_environment=" + R044Safe(plan == null ? string.Empty : plan.EnvironmentHash) +
                     "; live_environment=" + R044Safe(environment) +
                     "; environment_match=" +
@@ -2354,7 +2354,7 @@ namespace AERISFlightControl.Terrain
                 "[AERIS44][R043_PRELOAD_ENV_TRANSITION]" +
                 "; body=" + R044Safe(body == null ? string.Empty : body.name) +
                 "; game_data_hash=" + R044Safe(AERISTerrainTileSystem.GameDataHash) +
-                "; environment_contract=ENV3_TERRAIN_CFG_PQS" +
+                "; environment_contract=ENV4_EXACTCPU_HYBRID" +
                 "; previous_environment=" + R044Safe(previousEnvironment) +
                 "; new_environment=" + R044Safe(environment) +
                 "; action=RESET_SCAN_PRESERVE_OLD_DB" +
@@ -3240,7 +3240,7 @@ namespace AERISFlightControl.Terrain
                     "; plans=" +
                     (snapshot == null ? 0 : snapshot.Count)
                         .ToString(CultureInfo.InvariantCulture) +
-                    "; environment_contract=ENV3_TERRAIN_CFG_PQS");
+                    "; environment_contract=ENV4_EXACTCPU_HYBRID");
 
                 if (snapshot == null) return;
                 for (int i = 0; i < snapshot.Count; i++)
