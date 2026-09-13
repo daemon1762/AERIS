@@ -68,6 +68,10 @@ namespace AERISFlightControl.Terrain
             internal bool Cancelled;
             internal bool ManualRequested;
             internal string EnvironmentHash = string.Empty;
+            // AERIS53: body-local terrain authority fingerprint. This is distinct
+            // from EnvironmentHash so legacy ENV4 stable IDs can be retained across
+            // the one-time migration without masking future body-local changes.
+            internal string BodyEnvironmentFingerprint = string.Empty;
             internal long Generation = 1L;
             internal long EstimatedTargetTiles;
         }
@@ -217,7 +221,9 @@ namespace AERISFlightControl.Terrain
         const int StandardEncodeCommitCeiling = 32;
         const int CoastlineScanBatchSize = 8;
         const int CoastlineSamplingActiveLimit = 2;
-        const int PreloadStateVersion = 6;
+        const int PreloadStateVersion = 7;
+        const int BodyEnvironmentFingerprintStateVersion = 7;
+        const int DurableCoastlineStateVersion = 6;
         const int PointSetSignatureStateVersion = 5;
         const int LegacyPreloadStateVersion = 4;
         const int MaxCoastlineBitmapBytes = 1024 * 1024;
@@ -2380,39 +2386,114 @@ namespace AERISFlightControl.Terrain
                 LogR044LoadedStateSnapshot();
             }
 
-            if (!AERISTerrainTileSystem.GameDataHashReady) return;
+            if (plan == null || body == null ||
+                !AERISTerrainTileSystem.GameDataHashReady) return;
+
+            string bodyFingerprint =
+                AERISTerrainTileSystem.BodyEnvironmentFingerprintForBody(body);
+            if (string.IsNullOrEmpty(bodyFingerprint)) return;
+
+            string previousFingerprint =
+                plan.BodyEnvironmentFingerprint ?? string.Empty;
+            bool migratedLegacyIdentity = false;
+            bool bodyFingerprintChanged = false;
+
+            if (string.IsNullOrEmpty(previousFingerprint))
+            {
+                // AERIS53 migration: accepted AERIS52 state has no body-local
+                // fingerprint. Adopt the current body-local authority while retaining
+                // the already-persisted EnvironmentHash as its canonical stable ID.
+                // This prevents AERIS53 itself from causing one more all-body reset.
+                plan.BodyEnvironmentFingerprint = bodyFingerprint;
+                if (!string.IsNullOrEmpty(plan.EnvironmentHash))
+                {
+                    AERISTerrainTileSystem.SetEnvironmentCompatibilityOverride(
+                        body.name, plan.EnvironmentHash);
+                    migratedLegacyIdentity = true;
+                }
+                else
+                {
+                    AERISTerrainTileSystem.ClearEnvironmentCompatibilityOverride(
+                        body.name);
+                }
+                stateDirty = true;
+
+                AERISLogger.Info(
+                    "[AERIS53][ENV4_BODY_SCOPE]" +
+                    "; event=LEGACY_IDENTITY_ADOPTED" +
+                    "; body=" + R044Safe(body.name) +
+                    "; body_fingerprint=" + R044Safe(bodyFingerprint) +
+                    "; preserved_environment=" +
+                        R044Safe(plan.EnvironmentHash) +
+                    "; preserved_existing_id=" +
+                        R044Bool(migratedLegacyIdentity));
+            }
+            else if (string.Equals(previousFingerprint, bodyFingerprint,
+                StringComparison.Ordinal))
+            {
+                if (!string.IsNullOrEmpty(plan.EnvironmentHash))
+                    AERISTerrainTileSystem.SetEnvironmentCompatibilityOverride(
+                        body.name, plan.EnvironmentHash);
+                else
+                    AERISTerrainTileSystem.ClearEnvironmentCompatibilityOverride(
+                        body.name);
+            }
+            else
+            {
+                // A real body-local terrain authority change (config, PQS topology,
+                // producer policy, radius/ocean/format) ends compatibility with the
+                // legacy canonical ID. Only this body is allowed to transition.
+                AERISTerrainTileSystem.ClearEnvironmentCompatibilityOverride(
+                    body.name);
+                plan.BodyEnvironmentFingerprint = bodyFingerprint;
+                bodyFingerprintChanged = true;
+                stateDirty = true;
+
+                AERISLogger.Warn(
+                    "[AERIS53][ENV4_BODY_SCOPE]" +
+                    "; event=BODY_FINGERPRINT_CHANGED" +
+                    "; body=" + R044Safe(body.name) +
+                    "; previous_body_fingerprint=" +
+                        R044Safe(previousFingerprint) +
+                    "; new_body_fingerprint=" + R044Safe(bodyFingerprint) +
+                    "; action=ALLOW_BODY_LOCAL_ENVIRONMENT_TRANSITION");
+            }
 
             string environment = AERISTerrainTileSystem.EnvironmentHashForBody(body);
             if (string.IsNullOrEmpty(environment)) return;
 
-            if (r044EnvironmentObserved.Add(body == null ? string.Empty : body.name))
+            if (r044EnvironmentObserved.Add(body.name))
             {
                 AERISLogger.Info(
                     "[AERIS44][R043_PRELOAD_ENV_OBSERVED]" +
-                    "; body=" + R044Safe(body == null ? string.Empty : body.name) +
+                    "; body=" + R044Safe(body.name) +
                     "; game_data_hash=" + R044Safe(AERISTerrainTileSystem.GameDataHash) +
                     "; body_config_hash=" + R044Safe(AERISTerrainTileSystem.TerrainConfigHashForBody(body)) +
+                    "; body_fingerprint=" + R044Safe(bodyFingerprint) +
+                    "; legacy_identity_adopted=" +
+                        R044Bool(migratedLegacyIdentity) +
+                    "; body_fingerprint_changed=" +
+                        R044Bool(bodyFingerprintChanged) +
                     "; environment_contract=ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1" +
-                    "; persisted_environment=" + R044Safe(plan == null ? string.Empty : plan.EnvironmentHash) +
+                    "; persisted_environment=" + R044Safe(plan.EnvironmentHash) +
                     "; live_environment=" + R044Safe(environment) +
                     "; environment_match=" +
-                        R044Bool(plan != null && string.Equals(
-                            plan.EnvironmentHash, environment,
+                        R044Bool(string.Equals(plan.EnvironmentHash, environment,
                             StringComparison.Ordinal)) +
                     "; completed_environment=" +
-                        R044Safe(plan == null ? string.Empty : plan.CompletedEnvironmentHash) +
+                        R044Safe(plan.CompletedEnvironmentHash) +
                     "; automatic_complete=" +
-                        R044Bool(plan != null && plan.AutomaticComplete) +
+                        R044Bool(plan.AutomaticComplete) +
                     "; global_cursor=" +
-                        (plan == null ? "0" : plan.GlobalCursor.ToString(CultureInfo.InvariantCulture)) +
+                        plan.GlobalCursor.ToString(CultureInfo.InvariantCulture) +
                     "; far_cursor=" +
-                        (plan == null ? "0" : plan.FarCursor.ToString(CultureInfo.InvariantCulture)) +
+                        plan.FarCursor.ToString(CultureInfo.InvariantCulture) +
                     "; route_cursor=" +
-                        (plan == null ? "0" : plan.RouteCursor.ToString(CultureInfo.InvariantCulture)) +
+                        plan.RouteCursor.ToString(CultureInfo.InvariantCulture) +
                     "; coastline_cursor=" +
-                        (plan == null ? "0" : plan.CoastlineCursor.ToString(CultureInfo.InvariantCulture)) +
+                        plan.CoastlineCursor.ToString(CultureInfo.InvariantCulture) +
                     "; coastline_complete=" +
-                        R044Bool(plan != null && plan.CoastlineComplete));
+                        R044Bool(plan.CoastlineComplete));
             }
             if (string.Equals(plan.EnvironmentHash, environment,
                 StringComparison.Ordinal)) return;
@@ -2420,9 +2501,10 @@ namespace AERISFlightControl.Terrain
             string previousEnvironment = plan.EnvironmentHash ?? string.Empty;
             AERISLogger.Warn(
                 "[AERIS44][R043_PRELOAD_ENV_TRANSITION]" +
-                "; body=" + R044Safe(body == null ? string.Empty : body.name) +
+                "; body=" + R044Safe(body.name) +
                 "; game_data_hash=" + R044Safe(AERISTerrainTileSystem.GameDataHash) +
                 "; body_config_hash=" + R044Safe(AERISTerrainTileSystem.TerrainConfigHashForBody(body)) +
+                "; body_fingerprint=" + R044Safe(bodyFingerprint) +
                 "; environment_contract=ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1" +
                 "; previous_environment=" + R044Safe(previousEnvironment) +
                 "; new_environment=" + R044Safe(environment) +
@@ -2439,6 +2521,8 @@ namespace AERISFlightControl.Terrain
                     R044Bool(plan.AutomaticComplete));
 
             plan.EnvironmentHash = environment;
+            AERISTerrainTileSystem.SetEnvironmentCompatibilityOverride(
+                body.name, environment);
             InvalidateAutomaticCompletion(plan);
             InvalidateCoastlineCompletion(plan);
             plan.Generation++;
@@ -2958,6 +3042,7 @@ namespace AERISFlightControl.Terrain
                         StringComparison.Ordinal)) return false;
                     int version = reader.ReadInt32();
                     if (version != PreloadStateVersion &&
+                        version != DurableCoastlineStateVersion &&
                         version != PointSetSignatureStateVersion &&
                         version != LegacyPreloadStateVersion)
                         return false;
@@ -2993,12 +3078,14 @@ namespace AERISFlightControl.Terrain
                         plan.RouteCursor = reader.ReadInt64();
                         plan.PointCursor = reader.ReadInt32();
                         plan.EnvironmentHash = reader.ReadString();
+                        if (version >= BodyEnvironmentFingerprintStateVersion)
+                            plan.BodyEnvironmentFingerprint = reader.ReadString();
                         plan.Paused = reader.ReadBoolean();
                         plan.CoastlineCursor = reader.ReadInt64();
                         plan.CoastlineComplete = reader.ReadBoolean();
                         plan.CompletedCoastlineFormatVersion = reader.ReadInt32();
                         plan.CompletedCoastlineEnvironmentHash = reader.ReadString();
-                        if (version >= PreloadStateVersion)
+                        if (version >= DurableCoastlineStateVersion)
                         {
                             plan.CoastlineProgressBodyRadiusMillimetres =
                                 reader.ReadInt64();
@@ -3134,6 +3221,8 @@ namespace AERISFlightControl.Terrain
                         RouteCursor = plan.RouteCursor,
                         PointCursor = plan.PointCursor,
                         EnvironmentHash = plan.EnvironmentHash,
+                        BodyEnvironmentFingerprint =
+                            plan.BodyEnvironmentFingerprint,
                         Paused = plan.Paused,
                         CoastlineCursor = plan.CoastlineCursor,
                         CoastlineComplete = plan.CoastlineComplete,
@@ -3203,6 +3292,8 @@ namespace AERISFlightControl.Terrain
                             writer.Write(plan.RouteCursor);
                             writer.Write(plan.PointCursor);
                             writer.Write(plan.EnvironmentHash ?? string.Empty);
+                            writer.Write(plan.BodyEnvironmentFingerprint ??
+                                string.Empty);
                             writer.Write(plan.Paused);
                             writer.Write(plan.CoastlineCursor);
                             writer.Write(plan.CoastlineComplete);
