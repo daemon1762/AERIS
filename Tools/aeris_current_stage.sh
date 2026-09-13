@@ -8,8 +8,8 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="LAND-R1-APPROACH-RUNTIME-FOUNDATION"
-RUNNER="$ROOT/Tools/aeris50_land_r1_approach_runtime_foundation.sh"
+STAGE="PRELOAD-COASTLINE-FASTPATH-C1-C2"
+RUNNER="$ROOT/Tools/aeris51_preload_coastline_fastpath_c1_c2.sh"
 
 cd "$ROOT"
 
@@ -17,11 +17,11 @@ echo "=== AERIS CURRENT STAGE ==="
 echo "stage=$STAGE"
 echo "KSP=$KSP"
 echo "HEAD=$(git rev-parse HEAD)"
-echo "roadmap=CPU_SHADOW_PRODUCTION[ACCEPTED] -> PRELOAD_PTC[ACCEPTED] -> TERRAIN_ND[ACCEPTED] -> LAND[ACTIVE:R1] -> NEW_NAV[BLOCKED]"
+echo "roadmap=CPU_SHADOW_PRODUCTION[ACCEPTED] -> PRELOAD_PTC[ACCEPTED] -> TERRAIN_ND[ACCEPTED] -> LAND[R1 PASS] -> PRELOAD_COAST_FASTPATH[ACTIVE:C1+C2] -> LAND[R2 NEXT] -> NEW_NAV[BLOCKED]"
 echo
 
 [[ -f "$RUNNER" ]] || {
-  echo "STOP: AERIS50 LAND R1 runner missing" >&2
+  echo "STOP: AERIS51 preload coastline fastpath runner missing" >&2
   exit 20
 }
 
