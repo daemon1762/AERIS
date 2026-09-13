@@ -1047,6 +1047,7 @@ namespace AERISFlightControl.UI
    if(!settings.LandSectionExpanded){GUILayout.EndVertical();return;}
 
    GUILayout.Label("Registry: "+registry.Status);
+   GUILayout.Label("Procedure Registry: "+(core.Approaches==null?"UNAVAILABLE":core.Approaches.Status));
    GUILayout.Label(registry.SourceSummary);
    GUILayout.Label("KSP: "+registry.KspProviderStatus);
    GUILayout.Label("KK: "+registry.KerbalKonstructsProviderStatus);
@@ -1104,6 +1105,14 @@ namespace AERISFlightControl.UI
    AERISRunwayDefinition selectedRunway=registry.SelectedRunway;
    if(selectedDirection!=null){
     GUILayout.Label("Approach: "+selectedDirection.DisplayName+" | HDG "+selectedDirection.HeadingDeg.ToString("000.0")+"° | GP "+selectedDirection.GlidePathAngleDeg.ToString("0.0")+"°");
+    if(core.Approaches!=null){
+     System.Collections.Generic.IList<AERISApproachProcedure> procedureView=core.Approaches.SnapshotForDirection(selectedDirection.StableId);
+     if(procedureView.Count>0){
+      AERISApproachProcedure procedure=procedureView[0];
+      GUILayout.Label("Procedure: "+procedure.DisplayName+" | "+procedure.State.ToString().ToUpperInvariant()+" | GP "+procedure.GlideAngleDeg.ToString("0.0")+"°");
+      if(!string.IsNullOrEmpty(procedure.Detail))GUILayout.Label("Procedure status: "+procedure.Detail);
+     }else GUILayout.Label("Procedure: NOT BUILT FOR SELECTED DIRECTION");
+    }
     GUILayout.Label("Geometry bearing "+selectedDirection.ThresholdBearingDeg.ToString("000.0")+"° | heading error "+selectedDirection.HeadingGeometryErrorDeg.ToString("0.0")+"°");
     if(selectedDirection.GeometryDirectionAutoCorrected)GUILayout.Label("RECIPROCAL ENDPOINT ORDER AUTO-CORRECTED");
     if(!selectedDirection.HeadingMatchesGeometry)GUILayout.Label("RUNWAY GEOMETRY INVALID — LAND ARM INHIBITED");
