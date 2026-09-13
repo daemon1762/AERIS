@@ -21,7 +21,22 @@ namespace AERISFlightControl.Terrain
     internal sealed class AERISTerrainTileSystem : IDisposable
     {
         static readonly object environmentSync = new object();
+        sealed class TerrainConfigRecord
+        {
+            internal string RelativePath = string.Empty;
+            internal string ContentHash = string.Empty;
+            internal string ScopeText = string.Empty;
+        }
+
+        sealed class TerrainConfigHashSnapshot
+        {
+            internal string GlobalHash = string.Empty;
+            internal TerrainConfigRecord[] Records = new TerrainConfigRecord[0];
+        }
+
         static string cachedGameDataHash = string.Empty;
+        static TerrainConfigRecord[] cachedTerrainConfigRecords =
+            new TerrainConfigRecord[0];
         static bool gameDataHashReady;
         static bool gameDataHashRequested;
         static readonly Dictionary<string, string> cachedBodyEnvironmentHashes =
@@ -2928,11 +2943,18 @@ namespace AERISFlightControl.Terrain
                     return ComputeGameDataHash(applicationRoot);
                 }, value =>
                 {
-                    string result = value as string;
+                    TerrainConfigHashSnapshot result =
+                        value as TerrainConfigHashSnapshot;
                     lock (environmentSync)
                     {
-                        cachedGameDataHash = string.IsNullOrEmpty(result) ?
-                            AERISTerrainHash.Fnv1A64Hex("PRELOAD_DB_UNKNOWN") : result;
+                        cachedGameDataHash = result == null ||
+                            string.IsNullOrEmpty(result.GlobalHash) ?
+                            AERISTerrainHash.Fnv1A64Hex("PRELOAD_DB_UNKNOWN") :
+                            result.GlobalHash;
+                        cachedTerrainConfigRecords = result == null ||
+                            result.Records == null ?
+                            new TerrainConfigRecord[0] : result.Records;
+                        cachedBodyEnvironmentHashes.Clear();
                         gameDataHashReady = true;
                         gameDataHashRequested = false;
                     }
@@ -2943,15 +2965,16 @@ namespace AERISFlightControl.Terrain
             }
         }
 
-        static string ComputeGameDataHash(string applicationRoot)
+        static TerrainConfigHashSnapshot ComputeGameDataHash(
+            string applicationRoot)
         {
-            // ENV3: terrain identity must not depend on unrelated GameData config
-            // churn. ModuleManager.ConfigSHA describes the entire GameData tree,
-            // so a weapon/part/UI config edit used to invalidate every body's
-            // terrain preload. Hash only configs that can plausibly alter the
-            // celestial/PQS terrain authority; the live PQS topology is appended
-            // separately by EnvironmentHashForBody().
+            // AERIS53 ENV4 hotfix:
+            // keep a global terrain-config digest for diagnostics/database metadata,
+            // but retain the relevant config records so each celestial body can derive
+            // its own terrain-config identity. A Kerbin-only runway/terrain change must
+            // never invalidate Eve, Laythe, or any unrelated body.
             var builder = new System.Text.StringBuilder(4096);
+            var records = new List<TerrainConfigRecord>();
             builder.Append("PRELOAD_TERRAIN_CFG_")
                 .Append(AERISTerrainPreloadFormat.DatabaseFormatVersion).Append('|');
             try
@@ -2972,9 +2995,15 @@ namespace AERISFlightControl.Terrain
                     string text = File.ReadAllText(files[i]);
                     if (!IsTerrainRelevantConfig(relative, text)) continue;
 
+                    string contentHash = AERISTerrainHash.Fnv1A64Hex(text);
                     builder.Append(relative).Append('|').Append(text.Length)
-                        .Append('|').Append(AERISTerrainHash.Fnv1A64Hex(text))
-                        .Append(';');
+                        .Append('|').Append(contentHash).Append(';');
+                    records.Add(new TerrainConfigRecord
+                    {
+                        RelativePath = relative ?? string.Empty,
+                        ContentHash = contentHash,
+                        ScopeText = text ?? string.Empty
+                    });
                     relevant++;
                 }
                 builder.Append("COUNT=").Append(relevant).Append('|');
@@ -2983,19 +3012,35 @@ namespace AERISFlightControl.Terrain
             {
                 builder.Append("UNKNOWN|").Append(ex.GetType().FullName);
             }
-            return AERISTerrainHash.Fnv1A64Hex(builder.ToString());
+
+            return new TerrainConfigHashSnapshot
+            {
+                GlobalHash = AERISTerrainHash.Fnv1A64Hex(builder.ToString()),
+                Records = records.ToArray()
+            };
         }
 
         static bool IsTerrainRelevantConfig(string relativePath, string text)
         {
             string path = (relativePath ?? string.Empty).Replace('\\', '/');
-            if (path.IndexOf("Kopernicus", StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
             if (string.IsNullOrEmpty(text)) return false;
 
-            return text.IndexOf("PQS", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            // Do not classify a file as terrain-affecting merely because a custom
+            // runway/asset config happens to contain words such as MapDecal or
+            // FlattenArea. Require an actual celestial-body/PQS/Kopernicus context.
+            bool bodyContext =
+                text.IndexOf("@Body[", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("%Body[", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("+Body[", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("Body[", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("\nBody", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("\rBody", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool kopernicusContext =
+                path.IndexOf("Kopernicus", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("Kopernicus", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool pqsContext =
+                text.IndexOf("PQS", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("PQSMod_", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                text.IndexOf("Kopernicus", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("VertexHeight", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("VertexSimplex", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("VertexVoronoi", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -3003,22 +3048,112 @@ namespace AERISFlightControl.Terrain
                 text.IndexOf("MapDecal", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("FlattenArea", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("FlattenOcean", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                text.IndexOf("HeightMap", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("HeightMap", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            return pqsContext && (bodyContext || kopernicusContext);
+        }
+
+        static string TerrainConfigHashForBody(string bodyName)
+        {
+            TerrainConfigRecord[] records;
+            lock (environmentSync)
+                records = cachedTerrainConfigRecords ?? new TerrainConfigRecord[0];
+
+            var builder = new System.Text.StringBuilder(2048);
+            builder.Append("PRELOAD_TERRAIN_BODY_CFG_")
+                .Append(AERISTerrainPreloadFormat.DatabaseFormatVersion).Append('|')
+                .Append(bodyName ?? string.Empty).Append('|');
+            int count = 0;
+            for (int i = 0; i < records.Length; i++)
+            {
+                TerrainConfigRecord record = records[i];
+                if (record == null ||
+                    !TerrainConfigAppliesToBody(record, bodyName)) continue;
+                builder.Append(record.RelativePath ?? string.Empty).Append('|')
+                    .Append(record.ContentHash ?? string.Empty).Append(';');
+                count++;
+            }
+            builder.Append("COUNT=").Append(count).Append('|');
+            return AERISTerrainHash.Fnv1A64Hex(builder.ToString());
+        }
+
+        static bool TerrainConfigAppliesToBody(
+            TerrainConfigRecord record, string bodyName)
+        {
+            if (record == null || string.IsNullOrEmpty(bodyName)) return true;
+            string text = record.ScopeText ?? string.Empty;
+            string path = record.RelativePath ?? string.Empty;
+
+            if (path.IndexOf(bodyName, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf(bodyName, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
+            bool explicitSelector =
                 text.IndexOf("@Body[", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("%Body[", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                text.IndexOf("+Body[", StringComparison.OrdinalIgnoreCase) >= 0;
+                text.IndexOf("+Body[", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("Body[", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (explicitSelector)
+            {
+                // Wildcard/HAS selectors may intentionally apply to many bodies.
+                if (text.IndexOf("Body,*", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    text.IndexOf("Body:HAS", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    text.IndexOf("Body,*:", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+                return false;
+            }
+
+            // Plain Kopernicus Body { name = Foo ... } files are also body scoped.
+            // Only declare them specific when an unambiguous body-name assignment is
+            // present; otherwise remain conservative and treat the record as global.
+            if (ContainsBodyNameAssignment(text))
+                return false;
+
+            return true;
+        }
+
+        static bool ContainsBodyNameAssignment(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            string[] lines = text.Split(new char[] { '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (line.StartsWith("@name", StringComparison.OrdinalIgnoreCase) ||
+                    line.StartsWith("%name", StringComparison.OrdinalIgnoreCase) ||
+                    line.StartsWith("name", StringComparison.OrdinalIgnoreCase))
+                {
+                    int equals = line.IndexOf('=');
+                    if (equals > 0 && equals + 1 < line.Length)
+                    {
+                        string value = line.Substring(equals + 1).Trim();
+                        int comment = value.IndexOf("//", StringComparison.Ordinal);
+                        if (comment >= 0) value = value.Substring(0, comment).Trim();
+                        if (!string.IsNullOrEmpty(value)) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        internal static string TerrainConfigHashForBody(
+            CelestialBody body)
+        {
+            if (!GameDataHashReady) return string.Empty;
+            return TerrainConfigHashForBody(body == null ? string.Empty : body.name);
         }
 
         internal static string EnvironmentHashForBody(CelestialBody body)
         {
             if (!GameDataHashReady) return string.Empty;
-            string gameDataHash = GameDataHash;
+            string bodyConfigHash = TerrainConfigHashForBody(body);
             string producerPolicy = TerrainProducerPolicyForBody(body);
             string cacheKey = (body == null ? string.Empty : body.name) + "|" +
                 (body == null ? 0.0 : body.Radius).ToString("R",
                     CultureInfo.InvariantCulture) + "|" +
                 (body != null && body.ocean ? "1" : "0") + "|" +
-                gameDataHash + "|" + producerPolicy;
+                bodyConfigHash + "|" + producerPolicy;
             lock (environmentSync)
             {
                 string cached;
@@ -3030,7 +3165,7 @@ namespace AERISFlightControl.Terrain
             builder.Append("AERIS_TERRAIN_ENV4_EXACTCPU_HYBRID|");
             builder.Append(AERISTerrainTileFormat.Version).Append('|');
             builder.Append(AERISTerrainPreloadFormat.DatabaseFormatVersion).Append('|');
-            builder.Append(gameDataHash).Append('|');
+            builder.Append(bodyConfigHash).Append('|');
             builder.Append(body == null ? string.Empty : body.name).Append('|');
             builder.Append((body == null ? 0.0 : body.Radius).ToString("R",
                 CultureInfo.InvariantCulture)).Append('|');
