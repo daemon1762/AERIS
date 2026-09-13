@@ -158,6 +158,7 @@
     <Compile Include="Terrain\AERISR043PreloadPtcPipeline.cs" />
     <Compile Include="Terrain\AERISR047ExactCpuProduction.cs" />
     <Compile Include="Terrain\AERISR051CoastlineExactFastPath.cs" />
+    <Compile Include="Terrain\AERISR051PreloadCoastlineFastPath.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadCodec.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadDatabase.cs" />
     <Compile Include="Terrain\AERISTerrainBlockPipeline.cs" />
