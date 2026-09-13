@@ -41,6 +41,8 @@ namespace AERISFlightControl.Terrain
         static bool gameDataHashRequested;
         static readonly Dictionary<string, string> cachedBodyEnvironmentHashes =
             new Dictionary<string, string>(StringComparer.Ordinal);
+        static readonly Dictionary<string, string> bodyEnvironmentCompatibilityOverrides =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         readonly AERISSettings settings;
         readonly AERISTerrainPerformanceController performance;
         readonly AERISTerrainRamTileCache ram;
@@ -3254,7 +3256,8 @@ namespace AERISFlightControl.Terrain
             return TerrainConfigHashForBody(body == null ? string.Empty : body.name);
         }
 
-        internal static string EnvironmentHashForBody(CelestialBody body)
+        internal static string BodyEnvironmentFingerprintForBody(
+            CelestialBody body)
         {
             if (!GameDataHashReady) return string.Empty;
             string bodyConfigHash = TerrainConfigHashForBody(body);
@@ -3272,7 +3275,7 @@ namespace AERISFlightControl.Terrain
             }
 
             var builder = new System.Text.StringBuilder(4096);
-            builder.Append("AERIS_TERRAIN_ENV4_EXACTCPU_HYBRID|");
+            builder.Append("AERIS_TERRAIN_ENV4_EXACTCPU_HYBRID_BODY_FP_HF1|");
             builder.Append(AERISTerrainTileFormat.Version).Append('|');
             builder.Append(AERISTerrainPreloadFormat.DatabaseFormatVersion).Append('|');
             builder.Append(bodyConfigHash).Append('|');
@@ -3286,6 +3289,39 @@ namespace AERISFlightControl.Terrain
             string result = AERISTerrainHash.Fnv1A64Hex(builder.ToString());
             lock (environmentSync) cachedBodyEnvironmentHashes[cacheKey] = result;
             return result;
+        }
+
+        internal static string EnvironmentHashForBody(CelestialBody body)
+        {
+            if (!GameDataHashReady) return string.Empty;
+            string bodyName = body == null ? string.Empty : body.name;
+            lock (environmentSync)
+            {
+                string preserved;
+                if (!string.IsNullOrEmpty(bodyName) &&
+                    bodyEnvironmentCompatibilityOverrides.TryGetValue(
+                        bodyName, out preserved) &&
+                    !string.IsNullOrEmpty(preserved))
+                    return preserved;
+            }
+            return BodyEnvironmentFingerprintForBody(body);
+        }
+
+        internal static void SetEnvironmentCompatibilityOverride(
+            string bodyName, string environmentHash)
+        {
+            if (string.IsNullOrEmpty(bodyName) ||
+                string.IsNullOrEmpty(environmentHash)) return;
+            lock (environmentSync)
+                bodyEnvironmentCompatibilityOverrides[bodyName] = environmentHash;
+        }
+
+        internal static void ClearEnvironmentCompatibilityOverride(
+            string bodyName)
+        {
+            if (string.IsNullOrEmpty(bodyName)) return;
+            lock (environmentSync)
+                bodyEnvironmentCompatibilityOverrides.Remove(bodyName);
         }
 
         static string TerrainProducerPolicyForBody(CelestialBody body)
