@@ -2391,7 +2391,8 @@ namespace AERISFlightControl.Terrain
                     "[AERIS44][R043_PRELOAD_ENV_OBSERVED]" +
                     "; body=" + R044Safe(body == null ? string.Empty : body.name) +
                     "; game_data_hash=" + R044Safe(AERISTerrainTileSystem.GameDataHash) +
-                    "; environment_contract=ENV4_EXACTCPU_HYBRID" +
+                    "; body_config_hash=" + R044Safe(AERISTerrainTileSystem.TerrainConfigHashForBody(body)) +
+                    "; environment_contract=ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1" +
                     "; persisted_environment=" + R044Safe(plan == null ? string.Empty : plan.EnvironmentHash) +
                     "; live_environment=" + R044Safe(environment) +
                     "; environment_match=" +
@@ -2421,7 +2422,8 @@ namespace AERISFlightControl.Terrain
                 "[AERIS44][R043_PRELOAD_ENV_TRANSITION]" +
                 "; body=" + R044Safe(body == null ? string.Empty : body.name) +
                 "; game_data_hash=" + R044Safe(AERISTerrainTileSystem.GameDataHash) +
-                "; environment_contract=ENV4_EXACTCPU_HYBRID" +
+                "; body_config_hash=" + R044Safe(AERISTerrainTileSystem.TerrainConfigHashForBody(body)) +
+                "; environment_contract=ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1" +
                 "; previous_environment=" + R044Safe(previousEnvironment) +
                 "; new_environment=" + R044Safe(environment) +
                 "; action=RESET_SCAN_PRESERVE_OLD_DB" +
