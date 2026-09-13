@@ -68,29 +68,41 @@ grep -Fq 'TerrainConfigHashForBody(CelestialBody body)' "$TILE" || {
   echo "STOP: body-scoped config hash API missing" >&2
   exit 20
 }
-grep -Fq 'string bodyConfigHash = TerrainConfigHashForBody(body);' "$TILE" || {
-  echo "STOP: environment is not using body-scoped config hash" >&2
+grep -Fq 'BodyEnvironmentFingerprintForBody(' "$TILE" || {
+  echo "STOP: body-local authority fingerprint missing" >&2
   exit 21
+}
+grep -Fq 'SetEnvironmentCompatibilityOverride(' "$TILE" || {
+  echo "STOP: legacy environment compatibility bridge missing" >&2
+  exit 22
+}
+grep -Fq 'const int PreloadStateVersion = 7;' "$BUILDER" || {
+  echo "STOP: AERIS53 migration state format missing" >&2
+  exit 23
+}
+grep -Fq 'event=LEGACY_IDENTITY_ADOPTED' "$BUILDER" || {
+  echo "STOP: legacy identity adoption evidence missing" >&2
+  exit 24
 }
 grep -Fq 'return pqsContext && (bodyContext || kopernicusContext);' "$TILE" || {
   echo "STOP: strict terrain-config classifier missing" >&2
-  exit 22
+  exit 25
 }
 grep -Fq 'RunTerrainConfigScopeSelfTest' "$TILE" || {
   echo "STOP: terrain scope self-test missing" >&2
-  exit 23
+  exit 26
 }
 grep -Fq '[AERIS53][ENV4_BODY_SCOPE]' "$TILE" || {
   echo "STOP: AERIS53 runtime evidence missing" >&2
-  exit 24
+  exit 27
 }
 grep -Fq 'body_config_hash=' "$BUILDER" || {
   echo "STOP: environment audit lacks body config hash" >&2
-  exit 25
+  exit 28
 }
 grep -Fq 'ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1' "$BUILDER" || {
   echo "STOP: environment contract evidence label missing" >&2
-  exit 26
+  exit 29
 }
 
 while IFS= read -r path; do
@@ -99,7 +111,7 @@ while IFS= read -r path; do
       ;;
     *)
       echo "STOP: unexpected file changed from AERIS52 accepted base: $path" >&2
-      exit 27
+      exit 30
       ;;
   esac
 done < <(git diff --name-only "$BASE"...HEAD)
@@ -164,18 +176,37 @@ segment_from_offset "$(state_value log_offset)" "$SEG"
 
 if [[ "$PHASE" = "FIRST_RUNTIME" ]]; then
   selftest="$(grep -F '[AERIS53][ENV4_BODY_SCOPE]' "$SEG" | grep -F 'event=SELFTEST' | grep -Fc 'pass=true' || true)"
+  migrated="$(grep -F '[AERIS53][ENV4_BODY_SCOPE]' "$SEG" | grep -Fc 'event=LEGACY_IDENTITY_ADOPTED' || true)"
+  fingerprint_changed="$(grep -F '[AERIS53][ENV4_BODY_SCOPE]' "$SEG" | grep -Fc 'event=BODY_FINGERPRINT_CHANGED' || true)"
   observed="$(grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$SEG" | grep -Fc 'body_config_hash=' || true)"
+  matches="$(grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$SEG" | grep -Fc 'environment_match=true' || true)"
+  transitions="$(grep -Fc '[AERIS44][R043_PRELOAD_ENV_TRANSITION]' "$SEG" || true)"
   contract="$(grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$SEG" | grep -Fc 'ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1' || true)"
   exceptions="$(grep -Eic 'AERIS53.*(exception|error|fail)|Exception.*AERISFlightControl' "$SEG" || true)"
 
   echo "=== AERIS53 FIRST RUNTIME ==="
   echo "scope_selftest_pass=$selftest"
+  echo "legacy_identity_adoptions=$migrated"
+  echo "body_fingerprint_changes=$fingerprint_changed"
   echo "environment_observed_with_body_hash=$observed"
+  echo "environment_match_true=$matches"
+  echo "environment_transitions=$transitions"
   echo "body_scoped_contract_events=$contract"
   echo "suspected_exceptions=$exceptions"
 
-  if (( selftest < 1 || observed < 1 || contract < 1 || exceptions != 0 )); then
+  fail=0
+  (( selftest >= 1 )) || fail=$((fail+1))
+  (( migrated >= 1 )) || fail=$((fail+1))
+  (( fingerprint_changed == 0 )) || fail=$((fail+1))
+  (( observed >= 1 )) || fail=$((fail+1))
+  (( matches == observed )) || fail=$((fail+1))
+  (( transitions == 0 )) || fail=$((fail+1))
+  (( contract == observed )) || fail=$((fail+1))
+  (( exceptions == 0 )) || fail=$((fail+1))
+
+  if (( fail != 0 )); then
     echo "AERIS53_ENV4_BODY_SCOPE_VERDICT=FAIL_FIRST_RUNTIME"
+    echo "failed_checks=$fail"
     exit 60
   fi
 
@@ -196,6 +227,8 @@ fi
 
 if [[ "$PHASE" = "STABILITY_RUNTIME" ]]; then
   selftest="$(grep -F '[AERIS53][ENV4_BODY_SCOPE]' "$SEG" | grep -F 'event=SELFTEST' | grep -Fc 'pass=true' || true)"
+  migrated="$(grep -F '[AERIS53][ENV4_BODY_SCOPE]' "$SEG" | grep -Fc 'event=LEGACY_IDENTITY_ADOPTED' || true)"
+  fingerprint_changed="$(grep -F '[AERIS53][ENV4_BODY_SCOPE]' "$SEG" | grep -Fc 'event=BODY_FINGERPRINT_CHANGED' || true)"
   observed="$(grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$SEG" | grep -Fc 'body_config_hash=' || true)"
   matches="$(grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$SEG" | grep -Fc 'environment_match=true' || true)"
   transitions="$(grep -Fc '[AERIS44][R043_PRELOAD_ENV_TRANSITION]' "$SEG" || true)"
@@ -204,6 +237,8 @@ if [[ "$PHASE" = "STABILITY_RUNTIME" ]]; then
 
   echo "=== AERIS53 STABILITY RUNTIME ==="
   echo "scope_selftest_pass=$selftest"
+  echo "legacy_identity_adoptions=$migrated"
+  echo "body_fingerprint_changes=$fingerprint_changed"
   echo "environment_observed=$observed"
   echo "environment_match_true=$matches"
   echo "environment_transitions=$transitions"
@@ -213,6 +248,8 @@ if [[ "$PHASE" = "STABILITY_RUNTIME" ]]; then
 
   fail=0
   (( selftest >= 1 )) || fail=$((fail+1))
+  (( migrated == 0 )) || fail=$((fail+1))
+  (( fingerprint_changed == 0 )) || fail=$((fail+1))
   (( observed >= 1 )) || fail=$((fail+1))
   (( matches == observed )) || fail=$((fail+1))
   (( transitions == 0 )) || fail=$((fail+1))
