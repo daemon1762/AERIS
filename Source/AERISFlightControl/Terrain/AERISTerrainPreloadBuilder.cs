@@ -1009,6 +1009,10 @@ namespace AERISFlightControl.Terrain
                 return;
             }
 
+            if (!durableCoastlineCommit &&
+                tile.Key.Lod == AERISTerrainTileLod.Far)
+                R051RecordFarCoastlineClassification(plan, tile);
+
             string id = tile.Key.StableId;
             var work = new PendingEncodeWork
             {
@@ -1298,7 +1302,7 @@ namespace AERISFlightControl.Terrain
             {
                 if (coastlineScanInFlight ||
                     PendingCoastlineSamplingCountLocked(plan.BodyName) >=
-                        CoastlineSamplingActiveLimit) return false;
+                        R051CoastlineAdmissionLimit()) return false;
             }
 
             int latCount = AERISTerrainTileSystem.LatitudeTileCountFor(body,
@@ -1320,6 +1324,13 @@ namespace AERISFlightControl.Terrain
                 stateDirty = true;
                 return false;
             }
+
+            bool transientHandled;
+            bool transientQueued = R051TryScheduleTransientCoastline(
+                plan, body, total, latCount, lonCount, out transientHandled);
+            if (transientHandled)
+                return transientQueued;
+
             if (plan.CoastlineCursor < 0L || plan.CoastlineCursor >= total)
                 plan.CoastlineCursor = 0L;
 
@@ -1438,10 +1449,36 @@ namespace AERISFlightControl.Terrain
             string id = baseTile.Key.StableId;
             lock (sync)
             {
-                if (pendingCoastlineBaseTiles.ContainsKey(id) || pendingWrites.Contains(id) ||
+                if (pendingCoastlineBaseTiles.ContainsKey(id) ||
+                    pendingWrites.Contains(id) ||
                     PendingCoastlineSamplingCountLocked(plan.BodyName) >=
-                        CoastlineSamplingActiveLimit) return false;
+                        R051CoastlineAdmissionLimit()) return false;
                 pendingCoastlineBaseTiles[id] = baseTile.CloneImmutable();
+            }
+
+            bool exactPolicy;
+            bool fatal;
+            if (R051TrySubmitExactCpuCoastline(
+                plan, body, baseTile, out exactPolicy, out fatal))
+                return true;
+
+            if (exactPolicy)
+            {
+                lock (sync) pendingCoastlineBaseTiles.Remove(id);
+                return false;
+            }
+
+            // Non-Exact bodies retain the accepted bounded PQS/block-pipeline path.
+            // Keep its historical two-tile admission limit even though the Exact path
+            // may use more worker lanes.
+            lock (sync)
+            {
+                if (R051LegacyCoastlinePendingCountLocked() >
+                    CoastlineSamplingActiveLimit)
+                {
+                    pendingCoastlineBaseTiles.Remove(id);
+                    return false;
+                }
             }
 
             AERISTerrainTileRequest request = CreateHighDensityCoastlineRequest(body,
@@ -1457,7 +1494,8 @@ namespace AERISFlightControl.Terrain
                 AERISLogger.Info("[PRELOAD_COAST_HD] body=" + plan.BodyName +
                     "; event=QUEUE; tile=" + id + "; base_res=" + baseTile.Resolution +
                     "; target_res=" +
-                    AERISTerrainCoastlineExtractor.HighDensityResolution);
+                    AERISTerrainCoastlineExtractor.HighDensityResolution +
+                    "; path=LEGACY_BOUNDED");
                 return true;
             }
             lock (sync) pendingCoastlineBaseTiles.Remove(id);
@@ -1579,6 +1617,7 @@ namespace AERISFlightControl.Terrain
                     coastlineScanBodyName = string.Empty;
                 }
             }
+            R051ClearTransientCoastlineForBody(bodyName);
         }
 
         void SchedulePendingEncodes()
