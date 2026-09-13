@@ -2958,6 +2958,16 @@ namespace AERISFlightControl.Terrain
                         gameDataHashReady = true;
                         gameDataHashRequested = false;
                     }
+
+                    bool selfTest = RunTerrainConfigScopeSelfTest();
+                    AERISLogger.Info(
+                        "[AERIS53][ENV4_BODY_SCOPE]" +
+                        "; event=SELFTEST" +
+                        "; pass=" + (selfTest ? "true" : "false") +
+                        "; relevant_config_records=" +
+                            (result == null || result.Records == null ? "0" :
+                                result.Records.Length.ToString(CultureInfo.InvariantCulture)) +
+                        "; global_game_data_hash=" + GameDataHash);
                 }, false);
             if (!accepted)
             {
@@ -3018,6 +3028,42 @@ namespace AERISFlightControl.Terrain
                 GlobalHash = AERISTerrainHash.Fnv1A64Hex(builder.ToString()),
                 Records = records.ToArray()
             };
+        }
+
+        static bool RunTerrainConfigScopeSelfTest()
+        {
+            try
+            {
+                const string runwayOnly =
+                    "STATIC\n{\n    mesh = runway\n    note = MapDecal\n}\n";
+                if (IsTerrainRelevantConfig(
+                    "/KerbalKonstructs/Instances/Runway.cfg", runwayOnly))
+                    return false;
+
+                var kerbin = new TerrainConfigRecord
+                {
+                    RelativePath = "/Test/KerbinTerrain.cfg",
+                    ContentHash = "TEST",
+                    ScopeText = "@Body[Kerbin]\nPQS\n"
+                };
+                if (!TerrainConfigAppliesToBody(kerbin, "Kerbin")) return false;
+                if (TerrainConfigAppliesToBody(kerbin, "Eve")) return false;
+
+                var wildcard = new TerrainConfigRecord
+                {
+                    RelativePath = "/Test/AllTerrain.cfg",
+                    ContentHash = "TEST",
+                    ScopeText = "@Body,*:HAS[@PQS]\n"
+                };
+                if (!TerrainConfigAppliesToBody(wildcard, "Kerbin")) return false;
+                if (!TerrainConfigAppliesToBody(wildcard, "Eve")) return false;
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         static string BuildTerrainConfigScopeProbe(string text)
