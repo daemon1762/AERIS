@@ -63,6 +63,7 @@ git merge-base --is-ancestor "$BASE" HEAD || {
 
 TILE="Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs"
 BUILDER="Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs"
+RECOVERY="Tools/aeris53_recover_preload_state.py"
 
 grep -Fq 'TerrainConfigHashForBody(CelestialBody body)' "$TILE" || {
   echo "STOP: body-scoped config hash API missing" >&2
@@ -104,10 +105,22 @@ grep -Fq 'ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1' "$BUILDER" || {
   echo "STOP: environment contract evidence label missing" >&2
   exit 29
 }
+[[ -f "$RECOVERY" ]] || {
+  echo "STOP: AERIS53 recovery helper missing" >&2
+  exit 30
+}
+grep -Fq 'SKIP_NOT_LEGACY_V6' "$RECOVERY" || {
+  echo "STOP: recovery helper is not version-gated" >&2
+  exit 31
+}
+grep -Fq 'plan["EnvironmentHash"] != data.get("live_environment", "")' "$RECOVERY" || {
+  echo "STOP: recovery helper fail-closed environment guard missing" >&2
+  exit 32
+}
 
 while IFS= read -r path; do
   case "$path" in
-    Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs|Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs|Tools/aeris53_env4_body_scoped_fingerprint_hotfix.sh|Tools/aeris_current_stage.sh|Docs/AERIS53_ENV4_BODY_SCOPED_TERRAIN_FINGERPRINT_HOTFIX.md)
+    Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs|Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs|Tools/aeris53_env4_body_scoped_fingerprint_hotfix.sh|Tools/aeris53_recover_preload_state.py|Tools/aeris_current_stage.sh|Docs/AERIS53_ENV4_BODY_SCOPED_TERRAIN_FINGERPRINT_HOTFIX.md)
       ;;
     *)
       echo "STOP: unexpected file changed from AERIS52 accepted base: $path" >&2
@@ -121,6 +134,7 @@ echo "terrain_db_format=UNCHANGED"
 echo "global_game_data_hash=DIAGNOSTIC_METADATA_ONLY"
 echo "environment_config_identity=BODY_SCOPED"
 echo "old_environment_chunks=NEVER_AUTO_DELETED"
+echo "legacy_state_recovery=FAIL_CLOSED_LOG_PROVEN_ONLY"
 echo "flight_control_changes=NONE"
 
 if [[ ! -f "$STATE" ]]; then
@@ -128,6 +142,10 @@ if [[ ! -f "$STATE" ]]; then
     echo "STOP: exit KSP before building/arming AERIS53" >&2
     exit 40
   fi
+
+  echo
+  echo "=== AERIS53 PRE-BUILD STATE RECOVERY ==="
+  python3 "$RECOVERY" "$KSP"
 
   AERIS_PRELOAD_BRANCH="$EXPECTED_BRANCH"     bash Tools/AERIS_preload_build_and_go.sh     "$([[ "$KSP" == "$HOME/.local/share/Steam/steamapps/common/Kerbal Space Program" ]] && echo laptop || echo desktop)"
 
