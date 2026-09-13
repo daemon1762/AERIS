@@ -237,11 +237,9 @@ namespace AERISFlightControl.Terrain
             BodyPlan plan,
             CelestialBody body,
             AERISTerrainHeightTile baseTile,
-            out bool exactPolicy,
-            out bool fatal)
+            out bool exactPolicy)
         {
             exactPolicy = false;
-            fatal = false;
             if (plan == null || body == null || baseTile == null)
                 return false;
 
@@ -258,7 +256,6 @@ namespace AERISFlightControl.Terrain
                 body, plan.EnvironmentHash, out snapshot, out failure) ||
                 snapshot == null || !snapshot.IsValid)
             {
-                fatal = true;
                 plan.Paused = true;
                 plan.Generation++;
                 status =
@@ -316,7 +313,11 @@ namespace AERISFlightControl.Terrain
                         plan.Generation != capturedGeneration ||
                         !string.Equals(plan.EnvironmentHash,
                             capturedEnvironment, StringComparison.Ordinal))
+                    {
+                        lock (sync)
+                            pendingCoastlineBaseTiles.Remove(id);
                         return;
+                    }
 
                     if (result == null ||
                         !string.IsNullOrEmpty(result.Error) ||
