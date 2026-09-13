@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using UnityEngine;
 
@@ -69,6 +70,7 @@ namespace AERISFlightControl.Terrain
             internal string Error = string.Empty;
             internal int WorkerThreadId;
             internal int Samples;
+            internal double WorkerMilliseconds;
             internal byte[] Flags = new byte[0];
             internal float[] Segments = new float[0];
         }
@@ -192,6 +194,7 @@ namespace AERISFlightControl.Terrain
         {
             var result = new R051CoastlineExactResult();
             result.WorkerThreadId = Thread.CurrentThread.ManagedThreadId;
+            Stopwatch watch = Stopwatch.StartNew();
             try
             {
                 if (snapshot == null || !snapshot.IsValid)
@@ -283,6 +286,11 @@ namespace AERISFlightControl.Terrain
                     ex.GetType().Name + ":" + (ex.Message ?? string.Empty);
                 result.Flags = new byte[0];
                 result.Segments = new float[0];
+            }
+            finally
+            {
+                watch.Stop();
+                result.WorkerMilliseconds = watch.Elapsed.TotalMilliseconds;
             }
             return result;
         }
