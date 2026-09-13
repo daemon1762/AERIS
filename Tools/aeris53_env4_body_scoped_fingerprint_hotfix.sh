@@ -95,7 +95,7 @@ grep -Fq 'ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1' "$BUILDER" || {
 
 while IFS= read -r path; do
   case "$path" in
-    Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs|    Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs|    Tools/aeris53_env4_body_scoped_fingerprint_hotfix.sh|    Tools/aeris_current_stage.sh|    Docs/AERIS53_ENV4_BODY_SCOPED_TERRAIN_FINGERPRINT_HOTFIX.md)
+    Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs|Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs|Tools/aeris53_env4_body_scoped_fingerprint_hotfix.sh|Tools/aeris_current_stage.sh|Docs/AERIS53_ENV4_BODY_SCOPED_TERRAIN_FINGERPRINT_HOTFIX.md)
       ;;
     *)
       echo "STOP: unexpected file changed from AERIS52 accepted base: $path" >&2
