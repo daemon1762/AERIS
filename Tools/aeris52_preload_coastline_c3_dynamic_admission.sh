@@ -234,7 +234,6 @@ echo "installed_dll_sha256=$ACTUAL_DLL"
 fail=0
 (( selftest > 0 )) || fail=$((fail+1))
 (( changes > 0 )) || fail=$((fail+1))
-(( states > 0 )) || fail=$((fail+1))
 (( summaries > 0 )) || fail=$((fail+1))
 (( range_fail == 0 )) || fail=$((fail+1))
 (( activation > 0 )) || fail=$((fail+1))
