@@ -1,0 +1,235 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo "usage: bash Tools/aeris53_env4_body_scoped_fingerprint_hotfix.sh <KSP root>" >&2
+  exit 2
+fi
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+KSP="$1"
+EXPECTED_BRANCH="agent/aeris53-env4-body-scoped-terrain-fingerprint-hotfix"
+BASE="ddf98dea7ca1f29493520921d627f7de69412d81"
+GAME_DATA="$KSP/GameData/AERISFlightControl"
+TARGET="$GAME_DATA/Plugins/AERISFlightControl.dll"
+LOG="$GAME_DATA/Logs/AERISFlightControl.log"
+KEY="$(printf '%s' "$KSP" | sha256sum | awk '{print substr($1,1,16)}')"
+STATE_DIR="$HOME/.cache/AERIS/aeris53-env4-body-scope/$KEY"
+STATE="$STATE_DIR/state.txt"
+
+state_value(){
+  local key="$1"
+  [[ -f "$STATE" ]] || return 1
+  grep -m1 "^$key=" "$STATE" | cut -d= -f2-
+}
+
+segment_from_offset(){
+  local off="$1" out="$2" size start
+  [[ -f "$LOG" ]] || { : > "$out"; return; }
+  size="$(stat -c %s "$LOG")"
+  start=$((off+1))
+  if (( size >= off )); then
+    tail -c +"$start" "$LOG" > "$out"
+  else
+    cp "$LOG" "$out"
+  fi
+}
+
+cd "$ROOT"
+
+echo "=== AERIS53 / ENV4 BODY-SCOPED TERRAIN FINGERPRINT HOTFIX ==="
+echo "branch=$(git branch --show-current)"
+echo "HEAD=$(git rev-parse HEAD)"
+echo "base_aeris52_accepted=$BASE"
+echo "KSP=$KSP"
+
+[[ "$(git branch --show-current)" = "$EXPECTED_BRANCH" ]] || {
+  echo "STOP: wrong branch" >&2
+  exit 10
+}
+[[ -z "$(git status --porcelain)" ]] || {
+  echo "STOP: worktree dirty" >&2
+  git status -sb >&2
+  exit 11
+}
+git merge-base --is-ancestor "$BASE" HEAD || {
+  echo "STOP: AERIS52 accepted base is not an ancestor" >&2
+  exit 12
+}
+[[ -d "$KSP/KSP_x64_Data/Managed" ]] || {
+  echo "STOP: invalid KSP root" >&2
+  exit 13
+}
+
+TILE="Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs"
+BUILDER="Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs"
+
+grep -Fq 'TerrainConfigHashForBody(CelestialBody body)' "$TILE" || {
+  echo "STOP: body-scoped config hash API missing" >&2
+  exit 20
+}
+grep -Fq 'string bodyConfigHash = TerrainConfigHashForBody(body);' "$TILE" || {
+  echo "STOP: environment is not using body-scoped config hash" >&2
+  exit 21
+}
+grep -Fq 'return pqsContext && (bodyContext || kopernicusContext);' "$TILE" || {
+  echo "STOP: strict terrain-config classifier missing" >&2
+  exit 22
+}
+grep -Fq 'RunTerrainConfigScopeSelfTest' "$TILE" || {
+  echo "STOP: terrain scope self-test missing" >&2
+  exit 23
+}
+grep -Fq '[AERIS53][ENV4_BODY_SCOPE]' "$TILE" || {
+  echo "STOP: AERIS53 runtime evidence missing" >&2
+  exit 24
+}
+grep -Fq 'body_config_hash=' "$BUILDER" || {
+  echo "STOP: environment audit lacks body config hash" >&2
+  exit 25
+}
+grep -Fq 'ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1' "$BUILDER" || {
+  echo "STOP: environment contract evidence label missing" >&2
+  exit 26
+}
+
+while IFS= read -r path; do
+  case "$path" in
+    Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs|    Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs|    Tools/aeris53_env4_body_scoped_fingerprint_hotfix.sh|    Tools/aeris_current_stage.sh|    Docs/AERIS53_ENV4_BODY_SCOPED_TERRAIN_FINGERPRINT_HOTFIX.md)
+      ;;
+    *)
+      echo "STOP: unexpected file changed from AERIS52 accepted base: $path" >&2
+      exit 27
+      ;;
+  esac
+done < <(git diff --name-only "$BASE"...HEAD)
+
+echo "PASS static AERIS53 architecture gate"
+echo "terrain_db_format=UNCHANGED"
+echo "global_game_data_hash=DIAGNOSTIC_METADATA_ONLY"
+echo "environment_config_identity=BODY_SCOPED"
+echo "old_environment_chunks=NEVER_AUTO_DELETED"
+echo "flight_control_changes=NONE"
+
+if [[ ! -f "$STATE" ]]; then
+  if pgrep -f "$KSP/KSP.x86_64" >/dev/null 2>&1; then
+    echo "STOP: exit KSP before building/arming AERIS53" >&2
+    exit 40
+  fi
+
+  AERIS_PRELOAD_BRANCH="$EXPECTED_BRANCH"     bash Tools/AERIS_preload_build_and_go.sh     "$([[ "$KSP" == "$HOME/.local/share/Steam/steamapps/common/Kerbal Space Program" ]] && echo laptop || echo desktop)"
+
+  [[ -f "$TARGET" ]] || { echo "STOP: installed DLL missing" >&2; exit 41; }
+  DLL_SHA="$(sha256sum "$TARGET" | awk '{print $1}')"
+  LOG_OFFSET=0
+  [[ -f "$LOG" ]] && LOG_OFFSET="$(stat -c %s "$LOG")"
+
+  rm -rf "$STATE_DIR"
+  mkdir -p "$STATE_DIR"
+  cat > "$STATE" <<EOFSTATE
+phase=FIRST_RUNTIME
+head=$(git rev-parse HEAD)
+dll_sha=$DLL_SHA
+log_offset=$LOG_OFFSET
+EOFSTATE
+
+  echo
+  echo "AERIS53_ENV4_BODY_SCOPE=ARMED"
+  echo "installed_dll_sha256=$DLL_SHA"
+  echo "AERIS_CURRENT_STAGE=WAITING_FOR_AERIS53_FIRST_RUNTIME"
+  echo "human_action=Launch KSP to the main menu, wait until the AERIS preload window has populated, exit normally, then run this same command again."
+  exit 0
+fi
+
+[[ "$(state_value head)" = "$(git rev-parse HEAD)" ]] || {
+  echo "STOP: branch HEAD changed after AERIS53 was armed" >&2
+  exit 50
+}
+[[ -f "$TARGET" ]] || { echo "STOP: installed DLL missing" >&2; exit 51; }
+ACTUAL_DLL="$(sha256sum "$TARGET" | awk '{print $1}')"
+[[ "$ACTUAL_DLL" = "$(state_value dll_sha)" ]] || {
+  echo "STOP: installed DLL changed after AERIS53 was armed" >&2
+  exit 52
+}
+
+if pgrep -f "$KSP/KSP.x86_64" >/dev/null 2>&1; then
+  echo "AERIS_CURRENT_STAGE=WAITING_FOR_KSP_EXIT"
+  exit 0
+fi
+
+PHASE="$(state_value phase)"
+SEG="$(mktemp /tmp/AERIS53_ENV4_SCOPE.XXXXXX)"
+trap 'rm -f "$SEG"' EXIT
+segment_from_offset "$(state_value log_offset)" "$SEG"
+
+if [[ "$PHASE" = "FIRST_RUNTIME" ]]; then
+  selftest="$(grep -F '[AERIS53][ENV4_BODY_SCOPE]' "$SEG" | grep -F 'event=SELFTEST' | grep -Fc 'pass=true' || true)"
+  observed="$(grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$SEG" | grep -Fc 'body_config_hash=' || true)"
+  contract="$(grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$SEG" | grep -Fc 'ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1' || true)"
+  exceptions="$(grep -Eic 'AERIS53.*(exception|error|fail)|Exception.*AERISFlightControl' "$SEG" || true)"
+
+  echo "=== AERIS53 FIRST RUNTIME ==="
+  echo "scope_selftest_pass=$selftest"
+  echo "environment_observed_with_body_hash=$observed"
+  echo "body_scoped_contract_events=$contract"
+  echo "suspected_exceptions=$exceptions"
+
+  if (( selftest < 1 || observed < 1 || contract < 1 || exceptions != 0 )); then
+    echo "AERIS53_ENV4_BODY_SCOPE_VERDICT=FAIL_FIRST_RUNTIME"
+    exit 60
+  fi
+
+  LOG_OFFSET=0
+  [[ -f "$LOG" ]] && LOG_OFFSET="$(stat -c %s "$LOG")"
+  cat > "$STATE" <<EOFSTATE
+phase=STABILITY_RUNTIME
+head=$(git rev-parse HEAD)
+dll_sha=$ACTUAL_DLL
+log_offset=$LOG_OFFSET
+EOFSTATE
+
+  echo "AERIS53_FIRST_RUNTIME=PASS"
+  echo "AERIS_CURRENT_STAGE=WAITING_FOR_STABILITY_RUNTIME"
+  echo "human_action=Launch KSP once more without changing GameData, reach the main menu, wait for preload status, exit normally, then run this same command again."
+  exit 0
+fi
+
+if [[ "$PHASE" = "STABILITY_RUNTIME" ]]; then
+  selftest="$(grep -F '[AERIS53][ENV4_BODY_SCOPE]' "$SEG" | grep -F 'event=SELFTEST' | grep -Fc 'pass=true' || true)"
+  observed="$(grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$SEG" | grep -Fc 'body_config_hash=' || true)"
+  matches="$(grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$SEG" | grep -Fc 'environment_match=true' || true)"
+  transitions="$(grep -Fc '[AERIS44][R043_PRELOAD_ENV_TRANSITION]' "$SEG" || true)"
+  db_suppressed="$(grep -Fc '[AERIS49][ENV4_DB_WRITE_SUPPRESSED]' "$SEG" || true)"
+  exceptions="$(grep -Eic 'AERIS53.*(exception|error|fail)|Exception.*AERISFlightControl' "$SEG" || true)"
+
+  echo "=== AERIS53 STABILITY RUNTIME ==="
+  echo "scope_selftest_pass=$selftest"
+  echo "environment_observed=$observed"
+  echo "environment_match_true=$matches"
+  echo "environment_transitions=$transitions"
+  echo "exact_db_write_suppressed=$db_suppressed"
+  echo "suspected_exceptions=$exceptions"
+  echo "installed_dll_sha256=$ACTUAL_DLL"
+
+  fail=0
+  (( selftest >= 1 )) || fail=$((fail+1))
+  (( observed >= 1 )) || fail=$((fail+1))
+  (( matches == observed )) || fail=$((fail+1))
+  (( transitions == 0 )) || fail=$((fail+1))
+  (( db_suppressed == 0 )) || fail=$((fail+1))
+  (( exceptions == 0 )) || fail=$((fail+1))
+
+  if (( fail != 0 )); then
+    echo "AERIS53_ENV4_BODY_SCOPE_VERDICT=FAIL"
+    echo "failed_checks=$fail"
+    exit 70
+  fi
+
+  echo "AERIS53_ENV4_BODY_SCOPE_VERDICT=PASS_CANDIDATE"
+  echo "AERIS_CURRENT_STAGE=ENV4_BODY_SCOPE_HOTFIX_CANDIDATE_PASS"
+  echo "next_action=Review runtime evidence, then accept/freeze AERIS53 before resuming LAND-R2."
+  exit 0
+fi
+
+echo "STOP: unknown AERIS53 state phase: $PHASE" >&2
+exit 80
