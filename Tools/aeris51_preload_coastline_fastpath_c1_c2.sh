@@ -127,7 +127,7 @@ grep -Fq 'AERISR051PreloadCoastlineFastPath.cs' "$CSPROJ" || {
 
 while IFS= read -r path; do
   case "$path" in
-    Source/AERISFlightControl/AERISFlightControl.csproj|    Source/AERISFlightControl/Terrain/AERISR051CoastlineExactFastPath.cs|    Source/AERISFlightControl/Terrain/AERISR051PreloadCoastlineFastPath.cs|    Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs|    Tools/aeris51_preload_coastline_fastpath_c1_c2.sh|    Tools/aeris_current_stage.sh|    Docs/AERIS51_PRELOAD_COASTLINE_FASTPATH_C1_C2.md)
+    Source/AERISFlightControl/AERISFlightControl.csproj|Source/AERISFlightControl/Terrain/AERISR051CoastlineExactFastPath.cs|Source/AERISFlightControl/Terrain/AERISR051PreloadCoastlineFastPath.cs|Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs|Tools/aeris51_preload_coastline_fastpath_c1_c2.sh|Tools/aeris_current_stage.sh|Docs/AERIS51_PRELOAD_COASTLINE_FASTPATH_C1_C2.md)
       ;;
     *)
       echo "STOP: unexpected file changed from LAND R1 base: $path" >&2
@@ -150,7 +150,9 @@ if [[ ! -f "$STATE" ]]; then
     exit 40
   fi
 
-  AERIS_PRELOAD_BRANCH="$EXPECTED_BRANCH"     bash Tools/AERIS_preload_build_and_go.sh     "$([[ "$KSP" == "$HOME/.local/share/Steam/steamapps/common/Kerbal Space Program" ]] && echo laptop || echo desktop)"
+  AERIS_PRELOAD_BRANCH="$EXPECTED_BRANCH" \
+    bash Tools/AERIS_preload_build_and_go.sh \
+    "$([[ "$KSP" == "$HOME/.local/share/Steam/steamapps/common/Kerbal Space Program" ]] && echo laptop || echo desktop)"
 
   [[ -f "$TARGET" ]] || {
     echo "STOP: installed DLL missing" >&2
@@ -213,6 +215,8 @@ complete="$(grep -F '[AERIS51][PRELOAD_COAST_FAST]' "$SEG" | grep -Fc 'event=COM
 snapshot_fail="$(grep -F '[AERIS51][PRELOAD_COAST_FAST]' "$SEG" | grep -Fc 'event=SNAPSHOT_FAIL' || true)"
 worker_fail="$(grep -F '[AERIS51][PRELOAD_COAST_FAST]' "$SEG" | grep -Fc 'event=WORKER_FAIL' || true)"
 db_suppressed="$(grep -Fc '[AERIS49][ENV4_DB_WRITE_SUPPRESSED]' "$SEG" || true)"
+phase_elapsed="$(grep -F '[AERIS51][PRELOAD_COAST_FAST]' "$SEG" | grep -F 'event=COMPLETE' | tail -n1 | sed -n 's/.*; elapsed_s=\([^;]*\).*/\1/p' || true)"
+last_worker_ms="$(grep -F '[AERIS51][PRELOAD_COAST_FAST]' "$SEG" | grep -F 'event=EXACT_WORKER_COMMIT' | tail -n1 | sed -n 's/.*; worker_ms=\([^;]*\).*/\1/p' || true)"
 
 echo "=== AERIS51 COASTLINE RUNTIME RESULT ==="
 echo "transient_index_activation=$activation"
@@ -223,6 +227,8 @@ echo "coastline_complete=$complete"
 echo "snapshot_fail=$snapshot_fail"
 echo "worker_fail=$worker_fail"
 echo "exact_db_write_suppressed=$db_suppressed"
+echo "coastline_phase_elapsed_s=${phase_elapsed:-NA}"
+echo "last_exact_worker_ms=${last_worker_ms:-NA}"
 echo "installed_dll_sha256=$ACTUAL_DLL"
 
 if (( snapshot_fail > 0 || worker_fail > 0 || db_suppressed > 0 )); then
