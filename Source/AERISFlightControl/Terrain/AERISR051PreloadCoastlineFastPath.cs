@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using AERISFlightControl.Logging;
 using AERISFlightControl.Performance;
 
@@ -297,14 +296,8 @@ namespace AERISFlightControl.Terrain
                 runtime.CaptureStamp(),
                 context =>
                 {
-                    Stopwatch watch = Stopwatch.StartNew();
-                    AERISTerrainBlockPipeline.R051CoastlineExactResult result =
-                        AERISTerrainBlockPipeline.R051BuildExactCoastline(
-                            snapshot, south, north, west, east, resolution);
-                    watch.Stop();
-                    // Reuse Error as a pure diagnostic suffix only on failure; timing
-                    // is logged from the commit side by sample count and scheduler data.
-                    return result;
+                    return AERISTerrainBlockPipeline.R051BuildExactCoastline(
+                        snapshot, south, north, west, east, resolution);
                 },
                 value =>
                 {
