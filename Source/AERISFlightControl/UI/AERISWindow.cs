@@ -1109,7 +1109,7 @@ namespace AERISFlightControl.UI
      System.Collections.Generic.IList<AERISApproachProcedure> procedureView=core.Approaches.SnapshotForDirection(selectedDirection.StableId);
      if(procedureView.Count>0){
       AERISApproachProcedure procedure=procedureView[0];
-      GUILayout.Label("Procedure: "+procedure.DisplayName+" | "+procedure.State.ToString().ToUpperInvariant()+" | GP "+procedure.GlideAngleDeg.ToString("0.0")+"°");
+      GUILayout.Label("Procedure: "+procedure.DisplayName+" | "+procedure.State.ToString().ToUpperInvariant()+(procedure.State==AERISApproachProcedureState.Available||procedure.State==AERISApproachProcedureState.Conditional?" | GP "+procedure.GlideAngleDeg.ToString("0.0")+"°":""));
       if(!string.IsNullOrEmpty(procedure.Detail))GUILayout.Label("Procedure status: "+procedure.Detail);
      }else GUILayout.Label("Procedure: NOT BUILT FOR SELECTED DIRECTION");
     }
