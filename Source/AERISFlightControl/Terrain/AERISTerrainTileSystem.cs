@@ -3002,7 +3002,7 @@ namespace AERISFlightControl.Terrain
                     {
                         RelativePath = relative ?? string.Empty,
                         ContentHash = contentHash,
-                        ScopeText = text ?? string.Empty
+                        ScopeText = BuildTerrainConfigScopeProbe(text)
                     });
                     relevant++;
                 }
@@ -3018,6 +3018,24 @@ namespace AERISFlightControl.Terrain
                 GlobalHash = AERISTerrainHash.Fnv1A64Hex(builder.ToString()),
                 Records = records.ToArray()
             };
+        }
+
+        static string BuildTerrainConfigScopeProbe(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            string[] lines = text.Split(new char[] { '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries);
+            var builder = new System.Text.StringBuilder(512);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                if (line.IndexOf("Body", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    line.IndexOf("name", StringComparison.OrdinalIgnoreCase) < 0 &&
+                    line.IndexOf("Kopernicus", StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                builder.Append(line.Trim()).Append('\n');
+            }
+            return builder.ToString();
         }
 
         static bool IsTerrainRelevantConfig(string relativePath, string text)
