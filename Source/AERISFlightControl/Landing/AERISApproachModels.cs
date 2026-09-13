@@ -86,7 +86,7 @@ namespace AERISFlightControl.Landing
         internal double NormalMaximumGlideAngleDeg = 4.0;
         internal double ObstacleMaximumGlideAngleDeg = 5.0;
         internal double ConditionalMaximumGlideAngleDeg = 6.0;
-        internal double GlideAngleStepDeg = 0.25;
+        internal double GlideAngleStepDeg = 0.10;
         internal double MinimumFinalStraightMeters = 4000.0;
         internal double MaximumCaptureDistanceMeters = 30000.0;
         internal double MinimumTerrainClearanceMeters = 90.0;
