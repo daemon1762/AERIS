@@ -1298,6 +1298,11 @@ namespace AERISFlightControl.Terrain
             AERISPerformanceRuntime runtime = AERISPerformanceRuntime.Current;
             if (runtime == null || runtime.Scheduler == null) return false;
 
+            // AERIS52 C3 wraps both the C1 transient fast path and the accepted
+            // durable disk-scan fallback. Admission state is therefore body-scoped
+            // before either path is selected.
+            R052BeginDynamicCoastlineAdmission(plan.BodyName);
+
             lock (sync)
             {
                 if (coastlineScanInFlight ||
@@ -1321,6 +1326,8 @@ namespace AERISFlightControl.Terrain
             if (total <= 0L)
             {
                 MarkCoastlineComplete(plan);
+                R052CompleteDynamicCoastlineAdmission(plan.BodyName);
+                R052ResetDynamicCoastlineAdmission(plan.BodyName);
                 stateDirty = true;
                 return false;
             }
@@ -1426,6 +1433,8 @@ namespace AERISFlightControl.Terrain
                             "; format=" +
                             AERISTerrainCoastlineExtractor.HighDensityFormatVersion +
                             "; environment=" + (plan.EnvironmentHash ?? string.Empty));
+                        R052CompleteDynamicCoastlineAdmission(plan.BodyName);
+                        R052ResetDynamicCoastlineAdmission(plan.BodyName);
                     }
                     stateDirty = true;
                 }, false);
