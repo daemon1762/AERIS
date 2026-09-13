@@ -29,6 +29,7 @@ namespace AERISFlightControl.Terrain
             internal readonly List<string> CandidateOrder = new List<string>();
             internal int CandidateCursor;
             internal bool Activated;
+            internal float ActivatedRealtime;
         }
 
         readonly Dictionary<string, R051TransientCoastlineIndex>
@@ -129,6 +130,7 @@ namespace AERISFlightControl.Terrain
 
                 index.CandidateCursor = 0;
                 index.Activated = true;
+                index.ActivatedRealtime = UnityEngine.Time.realtimeSinceStartup;
                 stateDirty = true;
                 AERISLogger.Info(
                     "[AERIS51][PRELOAD_COAST_FAST]" +
@@ -153,7 +155,11 @@ namespace AERISFlightControl.Terrain
                     "; event=COMPLETE" +
                     "; mode=TRANSIENT_INDEX_PLUS_EXACT_WORKER" +
                     "; processed=" + processed +
-                    "; total=" + total);
+                    "; total=" + total +
+                    "; elapsed_s=" +
+                        Math.Max(0f, UnityEngine.Time.realtimeSinceStartup -
+                            index.ActivatedRealtime).ToString("0.000",
+                                System.Globalization.CultureInfo.InvariantCulture));
                 R051ClearTransientCoastlineForBody(plan.BodyName);
                 return false;
             }
@@ -408,6 +414,9 @@ namespace AERISFlightControl.Terrain
                 "; segments=" +
                     (result.Segments == null ? 0 : result.Segments.Length / 4) +
                 "; worker_thread=" + result.WorkerThreadId +
+                "; worker_ms=" +
+                    result.WorkerMilliseconds.ToString("0.000",
+                        System.Globalization.CultureInfo.InvariantCulture) +
                 "; authority=EXACT_CPU");
         }
 
