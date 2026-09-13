@@ -1457,9 +1457,8 @@ namespace AERISFlightControl.Terrain
             }
 
             bool exactPolicy;
-            bool fatal;
             if (R051TrySubmitExactCpuCoastline(
-                plan, body, baseTile, out exactPolicy, out fatal))
+                plan, body, baseTile, out exactPolicy))
                 return true;
 
             if (exactPolicy)
