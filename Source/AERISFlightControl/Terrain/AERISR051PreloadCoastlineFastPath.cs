@@ -131,6 +131,7 @@ namespace AERISFlightControl.Terrain
                 index.CandidateCursor = 0;
                 index.Activated = true;
                 index.ActivatedRealtime = UnityEngine.Time.realtimeSinceStartup;
+                R052BeginDynamicCoastlineAdmission(plan.BodyName);
                 stateDirty = true;
                 AERISLogger.Info(
                     "[AERIS51][PRELOAD_COAST_FAST]" +
@@ -160,6 +161,7 @@ namespace AERISFlightControl.Terrain
                         Math.Max(0f, UnityEngine.Time.realtimeSinceStartup -
                             index.ActivatedRealtime).ToString("0.000",
                                 System.Globalization.CultureInfo.InvariantCulture));
+                R052CompleteDynamicCoastlineAdmission(plan.BodyName);
                 R051ClearTransientCoastlineForBody(plan.BodyName);
                 return false;
             }
@@ -222,8 +224,7 @@ namespace AERISFlightControl.Terrain
 
         int R051CoastlineAdmissionLimit()
         {
-            int workers = ResolveWorkerCount();
-            return Math.Max(2, Math.Min(8, workers));
+            return R052ResolveDynamicCoastlineAdmissionLimit();
         }
 
         int R051LegacyCoastlinePendingCountLocked()
@@ -429,6 +430,7 @@ namespace AERISFlightControl.Terrain
                 {
                     r051TransientCoastline.Clear();
                     r051ExactCoastlineInFlight.Clear();
+                    R052ResetDynamicCoastlineAdmission(string.Empty);
                     return;
                 }
                 r051TransientCoastline.Remove(bodyName);
@@ -441,6 +443,7 @@ namespace AERISFlightControl.Terrain
                 for (int i = 0; i < remove.Count; i++)
                     r051ExactCoastlineInFlight.Remove(remove[i]);
             }
+            R052ResetDynamicCoastlineAdmission(bodyName);
         }
     }
 }
