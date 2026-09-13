@@ -3053,7 +3053,7 @@ namespace AERISFlightControl.Terrain
                 {
                     RelativePath = "/Test/AllTerrain.cfg",
                     ContentHash = "TEST",
-                    ScopeText = "@Body,*:HAS[@PQS]\n"
+                    ScopeText = "@Body[*]:HAS[@PQS]\n"
                 };
                 if (!TerrainConfigAppliesToBody(wildcard, "Kerbin")) return false;
                 if (!TerrainConfigAppliesToBody(wildcard, "Eve")) return false;
@@ -3148,22 +3148,29 @@ namespace AERISFlightControl.Terrain
             string text = record.ScopeText ?? string.Empty;
             string path = record.RelativePath ?? string.Empty;
 
-            if (path.IndexOf(bodyName, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                text.IndexOf(bodyName, StringComparison.OrdinalIgnoreCase) >= 0)
+            if (ScopeMentionsBody(text, bodyName))
                 return true;
 
             bool explicitSelector =
-                text.IndexOf("@Body[", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                text.IndexOf("%Body[", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                text.IndexOf("+Body[", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("@Body", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("%Body", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("+Body", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 text.IndexOf("Body[", StringComparison.OrdinalIgnoreCase) >= 0;
             if (explicitSelector)
             {
-                // Wildcard/HAS selectors may intentionally apply to many bodies.
-                if (text.IndexOf("Body,*", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    text.IndexOf("Body:HAS", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                // Wildcard selectors intentionally apply to multiple bodies.
+                if (text.IndexOf("Body[*]", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    text.IndexOf("Body,*", StringComparison.OrdinalIgnoreCase) >= 0 ||
                     text.IndexOf("Body,*:", StringComparison.OrdinalIgnoreCase) >= 0)
                     return true;
+
+                // HAS without an explicit #name selector can legitimately match many
+                // bodies. With #name present and no match above, this body is excluded.
+                bool hasSelector =
+                    text.IndexOf("Body:HAS", StringComparison.OrdinalIgnoreCase) >= 0;
+                bool hasNameConstraint =
+                    text.IndexOf("#name[", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (hasSelector && !hasNameConstraint) return true;
                 return false;
             }
 
@@ -3173,7 +3180,39 @@ namespace AERISFlightControl.Terrain
             if (ContainsBodyNameAssignment(text))
                 return false;
 
+            // Path names are only a fallback. Do not use a broad substring test such
+            // as "Kerbin" in "KerbinSide" as body-scope authority.
+            string normalizedPath = path.Replace('\\', '/');
+            string bodyToken = "/" + bodyName + "/";
+            if (normalizedPath.IndexOf(bodyToken,
+                StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
             return true;
+        }
+
+        static bool ScopeMentionsBody(string text, string bodyName)
+        {
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(bodyName))
+                return false;
+
+            if (text.IndexOf("Body[" + bodyName + "]",
+                    StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("#name[" + bodyName + "]",
+                    StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+
+            string[] lines = text.Split(new char[] { '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string value;
+                if (!TryReadNameAssignment(lines[i], out value)) continue;
+                if (string.Equals(value, bodyName,
+                    StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
         }
 
         static bool ContainsBodyNameAssignment(string text)
@@ -3183,22 +3222,29 @@ namespace AERISFlightControl.Terrain
                 StringSplitOptions.RemoveEmptyEntries);
             for (int i = 0; i < lines.Length; i++)
             {
-                string line = lines[i].Trim();
-                if (line.StartsWith("@name", StringComparison.OrdinalIgnoreCase) ||
-                    line.StartsWith("%name", StringComparison.OrdinalIgnoreCase) ||
-                    line.StartsWith("name", StringComparison.OrdinalIgnoreCase))
-                {
-                    int equals = line.IndexOf('=');
-                    if (equals > 0 && equals + 1 < line.Length)
-                    {
-                        string value = line.Substring(equals + 1).Trim();
-                        int comment = value.IndexOf("//", StringComparison.Ordinal);
-                        if (comment >= 0) value = value.Substring(0, comment).Trim();
-                        if (!string.IsNullOrEmpty(value)) return true;
-                    }
-                }
+                string value;
+                if (TryReadNameAssignment(lines[i], out value) &&
+                    !string.IsNullOrEmpty(value))
+                    return true;
             }
             return false;
+        }
+
+        static bool TryReadNameAssignment(string rawLine, out string value)
+        {
+            value = string.Empty;
+            string line = (rawLine ?? string.Empty).Trim();
+            if (!(line.StartsWith("@name", StringComparison.OrdinalIgnoreCase) ||
+                  line.StartsWith("%name", StringComparison.OrdinalIgnoreCase) ||
+                  line.StartsWith("name", StringComparison.OrdinalIgnoreCase)))
+                return false;
+
+            int equals = line.IndexOf('=');
+            if (equals <= 0 || equals + 1 >= line.Length) return false;
+            value = line.Substring(equals + 1).Trim();
+            int comment = value.IndexOf("//", StringComparison.Ordinal);
+            if (comment >= 0) value = value.Substring(0, comment).Trim();
+            return !string.IsNullOrEmpty(value);
         }
 
         internal static string TerrainConfigHashForBody(
