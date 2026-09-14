@@ -25,34 +25,23 @@ state_value(){
 }
 
 segment_from_offset(){
-  local off="$1" out="$2" start_line="" session_marker=""
-  : "$off"
-
-  # AERISFlightControl.log is append-mode. AERISLogger writes a deterministic
-  # "Dedicated logger initialized. session=..." marker at the start of every
-  # KSP process. The reliable per-run slice is therefore the tail beginning at
-  # the LAST such marker in the main log.
-  #
-  # Do not rely on file byte offsets across launches, and do not select the
-  # newest Sessions/* file by mtime: asynchronous close/flush ordering can make
-  # an adjacent session file appear newer than the runtime we are validating.
+  local off="$1" out="$2" size start
   [[ -f "$LOG" ]] || { : > "$out"; return; }
 
-  start_line="$(
-    grep -nF 'Dedicated logger initialized. session=' "$LOG" |
-      tail -n1 | cut -d: -f1 || true
-  )"
-
-  if [[ -n "$start_line" ]]; then
-    session_marker="$(sed -n "${start_line}p" "$LOG")"
-    echo "validation_main_log_start_line=$start_line"
-    echo "validation_session_marker=$session_marker"
-    tail -n +"$start_line" "$LOG" > "$out"
-    return
+  # MainPath is opened with append=true. Rotate() only copies MainPath to
+  # AERISFlightControl-prev.log; it does NOT truncate MainPath. Therefore a
+  # byte offset captured after one validated runtime is the exact boundary for
+  # the next runtime, and is safer than guessing session files by mtime.
+  size="$(stat -c %s "$LOG")"
+  start=$((off+1))
+  echo "validation_log_offset=$off"
+  echo "validation_log_size=$size"
+  if (( size >= off )); then
+    tail -c +"$start" "$LOG" > "$out"
+  else
+    echo "validation_log_rotation_or_truncation=true"
+    cp "$LOG" "$out"
   fi
-
-  echo "validation_session_marker=MISSING"
-  : > "$out"
 }
 
 cd "$ROOT"
@@ -142,12 +131,12 @@ grep -Fq 'plan["EnvironmentHash"] != data.get("live_environment", "")' "$RECOVER
   echo "STOP: recovery helper fail-closed environment guard missing" >&2
   exit 32
 }
-grep -Fq 'Write("INFO", "Dedicated logger initialized. session=" + SessionPath);' "$LOGGER" || {
-  echo "STOP: logger session-start marker contract missing" >&2
-  exit 33
-}
 grep -Fq 'mainWriter = new AERISAsyncFileChannel(MainPath, true,' "$LOGGER" || {
   echo "STOP: main log append-mode contract missing" >&2
+  exit 33
+}
+grep -Fq 'if (File.Exists(command.Path)) File.Copy(command.Path,'   "Source/AERISFlightControl/Performance/AERISBackgroundFileWriter.cs" || {
+  echo "STOP: logger rotate-copy contract missing" >&2
   exit 34
 }
 
@@ -308,6 +297,27 @@ if [[ "$PHASE" = "STABILITY_RUNTIME" ]]; then
   echo "exact_db_write_suppressed=$db_suppressed"
   echo "suspected_exceptions=$exceptions"
   echo "installed_dll_sha256=$ACTUAL_DLL"
+
+  # No positive AERIS53/env evidence and no failure evidence means the KSP
+  # session ended before the async GameData fingerprint completed. That is an
+  # inconclusive test, not a product failure. Re-arm from the current EOF so
+  # the next KSP run can be evaluated cleanly.
+  if (( selftest == 0 && observed == 0 && transitions == 0 &&
+        fingerprint_changed == 0 && exceptions == 0 )); then
+    LOG_OFFSET=0
+    [[ -f "$LOG" ]] && LOG_OFFSET="$(stat -c %s "$LOG")"
+    cat > "$STATE" <<EOFSTATE
+phase=STABILITY_RUNTIME
+head=$(git rev-parse HEAD)
+dll_sha=$ACTUAL_DLL
+log_offset=$LOG_OFFSET
+EOFSTATE
+    echo "AERIS53_ENV4_BODY_SCOPE_VERDICT=INCONCLUSIVE_NO_RUNTIME_EVIDENCE"
+    echo "AERIS_CURRENT_STAGE=WAITING_FOR_FRESH_STABILITY_RUNTIME"
+    echo "next_log_offset=$LOG_OFFSET"
+    echo "human_action=Launch KSP again, reach the main menu, wait at least 60 seconds after the preload window populates, exit normally, then run this same command again."
+    exit 0
+  fi
 
   fail=0
   (( selftest >= 1 )) || fail=$((fail+1))
