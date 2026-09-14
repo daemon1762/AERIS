@@ -25,29 +25,34 @@ state_value(){
 }
 
 segment_from_offset(){
-  local off="$1" out="$2" session=""
+  local off="$1" out="$2" start_line="" session_marker=""
   : "$off"
 
-  # AERISLogger writes every KSP process to a dedicated Sessions/*_session.log.
-  # The historical AERISFlightControl.log is append-mode and its "Rotate" step
-  # copies to -prev without truncating the main file, so the main log contains
-  # multiple sessions and must not be used for per-run acceptance counts.
-  if [[ -d "$SESSION_DIR" ]]; then
-    session="$(ls -1t "$SESSION_DIR"/*_session.log 2>/dev/null | head -n1 || true)"
-  fi
+  # AERISFlightControl.log is append-mode. AERISLogger writes a deterministic
+  # "Dedicated logger initialized. session=..." marker at the start of every
+  # KSP process. The reliable per-run slice is therefore the tail beginning at
+  # the LAST such marker in the main log.
+  #
+  # Do not rely on file byte offsets across launches, and do not select the
+  # newest Sessions/* file by mtime: asynchronous close/flush ordering can make
+  # an adjacent session file appear newer than the runtime we are validating.
+  [[ -f "$LOG" ]] || { : > "$out"; return; }
 
-  if [[ -n "$session" && -f "$session" ]]; then
-    echo "validation_session_log=$session"
-    cp "$session" "$out"
+  start_line="$(
+    grep -nF 'Dedicated logger initialized. session=' "$LOG" |
+      tail -n1 | cut -d: -f1 || true
+  )"
+
+  if [[ -n "$start_line" ]]; then
+    session_marker="$(sed -n "${start_line}p" "$LOG")"
+    echo "validation_main_log_start_line=$start_line"
+    echo "validation_session_marker=$session_marker"
+    tail -n +"$start_line" "$LOG" > "$out"
     return
   fi
 
-  # Fail-safe compatibility fallback for installations without session logs.
-  # This fallback can prove presence but may over-count historical events; the
-  # normal AERIS53 acceptance path therefore requires a dedicated session log.
-  [[ -f "$LOG" ]] || { : > "$out"; return; }
-  echo "validation_session_log=FALLBACK_MAIN_LOG"
-  cp "$LOG" "$out"
+  echo "validation_session_marker=MISSING"
+  : > "$out"
 }
 
 cd "$ROOT"
@@ -137,12 +142,12 @@ grep -Fq 'plan["EnvironmentHash"] != data.get("live_environment", "")' "$RECOVER
   echo "STOP: recovery helper fail-closed environment guard missing" >&2
   exit 32
 }
-grep -Fq 'SessionPath = Path.Combine(RootPath, "Sessions",' "$LOGGER" || {
-  echo "STOP: dedicated per-session log contract missing" >&2
+grep -Fq 'Write("INFO", "Dedicated logger initialized. session=" + SessionPath);' "$LOGGER" || {
+  echo "STOP: logger session-start marker contract missing" >&2
   exit 33
 }
-grep -Fq 'sessionWriter = new AERISAsyncFileChannel(SessionPath, false,' "$LOGGER" || {
-  echo "STOP: per-session log must be non-append" >&2
+grep -Fq 'mainWriter = new AERISAsyncFileChannel(MainPath, true,' "$LOGGER" || {
+  echo "STOP: main log append-mode contract missing" >&2
   exit 34
 }
 
