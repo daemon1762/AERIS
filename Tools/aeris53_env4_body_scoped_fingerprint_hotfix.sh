@@ -24,15 +24,19 @@ state_value(){
 }
 
 segment_from_offset(){
-  local off="$1" out="$2" size start
+  local off="$1" out="$2"
   [[ -f "$LOG" ]] || { : > "$out"; return; }
-  size="$(stat -c %s "$LOG")"
-  start=$((off+1))
-  if (( size >= off )); then
-    tail -c +"$start" "$LOG" > "$out"
-  else
-    cp "$LOG" "$out"
-  fi
+
+  # AERISLogger rotates AERISFlightControl.log to AERISFlightControl-prev.log
+  # on every KSP process start. Therefore the current main log already is the
+  # exact current KSP session. Byte offsets are unsafe across process starts:
+  # a fresh second-session log can grow beyond the prior-session byte count and
+  # make an offset tail silently skip startup-only ENV4 evidence.
+  #
+  # Keep the argument for compatibility with already-armed state files, but
+  # deliberately validate the whole current-session log.
+  : "$off"
+  cp "$LOG" "$out"
 }
 
 cd "$ROOT"
@@ -64,6 +68,7 @@ git merge-base --is-ancestor "$BASE" HEAD || {
 TILE="Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs"
 BUILDER="Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs"
 RECOVERY="Tools/aeris53_recover_preload_state.py"
+LOGGER="Source/AERISFlightControl/Logging/AERISLogger.cs"
 
 grep -Fq 'internal static string TerrainConfigHashForBody(' "$TILE" || {
   echo "STOP: body-scoped config hash API missing" >&2
@@ -121,6 +126,10 @@ grep -Fq 'plan["EnvironmentHash"] != data.get("live_environment", "")' "$RECOVER
   echo "STOP: recovery helper fail-closed environment guard missing" >&2
   exit 32
 }
+grep -Fq 'AERISBackgroundFileWriter.Rotate(MainPath, previous);' "$LOGGER" || {
+  echo "STOP: current-session log rotation contract missing" >&2
+  exit 33
+}
 
 while IFS= read -r path; do
   case "$path" in
@@ -175,10 +184,22 @@ EOFSTATE
   exit 0
 fi
 
-[[ "$(state_value head)" = "$(git rev-parse HEAD)" ]] || {
-  echo "STOP: branch HEAD changed after AERIS53 was armed" >&2
-  exit 50
-}
+ARMED_HEAD="$(state_value head)"
+CURRENT_HEAD="$(git rev-parse HEAD)"
+if [[ "$ARMED_HEAD" != "$CURRENT_HEAD" ]]; then
+  if git merge-base --is-ancestor "$ARMED_HEAD" "$CURRENT_HEAD" &&
+     [[ -z "$(git diff --name-only "$ARMED_HEAD".."$CURRENT_HEAD" -- Source/AERISFlightControl)" ]]
+  then
+    echo "AERIS53_VALIDATOR_ONLY_HEAD_ADVANCE=ACCEPTED"
+    echo "armed_head=$ARMED_HEAD"
+    echo "current_head=$CURRENT_HEAD"
+  else
+    echo "STOP: compiled source changed after AERIS53 was armed" >&2
+    echo "armed_head=$ARMED_HEAD" >&2
+    echo "current_head=$CURRENT_HEAD" >&2
+    exit 50
+  fi
+fi
 [[ -f "$TARGET" ]] || { echo "STOP: installed DLL missing" >&2; exit 51; }
 ACTUAL_DLL="$(sha256sum "$TARGET" | awk '{print $1}')"
 [[ "$ACTUAL_DLL" = "$(state_value dll_sha)" ]] || {
