@@ -332,6 +332,14 @@ EOFSTATE
   if (( fail != 0 )); then
     echo "AERIS53_ENV4_BODY_SCOPE_VERDICT=FAIL"
     echo "failed_checks=$fail"
+    echo "=== AERIS53 FAILURE DETAIL / BODY FINGERPRINT CHANGES ==="
+    grep -F '[AERIS53][ENV4_BODY_SCOPE]' "$SEG" |
+      grep -F 'event=BODY_FINGERPRINT_CHANGED' || true
+    echo "=== AERIS53 FAILURE DETAIL / ENVIRONMENT MISMATCHES ==="
+    grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$SEG" |
+      grep -F 'environment_match=false' || true
+    echo "=== AERIS53 FAILURE DETAIL / ENVIRONMENT TRANSITIONS ==="
+    grep -F '[AERIS44][R043_PRELOAD_ENV_TRANSITION]' "$SEG" || true
     exit 70
   fi
 
