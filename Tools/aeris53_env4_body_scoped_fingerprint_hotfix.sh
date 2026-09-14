@@ -65,8 +65,12 @@ TILE="Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs"
 BUILDER="Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs"
 RECOVERY="Tools/aeris53_recover_preload_state.py"
 
-grep -Fq 'TerrainConfigHashForBody(CelestialBody body)' "$TILE" || {
+grep -Fq 'internal static string TerrainConfigHashForBody(' "$TILE" || {
   echo "STOP: body-scoped config hash API missing" >&2
+  exit 20
+}
+grep -Fq '            CelestialBody body)' "$TILE" || {
+  echo "STOP: body-scoped config hash CelestialBody signature missing" >&2
   exit 20
 }
 grep -Fq 'BodyEnvironmentFingerprintForBody(' "$TILE" || {
