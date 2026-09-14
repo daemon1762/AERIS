@@ -13,6 +13,7 @@ BASE="ddf98dea7ca1f29493520921d627f7de69412d81"
 GAME_DATA="$KSP/GameData/AERISFlightControl"
 TARGET="$GAME_DATA/Plugins/AERISFlightControl.dll"
 LOG="$GAME_DATA/Logs/AERISFlightControl.log"
+SESSION_DIR="$GAME_DATA/Logs/Sessions"
 KEY="$(printf '%s' "$KSP" | sha256sum | awk '{print substr($1,1,16)}')"
 STATE_DIR="$HOME/.cache/AERIS/aeris53-env4-body-scope/$KEY"
 STATE="$STATE_DIR/state.txt"
@@ -24,18 +25,28 @@ state_value(){
 }
 
 segment_from_offset(){
-  local off="$1" out="$2"
-  [[ -f "$LOG" ]] || { : > "$out"; return; }
-
-  # AERISLogger rotates AERISFlightControl.log to AERISFlightControl-prev.log
-  # on every KSP process start. Therefore the current main log already is the
-  # exact current KSP session. Byte offsets are unsafe across process starts:
-  # a fresh second-session log can grow beyond the prior-session byte count and
-  # make an offset tail silently skip startup-only ENV4 evidence.
-  #
-  # Keep the argument for compatibility with already-armed state files, but
-  # deliberately validate the whole current-session log.
+  local off="$1" out="$2" session=""
   : "$off"
+
+  # AERISLogger writes every KSP process to a dedicated Sessions/*_session.log.
+  # The historical AERISFlightControl.log is append-mode and its "Rotate" step
+  # copies to -prev without truncating the main file, so the main log contains
+  # multiple sessions and must not be used for per-run acceptance counts.
+  if [[ -d "$SESSION_DIR" ]]; then
+    session="$(ls -1t "$SESSION_DIR"/*_session.log 2>/dev/null | head -n1 || true)"
+  fi
+
+  if [[ -n "$session" && -f "$session" ]]; then
+    echo "validation_session_log=$session"
+    cp "$session" "$out"
+    return
+  fi
+
+  # Fail-safe compatibility fallback for installations without session logs.
+  # This fallback can prove presence but may over-count historical events; the
+  # normal AERIS53 acceptance path therefore requires a dedicated session log.
+  [[ -f "$LOG" ]] || { : > "$out"; return; }
+  echo "validation_session_log=FALLBACK_MAIN_LOG"
   cp "$LOG" "$out"
 }
 
@@ -126,9 +137,13 @@ grep -Fq 'plan["EnvironmentHash"] != data.get("live_environment", "")' "$RECOVER
   echo "STOP: recovery helper fail-closed environment guard missing" >&2
   exit 32
 }
-grep -Fq 'AERISBackgroundFileWriter.Rotate(MainPath, previous);' "$LOGGER" || {
-  echo "STOP: current-session log rotation contract missing" >&2
+grep -Fq 'SessionPath = Path.Combine(RootPath, "Sessions",' "$LOGGER" || {
+  echo "STOP: dedicated per-session log contract missing" >&2
   exit 33
+}
+grep -Fq 'sessionWriter = new AERISAsyncFileChannel(SessionPath, false,' "$LOGGER" || {
+  echo "STOP: per-session log must be non-append" >&2
+  exit 34
 }
 
 while IFS= read -r path; do
