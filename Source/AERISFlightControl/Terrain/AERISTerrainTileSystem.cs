@@ -3275,7 +3275,7 @@ namespace AERISFlightControl.Terrain
             }
 
             var builder = new System.Text.StringBuilder(4096);
-            builder.Append("AERIS_TERRAIN_ENV4_EXACTCPU_HYBRID_BODY_FP_HF1|");
+            builder.Append("AERIS_TERRAIN_ENV4_EXACTCPU_HYBRID_BODY_FP_HF2|");
             builder.Append(AERISTerrainTileFormat.Version).Append('|');
             builder.Append(AERISTerrainPreloadFormat.DatabaseFormatVersion).Append('|');
             builder.Append(bodyConfigHash).Append('|');
@@ -3284,8 +3284,12 @@ namespace AERISFlightControl.Terrain
                 CultureInfo.InvariantCulture)).Append('|');
             builder.Append(body != null && body.ocean ? "1" : "0").Append('|');
             builder.Append(producerPolicy).Append('|');
-            AppendStablePqsTopologyFingerprint(builder, body);
 
+            // HF2 persistent authority deliberately excludes live PQS object topology.
+            // KSP/mod startup can reorder or late-attach PQS mods (Kerbin is a proven
+            // case), so runtime topology is diagnostic-only and must never invalidate
+            // persisted terrain by itself. Config-derived body scope + stable producer
+            // policy remain the persistent terrain identity.
             string result = AERISTerrainHash.Fnv1A64Hex(builder.ToString());
             lock (environmentSync) cachedBodyEnvironmentHashes[cacheKey] = result;
             return result;
@@ -3324,7 +3328,16 @@ namespace AERISFlightControl.Terrain
                 bodyEnvironmentCompatibilityOverrides.Remove(bodyName);
         }
 
-        static string TerrainProducerPolicyForBody(CelestialBody body)
+        internal static string LivePqsTopologyShadowHashForBody(
+            CelestialBody body)
+        {
+            var builder = new System.Text.StringBuilder(2048);
+            builder.Append("AERIS_TERRAIN_PQS_TOPOLOGY_SHADOW_HF1|");
+            AppendStablePqsTopologyFingerprint(builder, body);
+            return AERISTerrainHash.Fnv1A64Hex(builder.ToString());
+        }
+
+        internal static string TerrainProducerPolicyForBody(CelestialBody body)
         {
             AERISR042ExactCpuShadowSourceResolver.Decision decision =
                 AERISR042ExactCpuShadowSourceResolver.ResolveCandidate(body);
