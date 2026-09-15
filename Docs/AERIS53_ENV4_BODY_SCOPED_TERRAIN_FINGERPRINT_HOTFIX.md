@@ -1,85 +1,132 @@
-# AERIS53 — ENV4 Body-Scoped Terrain Fingerprint Hotfix
+# AERIS53 — ENV4 Body-Scoped Terrain Fingerprint Hotfix [ACCEPTED]
+
+Accepted branch: `agent/aeris53-env4-body-scoped-terrain-fingerprint-hotfix-accepted`  
+Accepted source SHA: `d86632ad63625e584cd96a65a35a0b479dd1e661`  
+Accepted desktop DLL SHA256: `33bd27a4c0fe7ae4f4fb27a4eaf5acc6dd03af40ed3a7cab46651f4cd2ed217c`
 
 ## Trigger
 
-AERIS52 accepted preload data was observed to reset scan/completion state across many
-celestial bodies after GameData changed while installing runway/airfield mods.
+AERIS52 accepted preload data was observed to reset scan/completion state across
+unrelated celestial bodies after GameData changed while runway/airfield mods were
+being changed.
 
-Observed failure shape:
+The database itself was not corrupt. Old chunks remained available.
 
-- prior preload state was loadable and old chunks were preserved;
-- the global terrain GameData digest changed;
-- ENV4 environment identity changed on unrelated bodies;
-- those bodies entered `RESET_SCAN_PRESERVE_OLD_DB`.
+## Root cause chain
 
-The database itself was not treated as corrupt.
+### HF1 root cause
 
-## Root cause
+AERIS52 fed one global terrain-related GameData digest into every body's ENV4
+identity. A Kerbin-local or false-positive terrain config change could therefore
+invalidate Eve, Laythe and unrelated bodies.
 
-AERIS52 ENV4 appended one global terrain-relevant GameData hash to every body's
-environment identity. The classifier was also lexical enough that custom runway/asset
-configs containing terrain-like words could be admitted even without celestial-body/PQS
-context.
+HF1 replaced that global authority with a body-scoped terrain-config identity and
+kept the global GameData hash as diagnostic metadata only.
 
-Therefore one Kerbin-only or false-positive GameData change could invalidate Eve,
-Laythe, and other unrelated body preload state.
+### HF1 stability defect discovered during validation
 
-## Hotfix contract
+HF1 also included the live runtime `pqsController.mods` topology in the persistent
+body fingerprint. Kerbin proved that this topology can change across otherwise
+unchanged KSP starts because runtime PQS attachment/enumeration order is not a
+stable persistence contract.
 
-AERIS53 preserves the existing TerrainPreloadDatabaseV3 format and does not delete old
-environment chunks automatically.
+That produced one real Kerbin-only false transition during HF1 validation.
 
-It changes only environment identity construction:
+### HF2 accepted authority
 
-1. Build a strict terrain-config inventory in the existing background GameData scan.
-2. Require actual Body/PQS/Kopernicus context instead of accepting a file merely because
-   it contains words such as `MapDecal` or `FlattenArea`.
-3. Retain only a compact body-scope probe for each relevant config.
-4. Derive a per-body terrain-config hash.
-5. Feed the per-body hash, not the global GameData digest, into
-   `EnvironmentHashForBody(...)`.
-6. Keep the global GameData digest as diagnostic/database metadata only.
-7. Log `body_config_hash` beside the existing environment audit.
-8. Run an internal scope self-test at startup.
-9. Persist a body-local terrain-authority fingerprint separately from the
-   canonical environment ID. On the v6 -> v7 state migration, adopt the new
-   fingerprint while retaining the existing environment ID, so installing the
-   hotfix itself causes zero additional cache reset.
-10. Before the first AERIS53 build, the stage runner invokes a fail-closed
-    incident recovery helper. It restores a legacy v6 body only when the
-    existing AERIS44 log proves that exact current environment was created by an
-    all-body transition from a previously automatic-complete and
-    coastline-complete environment. The original state is timestamp-backed-up
-    and database chunks are never modified.
+HF2 removes live PQS topology from persistent authority.
 
-Expected behavior:
+Persistent body identity is now based on:
 
-- unrelated runway/UI/part config churn: no terrain environment transition;
-- AERIS52 -> AERIS53 migration itself: no additional environment transition;
-- the 2026-09-13 observed global-hash incident: previously complete environment
-  IDs may be restored from log-proven evidence before the first AERIS53 run;
-- Kerbin-only terrain config change: Kerbin may transition, unrelated bodies must not;
-- wildcard/global terrain config change: affected bodies may transition;
-- old environment DB chunks remain preserved;
-- no change to AA/FBW, AP, PROTECT, Ground Assist, TERRAIN_ND display authority,
-  Exact CPU producer authority, coastline C1/C2/C3, or LAND control authority.
+- body-scoped terrain-config hash;
+- terrain/preload format identity;
+- body name;
+- body radius;
+- ocean state;
+- stable producer policy.
 
-## Validation
+Live PQS topology remains available only as a shadow diagnostic hash. It cannot
+invalidate persisted terrain by itself.
 
-Use:
+## State migration and recovery
 
-`bash Tools/aeris53_env4_body_scoped_fingerprint_hotfix.sh <KSP root>`
+AERIS53 state format remains v7.
 
-The runner performs:
+The HF1 -> HF2 migration:
 
-- branch/base/diff static gates;
-- fail-closed legacy-v6 incident recovery, when exact log/state evidence matches;
-- build/install;
-- first runtime migration evidence check requiring legacy identity adoption,
-  all observed environments to match, and zero environment transitions;
-- second unchanged-GameData runtime check requiring zero migration repeats,
-  zero body-fingerprint changes, all observed environments to match, and zero
-  environment transitions.
+- adopts an explicit HF2 fingerprint schema;
+- retains the current canonical EnvironmentHash;
+- does not reset a body merely because the fingerprint formula changed.
 
-This is a hotfix detour before LAND-R2. LAND-R2 remains the next official roadmap step
-after AERIS53 is accepted/frozen.
+The recovery helper is fail-closed and supports:
+
+1. the original AERIS52 v6 global-GameData invalidation incident;
+2. the AERIS53 HF1 Kerbin false transition when exact state/log evidence matches.
+
+Recovery never modifies or deletes TerrainPreloadDatabase chunks.
+
+During HF2 validation the helper restored exactly Kerbin from the proven HF1 false
+transition and reported `database_chunks_modified=false`.
+
+## Accepted runtime evidence
+
+### HF2 first runtime
+
+- scope self-test: PASS
+- legacy identity adoptions: 0
+- HF2 fingerprint schema adoptions: 15
+- body fingerprint changes: 0
+- observed bodies: 15
+- environment matches: 15/15
+- environment transitions: 0
+- HF2 contract events: 15
+- suspected exceptions: 0
+
+### Unchanged-GameData stability runtime
+
+- scope self-test: PASS
+- legacy identity adoptions: 0
+- repeated schema adoptions: 0
+- body fingerprint changes: 0
+- observed bodies: 15
+- environment matches: 15/15
+- environment transitions: 0
+- HF2 contract events: 15
+- exact DB write suppressed events: 0
+- suspected exceptions: 0
+- verdict: `PASS_CANDIDATE`
+
+This evidence is the acceptance basis for AERIS53.
+
+## Frozen contract
+
+AERIS53 acceptance freezes:
+
+- TerrainPreloadDatabase format;
+- body-scoped HF2 persistent terrain authority;
+- global GameData hash as diagnostic metadata only;
+- live PQS topology as diagnostic-only, never persistence authority;
+- preservation of old environment chunks;
+- fail-closed recovery behavior.
+
+AERIS53 does not change:
+
+- AA / FBW;
+- BANK / HDG / PITCH / V/S / ALT / ACC / VEL control laws;
+- PROTECT;
+- Ground Assist;
+- Exact CPU producer authority;
+- accepted TERRAIN_ND behavior;
+- coastline C1/C2/C3 behavior;
+- LAND flight-control authority.
+
+## Roadmap handoff
+
+AERIS53 is accepted/frozen.
+
+Next official stage:
+
+`LAND-R2 — Immutable Terrain/PTC-backed Approach Corridor Snapshots`
+
+LAND-R2 must use the accepted terrain/cache path and must not restore synchronous
+PQS sampling as the normal approach authority.
