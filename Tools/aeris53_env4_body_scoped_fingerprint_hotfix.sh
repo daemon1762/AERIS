@@ -6,7 +6,7 @@ if [[ $# -ne 1 ]]; then
   exit 2
 fi
 
-ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
 EXPECTED_BRANCH="agent/aeris53-env4-body-scoped-terrain-fingerprint-hotfix"
 BASE="ddf98dea7ca1f29493520921d627f7de69412d81"
