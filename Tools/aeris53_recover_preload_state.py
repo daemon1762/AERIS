@@ -3,13 +3,14 @@
 AERIS53 one-time fail-closed recovery for the AERIS52 global-GameData ENV4
 invalidation incident.
 
-It only restores a body when:
-  * preload_state.aps is legacy v6,
-  * the current state is incomplete,
-  * an AERIS44 OBSERVED record proves the immediately previous environment was
-    automatic_complete=true and coastline_complete=true,
-  * that record's live_environment exactly equals the current state's
-    EnvironmentHash.
+It has two fail-closed recovery modes:
+  * v6 AERIS52 global-GameData invalidation recovery (original AERIS53 incident),
+  * v7 AERIS53 HF1 false body transition recovery, where log evidence proves a
+    live-PQS-topology fingerprint change moved exactly one body away from a
+    previously completed environment.
+
+Every recovery requires exact state/log environment agreement. No database
+chunks are modified or deleted.
 
 No database chunks are changed or deleted. The original state file is preserved
 under a timestamped AERIS53 backup before the atomic replacement.
@@ -24,7 +25,7 @@ import tempfile
 from datetime import datetime
 
 STATE_MAGIC = "AERIS_PRELOAD_TERRAIN_STATE_V2"
-SUPPORTED_VERSION = 6
+SUPPORTED_VERSIONS = (6, 7)
 COASTLINE_FORMAT_VERSION = 2
 
 
@@ -95,7 +96,7 @@ def read_state(path):
     with open(path, "rb") as stream:
         magic = read_string(stream)
         version = read_i32(stream)
-        if magic != STATE_MAGIC or version != SUPPORTED_VERSION:
+        if magic != STATE_MAGIC or version not in SUPPORTED_VERSIONS:
             return None
         mode = read_i32(stream)
         point_signature = read_string(stream)
@@ -122,6 +123,8 @@ def read_state(path):
                 "RouteCursor": read_i64(stream),
                 "PointCursor": read_i32(stream),
                 "EnvironmentHash": read_string(stream),
+                "BodyEnvironmentFingerprint":
+                    read_string(stream) if version >= 7 else "",
                 "Paused": read_bool(stream),
                 "CoastlineCursor": read_i64(stream),
                 "CoastlineComplete": read_bool(stream),
@@ -183,6 +186,9 @@ def write_state(path, state):
                 write_i64(stream, plan["RouteCursor"])
                 write_i32(stream, plan["PointCursor"])
                 write_string(stream, plan["EnvironmentHash"])
+                if state["version"] >= 7:
+                    write_string(stream,
+                                 plan.get("BodyEnvironmentFingerprint", ""))
                 write_bool(stream, plan["Paused"])
                 write_i64(stream, plan["CoastlineCursor"])
                 write_bool(stream, plan["CoastlineComplete"])
@@ -241,11 +247,92 @@ def latest_recovery_evidence(log_path):
     return evidence
 
 
+def latest_hf1_false_transition_evidence(log_path):
+    """Return exact per-body rollback evidence for AERIS53 HF1 false transitions."""
+    evidence = {}
+    completion_proof = {}
+    latest_change = {}
+    if not os.path.isfile(log_path):
+        return evidence
+
+    with open(log_path, "r", encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            if "[AERIS44][R043_PRELOAD_ENV_OBSERVED]" in line:
+                data = fields(line)
+                body = data.get("body", "").lower()
+                persisted = data.get("persisted_environment", "")
+                if (body and persisted and
+                        data.get("automatic_complete", "").lower() == "true" and
+                        data.get("completed_environment", "") == persisted and
+                        data.get("coastline_complete", "").lower() == "true"):
+                    completion_proof[(body, persisted)] = data
+                continue
+
+            if ("[AERIS53][ENV4_BODY_SCOPE]" in line and
+                    "event=BODY_FINGERPRINT_CHANGED" in line):
+                data = fields(line)
+                body = data.get("body", "").lower()
+                if body:
+                    latest_change[body] = data
+                continue
+
+            if "[AERIS44][R043_PRELOAD_ENV_TRANSITION]" not in line:
+                continue
+            data = fields(line)
+            if data.get("environment_contract", "") !=                     "ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1":
+                continue
+            body = data.get("body", "").lower()
+            old_environment = data.get("previous_environment", "")
+            new_environment = data.get("new_environment", "")
+            if not body or not old_environment or not new_environment:
+                continue
+
+            change = latest_change.get(body)
+            if not change:
+                continue
+            if change.get("new_body_fingerprint", "") !=                     data.get("body_fingerprint", ""):
+                continue
+            proof = completion_proof.get((body, old_environment))
+            if not proof:
+                continue
+
+            evidence[body] = {
+                "transition": data,
+                "change": change,
+                "proof": proof,
+            }
+
+    return evidence
+
+
 def as_int(data, key, fallback):
     try:
         return int(data.get(key, fallback))
     except (TypeError, ValueError):
         return fallback
+
+
+def restore_completed_plan(plan, data, old_environment):
+    plan["EnvironmentHash"] = old_environment
+    plan["AutomaticComplete"] = True
+    plan["CompletedQualityLimit"] = plan["QualityLimit"]
+    plan["CompletedPointRefinementOnly"] = plan["AutomaticPointRefinementOnly"]
+    plan["CompletedEnvironmentHash"] = old_environment
+    plan["GlobalCursor"] = as_int(data, "global_cursor", plan["GlobalCursor"])
+    plan["FarCursor"] = as_int(data, "far_cursor", plan["FarCursor"])
+    plan["RouteCursor"] = as_int(data, "route_cursor", plan["RouteCursor"])
+    plan["CoastlineCursor"] = as_int(
+        data, "coastline_cursor", plan["CoastlineCursor"])
+    plan["CoastlineComplete"] = True
+    plan["CompletedCoastlineFormatVersion"] = COASTLINE_FORMAT_VERSION
+    plan["CompletedCoastlineEnvironmentHash"] = old_environment
+    plan["CoastlineProgressBodyRadiusMillimetres"] = 0
+    plan["CoastlineProgressTerrainFormatVersion"] = 0
+    plan["CoastlineProgressFormatVersion"] = 0
+    plan["CoastlineProgressEnvironmentHash"] = ""
+    plan["CoastlineProgressLatitudeTiles"] = 0
+    plan["CoastlineProgressLongitudeTiles"] = 0
+    plan["CoastlineProcessedBitmap"] = b""
 
 
 def main():
@@ -268,53 +355,65 @@ def main():
 
     state = read_state(state_path)
     if state is None:
-        print("AERIS53_PRELOAD_STATE_RECOVERY=SKIP_NOT_LEGACY_V6")
-        return 0
-
-    evidence = latest_recovery_evidence(log_path)
-    if not evidence:
-        print("AERIS53_PRELOAD_STATE_RECOVERY=SKIP_NO_PROVEN_EVIDENCE")
+        print("AERIS53_PRELOAD_STATE_RECOVERY=SKIP_UNSUPPORTED_STATE_VERSION")
         return 0
 
     recovered = []
-    for plan in state["bodies"]:
-        body = (plan["BodyName"] or "").lower()
-        data = evidence.get(body)
-        if data is None:
-            continue
-        # Fail closed: the evidence must describe the exact environment that is
-        # currently incomplete in state. Never roll back across an unrelated or
-        # later terrain change.
-        if plan["EnvironmentHash"] != data.get("live_environment", ""):
-            continue
-        if plan["AutomaticComplete"]:
-            continue
+    recovery_mode = ""
 
-        old_environment = data["persisted_environment"]
-        plan["EnvironmentHash"] = old_environment
-        plan["AutomaticComplete"] = True
-        plan["CompletedQualityLimit"] = plan["QualityLimit"]
-        plan["CompletedPointRefinementOnly"] =             plan["AutomaticPointRefinementOnly"]
-        plan["CompletedEnvironmentHash"] = old_environment
-        plan["GlobalCursor"] = as_int(data, "global_cursor",
-                                      plan["GlobalCursor"])
-        plan["FarCursor"] = as_int(data, "far_cursor",
-                                   plan["FarCursor"])
-        plan["RouteCursor"] = as_int(data, "route_cursor",
-                                     plan["RouteCursor"])
-        plan["CoastlineCursor"] = as_int(data, "coastline_cursor",
-                                         plan["CoastlineCursor"])
-        plan["CoastlineComplete"] = True
-        plan["CompletedCoastlineFormatVersion"] = COASTLINE_FORMAT_VERSION
-        plan["CompletedCoastlineEnvironmentHash"] = old_environment
-        plan["CoastlineProgressBodyRadiusMillimetres"] = 0
-        plan["CoastlineProgressTerrainFormatVersion"] = 0
-        plan["CoastlineProgressFormatVersion"] = 0
-        plan["CoastlineProgressEnvironmentHash"] = ""
-        plan["CoastlineProgressLatitudeTiles"] = 0
-        plan["CoastlineProgressLongitudeTiles"] = 0
-        plan["CoastlineProcessedBitmap"] = b""
-        recovered.append(plan["BodyName"])
+    if state["version"] == 6:
+        evidence = latest_recovery_evidence(log_path)
+        if not evidence:
+            print("AERIS53_PRELOAD_STATE_RECOVERY=SKIP_NO_PROVEN_EVIDENCE")
+            return 0
+
+        for plan in state["bodies"]:
+            body = (plan["BodyName"] or "").lower()
+            data = evidence.get(body)
+            if data is None:
+                continue
+            # Fail closed: the evidence must describe the exact environment that is
+            # currently incomplete in state. Never roll back across an unrelated or
+            # later terrain change.
+            if plan["EnvironmentHash"] != data.get("live_environment", ""):
+                continue
+            if plan["AutomaticComplete"]:
+                continue
+
+            old_environment = data["persisted_environment"]
+            restore_completed_plan(plan, data, old_environment)
+            recovered.append(plan["BodyName"])
+        recovery_mode = "AERIS52_GLOBAL_GAMEDATA_INVALIDATION"
+
+    elif state["version"] == 7:
+        evidence = latest_hf1_false_transition_evidence(log_path)
+        if not evidence:
+            print("AERIS53_PRELOAD_STATE_RECOVERY=SKIP_NO_HF1_FALSE_TRANSITION_PROOF")
+            return 0
+
+        for plan in state["bodies"]:
+            body = (plan["BodyName"] or "").lower()
+            item = evidence.get(body)
+            if item is None:
+                continue
+            transition = item["transition"]
+            change = item["change"]
+            proof = item["proof"]
+
+            # Exact-current-state guards: only roll back the body if the state still
+            # reflects the proven HF1 false transition and no later identity won.
+            if plan["EnvironmentHash"] != transition.get("new_environment", ""):
+                continue
+            if plan.get("BodyEnvironmentFingerprint", "") !=                     change.get("new_body_fingerprint", ""):
+                continue
+            old_environment = transition.get("previous_environment", "")
+            if not old_environment:
+                continue
+
+            restore_completed_plan(plan, proof, old_environment)
+            plan["BodyEnvironmentFingerprint"] =                 change.get("previous_body_fingerprint", "")
+            recovered.append(plan["BodyName"])
+        recovery_mode = "AERIS53_HF1_RUNTIME_PQS_FALSE_TRANSITION"
 
     if not recovered:
         print("AERIS53_PRELOAD_STATE_RECOVERY=NO_MATCHING_DAMAGE")
@@ -340,6 +439,7 @@ def main():
     print("AERIS53_PRELOAD_STATE_RECOVERY=RESTORED")
     print("recovered_bodies=" + ",".join(recovered))
     print("recovered_count=" + str(len(recovered)))
+    print("recovery_mode=" + recovery_mode)
     print("backup=" + backup)
     print("database_chunks_modified=false")
     return 0
