@@ -223,6 +223,7 @@ namespace AERISFlightControl.Terrain
         const int CoastlineSamplingActiveLimit = 2;
         const int PreloadStateVersion = 7;
         const int BodyEnvironmentFingerprintStateVersion = 7;
+        const string BodyEnvironmentFingerprintSchemaPrefix = "HF2|";
         const int DurableCoastlineStateVersion = 6;
         const int PointSetSignatureStateVersion = 5;
         const int LegacyPreloadStateVersion = 4;
@@ -2393,18 +2394,27 @@ namespace AERISFlightControl.Terrain
                 AERISTerrainTileSystem.BodyEnvironmentFingerprintForBody(body);
             if (string.IsNullOrEmpty(bodyFingerprint)) return;
 
-            string previousFingerprint =
+            string storedFingerprint =
                 plan.BodyEnvironmentFingerprint ?? string.Empty;
+            bool storedHf2Fingerprint =
+                storedFingerprint.StartsWith(
+                    BodyEnvironmentFingerprintSchemaPrefix,
+                    StringComparison.Ordinal);
+            string previousFingerprint = storedHf2Fingerprint ?
+                storedFingerprint.Substring(
+                    BodyEnvironmentFingerprintSchemaPrefix.Length) :
+                storedFingerprint;
             bool migratedLegacyIdentity = false;
+            bool migratedFingerprintSchema = false;
             bool bodyFingerprintChanged = false;
 
             if (string.IsNullOrEmpty(previousFingerprint))
             {
-                // AERIS53 migration: accepted AERIS52 state has no body-local
-                // fingerprint. Adopt the current body-local authority while retaining
-                // the already-persisted EnvironmentHash as its canonical stable ID.
-                // This prevents AERIS53 itself from causing one more all-body reset.
-                plan.BodyEnvironmentFingerprint = bodyFingerprint;
+                // Accepted AERIS52 state has no body-local fingerprint. Adopt HF2
+                // while retaining the already-persisted EnvironmentHash as the stable
+                // canonical ID, so the hotfix itself cannot cause an all-body reset.
+                plan.BodyEnvironmentFingerprint =
+                    BodyEnvironmentFingerprintSchemaPrefix + bodyFingerprint;
                 if (!string.IsNullOrEmpty(plan.EnvironmentHash))
                 {
                     AERISTerrainTileSystem.SetEnvironmentCompatibilityOverride(
@@ -2423,10 +2433,37 @@ namespace AERISFlightControl.Terrain
                     "; event=LEGACY_IDENTITY_ADOPTED" +
                     "; body=" + R044Safe(body.name) +
                     "; body_fingerprint=" + R044Safe(bodyFingerprint) +
+                    "; fingerprint_schema=HF2" +
                     "; preserved_environment=" +
                         R044Safe(plan.EnvironmentHash) +
                     "; preserved_existing_id=" +
                         R044Bool(migratedLegacyIdentity));
+            }
+            else if (!storedHf2Fingerprint)
+            {
+                // AERIS53 HF1 persisted a live-PQS-topology-dependent fingerprint.
+                // That authority proved non-deterministic on Kerbin. Upgrade every
+                // HF1 state record to HF2 without changing its current EnvironmentHash.
+                plan.BodyEnvironmentFingerprint =
+                    BodyEnvironmentFingerprintSchemaPrefix + bodyFingerprint;
+                if (!string.IsNullOrEmpty(plan.EnvironmentHash))
+                    AERISTerrainTileSystem.SetEnvironmentCompatibilityOverride(
+                        body.name, plan.EnvironmentHash);
+                else
+                    AERISTerrainTileSystem.ClearEnvironmentCompatibilityOverride(
+                        body.name);
+                migratedFingerprintSchema = true;
+                stateDirty = true;
+
+                AERISLogger.Info(
+                    "[AERIS53][ENV4_BODY_SCOPE]" +
+                    "; event=BODY_FINGERPRINT_SCHEMA_ADOPTED" +
+                    "; body=" + R044Safe(body.name) +
+                    "; previous_hf1_fingerprint=" +
+                        R044Safe(previousFingerprint) +
+                    "; new_hf2_fingerprint=" + R044Safe(bodyFingerprint) +
+                    "; preserved_environment=" +
+                        R044Safe(plan.EnvironmentHash));
             }
             else if (string.Equals(previousFingerprint, bodyFingerprint,
                 StringComparison.Ordinal))
@@ -2440,12 +2477,12 @@ namespace AERISFlightControl.Terrain
             }
             else
             {
-                // A real body-local terrain authority change (config, PQS topology,
-                // producer policy, radius/ocean/format) ends compatibility with the
-                // legacy canonical ID. Only this body is allowed to transition.
+                // A real HF2 body-local terrain authority change (body-scoped config,
+                // stable producer policy, radius/ocean/format) ends compatibility.
                 AERISTerrainTileSystem.ClearEnvironmentCompatibilityOverride(
                     body.name);
-                plan.BodyEnvironmentFingerprint = bodyFingerprint;
+                plan.BodyEnvironmentFingerprint =
+                    BodyEnvironmentFingerprintSchemaPrefix + bodyFingerprint;
                 bodyFingerprintChanged = true;
                 stateDirty = true;
 
@@ -2453,6 +2490,7 @@ namespace AERISFlightControl.Terrain
                     "[AERIS53][ENV4_BODY_SCOPE]" +
                     "; event=BODY_FINGERPRINT_CHANGED" +
                     "; body=" + R044Safe(body.name) +
+                    "; fingerprint_schema=HF2" +
                     "; previous_body_fingerprint=" +
                         R044Safe(previousFingerprint) +
                     "; new_body_fingerprint=" + R044Safe(bodyFingerprint) +
@@ -2470,11 +2508,18 @@ namespace AERISFlightControl.Terrain
                     "; game_data_hash=" + R044Safe(AERISTerrainTileSystem.GameDataHash) +
                     "; body_config_hash=" + R044Safe(AERISTerrainTileSystem.TerrainConfigHashForBody(body)) +
                     "; body_fingerprint=" + R044Safe(bodyFingerprint) +
+                    "; fingerprint_schema=HF2" +
+                    "; producer_policy=" +
+                        R044Safe(AERISTerrainTileSystem.TerrainProducerPolicyForBody(body)) +
+                    "; pqs_topology_shadow_hash=" +
+                        R044Safe(AERISTerrainTileSystem.LivePqsTopologyShadowHashForBody(body)) +
                     "; legacy_identity_adopted=" +
                         R044Bool(migratedLegacyIdentity) +
+                    "; body_fingerprint_schema_adopted=" +
+                        R044Bool(migratedFingerprintSchema) +
                     "; body_fingerprint_changed=" +
                         R044Bool(bodyFingerprintChanged) +
-                    "; environment_contract=ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1" +
+                    "; environment_contract=ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF2" +
                     "; persisted_environment=" + R044Safe(plan.EnvironmentHash) +
                     "; live_environment=" + R044Safe(environment) +
                     "; environment_match=" +
@@ -2505,7 +2550,7 @@ namespace AERISFlightControl.Terrain
                 "; game_data_hash=" + R044Safe(AERISTerrainTileSystem.GameDataHash) +
                 "; body_config_hash=" + R044Safe(AERISTerrainTileSystem.TerrainConfigHashForBody(body)) +
                 "; body_fingerprint=" + R044Safe(bodyFingerprint) +
-                "; environment_contract=ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF1" +
+                "; environment_contract=ENV4_EXACTCPU_HYBRID_BODY_SCOPED_HF2" +
                 "; previous_environment=" + R044Safe(previousEnvironment) +
                 "; new_environment=" + R044Safe(environment) +
                 "; action=RESET_SCAN_PRESERVE_OLD_DB" +
