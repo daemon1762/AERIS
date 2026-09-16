@@ -310,10 +310,14 @@ namespace AERISFlightControl.Terrain
             AERISR039MinmusPureCpuExact.VertexPlanetSnapshot r040bSnapshot = null;
             TryGetR040BMinmusSnapshot(body, out r040bSnapshot);
 
-            bool exactCpuPolicyExpected =
-                R047ExactCpuPolicyExpected(body);
+            // AERIS54 producer-coherence hotfix: snapshot capture may discover
+            // that the certified Exact CPU producer is no longer valid for the live
+            // body. Resolve the runtime state first, then stamp the tile with the
+            // effective producer expectation after any fail-closed PQS fallback.
             R043PtcTileState r043Ptc =
                 TryCreateR043PtcState(body, request, pqsHash);
+            bool exactCpuPolicyExpected =
+                R047ExactCpuPolicyExpected(body);
 
             string id = WorkId(request);
             lock (sync)
