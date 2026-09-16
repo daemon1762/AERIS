@@ -105,3 +105,33 @@ and therefore uses the already-accepted bounded PQS/block-pipeline path
 Candidate runtime acceptance additionally requires zero Kerbin
 `EXACT_CPU_NOT_SELECTED` coastline failures and at least one Kerbin legacy-bounded
 high-density coastline queue event.
+
+
+## Acceptance
+
+Accepted runtime evidence:
+
+- Candidate audit: `AERIS54_PRODUCER_COHERENCE_VERDICT=PASS_CANDIDATE`.
+- Kerbin runtime fallback observed exactly once.
+- Kerbin observed with `producer_policy=PQS_RUNTIME_FALLBACK_V1`.
+- New Kerbin `ENV4_DB_WRITE_SUPPRESSED` events: 0.
+- Kerbin coastline `EXACT_CPU_NOT_SELECTED` failures: 0.
+- Kerbin coastline legacy bounded queues: 1635.
+- Suspected AERIS54 exceptions: 0.
+- Final Kerbin coastline completion:
+  `event=COMPLETE; processed=6728; total=6728; elapsed_s=421.497`.
+- Final runtime DLL SHA256:
+  `8e888eeb29861b387ebd141bd00b86106c0d90b1d35a24828f7dcf7defa90a52`.
+
+Acceptance conclusion:
+
+```
+producer-coherence hotfix = ACCEPTED
+persistent HF2 live-topology exclusion = PRESERVED
+runtime fallback identity = PQS_RUNTIME_FALLBACK_V1
+old Exact CPU environment DB = PRESERVED
+stale producer-environment writes = FORBIDDEN
+Kerbin high-density coastline = COMPLETE 6728/6728
+LAND control authority = NONE / PILOT
+LAND-R2 = UNBLOCKED
+```
