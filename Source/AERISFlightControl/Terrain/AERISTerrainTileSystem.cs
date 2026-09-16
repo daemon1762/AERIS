@@ -3423,6 +3423,11 @@ namespace AERISFlightControl.Terrain
                     return false;
                 runtimeProducerFallbackReasons[bodyName] =
                     string.IsNullOrEmpty(reason) ? "UNKNOWN" : reason;
+                // A runtime producer change is a real body-local authority change.
+                // Any accepted HF2 compatibility alias for the previous producer must
+                // end immediately so flight reads cannot remain on the stale identity
+                // while the preload plan catches up on its next EnsureEnvironment pass.
+                bodyEnvironmentCompatibilityOverrides.Remove(bodyName);
                 return true;
             }
         }
