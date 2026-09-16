@@ -134,7 +134,7 @@ fi
 fallback_kerbin="$(grep -F '[AERIS54][ENV4_RUNTIME_PRODUCER_FALLBACK]' "$SEG" | grep -F 'body=Kerbin' | grep -Fc 'effective_policy=PQS_RUNTIME_FALLBACK_V1' || true)"
 observed_kerbin="$(grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$SEG" | grep -F 'body=Kerbin' | grep -Fc 'producer_policy=PQS_RUNTIME_FALLBACK_V1' || true)"
 transition_kerbin="$(grep -F '[AERIS44][R043_PRELOAD_ENV_TRANSITION]' "$SEG" | grep -Fc 'body=Kerbin' || true)"
-suppressed_kerbin="$(grep -F '[AERIS49][ENV4_DB_WRITE_SUPPRESSED]' "$SEG" | grep -F 'body=Kerbin' | wc -l | tr -d ' ')"
+suppressed_kerbin="$(grep -F '[AERIS49][ENV4_DB_WRITE_SUPPRESSED]' "$SEG" | grep -F 'body=Kerbin' | wc -l | tr -d ' ' || true)"
 stale_dropped="$(grep -Fc '[AERIS54][ENV4_STALE_PRODUCER_TILE_DROPPED]' "$SEG" || true)"
 exceptions="$(grep -Eic 'AERIS54.*(exception|error)|Exception.*AERISFlightControl' "$SEG" || true)"
 
