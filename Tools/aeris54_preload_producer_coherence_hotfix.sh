@@ -136,6 +136,8 @@ observed_kerbin="$(grep -F '[AERIS44][R043_PRELOAD_ENV_OBSERVED]' "$SEG" | grep 
 transition_kerbin="$(grep -F '[AERIS44][R043_PRELOAD_ENV_TRANSITION]' "$SEG" | grep -Fc 'body=Kerbin' || true)"
 suppressed_kerbin="$(grep -F '[AERIS49][ENV4_DB_WRITE_SUPPRESSED]' "$SEG" | grep -F 'body=Kerbin' | wc -l | tr -d ' ' || true)"
 stale_dropped="$(grep -Fc '[AERIS54][ENV4_STALE_PRODUCER_TILE_DROPPED]' "$SEG" || true)"
+coast_exact_not_selected="$(grep -F '[AERIS51][PRELOAD_COAST_FAST]' "$SEG" | grep -F 'body=Kerbin' | grep -Fc 'failure=EXACT_CPU_NOT_SELECTED' || true)"
+coast_legacy_queue="$(grep -F '[PRELOAD_COAST_HD]' "$SEG" | grep -F 'body=Kerbin' | grep -Fc 'path=LEGACY_BOUNDED' || true)"
 exceptions="$(grep -Eic 'AERIS54.*(exception|error)|Exception.*AERISFlightControl' "$SEG" || true)"
 
 echo "=== AERIS54 RUNTIME AUDIT ==="
@@ -143,6 +145,8 @@ echo "kerbin_runtime_fallback=$fallback_kerbin"
 echo "kerbin_observed_fallback_policy=$observed_kerbin"
 echo "kerbin_environment_transitions=$transition_kerbin"
 echo "kerbin_db_write_suppressed=$suppressed_kerbin"
+echo "kerbin_coast_exact_not_selected=$coast_exact_not_selected"
+echo "kerbin_coast_legacy_queue=$coast_legacy_queue"
 echo "stale_old_environment_tiles_dropped=$stale_dropped"
 echo "suspected_exceptions=$exceptions"
 echo "installed_dll_sha256=$DLL_SHA"
@@ -151,13 +155,15 @@ fail=0
 (( fallback_kerbin >= 1 )) || fail=$((fail+1))
 (( observed_kerbin >= 1 )) || fail=$((fail+1))
 (( suppressed_kerbin == 0 )) || fail=$((fail+1))
+(( coast_exact_not_selected == 0 )) || fail=$((fail+1))
+(( coast_legacy_queue >= 1 )) || fail=$((fail+1))
 (( exceptions == 0 )) || fail=$((fail+1))
 
 if (( fail != 0 )); then
   echo "AERIS54_PRODUCER_COHERENCE_VERDICT=FAIL"
   echo "failed_checks=$fail"
   echo "=== FALLBACK EVIDENCE ==="
-  grep -E '\[AERIS54\]\[ENV4_RUNTIME_PRODUCER_(CERT|FALLBACK)\]|\[AERIS53\]\[ENV4_BODY_SCOPE\]|\[AERIS44\]\[R043_PRELOAD_ENV_TRANSITION\]|\[AERIS49\]\[ENV4_DB_WRITE_SUPPRESSED\]' "$SEG" | tail -120 || true
+  grep -E '\[AERIS54\]\[ENV4_RUNTIME_PRODUCER_(CERT|FALLBACK)\]|\[AERIS53\]\[ENV4_BODY_SCOPE\]|\[AERIS44\]\[R043_PRELOAD_ENV_TRANSITION\]|\[AERIS49\]\[ENV4_DB_WRITE_SUPPRESSED\]|\[AERIS51\]\[PRELOAD_COAST_FAST\]|\[PRELOAD_COAST_HD\]' "$SEG" | tail -160 || true
   exit 50
 fi
 
