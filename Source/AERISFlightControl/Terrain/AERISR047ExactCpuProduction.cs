@@ -26,7 +26,8 @@ namespace AERISFlightControl.Terrain
         static bool R047ExactCpuPolicyExpected(CelestialBody body)
         {
             if (body == null ||
-                !AERISR042ExactCpuShadowSourceResolver.ProducerSwitchEnabled)
+                !AERISR042ExactCpuShadowSourceResolver.ProducerSwitchEnabled ||
+                AERISTerrainTileSystem.RuntimeProducerFallbackActiveForBody(body))
                 return false;
 
             AERISR042ExactCpuShadowSourceResolver.Decision decision =
@@ -41,7 +42,8 @@ namespace AERISFlightControl.Terrain
         {
             if (decision == null || snapshot == null ||
                 !snapshot.IsStructurallyValid ||
-                !AERISR042ExactCpuShadowSourceResolver.ProducerSwitchEnabled)
+                !AERISR042ExactCpuShadowSourceResolver.ProducerSwitchEnabled ||
+                AERISTerrainTileSystem.RuntimeProducerFallbackActiveForBody(bodyName))
                 return false;
 
             if (r047ExactCpuDisabledBodies.Contains(bodyName ?? string.Empty))
@@ -220,6 +222,8 @@ namespace AERISFlightControl.Terrain
         {
             string normalized = bodyName ?? string.Empty;
             r047ExactCpuDisabledBodies.Add(normalized);
+            AERISTerrainTileSystem.RegisterRuntimeProducerFallbackForBody(
+                normalized, reason);
             AERISLogger.Warn(
                 "[AERIS47][R043_EXACT_CPU_FALLBACK]" +
                 "; body=" + SafeR043(normalized) +
