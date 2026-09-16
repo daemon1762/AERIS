@@ -995,6 +995,29 @@ namespace AERISFlightControl.Terrain
                 telemetry.BuilderPqsMilliseconds = blockPipeline.LastBatchMilliseconds;
                 return;
             }
+
+            // AERIS54 producer-coherence hotfix: Exact CPU certification can fail
+            // while a tile from the previous environment is already in flight.
+            // Reconcile the body-local ENV4 identity before any persistent write and
+            // drop the stale tile if the effective producer changed.
+            CelestialBody commitBody = FindBody(plan.BodyName);
+            if (commitBody != null)
+                EnsureEnvironment(plan, commitBody);
+            if (!string.Equals(tile.Key.EnvironmentHash, plan.EnvironmentHash,
+                StringComparison.Ordinal))
+            {
+                AERISLogger.Warn(
+                    "[AERIS54][ENV4_STALE_PRODUCER_TILE_DROPPED]" +
+                    "; owner=PreloadBuilder" +
+                    "; body=" + (plan.BodyName ?? string.Empty) +
+                    "; stable_id=" + (tile.Key.StableId ?? string.Empty) +
+                    "; tile_environment=" + (tile.Key.EnvironmentHash ?? string.Empty) +
+                    "; live_environment=" + (plan.EnvironmentHash ?? string.Empty) +
+                    "; persisted=false" +
+                    "; action=REQUEUE_UNDER_LIVE_ENVIRONMENT");
+                return;
+            }
+
             // AERIS49 producer-identity hardening. If an Exact CPU policy body
             // had to fall back to PQS, keep the fallback out of the persistent Exact
             // environment. Pause this body so the failure is explicit and retriable.
@@ -2389,6 +2412,12 @@ namespace AERISFlightControl.Terrain
 
             if (plan == null || body == null ||
                 !AERISTerrainTileSystem.GameDataHashReady) return;
+
+            // AERIS54 producer-coherence hotfix: certify the effective runtime
+            // producer before deriving the persistent ENV4 body identity. The live
+            // topology hash is only a recertification trigger; only the resulting
+            // Exact-CPU/PQS policy enters the persistent fingerprint.
+            AERISTerrainTileSystem.RefreshRuntimeProducerPolicyForBody(body);
 
             string bodyFingerprint =
                 AERISTerrainTileSystem.BodyEnvironmentFingerprintForBody(body);
