@@ -46,6 +46,7 @@ git merge-base --is-ancestor "$BASE" HEAD || {
 TILE="Source/AERISFlightControl/Terrain/AERISTerrainTileSystem.cs"
 PIPE="Source/AERISFlightControl/Terrain/AERISR043PreloadPtcPipeline.cs"
 R047="Source/AERISFlightControl/Terrain/AERISR047ExactCpuProduction.cs"
+R051="Source/AERISFlightControl/Terrain/AERISR051PreloadCoastlineFastPath.cs"
 BLOCK="Source/AERISFlightControl/Terrain/AERISTerrainBlockPipeline.cs"
 BUILDER="Source/AERISFlightControl/Terrain/AERISTerrainPreloadBuilder.cs"
 
@@ -59,12 +60,14 @@ grep -Fq 'RuntimeProducerFallbackActiveForBody(body)' "$PIPE" || {
   echo "STOP: pipeline fallback short-circuit missing" >&2; exit 23; }
 grep -Fq 'RegisterRuntimeProducerFallbackForBody' "$R047" || {
   echo "STOP: Exact CPU failure propagation missing" >&2; exit 24; }
+grep -Fq '!AERISTerrainTileSystem.RuntimeProducerFallbackActiveForBody(body)' "$R051" || {
+  echo "STOP: coastline runtime fallback routing missing" >&2; exit 25; }
 grep -Fq 'TryCreateR043PtcState(body, request, pqsHash);' "$BLOCK" || {
-  echo "STOP: producer-resolution ordering seam missing" >&2; exit 25; }
+  echo "STOP: producer-resolution ordering seam missing" >&2; exit 26; }
 grep -Fq '[AERIS54][ENV4_STALE_PRODUCER_TILE_DROPPED]' "$BUILDER" || {
-  echo "STOP: preload stale-environment write guard missing" >&2; exit 26; }
+  echo "STOP: preload stale-environment write guard missing" >&2; exit 27; }
 grep -Fq '[AERIS54][ENV4_STALE_PRODUCER_TILE_DROPPED]' "$TILE" || {
-  echo "STOP: flight stale-environment write guard missing" >&2; exit 27; }
+  echo "STOP: flight stale-environment write guard missing" >&2; exit 28; }
 
 echo "PASS static producer-coherence architecture gate"
 echo "persistent_identity=HF2_BODY_SCOPE_PLUS_EFFECTIVE_PRODUCER_POLICY"
