@@ -43,6 +43,16 @@ namespace AERISFlightControl.Terrain
             new Dictionary<string, string>(StringComparer.Ordinal);
         static readonly Dictionary<string, string> bodyEnvironmentCompatibilityOverrides =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // AERIS54 preload producer-coherence hotfix.
+        // Runtime Exact-CPU certification is body-local and fail-closed. A body that
+        // cannot reproduce its certified immutable snapshot is pinned to a distinct
+        // PQS runtime-fallback producer identity for the remainder of this process.
+        // The live PQS topology hash is only a recertification trigger; it is never a
+        // persistent environment identity by itself (preserving the accepted HF2 rule).
+        static readonly Dictionary<string, string> runtimeProducerCertifiedTopologyHashes =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        static readonly Dictionary<string, string> runtimeProducerFallbackReasons =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         readonly AERISSettings settings;
         readonly AERISTerrainPerformanceController performance;
         readonly AERISTerrainRamTileCache ram;
@@ -459,6 +469,22 @@ namespace AERISFlightControl.Terrain
             if (!ReferenceEquals(activeBody, body) ||
                 !string.Equals(activeBodyName, body.name, StringComparison.Ordinal))
                 BeginBody(body);
+            else
+            {
+                RefreshRuntimeProducerPolicyForBody(body);
+                string liveEnvironment = EnvironmentHashForBody(body);
+                if (!string.Equals(environmentHash, liveEnvironment,
+                    StringComparison.Ordinal))
+                {
+                    AERISLogger.Warn(
+                        "[AERIS54][ENV4_ACTIVE_BODY_ENV_TRANSITION]" +
+                        "; body=" + (body.name ?? string.Empty) +
+                        "; previous_environment=" + (environmentHash ?? string.Empty) +
+                        "; new_environment=" + (liveEnvironment ?? string.Empty) +
+                        "; action=RESET_FLIGHT_TERRAIN_SCOPE");
+                    BeginBody(body);
+                }
+            }
             if (!BodySupported)
             {
                 UpdateTelemetry();
@@ -616,6 +642,8 @@ namespace AERISFlightControl.Terrain
             activeBodyName = body == null ? string.Empty : body.name;
             preloadDatabase.SetActiveBodyProtection(activeBodyName);
             BodySupported = BodyHasSolidSurface(body);
+            if (BodySupported)
+                RefreshRuntimeProducerPolicyForBody(body);
             environmentHash = BodySupported ? EnvironmentHashForBody(body) : string.Empty;
             if (currentBodyResidentCache != null)
                 currentBodyResidentCache.BeginBody(activeBodyName,
@@ -2063,9 +2091,30 @@ namespace AERISFlightControl.Terrain
             status = tile.Key.Lod >= AERISTerrainTileLod.Local ?
                 "LOCAL TERRAIN AVAILABLE" : "GLOBAL TERRAIN AVAILABLE";
 
-            // AERIS49 producer-identity hardening: an ENV4 Exact CPU policy tile may
-            // fall back to PQS for RAM-only continuity, but it must never be persisted
-            // under the Exact CPU environment identity.
+            // AERIS54 producer-coherence hotfix: runtime certification may switch
+            // this body to a distinct PQS fallback environment while an old-environment
+            // tile is still completing. Never persist that stale tile; the active-body
+            // environment synchronizer will rebuild the request under the new identity.
+            string livePersistentEnvironment = activeBody == null ?
+                string.Empty : EnvironmentHashForBody(activeBody);
+            if (!string.IsNullOrEmpty(livePersistentEnvironment) &&
+                !string.Equals(tile.Key.EnvironmentHash,
+                    livePersistentEnvironment, StringComparison.Ordinal))
+            {
+                status = "RUNTIME PRODUCER ENVIRONMENT CHANGED / STALE TILE DROPPED";
+                AERISLogger.Warn(
+                    "[AERIS54][ENV4_STALE_PRODUCER_TILE_DROPPED]" +
+                    "; owner=FlightFallback" +
+                    "; body=" + (tile.Key.BodyName ?? string.Empty) +
+                    "; tile_environment=" + (tile.Key.EnvironmentHash ?? string.Empty) +
+                    "; live_environment=" + (livePersistentEnvironment ?? string.Empty) +
+                    "; persisted=false");
+                return;
+            }
+
+            // AERIS49 producer-identity hardening remains the final fail-closed guard:
+            // an Exact CPU policy tile may fall back to PQS for RAM-only continuity,
+            // but it must never be persisted under the Exact CPU environment identity.
             if (tile.RuntimeExactCpuPolicyExpected && !tile.RuntimeExactCpuProduced)
             {
                 status = "EXACT CPU FALLBACK RAM ONLY / DB WRITE SUPPRESSED";
@@ -3337,8 +3386,123 @@ namespace AERISFlightControl.Terrain
             return AERISTerrainHash.Fnv1A64Hex(builder.ToString());
         }
 
+        internal static bool RuntimeProducerFallbackActiveForBody(
+            string bodyName)
+        {
+            if (string.IsNullOrEmpty(bodyName)) return false;
+            lock (environmentSync)
+                return runtimeProducerFallbackReasons.ContainsKey(bodyName);
+        }
+
+        internal static bool RuntimeProducerFallbackActiveForBody(
+            CelestialBody body)
+        {
+            return body != null &&
+                RuntimeProducerFallbackActiveForBody(body.name);
+        }
+
+        internal static string RuntimeProducerFallbackReasonForBody(
+            string bodyName)
+        {
+            if (string.IsNullOrEmpty(bodyName)) return string.Empty;
+            lock (environmentSync)
+            {
+                string reason;
+                return runtimeProducerFallbackReasons.TryGetValue(
+                    bodyName, out reason) ? (reason ?? string.Empty) : string.Empty;
+            }
+        }
+
+        internal static bool RegisterRuntimeProducerFallbackForBody(
+            string bodyName, string reason)
+        {
+            if (string.IsNullOrEmpty(bodyName)) return false;
+            lock (environmentSync)
+            {
+                if (runtimeProducerFallbackReasons.ContainsKey(bodyName))
+                    return false;
+                runtimeProducerFallbackReasons[bodyName] =
+                    string.IsNullOrEmpty(reason) ? "UNKNOWN" : reason;
+                return true;
+            }
+        }
+
+        // Main-thread-only runtime certification refresh. HF2 intentionally keeps
+        // live PQS topology out of persistent identity; this method uses the shadow
+        // topology hash solely to know when the accepted Exact-CPU certificate must
+        // be re-evaluated. A failed certificate is sticky for this process so startup
+        // late-attach churn cannot oscillate producer authority.
+        internal static void RefreshRuntimeProducerPolicyForBody(
+            CelestialBody body)
+        {
+            if (body == null || string.IsNullOrEmpty(body.name)) return;
+
+            AERISR042ExactCpuShadowSourceResolver.Decision decision =
+                AERISR042ExactCpuShadowSourceResolver.ResolveCandidate(body);
+            bool exactCandidate =
+                AERISR042ExactCpuShadowSourceResolver.ProducerSwitchEnabled &&
+                decision != null && decision.IsCandidate;
+            if (!exactCandidate) return;
+            if (RuntimeProducerFallbackActiveForBody(body.name)) return;
+
+            string topologyHash = LivePqsTopologyShadowHashForBody(body);
+            lock (environmentSync)
+            {
+                string certifiedHash;
+                if (runtimeProducerCertifiedTopologyHashes.TryGetValue(
+                    body.name, out certifiedHash) &&
+                    string.Equals(certifiedHash, topologyHash,
+                        StringComparison.Ordinal))
+                    return;
+            }
+
+            AERISR042ExactCpuShadowRuntimeSnapshot snapshot;
+            string failure;
+            bool certified =
+                AERISR042ExactCpuShadowRuntimeSnapshotBuilder.TryCapture(
+                    body,
+                    System.Threading.Thread.CurrentThread.ManagedThreadId,
+                    out snapshot,
+                    out failure) &&
+                snapshot != null && snapshot.IsStructurallyValid;
+
+            lock (environmentSync)
+                runtimeProducerCertifiedTopologyHashes[body.name] =
+                    topologyHash ?? string.Empty;
+
+            if (certified)
+            {
+                AERISLogger.Info(
+                    "[AERIS54][ENV4_RUNTIME_PRODUCER_CERT]" +
+                    "; body=" + (body.name ?? string.Empty) +
+                    "; pqs_topology_shadow_hash=" + (topologyHash ?? string.Empty) +
+                    "; certified=true" +
+                    "; effective_policy=EXACT_CPU_ALL_PERSISTENT_OWNERS_V2");
+                return;
+            }
+
+            string normalizedFailure = string.IsNullOrEmpty(failure) ?
+                "RUNTIME_SNAPSHOT_CERTIFICATION_FAILED" : failure;
+            bool newlyRegistered = RegisterRuntimeProducerFallbackForBody(
+                body.name, normalizedFailure);
+            if (newlyRegistered)
+            {
+                AERISLogger.Warn(
+                    "[AERIS54][ENV4_RUNTIME_PRODUCER_FALLBACK]" +
+                    "; body=" + (body.name ?? string.Empty) +
+                    "; pqs_topology_shadow_hash=" + (topologyHash ?? string.Empty) +
+                    "; certification_failure=" +
+                        normalizedFailure.Replace(';', ',').Replace('|', '/') +
+                    "; effective_policy=PQS_RUNTIME_FALLBACK_V1" +
+                    "; sticky_for_process=true");
+            }
+        }
+
         internal static string TerrainProducerPolicyForBody(CelestialBody body)
         {
+            if (RuntimeProducerFallbackActiveForBody(body))
+                return "PQS_RUNTIME_FALLBACK_V1";
+
             AERISR042ExactCpuShadowSourceResolver.Decision decision =
                 AERISR042ExactCpuShadowSourceResolver.ResolveCandidate(body);
             bool exactCandidate =
