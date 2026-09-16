@@ -164,6 +164,13 @@ namespace AERISFlightControl.Terrain
                  request.WorkOwner != AERISTerrainWorkOwner.FlightFallback))
                 return null;
 
+            // AERIS54 producer-coherence hotfix: once runtime certification has
+            // failed for this body, do not repeatedly attempt the Exact CPU snapshot
+            // in the same process. The body now has a distinct persistent PQS fallback
+            // identity and must use the existing PQS producer.
+            if (AERISTerrainTileSystem.RuntimeProducerFallbackActiveForBody(body))
+                return null;
+
             AERISR042ExactCpuShadowSourceResolver.Decision decision =
                 AERISR042ExactCpuShadowSourceResolver.ResolveCandidate(body);
             if (decision == null || !decision.IsCandidate)
@@ -187,10 +194,11 @@ namespace AERISFlightControl.Terrain
                     body, r040bMainThreadId, out snapshot, out failure) ||
                     snapshot == null || !snapshot.IsStructurallyValid)
                 {
-                    LogR043SnapshotFailure(
-                        bodyName,
-                        string.IsNullOrEmpty(failure) ?
-                            "SNAPSHOT_INVALID" : failure);
+                    string normalizedFailure = string.IsNullOrEmpty(failure) ?
+                        "SNAPSHOT_INVALID" : failure;
+                    AERISTerrainTileSystem.RegisterRuntimeProducerFallbackForBody(
+                        bodyName, normalizedFailure);
+                    LogR043SnapshotFailure(bodyName, normalizedFailure);
                     return null;
                 }
 
