@@ -247,7 +247,8 @@ namespace AERISFlightControl.Terrain
             AERISR042ExactCpuShadowSourceResolver.Decision decision =
                 AERISR042ExactCpuShadowSourceResolver.ResolveCandidate(body);
             exactPolicy = decision != null && decision.IsCandidate &&
-                AERISR042ExactCpuShadowSourceResolver.ProducerSwitchEnabled;
+                AERISR042ExactCpuShadowSourceResolver.ProducerSwitchEnabled &&
+                !AERISTerrainTileSystem.RuntimeProducerFallbackActiveForBody(body);
             if (!exactPolicy)
                 return false;
 
