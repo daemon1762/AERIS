@@ -87,3 +87,21 @@ Candidate acceptance requires:
 - No AERIS54 exception/error evidence.
 - Preload progress resumes after an explicit one-time Resume if the pre-hotfix state was
   already persisted as paused.
+
+## Runtime follow-up: coastline fast-path coherence
+
+The first hotfix runtime proved the ENV4 producer transition itself, but exposed a second
+coherence seam in AERIS51 C2. The coastline fast path selected Exact CPU from the static
+candidate resolver only, ignoring the new runtime PQS fallback state. Kerbin therefore
+entered `PQS_RUNTIME_FALLBACK_V1` correctly, completed FAR generation, then the coastline
+phase repeatedly attempted an Exact-CPU snapshot, produced
+`failure=EXACT_CPU_NOT_SELECTED`, paused the plan, and stopped with no work queued.
+
+The follow-up fix makes the AERIS51 exact-coastline policy consult the effective runtime
+producer. A body in runtime PQS fallback is treated as non-Exact for coastline generation
+and therefore uses the already-accepted bounded PQS/block-pipeline path
+(`path=LEGACY_BOUNDED`) instead of pausing.
+
+Candidate runtime acceptance additionally requires zero Kerbin
+`EXACT_CPU_NOT_SELECTED` coastline failures and at least one Kerbin legacy-bounded
+high-density coastline queue event.
