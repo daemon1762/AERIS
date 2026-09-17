@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using AERISFlightControl.Terrain;
@@ -73,6 +74,9 @@ namespace AERISFlightControl.Landing
             internal AERISTerrainCorridorComputeInput Input;
             internal int Priority;
             internal bool Pending;
+            // Zero means terrain/terminal pending: only an identity or priority
+            // change retries. Scheduler rejection instead receives a deadline.
+            internal long AdmissionRetryAfterTicks;
         }
         sealed class Publication
         {
@@ -163,6 +167,7 @@ namespace AERISFlightControl.Landing
         internal void Tick(string activeBodyName)
         {
             activeBody = activeBodyName ?? string.Empty;
+            long nowTicks = Stopwatch.GetTimestamp();
             IList<AERISTerrainCorridorDirectionCapture> current = Capture();
             var byId = new Dictionary<string, AERISTerrainCorridorDirectionCapture>(StringComparer.OrdinalIgnoreCase);
             foreach (var value in current) byId[value.Input.Identity.DirectionStableId] = value;
@@ -193,7 +198,9 @@ namespace AERISFlightControl.Landing
                 if (published.TryGetValue(id, out existing) && existing.Snapshot.TerrainCoverageComplete) continue;
                 bool same = previous != null && IdentityMatches(previous.Input.Identity, value.Input.Identity) &&
                     string.Equals(previous.Input.GameDataHash, value.Input.GameDataHash, StringComparison.Ordinal);
-                if (same && !promoted)
+                bool admissionRetryDue = previous != null && previous.AdmissionRetryAfterTicks != 0 &&
+                    nowTicks >= previous.AdmissionRetryAfterTicks;
+                if (same && !promoted && !admissionRetryDue)
                 {
                     // Remember demotion too, so a later background-to-selected
                     // transition is a new retry opportunity.
@@ -221,7 +228,7 @@ namespace AERISFlightControl.Landing
                 value.Input.Identity.TerrainDatabaseGeneration = plan.TerrainDatabaseGeneration;
                 Job job = new Job { Input = value.Input, Plan = plan };
                 if (!submitRead(plan, result => ReadCommitted(job, result)))
-                { Pending(value.Input, "READ_ADMISSION_UNAVAILABLE"); continue; }
+                { Pending(value.Input, "READ_ADMISSION_UNAVAILABLE", true); continue; }
                 jobs.Add(id, job);
                 Emit("QUEUE", value.Input.Identity, "reason=ADMITTED cycle=" + cycle + " priority=" + value.Priority +
                     " eligible_best_rank=" + value.Priority + " in_flight=" + jobs.Count);
@@ -260,7 +267,7 @@ namespace AERISFlightControl.Landing
             job.Input.ReadResult = result;
             // Even partial analysis is shared-worker work; no AnalyzePure on main.
             if (!submitCompute(job.Input, snapshot => ComputeCommitted(job, snapshot)))
-            { Pending(job.Input, "COMPUTE_ADMISSION_UNAVAILABLE"); Retire(job); }
+            { Pending(job.Input, "COMPUTE_ADMISSION_UNAVAILABLE", true); Retire(job); }
         }
 
         void ComputeCommitted(Job job, AERISApproachObstacleSnapshot snapshot)
@@ -309,11 +316,20 @@ namespace AERISFlightControl.Landing
                 jobs.Remove(job.Input.Identity.DirectionStableId);
             Summary();
         }
-        void Pending(AERISTerrainCorridorComputeInput input, string reason)
+        void Pending(AERISTerrainCorridorComputeInput input, string reason, bool retryAdmission = false)
         {
             if (input.Identity.ProducerGeneration != producerGeneration) return;
             Attempt attempt;
-            if (attempts.TryGetValue(input.Identity.DirectionStableId, out attempt)) attempt.Pending = true;
+            if (attempts.TryGetValue(input.Identity.DirectionStableId, out attempt))
+            {
+                attempt.Pending = true;
+                // A refused submission has no future callback. Retry after one
+                // monotonic second, including unavailable runtimes and full queues.
+                // Compute refusal retires its credit/payload and retries the full
+                // direction through the same two-credit admission gate.
+                attempt.AdmissionRetryAfterTicks = retryAdmission ?
+                    Stopwatch.GetTimestamp() + Stopwatch.Frequency : 0L;
+            }
             Emit("DIRECTION_PENDING", input.Identity, "reason=" + reason);
         }
         void Summary()

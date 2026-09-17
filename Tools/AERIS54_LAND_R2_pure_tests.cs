@@ -1078,6 +1078,83 @@ internal static class AERIS54LandR2PureTests
         Console.WriteLine("LAND_R2_PRODUCER_QUERY_GRID=PASS");
     }
 
+    private static void RapidTicks(ProducerHarness h)
+    {
+        int captures = h.CaptureCount;
+        int logs = h.Logs.Count;
+        for (int i = 0; i < 20; i++)
+        {
+            h.Tick();
+            if (h.InFlight > 2) Fail("admission retry exceeded physical direction bound");
+        }
+        RequireEqual(captures, h.CaptureCount, "admission backoff prevents rapid grid recapture");
+        RequireEqual(logs, h.Logs.Count, "admission backoff prevents rapid log storm");
+    }
+
+    private static void TestProducerReadAdmissionRecovery(Assembly aeris)
+    {
+        var h = new ProducerHarness(aeris); h.Directions.RemoveRange(1, 2);
+        h.Ranks["B"] = 0; h.ReadAdmission = false;
+        h.Tick(); RequireEqual(0, h.InFlight, "rejected read holds no physical credit");
+        RapidTicks(h);
+        var bounded = new ProducerHarness(aeris); bounded.ReadAdmission = false;
+        bounded.Tick();
+        // Monotonic one-second retry policy: unchanged identity and selection.
+        h.ReadAdmission = true;
+        System.Threading.Thread.Sleep(1100);
+        h.Tick(); RequireEqual(1, h.Reads.Count, "read admission recovers without identity change");
+        RequireEqual(1, h.InFlight, "recovered read owns exactly one credit");
+        h.Read(0); h.Compute(0);
+        RequireEqual(1, h.Snapshots.Count, "recovered read eventually publishes");
+        RequireEqual(0, h.InFlight, "recovered read credit retires");
+        bounded.ReadAdmission = true; bounded.Tick();
+        RequireEqual(2, bounded.InFlight, "simultaneous read retries respect two-credit limit");
+        bounded.Invoke("Reset", "retry-reset"); bounded.Tick();
+        RequireEqual(2, bounded.InFlight, "reset keeps recovered physical credits");
+        RequireEqual(2, bounded.Reads.Count, "reset cannot admit over old recovered jobs");
+        bounded.Reads[0].DynamicInvoke(new object[] { null }); bounded.Tick();
+        RequireEqual(2, bounded.InFlight, "one old terminal admits exactly one fresh job");
+        RequireEqual(3, bounded.Reads.Count, "exactly one fresh admission after terminal");
+        bounded.Reads[0].DynamicInvoke(new object[] { null });
+        RequireEqual(2, bounded.InFlight, "duplicate old terminal cannot release fresh credit");
+        Console.WriteLine("LAND_R2_READ_ADMISSION_RECOVERY=PASS");
+    }
+
+    private static void TestProducerComputeAdmissionRecovery(Assembly aeris)
+    {
+        var h = new ProducerHarness(aeris); h.Directions.RemoveRange(1, 2);
+        h.Ranks["B"] = 1; h.ComputeAdmission = false;
+        h.Tick(); h.Read(0);
+        RequireEqual(0, h.InFlight, "rejected compute retires read credit");
+        RapidTicks(h);
+        // Continued pressure retries at the bounded interval, then backs off again.
+        System.Threading.Thread.Sleep(1100);
+        h.Tick(); RequireEqual(2, h.Reads.Count, "compute rejection retries unchanged direction");
+        h.Read(1); RequireEqual(0, h.InFlight, "second compute rejection retires credit");
+        RapidTicks(h);
+        h.ComputeAdmission = true;
+        System.Threading.Thread.Sleep(1100);
+        h.Tick(); RequireEqual(3, h.Reads.Count, "compute admission recovers without identity change");
+        h.Read(2); RequireEqual(1, h.InFlight, "recovered compute retains direction credit");
+        h.Compute(0);
+        RequireEqual(1, h.Snapshots.Count, "recovered compute eventually publishes");
+        RequireEqual(0, h.InFlight, "recovered compute credit retires");
+        Console.WriteLine("LAND_R2_COMPUTE_ADMISSION_RECOVERY=PASS");
+    }
+
+    private static void TestProducerMissingTerrainDoesNotTimeRetry(Assembly aeris)
+    {
+        var missing = new ProducerHarness(aeris); missing.HasKeys = false;
+        missing.Tick();
+        var partial = new ProducerHarness(aeris); partial.Directions.RemoveRange(1, 2);
+        partial.Complete = false; partial.Tick(); partial.Read(0); partial.Compute(0);
+        System.Threading.Thread.Sleep(1100);
+        RapidTicks(missing); RapidTicks(partial);
+        RequireEqual(0, missing.Reads.Count, "genuinely missing tiles do not use admission retry");
+        RequireEqual(1, partial.Reads.Count, "genuinely incomplete terrain remains identity-gated");
+        Console.WriteLine("LAND_R2_MISSING_TERRAIN_RETRY_SUPPRESSION=PASS");
+    }
+
     private static int Main(string[] args)
     {
         try
@@ -1095,6 +1172,23 @@ internal static class AERIS54LandR2PureTests
                 };
             }
             Assembly aeris = Assembly.LoadFrom(args[0]);
+            string suite = Environment.GetEnvironmentVariable("AERIS_LAND_R2_TEST_SUITE");
+            if (!string.IsNullOrEmpty(suite))
+            {
+                if (suite == "read-admission") TestProducerReadAdmissionRecovery(aeris);
+                else if (suite == "compute-admission") TestProducerComputeAdmissionRecovery(aeris);
+                else if (suite == "producer-admission")
+                {
+                    TestProducerReadAdmissionRecovery(aeris);
+                    TestProducerComputeAdmissionRecovery(aeris);
+                    TestProducerMissingTerrainDoesNotTimeRetry(aeris);
+                    TestProducerLifecycle(aeris);
+                    TestProducerPendingAndFailures(aeris);
+                }
+                else Fail("unknown suite " + suite);
+                Console.WriteLine("AERIS54_LAND_R2_SELECTED_SUITE=PASS suite=" + suite);
+                return 0;
+            }
             TestSnapshotContract(aeris);
             TestSnapshotDefaultsAndClone(aeris);
             TestReadServiceContract(aeris);
@@ -1105,6 +1199,9 @@ internal static class AERIS54LandR2PureTests
             TestProducerPriorityAndIdentity(aeris);
             TestProducerLifecycle(aeris);
             TestProducerPendingAndFailures(aeris);
+            TestProducerReadAdmissionRecovery(aeris);
+            TestProducerComputeAdmissionRecovery(aeris);
+            TestProducerMissingTerrainDoesNotTimeRetry(aeris);
             TestProducerPublicationFreshness(aeris);
             TestProducerMaterialPublication(aeris);
             TestProducerQueryGrid(aeris);
