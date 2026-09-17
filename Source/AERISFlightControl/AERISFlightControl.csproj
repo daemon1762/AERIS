@@ -105,6 +105,7 @@
     <Compile Include="Landing\AERISProviderIdentity.cs" />
     <Compile Include="Landing\AERISPhysicalRunwayIdentity.cs" />
     <Compile Include="Landing\AERISApproachModels.cs" />
+    <Compile Include="Landing\AERISApproachTerrainCorridorProducer.cs" />
     <Compile Include="Landing\AERISAdaptiveApproachPlanner.cs" />
     <Compile Include="Landing\AERISApproachRegistry.cs" />
     <Compile Include="Landing\AERISRunwaySurveyContracts.cs" />

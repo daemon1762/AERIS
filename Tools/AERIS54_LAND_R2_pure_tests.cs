@@ -27,6 +27,21 @@ internal static class AERIS54LandR2PureTests
         if (!object.Equals(expected, actual)) Fail(name + " expected " + expected + " but was " + actual);
     }
 
+    private static void RequireNear(double expected, double actual, double tolerance,
+        string name)
+    {
+        if (Math.Abs(expected - actual) > tolerance)
+            Fail(name + " expected " + expected + " but was " + actual);
+    }
+
+    private static void SetField(Type type, object value, string name, object fieldValue)
+    {
+        FieldInfo field = type.GetField(name,
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        if (field == null) Fail(type.FullName + " missing field " + name);
+        field.SetValue(value, fieldValue);
+    }
+
     private static void TestSnapshotContract(Assembly aeris)
     {
         Type t = aeris.GetType(
@@ -367,6 +382,393 @@ internal static class AERIS54LandR2PureTests
             "stale warm failure reason");
     }
 
+    private sealed class PointSpec
+    {
+        internal int Index;
+        internal double Latitude;
+        internal double Longitude;
+        internal double Along;
+        internal double Cross;
+        internal bool Missed;
+    }
+
+    private static object CreateIdentity(Assembly aeris)
+    {
+        Type type = aeris.GetType(
+            "AERISFlightControl.Landing.AERISTerrainCorridorIdentity", true);
+        object identity = Activator.CreateInstance(type, true);
+        SetField(type, identity, "DirectionStableId", "direction");
+        SetField(type, identity, "BodyName", "Kerbin");
+        SetField(type, identity, "BodyRadiusMeters", 600000.0);
+        SetField(type, identity, "EnvironmentSignature", "environment");
+        SetField(type, identity, "AirfieldDatabaseRevision", 11L);
+        SetField(type, identity, "RunwayGeometryRevision", 12L);
+        SetField(type, identity, "TerrainRequestGeneration", 13L);
+        SetField(type, identity, "TerrainDatabaseGeneration", 14L);
+        SetField(type, identity, "ProducerGeneration", 15L);
+        return identity;
+    }
+
+    private static object CreateSyntheticKey(Assembly aeris, string body,
+        object lod, int latitudeIndex, int longitudeIndex)
+    {
+        Type keyType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainTileKey", true);
+        ConstructorInfo constructor = keyType.GetConstructor(
+            BindingFlags.Instance | BindingFlags.NonPublic, null,
+            new Type[] { typeof(string), typeof(double), typeof(string),
+                lod.GetType(), typeof(int), typeof(int) }, null);
+        return constructor.Invoke(new object[] {
+            body, 600000.0, "environment", lod, latitudeIndex, longitudeIndex
+        });
+    }
+
+    private static object CreateSyntheticTile(Assembly aeris, object key,
+        int resolution, float[] elevations, int quality, bool complete,
+        double south, double north, double west, double east)
+    {
+        Type tileType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainHeightTile", true);
+        object tile = Activator.CreateInstance(tileType, true);
+        SetField(tileType, tile, "Key", key);
+        SetField(tileType, tile, "Resolution", resolution);
+        SetField(tileType, tile, "SouthLatitudeDeg", south);
+        SetField(tileType, tile, "NorthLatitudeDeg", north);
+        SetField(tileType, tile, "WestLongitudeDeg", west);
+        SetField(tileType, tile, "EastLongitudeDeg", east);
+        SetField(tileType, tile, "Elevation", elevations);
+        SetField(tileType, tile, "Quality", quality);
+        SetField(tileType, tile, "SamplingComplete", complete);
+        return tile;
+    }
+
+    private static IDictionary CreateTileDictionary(Assembly aeris,
+        params object[] tiles)
+    {
+        Type tileType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainHeightTile", true);
+        IDictionary values = (IDictionary)Activator.CreateInstance(
+            typeof(Dictionary<,>).MakeGenericType(typeof(string), tileType));
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            object key = Field(tileType, tiles[i], "Key");
+            values[StableId(key)] = tiles[i];
+        }
+        return values;
+    }
+
+    private static object CreateAnalysisInput(Assembly aeris, PointSpec[] specs,
+        string[] mappings, int[] sourceLods, IDictionary tiles,
+        bool readCoverageComplete, double requiredMissedAltitude)
+    {
+        Type pointType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainCorridorQueryPoint", true);
+        Array points = Array.CreateInstance(pointType, specs.Length);
+        for (int i = 0; i < specs.Length; i++)
+        {
+            object point = Activator.CreateInstance(pointType, true);
+            SetField(pointType, point, "Index", specs[i].Index);
+            SetField(pointType, point, "LatitudeDeg", specs[i].Latitude);
+            SetField(pointType, point, "LongitudeDeg", specs[i].Longitude);
+            SetField(pointType, point, "AlongTrackMeters", specs[i].Along);
+            SetField(pointType, point, "CrossTrackMeters", specs[i].Cross);
+            SetField(pointType, point, "MissedApproach", specs[i].Missed);
+            points.SetValue(point, i);
+        }
+
+        Type planType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainCorridorReadPlan", true);
+        object plan = Activator.CreateInstance(planType, true);
+        SetField(planType, plan, "QueryPoints", points);
+        SetField(planType, plan, "PointTileStableIds", mappings);
+        SetField(planType, plan, "PointSourceLods", sourceLods);
+        SetField(planType, plan, "TerrainCoverageComplete", readCoverageComplete);
+
+        Type resultType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainCorridorReadResult", true);
+        object result = Activator.CreateInstance(resultType, true);
+        SetField(resultType, result, "Plan", plan);
+        SetField(resultType, result, "Tiles", tiles);
+        SetField(resultType, result, "TerrainCoverageComplete",
+            readCoverageComplete);
+
+        Type inputType = aeris.GetType(
+            "AERISFlightControl.Landing.AERISTerrainCorridorComputeInput", true);
+        object input = Activator.CreateInstance(inputType, true);
+        SetField(inputType, input, "Identity", CreateIdentity(aeris));
+        SetField(inputType, input, "ThresholdLatitudeDeg", 0.0);
+        SetField(inputType, input, "ThresholdLongitudeDeg", 0.0);
+        SetField(inputType, input, "ThresholdElevationMeters", 70.0);
+        SetField(inputType, input, "InboundHeadingDeg", 90.0);
+        SetField(inputType, input, "MissedApproachHeadingDeg", 90.0);
+        SetField(inputType, input, "RequiredMissedApproachAltitudeMeters",
+            requiredMissedAltitude);
+        SetField(inputType, input, "Limits", Activator.CreateInstance(aeris.GetType(
+            "AERISFlightControl.Landing.AERISApproachPlanningLimits", true), true));
+        SetField(inputType, input, "ReadResult", result);
+        return input;
+    }
+
+    private static object Analyze(Assembly aeris, object input)
+    {
+        Type producer = aeris.GetType(
+            "AERISFlightControl.Landing.AERISApproachTerrainCorridorProducer", true);
+        MethodInfo method = producer.GetMethod("AnalyzePure",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        if (method == null) Fail("AnalyzePure missing");
+        return method.Invoke(null, new object[] { input });
+    }
+
+    private static PointSpec Point(int index, double latitude, double longitude,
+        double along, double cross, bool missed)
+    {
+        return new PointSpec {
+            Index = index, Latitude = latitude, Longitude = longitude,
+            Along = along, Cross = cross, Missed = missed
+        };
+    }
+
+    private static void TestProducerPriorityAndIdentity(Assembly aeris)
+    {
+        Type producer = aeris.GetType(
+            "AERISFlightControl.Landing.AERISApproachTerrainCorridorProducer", true);
+        MethodInfo priority = producer.GetMethod("PriorityRank",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        if (priority == null) Fail("PriorityRank missing");
+        RequireEqual(0, priority.Invoke(null, new object[] { true, true, true }),
+            "armed priority");
+        RequireEqual(1, priority.Invoke(null, new object[] { false, true, true }),
+            "selected priority");
+        RequireEqual(2, priority.Invoke(null, new object[] { false, false, true }),
+            "active body priority");
+        RequireEqual(3, priority.Invoke(null, new object[] { false, false, false }),
+            "other body priority");
+
+        MethodInfo matches = producer.GetMethod("IdentityMatches",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        if (matches == null) Fail("IdentityMatches missing");
+        object expected = CreateIdentity(aeris);
+        object current = CreateIdentity(aeris);
+        RequireEqual(true, matches.Invoke(null, new object[] { expected, current }),
+            "equal identity");
+        Type identityType = expected.GetType();
+        SetField(identityType, current, "EnvironmentSignature", "changed");
+        RequireEqual(false, matches.Invoke(null, new object[] { expected, current }),
+            "environment identity mismatch");
+        current = CreateIdentity(aeris);
+        SetField(identityType, current, "RunwayGeometryRevision", 99L);
+        RequireEqual(false, matches.Invoke(null, new object[] { expected, current }),
+            "runway identity mismatch");
+        current = CreateIdentity(aeris);
+        SetField(identityType, current, "TerrainRequestGeneration", 99L);
+        RequireEqual(false, matches.Invoke(null, new object[] { expected, current }),
+            "terrain request identity mismatch");
+        RequireEqual(false, matches.Invoke(null, new object[] { expected, null }),
+            "null current identity mismatch");
+    }
+
+    private static void TestSyntheticInterpolationSignatureAndFailClosedFlags(
+        Assembly aeris)
+    {
+        Type lodType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainTileLod", true);
+        object key = CreateSyntheticKey(aeris, "Kerbin",
+            Enum.Parse(lodType, "Land"), 0, 0);
+        float[] elevations = { 100f, 200f, 300f, 400f };
+        object tile = CreateSyntheticTile(aeris, key, 2, elevations, 100, true,
+            0.0, 1.0, 0.0, 1.0);
+        string stableId = StableId(key);
+        PointSpec point = Point(0, 0.5, 0.5, 123.0, -7.0, false);
+        IDictionary tiles = CreateTileDictionary(aeris, tile);
+        string[] mappings = { stableId };
+        int[] lods = { 4 };
+        object input = CreateAnalysisInput(aeris, new PointSpec[] { point },
+            mappings, lods, tiles, true, 300.0);
+        object first = Analyze(aeris, input);
+        object second = Analyze(aeris, input);
+        Type snapshotType = first.GetType();
+        IList samples = (IList)Field(snapshotType, first, "Samples");
+        RequireEqual(1, samples.Count, "interpolated sample count");
+        Type sampleType = samples[0].GetType();
+        RequireEqual(true, Field(sampleType, samples[0], "IsTerrain"),
+            "interpolated sample terrain flag");
+        RequireEqual(stableId, Field(sampleType, samples[0], "SourceId"),
+            "interpolated sample source");
+        RequireNear(250.0, (double)Field(sampleType, samples[0],
+            "TopElevationMeters"), 0.001, "bilinear center elevation");
+        RequireNear(123.0, (double)Field(sampleType, samples[0],
+            "AlongTrackMeters"), 0.001, "copied along track");
+        RequireNear(-7.0, (double)Field(sampleType, samples[0],
+            "CrossTrackMeters"), 0.001, "copied cross track");
+        RequireEqual(Field(snapshotType, first, "TerrainSignature"),
+            Field(snapshotType, second, "TerrainSignature"),
+            "deterministic terrain signature");
+        RequireEqual("1C621A8DC906F4CB",
+            Field(snapshotType, first, "TerrainSignature"),
+            "exact invariant terrain signature material");
+        if (string.IsNullOrEmpty((string)Field(snapshotType, first,
+            "TerrainSignature"))) Fail("terrain signature empty");
+        RequireEqual(true, Field(snapshotType, first, "TerrainCoverageComplete"),
+            "complete terrain coverage");
+        RequireEqual(false, Field(snapshotType, first, "ObstacleCoverageComplete"),
+            "fail-closed obstacle coverage");
+        RequireEqual(false, Field(snapshotType, first, "CorridorComplete"),
+            "fail-closed corridor");
+        RequireEqual(false, Field(snapshotType, first, "MissedApproachClear"),
+            "fail-closed missed approach");
+        RequireEqual("R2_TERRAIN_ONLY_OBSTACLES_INCOMPLETE",
+            Field(snapshotType, first, "ObstacleSignature"),
+            "terrain-only obstacle signature");
+        RequireEqual(4, Field(snapshotType, first, "MinimumTerrainSourceLod"),
+            "best observed terrain lod");
+        RequireEqual(false, Field(snapshotType, first,
+            "TerrainMissedApproachClear"), "no missed-approach points diagnostic");
+
+        RequireEqual(4, elevations.Length, "input elevation length unchanged");
+        RequireNear(100.0, elevations[0], 0.001, "input elevation unchanged");
+        RequireEqual(stableId, mappings[0], "input mapping unchanged");
+        RequireEqual(4, lods[0], "input source lod unchanged");
+        RequireEqual(1, tiles.Count, "input tiles unchanged");
+        Type inputType = input.GetType();
+        object readResult = Field(inputType, input, "ReadResult");
+        object plan = Field(readResult.GetType(), readResult, "Plan");
+        Array inputPoints = (Array)Field(plan.GetType(), plan, "QueryPoints");
+        object inputPoint = inputPoints.GetValue(0);
+        RequireNear(0.5, (double)Field(inputPoint.GetType(), inputPoint,
+            "LatitudeDeg"), 0.0, "input query latitude unchanged");
+        RequireNear(123.0, (double)Field(inputPoint.GetType(), inputPoint,
+            "AlongTrackMeters"), 0.0, "input query along track unchanged");
+    }
+
+    private static void TestEdgeInterpolationAndIndexOrderedSignature(Assembly aeris)
+    {
+        Type lodType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainTileLod", true);
+        object key = CreateSyntheticKey(aeris, "Kerbin",
+            Enum.Parse(lodType, "Land"), 0, 0);
+        object tile = CreateSyntheticTile(aeris, key, 2,
+            new float[] { 100f, 200f, 300f, 400f }, 100, true,
+            0.0, 1.0, 0.0, 1.0);
+        string stableId = StableId(key);
+        IDictionary tiles = CreateTileDictionary(aeris, tile);
+        PointSpec low = Point(0, 0.0, 0.0, 1.0, 2.0, false);
+        PointSpec high = Point(1, 1.0, 1.0, 3.0, 4.0, false);
+        object ordered = Analyze(aeris, CreateAnalysisInput(aeris,
+            new PointSpec[] { low, high }, new string[] { stableId, stableId },
+            new int[] { 1, 4 }, tiles, true, 500.0));
+        object reversed = Analyze(aeris, CreateAnalysisInput(aeris,
+            new PointSpec[] { high, low }, new string[] { stableId, stableId },
+            new int[] { 4, 1 }, tiles, true, 500.0));
+        Type snapshotType = ordered.GetType();
+        IList samples = (IList)Field(snapshotType, ordered, "Samples");
+        RequireNear(100.0, (double)Field(samples[0].GetType(), samples[0],
+            "TopElevationMeters"), 0.001, "south-west edge elevation");
+        RequireNear(400.0, (double)Field(samples[1].GetType(), samples[1],
+            "TopElevationMeters"), 0.001, "north-east edge elevation");
+        RequireEqual(Field(snapshotType, ordered, "TerrainSignature"),
+            Field(snapshotType, reversed, "TerrainSignature"),
+            "query-index ordered signature");
+        RequireEqual(4, Field(snapshotType, ordered, "MinimumTerrainSourceLod"),
+            "maximum numeric best observed lod");
+    }
+
+    private static void RequireIncompleteAnalysis(Assembly aeris, object input,
+        string name)
+    {
+        object snapshot = Analyze(aeris, input);
+        Type type = snapshot.GetType();
+        RequireEqual(false, Field(type, snapshot, "TerrainCoverageComplete"),
+            name + " terrain coverage");
+        RequireEqual(false, Field(type, snapshot, "CorridorComplete"),
+            name + " corridor coverage");
+        RequireEqual(false, Field(type, snapshot, "TerrainMissedApproachClear"),
+            name + " missed approach diagnostic");
+        RequireEqual(-1, Field(type, snapshot, "MinimumTerrainSourceLod"),
+            name + " source lod");
+        RequireEqual(0, ((IList)Field(type, snapshot, "Samples")).Count,
+            name + " sample count");
+    }
+
+    private static void TestInvalidAndMissingTilesFailClosed(Assembly aeris)
+    {
+        Type lodType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainTileLod", true);
+        object key = CreateSyntheticKey(aeris, "Kerbin",
+            Enum.Parse(lodType, "Land"), 0, 0);
+        string stableId = StableId(key);
+        PointSpec point = Point(0, 0.5, 0.5, 0.0, 0.0, false);
+        RequireIncompleteAnalysis(aeris, CreateAnalysisInput(aeris,
+            new PointSpec[] { point }, new string[] { string.Empty },
+            new int[] { -1 }, CreateTileDictionary(aeris), false, 300.0),
+            "missing mapping");
+        RequireIncompleteAnalysis(aeris, CreateAnalysisInput(aeris,
+            new PointSpec[] { point }, new string[] { stableId },
+            new int[] { 4 }, CreateTileDictionary(aeris), true, 300.0),
+            "missing tile");
+
+        object[] invalidTiles = {
+            CreateSyntheticTile(aeris, key, 1, new float[] { 100f }, 100, true,
+                0.0, 1.0, 0.0, 1.0),
+            CreateSyntheticTile(aeris, key, 2, new float[] { 100f, 200f, 300f },
+                100, true, 0.0, 1.0, 0.0, 1.0),
+            CreateSyntheticTile(aeris, key, 2,
+                new float[] { 100f, 200f, 300f, 400f }, 99, true,
+                0.0, 1.0, 0.0, 1.0),
+            CreateSyntheticTile(aeris, key, 2,
+                new float[] { 100f, 200f, 300f, 400f }, 100, false,
+                0.0, 1.0, 0.0, 1.0)
+        };
+        string[] names = { "invalid resolution", "short elevation array",
+            "insufficient quality", "incomplete sampling" };
+        for (int i = 0; i < invalidTiles.Length; i++)
+            RequireIncompleteAnalysis(aeris, CreateAnalysisInput(aeris,
+                new PointSpec[] { point }, new string[] { stableId },
+                new int[] { 4 }, CreateTileDictionary(aeris, invalidTiles[i]),
+                true, 300.0), names[i]);
+
+        object validTile = CreateSyntheticTile(aeris, key, 2,
+            new float[] { 100f, 200f, 300f, 400f }, 100, true,
+            0.0, 1.0, 0.0, 1.0);
+        RequireIncompleteAnalysis(aeris, CreateAnalysisInput(aeris,
+            new PointSpec[] { Point(0, 1.01, 0.5, 0.0, 0.0, false) },
+            new string[] { stableId }, new int[] { 4 },
+            CreateTileDictionary(aeris, validTile), true, 300.0),
+            "point outside mapped tile");
+    }
+
+    private static void TestMissedApproachTerrainDiagnostic(Assembly aeris)
+    {
+        Type lodType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainTileLod", true);
+        object key = CreateSyntheticKey(aeris, "Kerbin",
+            Enum.Parse(lodType, "Land"), 0, 0);
+        object tile = CreateSyntheticTile(aeris, key, 2,
+            new float[] { 100f, 100f, 100f, 100f }, 100, true,
+            0.0, 1.0, 0.0, 1.0);
+        string stableId = StableId(key);
+        PointSpec missed = Point(0, 0.5, 0.5, -100.0, 0.0, true);
+        object clear = Analyze(aeris, CreateAnalysisInput(aeris,
+            new PointSpec[] { missed }, new string[] { stableId },
+            new int[] { 4 }, CreateTileDictionary(aeris, tile), true, 101.0));
+        Type snapshotType = clear.GetType();
+        RequireEqual(true, Field(snapshotType, clear,
+            "TerrainMissedApproachClear"), "terrain-only missed approach clear");
+        RequireEqual(false, Field(snapshotType, clear, "MissedApproachClear"),
+            "operational missed approach remains fail-closed");
+
+        object blocked = Analyze(aeris, CreateAnalysisInput(aeris,
+            new PointSpec[] { missed }, new string[] { stableId },
+            new int[] { 4 }, CreateTileDictionary(aeris, tile), true, 100.0));
+        RequireEqual(false, Field(snapshotType, blocked,
+            "TerrainMissedApproachClear"), "equal terrain top is not below limit");
+
+        object missing = Analyze(aeris, CreateAnalysisInput(aeris,
+            new PointSpec[] { missed }, new string[] { string.Empty },
+            new int[] { -1 }, CreateTileDictionary(aeris), false, 101.0));
+        RequireEqual(false, Field(snapshotType, missing,
+            "TerrainMissedApproachClear"), "missing missed terrain fails closed");
+    }
+
     private static int Main(string[] args)
     {
         try
@@ -391,6 +793,11 @@ internal static class AERIS54LandR2PureTests
             TestReadPlanSelectsLandAndDeduplicatesTiles(aeris);
             TestReadPlanFreshnessTracksOnlyRequiredTiles(aeris);
             TestReadResultRejectsStaleWarmGeneration(aeris);
+            TestProducerPriorityAndIdentity(aeris);
+            TestSyntheticInterpolationSignatureAndFailClosedFlags(aeris);
+            TestEdgeInterpolationAndIndexOrderedSignature(aeris);
+            TestInvalidAndMissingTilesFailClosed(aeris);
+            TestMissedApproachTerrainDiagnostic(aeris);
             Console.WriteLine("AERIS54_LAND_R2_PURE_TESTS=PASS");
             return 0;
         }
