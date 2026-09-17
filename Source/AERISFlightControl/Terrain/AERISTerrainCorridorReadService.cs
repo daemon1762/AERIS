@@ -70,6 +70,9 @@ namespace AERISFlightControl.Terrain
             this.performance = performance;
         }
 
+        internal long RequestGeneration { get { return database == null ? -1L : database.RequestGeneration; } }
+        internal long DatabaseGeneration { get { return database == null ? -1L : database.DatabaseGeneration; } }
+
         internal bool TryCapturePlan(
             string directionStableId,
             string bodyName,

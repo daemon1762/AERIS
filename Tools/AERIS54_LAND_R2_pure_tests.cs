@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Linq.Expressions;
 
 internal static class AERIS54LandR2PureTests
 {
@@ -769,6 +770,314 @@ internal static class AERIS54LandR2PureTests
             "TerrainMissedApproachClear"), "missing missed terrain fails closed");
     }
 
+    // Copied-value adapters exercise the actual producer state machine without KSP.
+    private sealed class ProducerHarness
+    {
+        internal readonly Assembly Assembly;
+        internal readonly Type ProducerType;
+        internal readonly object Producer;
+        internal readonly List<string> Directions = new List<string> { "B", "A", "C" };
+        internal readonly Dictionary<string, int> Ranks = new Dictionary<string, int>();
+        internal readonly List<object> Plans = new List<object>();
+        internal readonly List<Delegate> Reads = new List<Delegate>();
+        internal readonly List<object> Inputs = new List<object>();
+        internal readonly List<Delegate> Computes = new List<Delegate>();
+        internal readonly List<string> Logs = new List<string>();
+        internal long DatabaseGeneration = 13L;
+        internal long RequestGeneration = 12L;
+        internal long GeometryRevision = 11L;
+        internal string Environment = "environment";
+        internal bool PlanCurrent = true;
+        internal bool ReadAdmission = true;
+        internal bool ComputeAdmission = true;
+        internal bool HasKeys = true;
+        internal bool Complete = true;
+        internal int CaptureCount;
+        internal int FreshnessCount;
+
+        internal ProducerHarness(Assembly assembly)
+        {
+            Assembly = assembly;
+            ProducerType = assembly.GetType("AERISFlightControl.Landing.AERISApproachTerrainCorridorProducer", true);
+            foreach (string property in new string[] { "PublicationGeneration", "InFlightCount" })
+                if (ProducerType.GetProperty(property, BindingFlags.Instance | BindingFlags.NonPublic) == null)
+                    Fail("producer missing " + property);
+            ConstructorInfo constructor = null;
+            foreach (ConstructorInfo candidate in ProducerType.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic))
+                if (candidate.GetParameters().Length == 6) constructor = candidate;
+            if (constructor == null) Fail("copied-value producer adapter constructor missing");
+            Func<object[], object>[] functions = {
+                delegate(object[] args) { return Capture(); },
+                delegate(object[] args) { return CapturePlan(args[0]); },
+                delegate(object[] args) { FreshnessCount++; return PlanCurrent; },
+                delegate(object[] args) {
+                    if (!ReadAdmission) return false;
+                    Plans.Add(args[0]); Reads.Add((Delegate)args[1]); return true;
+                },
+                delegate(object[] args) {
+                    if (!ComputeAdmission) return false;
+                    Inputs.Add(args[0]); Computes.Add((Delegate)args[1]); return true;
+                },
+                delegate(object[] args) { Logs.Add((string)args[0]); return null; }
+            };
+            object[] adapters = new object[functions.Length];
+            for (int i = 0; i < adapters.Length; i++)
+                adapters[i] = Adapt(constructor.GetParameters()[i].ParameterType, functions[i]);
+            Producer = constructor.Invoke(adapters);
+        }
+
+        private object Capture()
+        {
+            Type captureType = Assembly.GetType("AERISFlightControl.Landing.AERISTerrainCorridorDirectionCapture", true);
+            IList captures = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(captureType));
+            foreach (string direction in Directions)
+            {
+                object input = Activator.CreateInstance(Assembly.GetType("AERISFlightControl.Landing.AERISTerrainCorridorComputeInput", true), true);
+                object identity = CreateIdentity(Assembly);
+                SetField(identity.GetType(), identity, "DirectionStableId", direction);
+                SetField(identity.GetType(), identity, "EnvironmentSignature", Environment);
+                SetField(identity.GetType(), identity, "TerrainDatabaseGeneration", DatabaseGeneration);
+                SetField(identity.GetType(), identity, "TerrainRequestGeneration", RequestGeneration);
+                SetField(identity.GetType(), identity, "RunwayGeometryRevision", GeometryRevision);
+                SetField(input.GetType(), input, "Identity", identity);
+                object capture = Activator.CreateInstance(captureType, true);
+                SetField(captureType, capture, "Input", input);
+                SetField(captureType, capture, "Priority", Ranks.ContainsKey(direction) ? Ranks[direction] : 2);
+                captures.Add(capture);
+            }
+            return captures;
+        }
+
+        private object CapturePlan(object input)
+        {
+            CaptureCount++;
+            object identity = Field(input.GetType(), input, "Identity");
+            Type type = Assembly.GetType("AERISFlightControl.Terrain.AERISTerrainCorridorReadPlan", true);
+            object plan = Activator.CreateInstance(type, true);
+            foreach (FieldInfo field in identity.GetType().GetFields(BindingFlags.Instance | BindingFlags.NonPublic))
+                SetField(type, plan, field.Name, field.GetValue(identity));
+            Type lod = Assembly.GetType("AERISFlightControl.Terrain.AERISTerrainTileLod", true);
+            object key = CreateSyntheticKey(Assembly, "Kerbin", Enum.Parse(lod, "Land"), 0, 0);
+            Array keys = Array.CreateInstance(key.GetType(), HasKeys ? 1 : 0);
+            if (HasKeys) keys.SetValue(key, 0);
+            SetField(type, plan, "TileKeys", keys);
+            object point = CreateQueryPoint(Assembly, 0, 0.5, 0.5);
+            Array points = Array.CreateInstance(point.GetType(), 1); points.SetValue(point, 0);
+            SetField(type, plan, "QueryPoints", points);
+            SetField(type, plan, "PointTileStableIds", new string[] { StableId(key) });
+            SetField(type, plan, "PointSourceLods", new int[] { 4 });
+            SetField(type, plan, "TerrainCoverageComplete", Complete);
+            return plan;
+        }
+
+        internal object Result(int index)
+        {
+            object plan = Plans[index];
+            Type type = Assembly.GetType("AERISFlightControl.Terrain.AERISTerrainCorridorReadResult", true);
+            object result = Activator.CreateInstance(type, true);
+            SetField(type, result, "Plan", plan);
+            SetField(type, result, "TerrainCoverageComplete", Complete);
+            object key = ((Array)Field(plan.GetType(), plan, "TileKeys")).GetValue(0);
+            object tile = CreateSyntheticTile(Assembly, key, 2, new float[] { 1, 2, 3, 4 }, 100, true, 0, 1, 0, 1);
+            SetField(type, result, "Tiles", CreateTileDictionary(Assembly, tile));
+            return result;
+        }
+
+        internal object Invoke(string method, params object[] args)
+        { return ProducerType.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(Producer, args); }
+        internal int InFlight { get { return (int)ProducerType.GetProperty("InFlightCount", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(Producer, null); } }
+        internal long Generation { get { return (long)ProducerType.GetProperty("PublicationGeneration", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(Producer, null); } }
+        internal IDictionary Snapshots { get { return (IDictionary)Invoke("SnapshotDictionary"); } }
+        internal void Tick() { Invoke("Tick", "Kerbin"); }
+        internal void Read(int i) { Reads[i].DynamicInvoke(Result(i)); }
+        internal void Compute(int i) { Computes[i].DynamicInvoke(Analyze(Assembly, Inputs[i])); }
+    }
+
+    private static Delegate Adapt(Type delegateType, Func<object[], object> callback)
+    {
+        MethodInfo invoke = delegateType.GetMethod("Invoke");
+        ParameterInfo[] infos = invoke.GetParameters();
+        ParameterExpression[] parameters = new ParameterExpression[infos.Length];
+        Expression[] arguments = new Expression[infos.Length];
+        for (int i = 0; i < infos.Length; i++)
+        {
+            parameters[i] = Expression.Parameter(infos[i].ParameterType, "p" + i);
+            arguments[i] = Expression.Convert(parameters[i], typeof(object));
+        }
+        Expression call = Expression.Invoke(Expression.Constant(callback), Expression.NewArrayInit(typeof(object), arguments));
+        Expression body = invoke.ReturnType == typeof(void) ? (Expression)Expression.Block(call, Expression.Empty()) : Expression.Convert(call, invoke.ReturnType);
+        return Expression.Lambda(delegateType, body, parameters).Compile();
+    }
+
+    private static void TestProducerLifecycle(Assembly aeris)
+    {
+        var h = new ProducerHarness(aeris);
+        h.Ranks["C"] = 0;
+        h.Tick();
+        RequireEqual(2, h.InFlight, "physical admission bound");
+        RequireEqual("C", Field(h.Plans[0].GetType(), h.Plans[0], "DirectionStableId"), "armed first");
+        RequireEqual("A", Field(h.Plans[1].GetType(), h.Plans[1], "DirectionStableId"), "stable id tie order");
+        h.Tick(); RequireEqual(2, h.Reads.Count, "no duplicate reads");
+        h.Ranks["C"] = 2; h.Ranks["B"] = 1;
+        h.Read(0); RequireEqual(2, h.InFlight, "selection only reprioritizes; compute retains credit");
+        RequireEqual(0, h.Snapshots.Count, "no main-thread analysis publication");
+        h.DatabaseGeneration++; h.Compute(0);
+        RequireEqual(1, h.InFlight, "compute retires credit across unrelated append");
+        RequireEqual(null, Field(h.Inputs[0].GetType(), h.Inputs[0], "ReadResult"), "retired job releases decoded tile payload");
+        RequireEqual(1, h.Snapshots.Count, "unrelated append preserves decoded publication");
+        long generation = h.Generation;
+        object copy = h.Snapshots["C"];
+        SetField(copy.GetType(), copy, "TerrainSignature", "mutated");
+        if ((string)Field(copy.GetType(), h.Snapshots["C"], "TerrainSignature") == "mutated") Fail("publication dictionary not cloned");
+        h.Computes[0].DynamicInvoke(new object[] { null });
+        RequireEqual(1, h.InFlight, "duplicate terminal callback ignored");
+        h.Environment = "changed";
+        h.Tick(); RequireEqual(0, h.Snapshots.Count, "environment immediately revokes publication");
+        if (h.Generation <= generation) Fail("revocation did not advance publication generation");
+        h.Read(1); RequireEqual(1, h.Computes.Count, "stale read cannot compute");
+        h.Invoke("Reset", "test");
+        int admitted = h.InFlight;
+        h.Tick(); RequireEqual(2, h.InFlight, "reset still preserves physical bound");
+        RequireEqual(2 - admitted, h.Reads.Count - 3, "reset admits only unused credits");
+        h.Reads[2].DynamicInvoke(new object[] { null });
+        h.Reads[2].DynamicInvoke(new object[] { null });
+        RequireEqual(1, h.InFlight, "old reset credit retires exactly once");
+        Console.WriteLine("LAND_R2_PRODUCER_LIFECYCLE=PASS");
+    }
+
+    private static void TestProducerPendingAndFailures(Assembly aeris)
+    {
+        var h = new ProducerHarness(aeris); h.Directions.RemoveRange(1, 2); h.Complete = false;
+        h.Tick(); h.Read(0);
+        RequireEqual(1, h.Computes.Count, "partial analysis uses compute phase");
+        h.Compute(0);
+        RequireEqual(false, Field(h.Snapshots["B"].GetType(), h.Snapshots["B"], "CorridorComplete"), "partial operational fail closed");
+        h.Tick(); h.Tick(); RequireEqual(1, h.Reads.Count, "incomplete no frame retries");
+        h.Ranks["B"] = 1; h.Tick(); RequireEqual(2, h.Reads.Count, "background promotion retries");
+        h.ComputeAdmission = false; h.Read(1); RequireEqual(0, h.InFlight, "compute admission failure releases credit");
+        h.Tick(); RequireEqual(2, h.Reads.Count, "compute failure no frame retries");
+        h.DatabaseGeneration++; h.Tick(); RequireEqual(3, h.Reads.Count, "DB generation retries pending");
+        h.Reads[2].DynamicInvoke(new object[] { null }); RequireEqual(0, h.InFlight, "null read releases credit");
+        h.Tick(); RequireEqual(3, h.Reads.Count, "null terminal no frame retries");
+        h.RequestGeneration++; h.HasKeys = false; h.Tick(); h.Tick();
+        RequireEqual(4, h.CaptureCount, "missing keys captured only once per identity");
+        h.RequestGeneration++; h.HasKeys = true; h.ReadAdmission = false; h.Tick(); h.Tick();
+        RequireEqual(0, h.InFlight, "read admission failure has no credit");
+        RequireEqual(5, h.CaptureCount, "unavailable read no frame storm");
+        Console.WriteLine("LAND_R2_PRODUCER_PENDING_FAILURES=PASS");
+    }
+
+    private static void TestProducerPublicationFreshness(Assembly aeris)
+    {
+        var h = new ProducerHarness(aeris); h.Directions.RemoveRange(1, 2);
+        h.Tick(); h.Read(0); h.Compute(0);
+        long first = h.Generation;
+        int checks = h.FreshnessCount;
+        h.Tick(); h.Tick();
+        RequireEqual(checks, h.FreshnessCount, "unchanged publication avoids repeated tile metadata checks");
+        RequireEqual(1, h.CaptureCount, "complete publication avoids grid recapture");
+        RequireEqual(first, h.Generation, "unchanged publication generation stable");
+        h.DatabaseGeneration++; h.Tick();
+        RequireEqual(checks + 1, h.FreshnessCount, "append proves required tile freshness once");
+        h.Tick(); RequireEqual(checks + 1, h.FreshnessCount, "validated append not reprobed per frame");
+        RequireEqual(first, h.Generation, "unrelated append does not republish");
+        h.PlanCurrent = false; h.DatabaseGeneration++; h.ReadAdmission = false; h.Tick();
+        RequireEqual(0, h.Snapshots.Count, "changed required tile revokes publication");
+        h.PlanCurrent = true; h.GeometryRevision++; h.ReadAdmission = true; h.Tick(); h.Read(1);
+        h.GeometryRevision++; h.Compute(1);
+        RequireEqual(0, h.Snapshots.Count, "geometry change rejects compute result");
+        RequireEqual(0, h.InFlight, "stale compute releases credit");
+        h.Tick(); h.Read(2);
+        h.Invoke("Reset", "compute-reset");
+        RequireEqual(1, h.InFlight, "reset compute retains credit");
+        h.Compute(2);
+        RequireEqual(0, h.InFlight, "reset stale compute retires");
+        RequireEqual(0, h.Snapshots.Count, "reset stale compute cannot publish");
+        h.Tick(); h.Read(3); h.Computes[3].DynamicInvoke(new object[] { null });
+        RequireEqual(0, h.InFlight, "null compute releases credit");
+        h.Tick(); RequireEqual(4, h.Reads.Count, "null compute no retry storm");
+        Console.WriteLine("LAND_R2_PRODUCER_PUBLICATION_FRESHNESS=PASS");
+    }
+
+    private static void TestProducerMaterialPublication(Assembly aeris)
+    {
+        var h = new ProducerHarness(aeris); h.Directions.RemoveRange(1, 2); h.Complete = false;
+        h.Tick(); h.Read(0); h.Compute(0); long first = h.Generation;
+        h.Ranks["B"] = 1; h.Tick(); h.Read(1); h.Compute(1);
+        RequireEqual(first, h.Generation, "identical partial snapshot does not republish");
+        h.Ranks["B"] = 2; h.Tick(); h.Ranks["B"] = 0; h.Tick(); h.Read(2);
+        object snapshot = Analyze(aeris, h.Inputs[2]);
+        SetField(snapshot.GetType(), snapshot, "TerrainSignature", "material-change");
+        h.Computes[2].DynamicInvoke(snapshot);
+        RequireEqual(first + 1, h.Generation, "material change increments publication generation");
+        h.Directions.Clear(); h.Tick();
+        RequireEqual(0, h.Snapshots.Count, "removed certification revokes publication");
+        long empty = h.Generation; h.Invoke("Reset", "empty");
+        RequireEqual(empty, h.Generation, "empty reset does not publish");
+        var reset = new ProducerHarness(aeris); reset.Directions.RemoveRange(1, 2);
+        reset.Tick(); reset.Read(0); reset.Compute(0); long published = reset.Generation;
+        reset.Invoke("Reset", "published");
+        RequireEqual(published + 1, reset.Generation, "nonempty reset increments publication generation");
+        RequireEqual(0, reset.Snapshots.Count, "reset clears published snapshots immediately");
+        reset.Tick(); reset.Read(1); reset.Compute(1);
+        reset.RequestGeneration++; reset.ReadAdmission = false; reset.Tick();
+        RequireEqual(0, reset.Snapshots.Count, "request epoch immediately revokes publication");
+        Console.WriteLine("LAND_R2_PRODUCER_MATERIAL_PUBLICATION=PASS");
+    }
+
+    private static void TestProducerQueryGrid(Assembly aeris)
+    {
+        Type producer = aeris.GetType("AERISFlightControl.Landing.AERISApproachTerrainCorridorProducer", true);
+        Type inputType = aeris.GetType("AERISFlightControl.Landing.AERISTerrainCorridorComputeInput", true);
+        Type limitsType = aeris.GetType("AERISFlightControl.Landing.AERISApproachPlanningLimits", true);
+        object input = Activator.CreateInstance(inputType, true);
+        object limits = Activator.CreateInstance(limitsType, true);
+        SetField(limitsType, limits, "MaximumCaptureDistanceMeters", 1025.0);
+        SetField(limitsType, limits, "CorridorHalfWidthMeters", 180.0);
+        SetField(inputType, input, "Limits", limits);
+        SetField(inputType, input, "Identity", CreateIdentity(aeris));
+        SetField(inputType, input, "InboundHeadingDeg", 90.0);
+        SetField(inputType, input, "MissedApproachHeadingDeg", 90.0);
+        Delegate worker = (Delegate)producer.GetMethod("ComputeWork", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, new object[] { input });
+        FieldInfo[] workerFields = worker.Target.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        RequireEqual(1, workerFields.Length, "compute worker closure contains only copied input");
+        RequireEqual(input, workerFields[0].GetValue(worker.Target), "worker closure has no producer/runtime capture");
+        MethodInfo grid = producer.GetMethod("BuildGrid", BindingFlags.Static | BindingFlags.NonPublic);
+        IList baseline = (IList)grid.Invoke(null, new object[] { input, null });
+        bool finalEnd = false, missedEnd = false;
+        foreach (object point in baseline)
+        {
+            Type t = point.GetType();
+            bool missed = (bool)Field(t, point, "MissedApproach");
+            double along = (double)Field(t, point, "AlongTrackMeters");
+            double lon = (double)Field(t, point, "LongitudeDeg");
+            if (Math.Abs(along) == 1025.0) { if (missed) missedEnd = true; else finalEnd = true; }
+            if (along > 0 && (double)Field(t, point, "CrossTrackMeters") == 0 && lon >= 0) Fail("final grid must extend behind inbound threshold");
+            if (missed && along < 0 && lon <= 0) Fail("missed grid must extend along missed heading");
+            if (!missed && (double)Field(t, point, "CrossTrackMeters") > 0 &&
+                (double)Field(t, point, "LatitudeDeg") >= 0) Fail("positive cross-track must be right of inbound course");
+        }
+        RequireEqual(true, finalEnd && missedEnd, "both exact endpoints present");
+        Type planType = aeris.GetType("AERISFlightControl.Terrain.AERISTerrainCorridorReadPlan", true);
+        object plan = Activator.CreateInstance(planType, true);
+        Array points = Array.CreateInstance(baseline[0].GetType(), baseline.Count);
+        int[] lods = new int[baseline.Count];
+        for (int i = 0; i < baseline.Count; i++) { points.SetValue(baseline[i], i); lods[i] = 4; }
+        SetField(planType, plan, "QueryPoints", points); SetField(planType, plan, "PointSourceLods", lods);
+        IList refined = (IList)grid.Invoke(null, new object[] { input, plan });
+        if (refined.Count <= baseline.Count) Fail("Land source did not refine baseline");
+        bool final64 = false, missed64 = false;
+        foreach (object point in refined)
+        {
+            Type t = point.GetType();
+            double along = (double)Field(t, point, "AlongTrackMeters");
+            if (along == 64) final64 = true;
+            if (along == -64) missed64 = true;
+        }
+        RequireEqual(true, final64 && missed64, "both paths refine at 64m floor");
+        Console.WriteLine("LAND_R2_PRODUCER_QUERY_GRID=PASS");
+    }
+
     private static int Main(string[] args)
     {
         try
@@ -794,6 +1103,11 @@ internal static class AERIS54LandR2PureTests
             TestReadPlanFreshnessTracksOnlyRequiredTiles(aeris);
             TestReadResultRejectsStaleWarmGeneration(aeris);
             TestProducerPriorityAndIdentity(aeris);
+            TestProducerLifecycle(aeris);
+            TestProducerPendingAndFailures(aeris);
+            TestProducerPublicationFreshness(aeris);
+            TestProducerMaterialPublication(aeris);
+            TestProducerQueryGrid(aeris);
             TestSyntheticInterpolationSignatureAndFailClosedFlags(aeris);
             TestEdgeInterpolationAndIndexOrderedSignature(aeris);
             TestInvalidAndMissingTilesFailClosed(aeris);
