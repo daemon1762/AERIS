@@ -60,6 +60,16 @@ namespace AERISFlightControl.Landing
     {
         internal long Generation;
         internal string DirectionStableId = string.Empty;
+        internal string BodyName = string.Empty;
+        internal string EnvironmentSignature = string.Empty;
+        internal long AirfieldDatabaseRevision;
+        internal long RunwayGeometryRevision;
+        internal long TerrainRequestGeneration;
+        internal long TerrainDatabaseGeneration;
+        internal bool TerrainCoverageComplete;
+        internal bool ObstacleCoverageComplete;
+        internal int MinimumTerrainSourceLod = -1;
+        internal bool TerrainMissedApproachClear;
         internal string TerrainSignature = string.Empty;
         internal string ObstacleSignature = string.Empty;
         internal bool CorridorComplete;
