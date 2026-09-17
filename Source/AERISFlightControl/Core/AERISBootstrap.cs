@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using UnityEngine;
@@ -28,6 +29,9 @@ namespace AERISFlightControl.Core
 	  float airfieldProviderReadySince=-1f; Vessel airfieldProviderReadyVessel;
 	  float nextCanonicalSnapshotTime; double lastPerformanceSnapshotCostMilliseconds=-1.0;
 	  long lastRuntimeDatabaseRevision=-1L,lastRuntimeSelectionRevision=-1L;
+  AERISApproachTerrainCorridorProducer approachTerrainCorridors;
+  long lastApproachTerrainPublicationGeneration=-1L;
+  long lastApproachTerrainDatabaseRevision=-1L;
   readonly AERISApproachPlanningLimits approachPlanningLimits=new AERISApproachPlanningLimits();
   bool normalApExecutionPermittedLastFrame; Vessel normalApExecutionVessel; string pendingNormalApActivationSource;
   internal ProtectTelemetry Protect { get; private set; }
@@ -68,7 +72,7 @@ namespace AERISFlightControl.Core
    if(instance!=null && instance!=this){ duplicateInstance=true; Debug.LogWarning("[AERIS] Duplicate persistent bootstrap rejected."); Destroy(gameObject); return; }
    instance=this; DontDestroyOnLoad(gameObject);
   }
-	  void Start(){if(duplicateInstance)return; settings=AERISSettings.Load(); Performance=new AERISPerformanceRuntime(settings.PerformanceWorkerOverride,!settings.PerformanceGpuAccelerationEnabled); Protect=new ProtectTelemetry(); SpeedAirbrake=new AERISSpeedAirbrakeController(); SpeedAirbrake.Enabled=settings.SpeedAutomaticAirbrakeEnabled; GroundStability=new GroundStabilityProtection(settings,SpeedAirbrake); Bank=new AERISBankDirector(); Hdg=new AERISHdgDirector(); Hdg.ThinAirTurnAssistEnabled=settings.ThinAirTurnAssistEnabled; FlightPlans=new AERISFlightPlanLibrary(settings); MapDramCache=new AERISMapDramCache(); Airfields=new AERISAirfieldRegistry(settings,MapDramCache); Approaches=new AERISApproachRegistry(); Landing=new AERISLandingFoundation(Airfields); AERISRunwayTrackTokenApi.Bind(()=>{AERISRunwayTrackToken token;return Landing!=null&&Landing.TryCreateTrackToken(out token)?token:null;}); Terrain=new AERISTerrainAwareness(settings,MapDramCache); Pitch=new AERISPitchDirector(); VerticalSpeed=new AERISVerticalSpeedDirector(); Altitude=new AERISAltitudeDirector(); Acceleration=new AERISAccelerationDirector(); Velocity=new AERISVelocityDirector(); Velocity.SetAccelerationLimit(settings.VelocityAccelerationLimitMps2); AxisSupervisor=new AERISAxisStabilitySupervisor(); AutoTakeoff=new AERISAutoTakeoffDirector(settings); Attitude=new VirtualAttitudeInstrument(); AERISFlightStateApi.Publish(Attitude); ExternalAutomation=new AERISExternalAutomationManager(this); AERISExternalAutomationApi.Bind(ExternalAutomation); window=new AERISWindow(settings,this); flightInstrument=new AERISFlightInstrument(settings,this); ToolbarBridge.RegisterModOnce(); toolbar=gameObject.AddComponent<ToolbarBridge>(); toolbar.Initialise(()=>{if(window!=null)window.ShowForCurrentScene();},()=>{if(window!=null)window.HideForCurrentScene();}); AERISLogger.Initialize(); AERISFlightDataArchive.ConfigureRetention(settings.FlightDataArchiveLimit); if(FlightPlans!=null){FlightPlans.Reload();Performance.FlightPlanChanged();} RestoreAutopilotInputValues(); recorder=new AERISFlightDataRecorder(); AERISLogger.EventSink=(level,message)=>{ if(recorder!=null) recorder.RecordCvr("AERIS",level,message); }; AERISFlightRecorderApi.EventSink=(provider,category,action,severity,message)=>{if(recorder!=null)recorder.RecordExtensionEvent(provider,category,action,severity,message);}; AERISFlightRecorderApi.SchemaSink=(schema)=>recorder!=null && recorder.RegisterTelemetrySchema(schema); AERISFlightRecorderApi.TelemetrySink=(frame)=>{if(recorder!=null)recorder.RecordExtensionTelemetry(frame);}; FlightModel.BackgroundTrainingEnabled = settings.EnableAABackgroundTraining; observedUiScene=HighLogic.LoadedScene; wasFlightScene=HighLogic.LoadedSceneIsFlight; if(wasFlightScene)NotifyRuntimeVessel(FlightGlobals.ActiveVessel);
+	  void Start(){if(duplicateInstance)return; settings=AERISSettings.Load(); Performance=new AERISPerformanceRuntime(settings.PerformanceWorkerOverride,!settings.PerformanceGpuAccelerationEnabled); Protect=new ProtectTelemetry(); SpeedAirbrake=new AERISSpeedAirbrakeController(); SpeedAirbrake.Enabled=settings.SpeedAutomaticAirbrakeEnabled; GroundStability=new GroundStabilityProtection(settings,SpeedAirbrake); Bank=new AERISBankDirector(); Hdg=new AERISHdgDirector(); Hdg.ThinAirTurnAssistEnabled=settings.ThinAirTurnAssistEnabled; FlightPlans=new AERISFlightPlanLibrary(settings); MapDramCache=new AERISMapDramCache(); Airfields=new AERISAirfieldRegistry(settings,MapDramCache); Approaches=new AERISApproachRegistry(); Landing=new AERISLandingFoundation(Airfields); AERISRunwayTrackTokenApi.Bind(()=>{AERISRunwayTrackToken token;return Landing!=null&&Landing.TryCreateTrackToken(out token)?token:null;}); Terrain=new AERISTerrainAwareness(settings,MapDramCache); approachTerrainCorridors=new AERISApproachTerrainCorridorProducer(Airfields,Landing,Terrain==null?null:Terrain.CorridorReadService,Performance,approachPlanningLimits); Pitch=new AERISPitchDirector(); VerticalSpeed=new AERISVerticalSpeedDirector(); Altitude=new AERISAltitudeDirector(); Acceleration=new AERISAccelerationDirector(); Velocity=new AERISVelocityDirector(); Velocity.SetAccelerationLimit(settings.VelocityAccelerationLimitMps2); AxisSupervisor=new AERISAxisStabilitySupervisor(); AutoTakeoff=new AERISAutoTakeoffDirector(settings); Attitude=new VirtualAttitudeInstrument(); AERISFlightStateApi.Publish(Attitude); ExternalAutomation=new AERISExternalAutomationManager(this); AERISExternalAutomationApi.Bind(ExternalAutomation); window=new AERISWindow(settings,this); flightInstrument=new AERISFlightInstrument(settings,this); ToolbarBridge.RegisterModOnce(); toolbar=gameObject.AddComponent<ToolbarBridge>(); toolbar.Initialise(()=>{if(window!=null)window.ShowForCurrentScene();},()=>{if(window!=null)window.HideForCurrentScene();}); AERISLogger.Initialize(); AERISFlightDataArchive.ConfigureRetention(settings.FlightDataArchiveLimit); if(FlightPlans!=null){FlightPlans.Reload();Performance.FlightPlanChanged();} RestoreAutopilotInputValues(); recorder=new AERISFlightDataRecorder(); AERISLogger.EventSink=(level,message)=>{ if(recorder!=null) recorder.RecordCvr("AERIS",level,message); }; AERISFlightRecorderApi.EventSink=(provider,category,action,severity,message)=>{if(recorder!=null)recorder.RecordExtensionEvent(provider,category,action,severity,message);}; AERISFlightRecorderApi.SchemaSink=(schema)=>recorder!=null && recorder.RegisterTelemetrySchema(schema); AERISFlightRecorderApi.TelemetrySink=(frame)=>{if(recorder!=null)recorder.RecordExtensionTelemetry(frame);}; FlightModel.BackgroundTrainingEnabled = settings.EnableAABackgroundTraining; observedUiScene=HighLogic.LoadedScene; wasFlightScene=HighLogic.LoadedSceneIsFlight; if(wasFlightScene)NotifyRuntimeVessel(FlightGlobals.ActiveVessel);
   AERISLogger.Info("[AERIS23_RUNTIME_CANDIDATE] candidate="+AERISBuildVersion.CandidateName+"; git="+AERISBuildVersion.SourceGitSha+"; source_tree_sha256="+AERISBuildVersion.SourceTreeSha256+"; dll_sha256="+RuntimeAssemblySha256());
   AERISLogger.Info(""+AERISBuildVersion.Display+" loaded. Legacy NAV remains removed. Independent LAND remains observation-only. The CP2.5 Map DRAM Cache holds immutable airport/runway/ILS and Terrain Tile/LOD metadata snapshots for normal lookup without synchronous SSD access; CP3 Gate 3.1 makes the real rotated ND viewport authoritative, admits every Global/Far foundation tile before refinement, limits current-body background population to the sole persistent Global/Far base, and treats Route/Local as future reconstructed quality with only an existing exact-SSD bridge and demand-gated LAND microtiles. Gate 3 predictive corridor warming is constrained to Far base payloads. Gate 4B Geometry Integrity Hotfix 2 keeps temporal GUI-matrix reprojection quarantined after field rejection; exact current-projection GPU FAR rendering is the presentation authority while ATTR is redesigned. The CP2 ND retains asynchronous shared-scheduler reads, progressive Terrain Block fallback, bounded hot/warm/disk/VRAM caches, and GPU TOPO/REL rendering; terrain and LAND remain control-free."); StandardFlyByWire.ExternalThrottleFloor=ApplyAERISThrottleFloor; StandardFlyByWire.ExternalThrottleCeiling=ApplyAERISThrottleCeiling; StandardFlyByWire.ExternalPropulsionDemand=PublishAAPropulsionDemand; ClearExternalControlDemands(); GameEvents.onVesselChange.Add(OnVesselChange); GameEvents.onVesselGoOffRails.Add(OnVesselGoOffRails); GameEvents.onVesselWasModified.Add(OnVesselWasModified); AttachVirtualPilotHook(FlightGlobals.ActiveVessel); StartCoroutine(DetectAddonsAfterStartup());}
   IEnumerator DetectAddonsAfterStartup(){ yield return new WaitForSeconds(2f); AddonIntegration.DetectAtStartup(); AddonIntegration.RefreshForVessel(FlightGlobals.ActiveVessel); if(Airfields!=null)Airfields.RequestStartupLoad(); AERISLogger.Info("[ADDONS] Startup detection complete. APP="+AddonIntegration.AppStatusText+". One airfield load requested; execution waits for stable unpacked flight providers."); }
@@ -96,6 +100,7 @@ namespace AERISFlightControl.Core
 
   void ResetAutomationState(string reason,bool detachInputHook){
    SafeResetStep(()=>{if(ExternalAutomation!=null)ExternalAutomation.HandleCoreReset(reason);},"external automation",reason);
+   SafeResetStep(()=>{if(approachTerrainCorridors!=null)approachTerrainCorridors.Reset(reason);},"LAND-R2 terrain corridor producer",reason);
    SafeResetStep(()=>{if(Landing!=null)Landing.ResetForSceneTransition(reason);},"LAND foundation",reason);
    SafeResetStep(()=>{if(Terrain!=null)Terrain.Reset(reason);},"terrain awareness",reason);
    Vessel releaseVessel=observed!=null?observed:FlightGlobals.ActiveVessel;
@@ -484,16 +489,30 @@ namespace AERISFlightControl.Core
    long database=Airfields.DatabaseRevision;
    long selection=Airfields.SelectionRevision;
    if(database==lastRuntimeDatabaseRevision&&selection==lastRuntimeSelectionRevision)return;
-   bool databaseChanged=database!=lastRuntimeDatabaseRevision;
    lastRuntimeDatabaseRevision=database;
    lastRuntimeSelectionRevision=selection;
    Performance.UpdateRunwayRevisions(database,selection);
-   if(databaseChanged&&Approaches!=null){
-    Approaches.Rebuild(Airfields.Airfields,null,approachPlanningLimits);
-    AERISLogger.Info("[LAND_R1][APPROACH_REGISTRY] runtime rebuild; databaseRevision="+
-     database+"; "+Approaches.Status+
-     "; corridorSnapshots=0; authority=DISPLAY_OBSERVATION_ONLY.");
-   }
+  }
+  static bool ApproachRegistryRebuildRequired(long database,long previousDatabase,
+   long corridorGeneration,long previousCorridorGeneration){
+   return database!=previousDatabase||corridorGeneration!=previousCorridorGeneration;
+  }
+  void SyncApproachRegistry(){
+   if(Airfields==null||Approaches==null)return;
+   long database=Airfields.DatabaseRevision;
+   long corridorGeneration=approachTerrainCorridors==null?0L:
+    approachTerrainCorridors.PublicationGeneration;
+   if(!ApproachRegistryRebuildRequired(database,lastApproachTerrainDatabaseRevision,
+      corridorGeneration,lastApproachTerrainPublicationGeneration))return;
+   IDictionary<string,AERISApproachObstacleSnapshot> snapshots=
+    approachTerrainCorridors==null?null:approachTerrainCorridors.SnapshotDictionary();
+   Approaches.Rebuild(Airfields.Airfields,snapshots,approachPlanningLimits);
+   lastApproachTerrainDatabaseRevision=database;
+   lastApproachTerrainPublicationGeneration=corridorGeneration;
+   AERISLogger.Info("[LAND_R2][APPROACH_REGISTRY] runtime rebuild; databaseRevision="+
+    database+"; publicationGeneration="+corridorGeneration+"; "+Approaches.Status+
+    "; corridorSnapshots="+(snapshots==null?0:snapshots.Count)+
+    "; authority=DISPLAY_OBSERVATION_ONLY.");
   }
   string RuntimeLateralMode(){if(Hdg!=null&&Hdg.Armed)return "HDG/"+Hdg.ControlState;if(Bank!=null&&Bank.Armed)return "BANK/"+Bank.ControlState;return "MANUAL";}
   string RuntimeVerticalMode(){if(Altitude!=null&&Altitude.Armed)return "ALT/"+Altitude.ControlState;if(VerticalSpeed!=null&&VerticalSpeed.Armed)return "VS/"+VerticalSpeed.ControlState;if(Pitch!=null&&Pitch.Armed)return "PITCH/"+Pitch.ControlState;return "MANUAL";}
@@ -548,6 +567,11 @@ namespace AERISFlightControl.Core
    SyncRuntimeRevisions();
    if(inFlight&&Landing!=null)Landing.Tick(FlightGlobals.ActiveVessel,Attitude);
    if(Terrain!=null)Terrain.Tick(FlightGlobals.ActiveVessel,Landing,Airfields);
+   if(approachTerrainCorridors!=null)
+    approachTerrainCorridors.Tick(FlightGlobals.ActiveVessel==null||
+     FlightGlobals.ActiveVessel.mainBody==null?string.Empty:
+     FlightGlobals.ActiveVessel.mainBody.name);
+   SyncApproachRegistry();
    if(toolbar!=null&&window!=null)toolbar.SetState(window.ToolbarVisibleState);
    if(!inFlight)return;
    ProcessHotkeys();DisableTrimLearning();

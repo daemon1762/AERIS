@@ -35,6 +35,72 @@ internal static class AERIS54LandR2PureTests
             Fail(name + " expected " + expected + " but was " + actual);
     }
 
+    private static void RequireSourceContains(string source, string value, string name)
+    {
+        if (source.IndexOf(value, StringComparison.Ordinal) < 0)
+            Fail("bootstrap source missing " + name);
+    }
+
+    private static void TestBootstrapLifecycleIntegration(Assembly aeris)
+    {
+        Type bootstrap = aeris.GetType(
+            "AERISFlightControl.Core.AERISBootstrap", true);
+        RequireField(bootstrap, "approachTerrainCorridors");
+        RequireField(bootstrap, "lastApproachTerrainPublicationGeneration");
+        RequireField(bootstrap, "lastApproachTerrainDatabaseRevision");
+
+        MethodInfo gate = bootstrap.GetMethod("ApproachRegistryRebuildRequired",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        if (gate == null) Fail("ApproachRegistryRebuildRequired missing");
+        RequireEqual(false, gate.Invoke(null, new object[] { 7L, 7L, 11L, 11L }),
+            "unchanged registry inputs do not rebuild");
+        RequireEqual(true, gate.Invoke(null, new object[] { 8L, 7L, 11L, 11L }),
+            "database-only change rebuilds");
+        RequireEqual(true, gate.Invoke(null, new object[] { 7L, 7L, 12L, 11L }),
+            "publication-only change rebuilds");
+        RequireEqual(true, gate.Invoke(null, new object[] { 8L, 7L, 12L, 11L }),
+            "combined change rebuilds once");
+
+        string sourcePath = Environment.GetEnvironmentVariable(
+            "AERIS_BOOTSTRAP_SOURCE");
+        if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
+            Fail("AERIS_BOOTSTRAP_SOURCE must name the candidate bootstrap source");
+        string source = File.ReadAllText(sourcePath);
+        RequireSourceContains(source,
+            "approachTerrainCorridors=new AERISApproachTerrainCorridorProducer(",
+            "terrain corridor producer construction");
+        RequireSourceContains(source, "approachTerrainCorridors.Reset(reason)",
+            "terrain corridor producer reset");
+        RequireSourceContains(source, "approachTerrainCorridors.SnapshotDictionary()",
+            "published snapshot handoff");
+        RequireSourceContains(source,
+            "Approaches.Rebuild(Airfields.Airfields,snapshots,approachPlanningLimits)",
+            "snapshot-backed approach registry rebuild");
+
+        int terrainConstruction = source.IndexOf(
+            "Terrain=new AERISTerrainAwareness", StringComparison.Ordinal);
+        int producerConstruction = source.IndexOf(
+            "approachTerrainCorridors=new AERISApproachTerrainCorridorProducer(",
+            StringComparison.Ordinal);
+        if (terrainConstruction < 0 || producerConstruction <= terrainConstruction)
+            Fail("terrain corridor producer must be constructed after Terrain");
+
+        int update = source.IndexOf("void Update(){", StringComparison.Ordinal);
+        int airfieldsTick = source.IndexOf("Airfields.Tick(", update,
+            StringComparison.Ordinal);
+        int terrainTick = source.IndexOf("Terrain.Tick(", update,
+            StringComparison.Ordinal);
+        int producerTick = source.IndexOf("approachTerrainCorridors.Tick(", update,
+            StringComparison.Ordinal);
+        int registrySync = source.IndexOf("SyncApproachRegistry();", update,
+            StringComparison.Ordinal);
+        if (update < 0 || airfieldsTick < update || terrainTick <= airfieldsTick ||
+            producerTick <= terrainTick || registrySync <= producerTick)
+            Fail("bootstrap update must tick Airfields, Terrain, producer, then sync approaches");
+
+        Console.WriteLine("LAND_R2_BOOTSTRAP_LIFECYCLE_INTEGRATION=PASS");
+    }
+
     private static void SetField(Type type, object value, string name, object fieldValue)
     {
         FieldInfo field = type.GetField(name,
@@ -1185,6 +1251,8 @@ internal static class AERIS54LandR2PureTests
                     TestProducerLifecycle(aeris);
                     TestProducerPendingAndFailures(aeris);
                 }
+                else if (suite == "bootstrap-integration")
+                    TestBootstrapLifecycleIntegration(aeris);
                 else Fail("unknown suite " + suite);
                 Console.WriteLine("AERIS54_LAND_R2_SELECTED_SUITE=PASS suite=" + suite);
                 return 0;
