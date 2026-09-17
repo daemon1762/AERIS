@@ -232,28 +232,13 @@ namespace AERISFlightControl.Terrain
                     bool loadedAny = database.TryLoadBatch(submittedPlan.TileKeys,
                         warm, loaded, new AERISTerrainPreloadTelemetry(),
                         submittedPlan.GameDataHash);
-                    var result = new AERISTerrainCorridorReadResult
-                    {
-                        Plan = submittedPlan,
-                        TerrainCoverageComplete = submittedPlan.TerrainCoverageComplete,
-                        FailureReason = string.Empty
-                    };
-                    foreach (KeyValuePair<string, AERISTerrainHeightTile> pair in loaded)
-                    {
-                        if (pair.Value != null)
-                            result.Tiles[pair.Key] = pair.Value.CloneImmutable();
-                    }
+                    AERISTerrainCorridorReadResult result = BuildReadResult(
+                        submittedPlan, loaded, loadedAny);
                     if (!IsPlanCurrent(submittedPlan))
                     {
                         result.Tiles.Clear();
                         result.TerrainCoverageComplete = false;
                         result.FailureReason = "TERRAIN_REQUIRED_TILE_CHANGED";
-                    }
-                    else if (!loadedAny ||
-                        result.Tiles.Count != submittedPlan.TileKeys.Length)
-                    {
-                        result.TerrainCoverageComplete = false;
-                        result.FailureReason = "TERRAIN_READ_INCOMPLETE";
                     }
                     return result;
                 },
@@ -263,6 +248,55 @@ namespace AERISFlightControl.Terrain
                     // failed required work. Preserve it so the producer retires credit.
                     commit(value as AERISTerrainCorridorReadResult);
                 }, false);
+        }
+
+        static AERISTerrainCorridorReadResult BuildReadResult(
+            AERISTerrainCorridorReadPlan plan,
+            IDictionary<string, AERISTerrainHeightTile> loaded,
+            bool loadedAny)
+        {
+            var result = new AERISTerrainCorridorReadResult
+            {
+                Plan = plan,
+                TerrainCoverageComplete = plan != null &&
+                    plan.TerrainCoverageComplete,
+                FailureReason = string.Empty
+            };
+            if (plan == null || plan.TileKeys == null ||
+                plan.TileGenerationUtcTicks == null ||
+                plan.TileKeys.Length != plan.TileGenerationUtcTicks.Length)
+            {
+                result.TerrainCoverageComplete = false;
+                result.FailureReason = "TERRAIN_READ_PLAN_INVALID";
+                return result;
+            }
+
+            bool generationMismatch = false;
+            for (int i = 0; i < plan.TileKeys.Length; i++)
+            {
+                AERISTerrainTileKey key = plan.TileKeys[i];
+                AERISTerrainHeightTile tile;
+                if (loaded == null || !loaded.TryGetValue(key.StableId, out tile) ||
+                    tile == null) continue;
+                if (tile.CreatedUtcTicks != plan.TileGenerationUtcTicks[i])
+                {
+                    generationMismatch = true;
+                    break;
+                }
+                result.Tiles[key.StableId] = tile.CloneImmutable();
+            }
+            if (generationMismatch)
+            {
+                result.Tiles.Clear();
+                result.TerrainCoverageComplete = false;
+                result.FailureReason = "TERRAIN_TILE_GENERATION_MISMATCH";
+            }
+            else if (!loadedAny || result.Tiles.Count != plan.TileKeys.Length)
+            {
+                result.TerrainCoverageComplete = false;
+                result.FailureReason = "TERRAIN_READ_INCOMPLETE";
+            }
+            return result;
         }
 
         static AERISTerrainCorridorReadResult FailedResult(

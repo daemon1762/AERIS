@@ -97,6 +97,12 @@ internal static class AERIS54LandR2PureTests
 
     private static object CreateReadService(Assembly aeris, out object database)
     {
+        return CreateReadService(aeris, null, out database);
+    }
+
+    private static object CreateReadService(Assembly aeris, object warm,
+        out object database)
+    {
         Type databaseType = aeris.GetType(
             "AERISFlightControl.Terrain.AERISTerrainPreloadDatabase", true);
         Type mapType = aeris.GetType(
@@ -117,7 +123,7 @@ internal static class AERIS54LandR2PureTests
         ConstructorInfo serviceConstructor = serviceType.GetConstructor(
             BindingFlags.Instance | BindingFlags.NonPublic, null,
             new Type[] { databaseType, warmType, performanceType }, null);
-        return serviceConstructor.Invoke(new object[] { database, null, null });
+        return serviceConstructor.Invoke(new object[] { database, warm, null });
     }
 
     private static object CreateQueryPoint(Assembly aeris, int index,
@@ -286,6 +292,81 @@ internal static class AERIS54LandR2PureTests
             "required tile replacement plan freshness");
     }
 
+    private static void TestReadResultRejectsStaleWarmGeneration(Assembly aeris)
+    {
+        Type warmType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainWarmTileCache", true);
+        object warm = Activator.CreateInstance(warmType,
+            BindingFlags.Instance | BindingFlags.NonPublic, null,
+            new object[] { 8L * 1024L * 1024L }, null);
+        object database;
+        object service = CreateReadService(aeris, warm, out database);
+        Type lodType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainTileLod", true);
+        object land = KeyForPoint(service, Enum.Parse(lodType, "Land"), 5.0, 6.0);
+        AddAcceptedMetadata(database, land, aeris, 401L);
+        object plan = CapturePlan(aeris, service, CreateQueryList(aeris,
+            CreateQueryPoint(aeris, 0, 5.0, 6.0)));
+
+        Type tileType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainHeightTile", true);
+        object tile = Activator.CreateInstance(tileType, true);
+        tileType.GetField("Key", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(tile, land);
+        tileType.GetField("Resolution", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(tile, 2);
+        tileType.GetField("Elevation", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(tile, new float[] { 10f, 10f, 10f, 10f });
+        tileType.GetField("Flags", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(tile, new byte[] { 0, 0, 0, 0 });
+        tileType.GetField("CreatedUtcTicks", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(tile, 400L);
+        tileType.GetField("Quality", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(tile, 100);
+        tileType.GetField("SamplingComplete", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(tile, true);
+
+        Type codecType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainPreloadCodec", true);
+        Type codecIdType = aeris.GetType(
+            "AERISFlightControl.Terrain.AERISTerrainCodecId", true);
+        object encoded = codecType.GetMethod("Encode",
+            BindingFlags.Static | BindingFlags.NonPublic).Invoke(null,
+            new object[] { tile, "environment", "game-data", 0L,
+                Enum.Parse(codecIdType, "Raw") });
+        warmType.GetMethod("Put", BindingFlags.Instance | BindingFlags.NonPublic)
+            .Invoke(warm, new object[] { encoded, 2 });
+
+        Type keyType = land.GetType();
+        Type keysType = typeof(List<>).MakeGenericType(keyType);
+        IList keys = (IList)Activator.CreateInstance(keysType);
+        keys.Add(land);
+        Type outputType = typeof(Dictionary<,>).MakeGenericType(typeof(string), tileType);
+        IDictionary loaded = (IDictionary)Activator.CreateInstance(outputType);
+        MethodInfo load = database.GetType().GetMethod("TryLoadBatch",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        bool loadedAny = (bool)load.Invoke(database,
+            new object[] { keys, warm, loaded, null, "game-data" });
+        RequireEqual(true, loadedAny, "stale warm payload loaded");
+        object decoded = loaded[StableId(land)];
+        RequireEqual(400L, Field(tileType, decoded, "CreatedUtcTicks"),
+            "stale warm decoded generation");
+
+        MethodInfo buildResult = service.GetType().GetMethod("BuildReadResult",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        if (buildResult == null) Fail("BuildReadResult missing");
+        object result = buildResult.Invoke(null,
+            new object[] { plan, loaded, loadedAny });
+        Type resultType = result.GetType();
+        IDictionary resultTiles = (IDictionary)Field(resultType, result, "Tiles");
+        RequireEqual(0, resultTiles.Count, "stale warm result tile count");
+        RequireEqual(false, Field(resultType, result, "TerrainCoverageComplete"),
+            "stale warm result coverage");
+        RequireEqual("TERRAIN_TILE_GENERATION_MISMATCH",
+            Field(resultType, result, "FailureReason"),
+            "stale warm failure reason");
+    }
+
     private static int Main(string[] args)
     {
         try
@@ -309,6 +390,7 @@ internal static class AERIS54LandR2PureTests
             TestReadPlanCopiesQueriesAndMarksMissingCoverage(aeris);
             TestReadPlanSelectsLandAndDeduplicatesTiles(aeris);
             TestReadPlanFreshnessTracksOnlyRequiredTiles(aeris);
+            TestReadResultRejectsStaleWarmGeneration(aeris);
             Console.WriteLine("AERIS54_LAND_R2_PURE_TESTS=PASS");
             return 0;
         }
