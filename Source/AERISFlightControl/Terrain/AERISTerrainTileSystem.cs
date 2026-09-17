@@ -62,6 +62,7 @@ namespace AERISFlightControl.Terrain
         readonly AERISTerrainDiskTileCache disk;
         readonly AERISTerrainPreloadDatabase preloadDatabase;
         readonly AERISTerrainWarmTileCache warm;
+        readonly AERISTerrainCorridorReadService corridorReadService;
         readonly AERISTerrainBlockPipeline blockPipeline;
         readonly AERISTerrainPreloadBuilder preloadBuilder;
         readonly AERISTerrainPreloadTelemetry preloadTelemetry =
@@ -224,6 +225,8 @@ namespace AERISFlightControl.Terrain
                 ResolvePreloadLimitBytes(settings), mapDramCache);
             warm = new AERISTerrainWarmTileCache(Math.Max(16L * 1024L * 1024L,
                 ramLimit / 2L));
+            corridorReadService = new AERISTerrainCorridorReadService(
+                preloadDatabase, warm, AERISPerformanceRuntime.Current);
             blockPipeline = new AERISTerrainBlockPipeline(performance);
             preloadBuilder = new AERISTerrainPreloadBuilder(settings, performance,
                 preloadDatabase, blockPipeline, preloadTelemetry);
@@ -231,6 +234,26 @@ namespace AERISFlightControl.Terrain
         }
 
         internal bool IndexLoaded { get { return preloadDatabase.IndexLoaded; } }
+        internal AERISTerrainCorridorReadService CorridorReadService
+        {
+            get { return corridorReadService; }
+        }
+        internal string ActiveEnvironmentHash
+        {
+            get { return environmentHash ?? string.Empty; }
+        }
+        internal string CurrentGameDataHash
+        {
+            get { return cachedGameDataHash ?? string.Empty; }
+        }
+        internal long TerrainRequestGeneration
+        {
+            get { return preloadDatabase == null ? 0L : preloadDatabase.RequestGeneration; }
+        }
+        internal long TerrainDatabaseGeneration
+        {
+            get { return preloadDatabase == null ? 0L : preloadDatabase.DatabaseGeneration; }
+        }
         internal AERISCurrentBodyResidentCache CurrentBodyResidentCache
         {
             get { return currentBodyResidentCache; }

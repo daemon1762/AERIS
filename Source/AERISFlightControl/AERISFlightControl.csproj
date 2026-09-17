@@ -164,6 +164,7 @@
     <Compile Include="Terrain\AERISTerrainPreloadDatabase.cs" />
     <Compile Include="Terrain\AERISTerrainBlockPipeline.cs" />
     <Compile Include="Terrain\AERISTerrainPreloadBuilder.cs" />
+    <Compile Include="Terrain\AERISTerrainCorridorReadService.cs" />
     <Compile Include="Terrain\AERISTerrainTileSystem.cs" />
     <Compile Include="Terrain\AERISTerrainCoastlinePolicy.cs" />
     <Compile Include="Terrain\AERISTerrainCoastlineExtractor.cs" />

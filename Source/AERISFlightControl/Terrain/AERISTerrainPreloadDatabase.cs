@@ -185,6 +185,24 @@ namespace AERISFlightControl.Terrain
             }
         }
 
+        // Metadata-only content identity for consumers that must invalidate a read only
+        // when one of its required tiles changes. This deliberately bypasses payload I/O
+        // and does not expose the mutable index entry.
+        internal bool TryGetGenerationUtcTicks(AERISTerrainTileKey key,
+            out long generationUtcTicks)
+        {
+            generationUtcTicks = 0L;
+            lock (indexSync)
+            {
+                IndexEntry entry;
+                if (!tileIndex.TryGetValue(key.StableId, out entry) || entry == null ||
+                    entry.State != AERISTerrainGenerationState.Complete ||
+                    entry.Quality < 100) return false;
+                generationUtcTicks = entry.GenerationUtcTicks;
+                return true;
+            }
+        }
+
         internal string ChunkIdFor(AERISTerrainTileKey key)
         {
             int chunkX = AERISTerrainSpatialKey.ChunkCoordinate(key.LongitudeIndex);

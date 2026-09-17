@@ -95,6 +95,11 @@ namespace AERISFlightControl.Terrain
 
         internal AERISTerrainPerformanceController Performance { get { return performance; } }
         internal AERISTerrainTileSystem DisplayTiles { get { return displayTiles; } }
+        internal AERISTerrainCorridorReadService CorridorReadService
+        {
+            get { return displayTiles == null ? null :
+                displayTiles.CorridorReadService; }
+        }
         internal AERISCurrentBodyResidentCache CurrentBodyResidentCache
         {
             get { return displayTiles == null ? null :
