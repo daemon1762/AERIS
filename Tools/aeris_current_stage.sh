@@ -8,8 +8,8 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KSP="$1"
-STAGE="LAND-R2-IMMUTABLE-TERRAIN-CORRIDOR-SNAPSHOTS"
-RUNNER="$ROOT/Tools/aeris54_land_r2_start_audit.sh"
+STAGE="LAND-R2-IMMUTABLE-TERRAIN-CORRIDOR-SNAPSHOTS-CANDIDATE"
+RUNNER="$ROOT/Tools/aeris54_land_r2_candidate.sh"
 
 cd "$ROOT"
 
