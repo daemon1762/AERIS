@@ -32,6 +32,7 @@ BOOLS = ('terrain_coverage_complete', 'obstacle_coverage_complete',
          'corridor_complete', 'missed_approach_clear')
 NUMBERS = ('producer_generation', 'cycle', 'priority', 'eligible_best_rank',
            'in_flight', 'samples', 'published', 'pending')
+LOGGER_RECORD = re.compile(r'^\[AERIS\] \[\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}\] \[[A-Z]+\] ')
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
@@ -72,6 +73,58 @@ def segment(data, current, previous):
         return data[offset:], 'APPENDED_SEGMENT'
     return data, 'REPLACED_OR_TRUNCATED_LOG'
 
+def logical_records(text):
+    """Reassemble only LAND_R2 records split by newline-bearing direction IDs."""
+    records, errors, pending = [], [], None
+    for physical in text.splitlines():
+        if LOGGER_RECORD.match(physical):
+            if pending is not None:
+                errors.append('truncated LAND_R2 logical record: ' + pending)
+                records.append(pending)
+                pending = None
+            if MARKER in physical and ' direction=' in physical and ' body=' not in physical:
+                pending = physical
+            else:
+                records.append(physical)
+            continue
+        if pending is None:
+            if physical:
+                errors.append('orphan LAND_R2 continuation: ' + physical)
+            continue
+        if not physical or len(physical) > 4096 or MARKER in physical or physical.startswith('[') or \
+                any(ord(char) < 32 and char != '\t' for char in physical) or \
+                (' body=' not in physical and '=' in physical):
+            errors.append('invalid LAND_R2 continuation: ' + physical)
+            records.append(pending)
+            pending = None
+            continue
+        if ' body=' in physical:
+            direction_tail, _ = physical.split(' body=', 1)
+            if physical.count(' body=') != 1 or not direction_tail or '=' in direction_tail:
+                errors.append('invalid LAND_R2 continuation: ' + physical)
+                records.append(pending)
+                pending = None
+                continue
+            pending += '\n' + physical
+            records.append(pending)
+            pending = None
+        else:
+            pending += '\n' + physical
+            if len(pending) > 16384:
+                errors.append('invalid LAND_R2 continuation: logical record too long')
+                records.append(pending)
+                pending = None
+    if pending is not None:
+        errors.append('truncated LAND_R2 logical record: ' + pending)
+        records.append(pending)
+    return records, errors
+
+def genuine_exception(line):
+    if '[ERROR]' in line:
+        return True
+    return re.search(r'(?:^|\s)[A-Za-z_][A-Za-z0-9_.]*Exception(?::|\s|$)|'
+                     r'Traceback \(most recent call last\)|Unhandled exception', line, re.I) is not None
+
 def telemetry_start(name):
     match = re.fullmatch(r'(\d{4}-\d\d-\d\d_\d{6}_\d{3})_performance_runtime\.csv', name)
     if not match:
@@ -79,28 +132,28 @@ def telemetry_start(name):
     return datetime.datetime.strptime(match[1], '%Y-%m-%d_%H%M%S_%f').replace(
         tzinfo=datetime.timezone.utc).timestamp()
 
-def scheduler_evidence(text, armed_at, files, existing):
+def scheduler_evidence(records, armed_at, files, existing):
     """Require one session and unique post-arm CSV covering its work callbacks.
 
     Performance is constructed before logger initialization; its first Tick/CSV
     occurs after initialization. The filename and row UTC interval must straddle
     that boundary. No cross-session counter aggregation or nearest-file fallback.
     """
-    starts = [line for line in text.splitlines() if 'Dedicated logger initialized. session=' in line]
+    starts = [line for line in records if 'Dedicated logger initialized. session=' in line]
     if len(starts) != 1:
         return False, 0, 'exactly one logger session required; sessions=' + str(len(starts))
     if files is None or existing is None:
         return False, 0, 'scheduler telemetry or arm-time inventory missing'
     try:
         start = timestamp(starts[0])
-        name = Path(starts[0].split('session=', 1)[1]).name
+        name = starts[0].split('session=', 1)[1].replace('\\', '/').rsplit('/', 1)[-1]
         named_start = datetime.datetime.strptime(name, '%Y-%m-%d_%H%M%S_session.log').replace(
             tzinfo=datetime.timezone.utc).timestamp()
         if not armed_at < start or not named_start <= start < named_start + 2:
             return False, 0, 'logger session filename/time mismatch'
         work = []
         ends = []
-        for line in text.splitlines():
+        for line in records:
             if MARKER in line:
                 kind = line.split(MARKER, 1)[1].strip().split(' ', 1)[0]
                 # Shutdown Reset only invalidates state and emits its summary;
@@ -208,10 +261,13 @@ def audit(text, armed_at, dll_sha, telemetry=None, existing=None):
         'terrain_complete_publish_count', 'terrain_incomplete_count',
         'malformed_record_count', 'priority_violation_count', 'priority_proof_count',
         'scheduler_failed_count', 'scheduler_telemetry_verified_count', 'terminal_null_count']})
-    errors, evidence, queues = [], [], collections.defaultdict(list)
+    records, framing_errors = logical_records(text)
+    errors, evidence, queues = list(framing_errors), [], collections.defaultdict(list)
+    incomplete_directions = set()
+    counts['malformed_record_count'] += len(framing_errors)
     session, identified, identities = 0, False, 0
-    for line in text.splitlines():
-        if re.search(r'exception|\[ERROR\]', line, re.I):
+    for line in records:
+        if genuine_exception(line):
             counts['suspected_exceptions'] += 1
         if 'ENV4_DB_WRITE_SUPPRESSED' in line:
             counts['env4_db_write_suppressed_count'] += 1
@@ -242,7 +298,8 @@ def audit(text, armed_at, dll_sha, telemetry=None, existing=None):
             event, fields = tail.split(' ', 1)
             if event not in EVENTS:
                 raise ValueError('unknown LAND_R2 event ' + event)
-            pairs = re.findall(r'(?:^|\s)([a-z_][a-z_0-9]*)=(.*?)(?=\s+[a-z_][a-z_0-9]*=|$)', fields)
+            pairs = re.findall(r'(?:^|\s)([a-z_][a-z_0-9]*)=(.*?)(?=\s+[a-z_][a-z_0-9]*=|$)',
+                               fields, re.S)
             values = dict(pairs)
             if len(pairs) != len(values):
                 raise ValueError('duplicate field')
@@ -288,7 +345,8 @@ def audit(text, armed_at, dll_sha, telemetry=None, existing=None):
                 if any(key not in values for key in BOOLS) or values.get('authority') != 'NONE_PILOT':
                     raise ValueError('PUBLISH missing completeness/authority')
                 counts['terrain_complete_publish_count'] += int(values['terrain_coverage_complete'])
-                counts['terrain_incomplete_count'] += int(not values['terrain_coverage_complete'])
+                if not values['terrain_coverage_complete']:
+                    incomplete_directions.add((values['producer_generation'], values['direction']))
             elif event in ('DIRECTION_PENDING', 'READ_READY', 'READ_INCOMPLETE', 'STALE_REJECT', 'RESET'):
                 if 'reason' not in values:
                     raise ValueError(event + ' missing reason')
@@ -296,7 +354,7 @@ def audit(text, armed_at, dll_sha, telemetry=None, existing=None):
                     counts['terminal_null_count'] += 1
                 if event == 'READ_INCOMPLETE' or (event == 'DIRECTION_PENDING' and values['reason'] in
                         ('TERRAIN_INCOMPLETE', 'NO_REQUIRED_TERRAIN')):
-                    counts['terrain_incomplete_count'] += 1
+                    incomplete_directions.add((values['producer_generation'], values['direction']))
             counts[EVENTS[event]] += 1
         except (ValueError, KeyError) as exc:
             counts['malformed_record_count'] += 1
@@ -309,10 +367,11 @@ def audit(text, armed_at, dll_sha, telemetry=None, existing=None):
         # logger session. Rank 0/1 means current ARMED/selected at that opportunity.
         if any(entry['priority'] < 2 for entry in entries) and any(entry['priority'] >= 2 for entry in entries):
             counts['priority_proof_count'] += 1
-    verified, scheduler_failed, attribution = scheduler_evidence(text, armed_at, telemetry, existing)
+    verified, scheduler_failed, attribution = scheduler_evidence(records, armed_at, telemetry, existing)
     counts['scheduler_failed_count'] = scheduler_failed
     counts['suspected_exceptions'] += scheduler_failed
     counts['scheduler_telemetry_verified_count'] = int(verified)
+    counts['terrain_incomplete_count'] = len(incomplete_directions)
     evidence.append('SCHEDULER_EVIDENCE: ' + attribution)
     if not verified:
         errors.append('scheduler evidence pending: ' + attribution)
@@ -380,6 +439,73 @@ def self_test():
         b'"2026-09-18T01:00:04.1000000Z",0,FINAL_SCHEDULER_COUNTERS,0,0,0,0,0,0\n')
     periodic_data = b'\n'.join(csv_data.splitlines()[:-1]) + b'\n'
     telemetry = {csv_name: csv_data}
+    mixed_multiline = good.replace(
+        'session=/KSP/Logs/Sessions/2026-09-18_010001_session.log',
+        r'session=Z:/KSP/GameData\AERISFlightControl\Logs\Sessions\2026-09-18_010001_session.log').replace(
+        'direction=RWY09 body=', 'direction=Kerbin\nTEST_AIRFIELD\nTEST_RUNWAY\nRWY09 body=').replace(
+        'direction=RWY27 body=', 'direction=Kerbin\nTEST_AIRFIELD\nTEST_RUNWAY\nRWY27 body=')
+    zero_metrics = prefix + 'runtime metrics exception_clauses=0 oh_gpu_vertex_reject_exception=0'
+    mixed_multiline_zero = mixed_multiline.replace(session_end, zero_metrics + '\n' + session_end)
+    priority_missing = good.replace(
+        event('QUEUE', 'cycle=1 priority=2 eligible_best_rank=2 in_flight=2', 'RWY27') + '\n', '').replace(
+        'session=/KSP/Logs/Sessions/2026-09-18_010001_session.log',
+        r'session=Z:/KSP/GameData\AERISFlightControl\Logs\Sessions\2026-09-18_010001_session.log').replace(
+        'direction=RWY09 body=', 'direction=Kerbin\nTEST_AIRFIELD\nTEST_RUNWAY\nRWY09 body=').replace(
+        'direction=RWY27 body=', 'direction=Kerbin\nTEST_AIRFIELD\nTEST_RUNWAY\nRWY27 body=').replace(
+        session_end, zero_metrics + '\n' + session_end)
+    focused = []
+    result = audit(mixed_multiline_zero, armed, sha, telemetry, [])
+    if result[0] != 'PASS_CANDIDATE' or result[1]['queue_count'] != 2 or \
+            result[1]['publish_count'] != 1 or result[1]['malformed_record_count'] != 0 or \
+            result[1]['suspected_exceptions'] != 0 or result[1]['terrain_incomplete_count'] != 1 or \
+            result[1]['scheduler_telemetry_verified_count'] != 1:
+        focused.append('mixed path/multiline/zero metrics expected clean PASS, got ' +
+                       result[0] + ' ' + str(dict(result[1])))
+    result = audit(mixed_multiline_zero + '\n' + prefix.replace('[INFO]', '[ERROR]') + ' deliberate failure',
+                   armed, sha, telemetry, [])
+    if result[0] != 'FAIL' or result[1]['suspected_exceptions'] != 1 or result[1]['malformed_record_count'] != 0:
+        focused.append('[ERROR] expected one genuine exception and FAIL, got ' +
+                       result[0] + ' ' + str(dict(result[1])))
+    result = audit(mixed_multiline_zero + '\n' + prefix + 'System.InvalidOperationException: deliberate',
+                   armed, sha, telemetry, [])
+    if result[0] != 'FAIL' or result[1]['suspected_exceptions'] != 1 or result[1]['malformed_record_count'] != 0:
+        focused.append('actual exception expected one genuine exception and FAIL, got ' +
+                       result[0] + ' ' + str(dict(result[1])))
+    truncated = '\n'.join([
+        prefix + r'Dedicated logger initialized. session=Z:/KSP/GameData\AERISFlightControl\Logs\Sessions\2026-09-18_010001_session.log',
+        prefix + '[AERIS23_RUNTIME_CANDIDATE] dll_sha256=' + sha,
+        prefix + MARKER + ' QUEUE direction=Kerbin',
+        'TEST_AIRFIELD'])
+    result = audit(truncated, armed, sha, telemetry, [])
+    if result[0] != 'FAIL' or not any('truncated LAND_R2 logical record' in error for error in result[2]):
+        focused.append('truncated multiline expected explicit framing FAIL, got ' + result[0] + ' ' + str(result[2]))
+    orphan = mixed_multiline_zero + '\nORPHAN_DIRECTION_FRAGMENT body=Kerbin'
+    result = audit(orphan, armed, sha, telemetry, [])
+    if result[0] != 'FAIL' or not any('orphan LAND_R2 continuation' in error for error in result[2]):
+        focused.append('orphan continuation expected explicit framing FAIL, got ' + result[0] + ' ' + str(result[2]))
+    invalid = mixed_multiline_zero.replace('\nTEST_AIRFIELD\n', '\ninvalid=value\n', 1)
+    result = audit(invalid, armed, sha, telemetry, [])
+    if result[0] != 'FAIL' or not any('invalid LAND_R2 continuation' in error for error in result[2]):
+        focused.append('invalid continuation expected explicit framing FAIL, got ' + result[0] + ' ' + str(result[2]))
+    result = audit(priority_missing, armed, sha, telemetry, [])
+    if result[0] != 'PENDING_RUNTIME_EVIDENCE' or result[1]['priority_proof_count'] != 0 or \
+            result[1]['scheduler_telemetry_verified_count'] != 1:
+        focused.append('priority-missing fixture expected verified PENDING, got ' +
+                       result[0] + ' ' + str(dict(result[1])))
+    next_generation_incomplete = '\n'.join([
+        event('PUBLISH', 'terrain_coverage_complete=false obstacle_coverage_complete=false '
+              'corridor_complete=false missed_approach_clear=false authority=NONE_PILOT', 'RWY27'),
+        event('DIRECTION_PENDING', 'reason=TERRAIN_INCOMPLETE', 'RWY27')]).replace(
+              'producer_generation=0', 'producer_generation=1').replace(
+              'direction=RWY27 body=', 'direction=Kerbin\nTEST_AIRFIELD\nTEST_RUNWAY\nRWY27 body=')
+    generation_fixture = mixed_multiline_zero.replace(session_end, next_generation_incomplete + '\n' + session_end)
+    result = audit(generation_fixture, armed, sha, telemetry, [])
+    if result[0] != 'PASS_CANDIDATE' or result[1]['terrain_incomplete_count'] != 2:
+        focused.append('same direction in two generations expected two incomplete observations, got ' +
+                       result[0] + ' ' + str(dict(result[1])))
+    if focused:
+        raise ValueError('FOCUSED AUDIT FIXTURES FAILED:\n' + '\n'.join(focused))
+    print('SELF_TEST PASS: mixed path, strict multiline framing, precise exceptions, scheduler final and priority pending')
     for name, data, expected in cases:
         actual = audit(data, armed, sha, telemetry, [])[0]
         if actual != expected:
