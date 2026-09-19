@@ -74,49 +74,96 @@ def segment(data, current, previous):
     return data, 'REPLACED_OR_TRUNCATED_LOG'
 
 def logical_records(text):
-    """Reassemble only LAND_R2 records split by newline-bearing direction IDs."""
-    records, errors, pending = [], [], None
+    """Frame general AERIS logger records, then strictly rebuild LAND_R2 records."""
+    framed = []
+    current = None
+
+    # Stage 1:
+    # Reconstruct physical logger records without assuming which subsystem
+    # emitted newline-bearing payloads.
     for physical in text.splitlines():
         if LOGGER_RECORD.match(physical):
-            if pending is not None:
-                errors.append('truncated LAND_R2 logical record: ' + pending)
-                records.append(pending)
-                pending = None
-            if MARKER in physical and ' direction=' in physical and ' body=' not in physical:
-                pending = physical
-            else:
-                records.append(physical)
+            if current is not None:
+                framed.append(current)
+            current = [physical]
+        elif current is not None:
+            current.append(physical)
+        elif physical:
+            # A captured byte segment can theoretically begin inside a
+            # continuation whose logger header predates the segment boundary.
+            # Without that header it cannot safely be attributed to LAND_R2.
+            framed.append([physical])
+
+    if current is not None:
+        framed.append(current)
+
+    # Stage 2:
+    # Apply fail-closed continuation validation only to LAND_R2 records.
+    records = []
+    errors = []
+
+    for lines in framed:
+        header = lines[0]
+        continuations = lines[1:]
+
+        if MARKER not in header:
+            records.append('\n'.join(lines))
             continue
-        if pending is None:
-            if physical:
-                errors.append('orphan LAND_R2 continuation: ' + physical)
+
+        expects_direction_tail = ' direction=' in header and ' body=' not in header
+
+        if not expects_direction_tail:
+            if continuations:
+                errors.append(
+                    'invalid LAND_R2 continuation: ' + continuations[0])
+            records.append(header)
             continue
-        if not physical or len(physical) > 4096 or MARKER in physical or physical.startswith('[') or \
-                any(ord(char) < 32 and char != '\t' for char in physical) or \
-                (' body=' not in physical and '=' in physical):
-            errors.append('invalid LAND_R2 continuation: ' + physical)
-            records.append(pending)
-            pending = None
-            continue
-        if ' body=' in physical:
-            direction_tail, _ = physical.split(' body=', 1)
-            if physical.count(' body=') != 1 or not direction_tail or '=' in direction_tail:
+
+        pending = header
+        completed = False
+        failed = False
+
+        for index, physical in enumerate(continuations):
+            if not physical or len(physical) > 4096 or MARKER in physical or \
+                    physical.startswith('[') or \
+                    any(ord(char) < 32 and char != '\t' for char in physical) or \
+                    (' body=' not in physical and '=' in physical):
                 errors.append('invalid LAND_R2 continuation: ' + physical)
-                records.append(pending)
-                pending = None
-                continue
+                failed = True
+                break
+
             pending += '\n' + physical
-            records.append(pending)
-            pending = None
-        else:
-            pending += '\n' + physical
+
             if len(pending) > 16384:
-                errors.append('invalid LAND_R2 continuation: logical record too long')
-                records.append(pending)
-                pending = None
-    if pending is not None:
-        errors.append('truncated LAND_R2 logical record: ' + pending)
+                errors.append(
+                    'invalid LAND_R2 continuation: logical record too long')
+                failed = True
+                break
+
+            if ' body=' in physical:
+                direction_tail, _ = physical.split(' body=', 1)
+
+                if physical.count(' body=') != 1 or \
+                        not direction_tail or '=' in direction_tail:
+                    errors.append(
+                        'invalid LAND_R2 continuation: ' + physical)
+                    failed = True
+                    break
+
+                completed = True
+
+                if index + 1 < len(continuations):
+                    errors.append(
+                        'invalid LAND_R2 continuation after completed logical record: ' +
+                        continuations[index + 1])
+                break
+
         records.append(pending)
+
+        if not completed and not failed:
+            errors.append(
+                'truncated LAND_R2 logical record: ' + pending)
+
     return records, errors
 
 def genuine_exception(line):
@@ -446,6 +493,16 @@ def self_test():
         'direction=RWY27 body=', 'direction=Kerbin\nTEST_AIRFIELD\nTEST_RUNWAY\nRWY27 body=')
     zero_metrics = prefix + 'runtime metrics exception_clauses=0 oh_gpu_vertex_reject_exception=0'
     mixed_multiline_zero = mixed_multiline.replace(session_end, zero_metrics + '\n' + session_end)
+    non_land_multiline = '\n'.join([
+        prefix.replace('[INFO]', '[WARN]') +
+        '[ND/RUNWAY_MAP_LOCK] terrain commit rejected; '
+        'errorPx=318.136; runway=Kerbin',
+        'PHYSICAL_RUNWAY',
+        'PRWY_205FC8BEACC26AF6',
+        'CERT_KOLA_ISLAND_0.'])
+    mixed_multiline_non_land = mixed_multiline_zero.replace(
+        session_end, non_land_multiline + '\n' + session_end)
+
     priority_missing = good.replace(
         event('QUEUE', 'cycle=1 priority=2 eligible_best_rank=2 in_flight=2', 'RWY27') + '\n', '').replace(
         'session=/KSP/Logs/Sessions/2026-09-18_010001_session.log',
@@ -454,6 +511,18 @@ def self_test():
         'direction=RWY27 body=', 'direction=Kerbin\nTEST_AIRFIELD\nTEST_RUNWAY\nRWY27 body=').replace(
         session_end, zero_metrics + '\n' + session_end)
     focused = []
+    result = audit(
+        mixed_multiline_non_land, armed, sha, telemetry, [])
+    if result[0] != 'PASS_CANDIDATE' or \
+            result[1]['malformed_record_count'] != 0 or \
+            result[1]['suspected_exceptions'] != 0 or \
+            result[1]['queue_count'] != 2 or \
+            result[1]['publish_count'] != 1 or \
+            result[1]['scheduler_telemetry_verified_count'] != 1:
+        focused.append(
+            'non-LAND multiline logger expected clean PASS, got ' +
+            result[0] + ' ' + str(dict(result[1])))
+
     result = audit(mixed_multiline_zero, armed, sha, telemetry, [])
     if result[0] != 'PASS_CANDIDATE' or result[1]['queue_count'] != 2 or \
             result[1]['publish_count'] != 1 or result[1]['malformed_record_count'] != 0 or \
@@ -479,10 +548,20 @@ def self_test():
     result = audit(truncated, armed, sha, telemetry, [])
     if result[0] != 'FAIL' or not any('truncated LAND_R2 logical record' in error for error in result[2]):
         focused.append('truncated multiline expected explicit framing FAIL, got ' + result[0] + ' ' + str(result[2]))
-    orphan = mixed_multiline_zero + '\nORPHAN_DIRECTION_FRAGMENT body=Kerbin'
-    result = audit(orphan, armed, sha, telemetry, [])
-    if result[0] != 'FAIL' or not any('orphan LAND_R2 continuation' in error for error in result[2]):
-        focused.append('orphan continuation expected explicit framing FAIL, got ' + result[0] + ' ' + str(result[2]))
+    invalid_tail = mixed_multiline_zero.replace(
+        'direction=Kerbin\nTEST_AIRFIELD\nTEST_RUNWAY\nRWY09 body=',
+        'direction=Kerbin\nTEST_AIRFIELD\nTEST_RUNWAY\n'
+        'RWY09 body=Kerbin\nEXTRA_LAND_CONTINUATION\n'
+        'IGNORED_BODY=',
+        1)
+    result = audit(invalid_tail, armed, sha, telemetry, [])
+    if result[0] != 'FAIL' or not any(
+            'invalid LAND_R2 continuation after completed logical record'
+            in error for error in result[2]):
+        focused.append(
+            'LAND_R2 extra continuation expected explicit framing FAIL, got ' +
+            result[0] + ' ' + str(result[2]))
+
     invalid = mixed_multiline_zero.replace('\nTEST_AIRFIELD\n', '\ninvalid=value\n', 1)
     result = audit(invalid, armed, sha, telemetry, [])
     if result[0] != 'FAIL' or not any('invalid LAND_R2 continuation' in error for error in result[2]):
