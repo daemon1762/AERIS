@@ -101,6 +101,94 @@ internal static class AERIS54LandR2PureTests
         Console.WriteLine("LAND_R2_BOOTSTRAP_LIFECYCLE_INTEGRATION=PASS");
     }
 
+    private static string[] ParseCsvRecord(string line)
+    {
+        var fields = new System.Collections.Generic.List<string>();
+        var value = new System.Text.StringBuilder();
+        bool quoted = false;
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+            if (c == '"')
+            {
+                if (quoted && i + 1 < line.Length && line[i + 1] == '"') { value.Append(c); i++; }
+                else quoted = !quoted;
+            }
+            else if (c == ',' && !quoted) { fields.Add(value.ToString()); value.Length = 0; }
+            else value.Append(c);
+        }
+        fields.Add(value.ToString());
+        return fields.ToArray();
+    }
+
+    private static void TestFinalSchedulerTelemetry(Assembly aeris)
+    {
+        string output = Environment.GetEnvironmentVariable("AERIS_LAND_R2_TEST_OUTPUT");
+        if (string.IsNullOrEmpty(output)) Fail("AERIS_LAND_R2_TEST_OUTPUT must name repository-local test storage");
+        Directory.CreateDirectory(output);
+        string bootstrap = Environment.GetEnvironmentVariable("AERIS_BOOTSTRAP_SOURCE");
+        string source = File.ReadAllText(Path.Combine(Path.GetDirectoryName(bootstrap), "..", "Performance", "AERISPerformanceRuntime.cs"));
+        int headerStart = source.IndexOf("telemetryWriter.WriteHeader(new string[] {");
+        int headerEnd = source.IndexOf("});", headerStart);
+        var names = new System.Collections.Generic.List<string>();
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(
+            source.Substring(headerStart, headerEnd - headerStart), "\"([^\"]+)\"")) names.Add(match.Groups[1].Value);
+        Type runtimeType = aeris.GetType("AERISFlightControl.Performance.AERISPerformanceRuntime", true);
+        Type schedulerType = aeris.GetType("AERISFlightControl.Performance.AERISWorkerScheduler", true);
+        Type channelType = aeris.GetType("AERISFlightControl.Performance.AERISAsyncFileChannel", true);
+        Type writerType = aeris.GetType("AERISFlightControl.Performance.AERISBackgroundFileWriter", true);
+        BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic;
+        foreach (long failures in new long[] { 0L, 7L })
+        {
+            object generations = Activator.CreateInstance(aeris.GetType("AERISFlightControl.Performance.AERISGenerationRegistry", true), true);
+            object permits = Activator.CreateInstance(aeris.GetType("AERISFlightControl.Performance.AERISActivePermitController", true), true);
+            object scheduler = Activator.CreateInstance(schedulerType, instance, null, new object[] { generations, permits, 2 }, null);
+            object runtime = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(runtimeType);
+            string path = Path.Combine(output, "scheduler-final-" + failures + ".csv");
+            if (File.Exists(path)) File.Delete(path);
+            object priority = Enum.Parse(aeris.GetType("AERISFlightControl.Performance.AERISFileRecordPriority", true), "Continuous");
+            object channel = Activator.CreateInstance(channelType, instance, null, new object[] { path, false, priority }, null);
+            channelType.GetMethod("WriteHeader", instance).Invoke(channel, new object[] { names.ToArray() });
+            SetField(runtimeType, runtime, "scheduler", scheduler);
+            SetField(runtimeType, runtime, "telemetryWriter", channel);
+            SetField(runtimeType, runtime, "runtimeTelemetry", schedulerType.GetMethod("SnapshotTelemetry", instance).Invoke(scheduler, null));
+            SetField(runtimeType, runtime, "writerTelemetry", writerType.GetMethod("SnapshotTelemetry", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null));
+            object gpu = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(aeris.GetType("AERISFlightControl.Performance.AERISGpuAssistBackend", true));
+            SetField(gpu.GetType(), gpu, "disabled", true);
+            SetField(runtimeType, runtime, "gpu", gpu);
+            SetField(runtimeType, runtime, "instruments", System.Runtime.Serialization.FormatterServices.GetUninitializedObject(aeris.GetType("AERISFlightControl.Performance.AERISInstrumentPipeline", true)));
+            // Simulate a commit failure after the cached periodic zero snapshot.
+            // Pending-result/active counters must be captured before Dispose clears
+            // scheduler results, without draining them just to make the audit pass.
+            SetField(schedulerType, scheduler, "failed", failures);
+            SetField(schedulerType, scheduler, "activeJobs", failures == 0 ? 0 : 3);
+            if (failures != 0)
+            {
+                object results = Field(schedulerType, scheduler, "results");
+                Type resultType = schedulerType.GetNestedType("Result", BindingFlags.NonPublic);
+                results.GetType().GetMethod("AddLast", new Type[] { resultType }).Invoke(results,
+                    new object[] { Activator.CreateInstance(resultType, true) });
+            }
+            ((IDisposable)runtime).Dispose();
+            ((IDisposable)runtime).Dispose();
+            string[] lines = new string[0];
+            for (int attempt = 0; attempt < 200; attempt++)
+            {
+                if (File.Exists(path)) lines = File.ReadAllLines(path);
+                if (lines.Length >= 2) break;
+                System.Threading.Thread.Sleep(10);
+            }
+            RequireEqual(2, lines.Length, "one final record is persisted by actual ordered close, including duplicate Dispose");
+            string[] values = ParseCsvRecord(lines[1]);
+            RequireEqual(names.Count, values.Length, "final CSV shape matches production header");
+            RequireEqual("FINAL_SCHEDULER_COUNTERS", values[names.IndexOf("record_kind")], "final marker");
+            RequireEqual(failures.ToString(), values[names.IndexOf("failed")], "fresh failure counter replaces cached periodic zero");
+            RequireEqual(failures == 0 ? "0" : "3", values[names.IndexOf("active_total")], "fresh active jobs");
+            RequireEqual(failures == 0 ? "0" : "1", values[names.IndexOf("result_depth")], "pending results captured before scheduler teardown");
+        }
+        Console.WriteLine("LAND_R2_FINAL_SCHEDULER_TELEMETRY=PASS");
+    }
+
     private static void SetField(Type type, object value, string name, object fieldValue)
     {
         FieldInfo field = type.GetField(name,
@@ -1253,6 +1341,8 @@ internal static class AERIS54LandR2PureTests
                 }
                 else if (suite == "bootstrap-integration")
                     TestBootstrapLifecycleIntegration(aeris);
+                else if (suite == "scheduler-final-telemetry")
+                    TestFinalSchedulerTelemetry(aeris);
                 else Fail("unknown suite " + suite);
                 Console.WriteLine("AERIS54_LAND_R2_SELECTED_SUITE=PASS suite=" + suite);
                 return 0;

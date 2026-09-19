@@ -99,7 +99,7 @@ def scheduler_evidence(text, armed_at, files, existing):
         if not armed_at < start or not named_start <= start < named_start + 2:
             return False, 0, 'logger session filename/time mismatch'
         work = []
-        end = float('inf')
+        ends = []
         for line in text.splitlines():
             if MARKER in line:
                 kind = line.split(MARKER, 1)[1].strip().split(' ', 1)[0]
@@ -108,9 +108,12 @@ def scheduler_evidence(text, armed_at, files, existing):
                 if kind not in ('RESET', 'SUMMARY'):
                     work.append(timestamp(line))
             if re.search(r'\[INFO\] .* shutdown\.$', line):
-                end = timestamp(line)
+                ends.append(timestamp(line))
         if not work:
             return False, 0, 'no LAND_R2 work interval to attribute'
+        if len(ends) != 1 or ends[0] < max(work):
+            return False, 0, 'unique normal session-end boundary missing'
+        end = ends[0]
         matched, rejected = [], []
         for filename, data in files.items():
             created = telemetry_start(filename)
@@ -123,7 +126,9 @@ def scheduler_evidence(text, armed_at, files, existing):
                 if len(rows) < 2 or len(set(rows[0])) != len(rows[0]):
                     raise ValueError('missing rows or duplicate columns')
                 header = rows[0]
-                indices = {key: header.index(key) for key in ('utc', 'failed')}
+                quiet_fields = ('active_total', 'result_depth', 'queue_safety',
+                                'queue_general', 'queue_telemetry', 'queue_archive')
+                indices = {key: header.index(key) for key in ('utc', 'failed', 'record_kind') + quiet_fields}
                 observed = []
                 for row in rows[1:]:
                     if len(row) != len(header):
@@ -134,28 +139,42 @@ def scheduler_evidence(text, armed_at, files, existing):
                         raise ValueError('invalid UTC/failed counter')
                     stamp = datetime.datetime.fromisoformat(utc[:-1] + '+00:00').timestamp()
                     value = int(failed)
-                    if observed and (stamp <= observed[-1][0] or value < observed[-1][1]):
+                    if observed and (stamp < observed[-1][0] or value < observed[-1][1]):
                         raise ValueError('nonmonotonic telemetry time/failed counter')
-                    observed.append((stamp, value))
+                    kind = row[indices['record_kind']]
+                    if kind not in ('PERIODIC', 'FINAL_SCHEDULER_COUNTERS'):
+                        raise ValueError('invalid telemetry record kind')
+                    quiet = []
+                    for key in quiet_fields:
+                        scalar = row[indices[key]]
+                        if not re.fullmatch(r'[0-9]+', scalar):
+                            raise ValueError('invalid quiescence counter ' + key)
+                        quiet.append(int(scalar))
+                    observed.append((stamp, value, kind, sum(quiet)))
                 # Earlier post-arm runs leave CSVs in Sessions after main-log
                 # rotation. They cannot supply evidence for the latest session.
                 if observed[-1][0] < start:
                     continue
-                if observed[0][0] < start or observed[-1][0] > end:
+                if observed[0][0] < start or any(row[0] > end for row in observed if row[2] == 'PERIODIC'):
                     raise ValueError('telemetry rows outside logger session')
                 if observed[0][0] > min(work) + 1:
                     raise ValueError('telemetry starts after LAND_R2 work')
-                matched.append((filename, observed[-1][1], observed[-1][0]))
+                finals = [row for row in observed if row[2] == 'FINAL_SCHEDULER_COUNTERS']
+                # Final emission is synchronous capture during Dispose, after the
+                # shutdown log and before queued writer close; persistence itself
+                # is asynchronous. Five seconds is an attribution bound, not a
+                # substitute for final evidence or allowance for stale zeroes.
+                final = len(finals) == 1 and observed[-1] == finals[0] and end <= finals[0][0] <= end + 5
+                covered = final and finals[0][3] == 0
+                matched.append((filename, observed[-1][1], covered, final))
             except (ValueError, UnicodeError, csv.Error) as exc:
                 rejected.append(filename + ': ' + str(exc))
         if len(matched) != 1 or rejected:
             return False, 0, 'scheduler attribution missing/ambiguous: matched=' + str(len(matched)) + \
                 ('; ' + '; '.join(rejected) if rejected else '')
-        filename, failed, last = matched[0]
-        # SnapshotTelemetry refreshes once per second. A sample at the callback's
-        # timestamp can still precede it; require a later refresh after all work.
-        covered = last >= max(work) + 1
-        return covered, failed, filename + (' covers work interval' if covered else ' lacks post-work refresh')
+        filename, failed, covered, final = matched[0]
+        return covered, failed, filename + (' final quiescent scheduler counters verified' if covered else
+            ' final scheduler not quiescent' if final else ' missing/unattributable trailing final scheduler counters')
     except (ValueError, IndexError) as exc:
         return False, 0, 'scheduler provenance invalid: ' + str(exc)
 
@@ -319,6 +338,7 @@ def self_test():
     def event(kind, details, direction='RWY09'):
         return prefix + MARKER + ' ' + kind + ' direction=' + direction + \
             ' body=Kerbin environment=ENV4 producer_generation=0 ' + details
+    session_end = (prefix + 'AERIS test build shutdown.').replace('01:00:01.000', '01:00:04.000')
     good = '\n'.join([prefix + 'Dedicated logger initialized. session=/KSP/Logs/Sessions/2026-09-18_010001_session.log',
         prefix + '[AERIS23_RUNTIME_CANDIDATE] dll_sha256=' + sha,
         event('QUEUE', 'cycle=1 priority=1 eligible_best_rank=1 in_flight=1'),
@@ -328,7 +348,7 @@ def self_test():
               'corridor_complete=false missed_approach_clear=false authority=NONE_PILOT'),
         event('READ_INCOMPLETE', 'reason=MISSING_TILE', 'RWY27'),
         event('DIRECTION_PENDING', 'reason=TERRAIN_INCOMPLETE', 'RWY27'),
-        event('SUMMARY', 'in_flight=0 published=1 pending=1 authority=NONE_PILOT', 'ALL')])
+        event('SUMMARY', 'in_flight=0 published=1 pending=1 authority=NONE_PILOT', 'ALL'), session_end])
     cases = [('complete and incomplete with same-cycle priority', good, 'PASS_CANDIDATE'),
         ('no evidence', '', 'PENDING_RUNTIME_EVIDENCE'),
         ('partial publication only', good.replace('terrain_coverage_complete=True', 'terrain_coverage_complete=false'), 'PENDING_RUNTIME_EVIDENCE'),
@@ -354,7 +374,11 @@ def self_test():
     lines[2], lines[3] = lines[3], lines[2]
     cases.append(('background before selected', '\n'.join(lines), 'FAIL'))
     csv_name = '2026-09-18_010000_500_performance_runtime.csv'
-    csv_data = b'utc,failed\n"2026-09-18T01:00:01.0000000Z",0\n"2026-09-18T01:00:02.5000000Z",0\n'
+    csv_data = (b'utc,failed,record_kind,active_total,result_depth,queue_safety,queue_general,queue_telemetry,queue_archive\n'
+        b'"2026-09-18T01:00:01.0000000Z",0,PERIODIC,0,0,0,0,0,0\n'
+        b'"2026-09-18T01:00:02.5000000Z",0,PERIODIC,0,0,0,0,0,0\n'
+        b'"2026-09-18T01:00:04.1000000Z",0,FINAL_SCHEDULER_COUNTERS,0,0,0,0,0,0\n')
+    periodic_data = b'\n'.join(csv_data.splitlines()[:-1]) + b'\n'
     telemetry = {csv_name: csv_data}
     for name, data, expected in cases:
         actual = audit(data, armed, sha, telemetry, [])[0]
@@ -372,14 +396,15 @@ def self_test():
     shutdown = (event('RESET', 'reason=shutdown', 'ALL') + '\n' +
                 event('SUMMARY', 'in_flight=0 published=0 pending=0 authority=NONE_PILOT', 'ALL') + '\n' +
                 prefix + 'AERIS test build shutdown.').replace('01:00:01.000', '01:00:04.000')
-    lifecycle = good + '\n' + shutdown
+    lifecycle = good.replace(session_end, shutdown)
     scheduler_cases = [
-        ('normal shutdown after last telemetry', lifecycle, telemetry, [], 'PASS_CANDIDATE'),
+        ('periodic telemetry stale at shutdown', lifecycle.replace('01:00:04.000', '01:10:00.000'), {csv_name: periodic_data}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('normal shutdown before final counters', lifecycle, telemetry, [], 'PASS_CANDIDATE'),
         ('null with zero covering failures', null_log, telemetry, [], 'PASS_CANDIDATE'),
-        ('worker failure with read null', null_log, {csv_name: csv_data.replace(b'02.5000000Z",0', b'02.5000000Z",1')}, [], 'FAIL'),
+        ('worker failure with read null', null_log, {csv_name: csv_data.replace(b'Z",0,', b'Z",1,')}, [], 'FAIL'),
         ('worker failure with compute null', null_log.replace('READ_TERMINAL_NULL', 'COMPUTE_TERMINAL_NULL'),
-         {csv_name: csv_data.replace(b'02.5000000Z",0', b'02.5000000Z",1')}, [], 'FAIL'),
-        ('commit failure without null', good, {csv_name: csv_data.replace(b'02.5000000Z",0', b'02.5000000Z",2')}, [], 'FAIL'),
+         {csv_name: csv_data.replace(b'Z",0,', b'Z",1,')}, [], 'FAIL'),
+        ('commit failure without null', good, {csv_name: csv_data.replace(b'04.1000000Z",0', b'04.1000000Z",2')}, [], 'FAIL'),
         ('missing scheduler file', good, {}, [], 'PENDING_RUNTIME_EVIDENCE'),
         ('missing arm inventory', good, telemetry, None, 'PENDING_RUNTIME_EVIDENCE'),
         ('preexisting scheduler file', good, telemetry, [csv_name], 'PENDING_RUNTIME_EVIDENCE'),
@@ -388,10 +413,10 @@ def self_test():
         ('stale scheduler rows', good, {csv_name: csv_data.replace(b'01:00:', b'00:59:')}, [], 'PENDING_RUNTIME_EVIDENCE'),
         ('latest session ignores earlier post-arm CSV', good,
          {csv_name: csv_data, '2026-09-18_010000_100_performance_runtime.csv':
-          csv_data.replace(b'01.0000000', b'00.2000000').replace(b'02.5000000', b'00.4000000')}, [], 'PASS_CANDIDATE'),
+          csv_data.replace(b'01.0000000', b'00.2000000').replace(b'02.5000000', b'00.4000000').replace(b'04.1000000', b'00.6000000')}, [], 'PASS_CANDIDATE'),
         ('unrelated later scheduler rows', good, {csv_name: csv_data.replace(b'01:00:', b'01:01:')}, [], 'PENDING_RUNTIME_EVIDENCE'),
-        ('missing post-work refresh', null_log, {csv_name: csv_data.replace(b'02.5000000', b'01.5000000')}, [], 'PENDING_RUNTIME_EVIDENCE'),
-        ('terminal null after final sample', good + '\n' + event('DIRECTION_PENDING', 'reason=READ_TERMINAL_NULL').replace('01:00:01.000', '01:00:03.000'), telemetry, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('periodic zero without final record', null_log, {csv_name: periodic_data}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('terminal null after final boundary', good + '\n' + event('DIRECTION_PENDING', 'reason=READ_TERMINAL_NULL').replace('01:00:01.000', '01:00:05.000'), telemetry, [], 'PENDING_RUNTIME_EVIDENCE'),
         ('ambiguous scheduler files', good, {csv_name: csv_data, '2026-09-18_010000_600_performance_runtime.csv': csv_data}, [], 'PENDING_RUNTIME_EVIDENCE'),
         ('negative failure count', good, {csv_name: csv_data.replace(b'02.5000000Z",0', b'02.5000000Z",-1')}, [], 'PENDING_RUNTIME_EVIDENCE'),
         ('malformed failure count', good, {csv_name: csv_data.replace(b'02.5000000Z",0', b'02.5000000Z",bad')}, [], 'PENDING_RUNTIME_EVIDENCE'),
@@ -400,6 +425,19 @@ def self_test():
         ('incomplete CSV tail', good, {csv_name: csv_data.rstrip()}, [], 'PENDING_RUNTIME_EVIDENCE'),
         ('decreasing failure count', good, {csv_name: csv_data.replace(b'01.0000000Z",0', b'01.0000000Z",1')}, [], 'PENDING_RUNTIME_EVIDENCE'),
         ('CSV after session shutdown', lifecycle, {csv_name: csv_data.replace(b'02.5000000', b'05.5000000')}, [], 'PENDING_RUNTIME_EVIDENCE')]
+    scheduler_cases.extend([
+        ('final record before shutdown', lifecycle, {csv_name: csv_data.replace(b'04.1000000', b'03.9000000')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('final record too late to attribute', lifecycle, {csv_name: csv_data.replace(b'04.1000000', b'10.0000000')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('missing normal shutdown boundary', good.replace(session_end, ''), telemetry, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('stale final at ten-minute shutdown', lifecycle.replace('01:00:04.000', '01:10:00.000'), telemetry, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('fresh final after long periodic gap', lifecycle.replace('01:00:04.000', '01:10:00.000'),
+         {csv_name: csv_data.replace(b'01:00:04.1000000', b'01:10:00.1000000')}, [], 'PASS_CANDIDATE'),
+        ('active work at final', good, {csv_name: csv_data.replace(b'FINAL_SCHEDULER_COUNTERS,0', b'FINAL_SCHEDULER_COUNTERS,1')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('pending result at final', good, {csv_name: csv_data.replace(b'FINAL_SCHEDULER_COUNTERS,0,0', b'FINAL_SCHEDULER_COUNTERS,0,1')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('queued work at final', good, {csv_name: csv_data.replace(b'FINAL_SCHEDULER_COUNTERS,0,0,0', b'FINAL_SCHEDULER_COUNTERS,0,0,1')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('invalid final quiescence', good, {csv_name: csv_data.replace(b'FINAL_SCHEDULER_COUNTERS,0', b'FINAL_SCHEDULER_COUNTERS,-1')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('duplicate final record', good, {csv_name: csv_data + csv_data.splitlines()[-1] + b'\n'}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('periodic row after final', good, {csv_name: csv_data + csv_data.splitlines()[-2] + b'\n'}, [], 'PENDING_RUNTIME_EVIDENCE')])
     partial_a = '\n'.join(line for line in good.splitlines() if ' PUBLISH ' not in line)
     partial_b = '\n'.join(line for line in good.splitlines() if ' QUEUE ' not in line)
     scheduler_cases.extend([
@@ -488,7 +526,7 @@ def main():
         if line.startswith('SCHEDULER_EVIDENCE:'):
             print(line)
     print('terminal_null_attribution=' + ('SCHEDULER_FAILURE' if counts['scheduler_failed_count'] else
-          'ZERO_FAILURES_IN_COVERING_TELEMETRY' if counts['scheduler_telemetry_verified_count'] else 'PENDING_TELEMETRY'))
+          'ZERO_FAILURES_IN_FINAL_QUIESCENT_COUNTERS' if counts['scheduler_telemetry_verified_count'] else 'PENDING_TELEMETRY'))
     if verdict != 'PASS_CANDIDATE':
         print('=== RUNTIME / PRIORITY EVIDENCE (last 160 events) ===')
         for line in evidence[-160:]:
@@ -600,11 +638,14 @@ if (( VERIFY_ONLY )) || [[ "$ARMED_HEAD" != "$CURRENT_HEAD" ]]; then
   mcs -out:"$STATE_DIR/AERIS54_LAND_R2_pure_tests.exe" Tools/AERIS54_LAND_R2_pure_tests.cs
   export AERIS_KSP_MANAGED="$KSP/KSP_x64_Data/Managed"
   export AERIS_BOOTSTRAP_SOURCE="$ROOT/Source/AERISFlightControl/Core/AERISBootstrap.cs"
+  export AERIS_LAND_R2_TEST_OUTPUT="$STATE_DIR/final-telemetry-tests"
   mono "$STATE_DIR/AERIS54_LAND_R2_pure_tests.exe" "$BUILD_DLL" 2>&1 | tee "$STATE_DIR/pure.log"
   grep -Fxq 'AERIS54_LAND_R2_PURE_TESTS=PASS' "$STATE_DIR/pure.log"
   # The existing full Main does not include the Task 5 bootstrap integration test.
   AERIS_LAND_R2_TEST_SUITE=bootstrap-integration mono "$STATE_DIR/AERIS54_LAND_R2_pure_tests.exe" "$BUILD_DLL" 2>&1 | tee "$STATE_DIR/bootstrap.log"
   grep -Fxq 'LAND_R2_BOOTSTRAP_LIFECYCLE_INTEGRATION=PASS' "$STATE_DIR/bootstrap.log"
+  AERIS_LAND_R2_TEST_SUITE=scheduler-final-telemetry mono "$STATE_DIR/AERIS54_LAND_R2_pure_tests.exe" "$BUILD_DLL" 2>&1 | tee "$STATE_DIR/final-telemetry.log"
+  grep -Fxq 'LAND_R2_FINAL_SCHEDULER_TELEMETRY=PASS' "$STATE_DIR/final-telemetry.log"
   [[ "$(git rev-parse HEAD)" = "$CURRENT_HEAD" && -z "$(git status --porcelain)" ]] || {
     echo 'STOP: source changed during build/tests' >&2; exit 32;
   }

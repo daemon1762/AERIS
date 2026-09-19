@@ -21,6 +21,7 @@ namespace AERISFlightControl.Performance
         AERISFileWriterTelemetrySnapshot writerTelemetry;
         double nextPolicyEvaluation;
         double nextTelemetryWrite;
+        double lastTelemetryRuntimeSeconds;
         double frameMillisecondsEma;
         double mainMillisecondsEma;
         double snapshotCaptureMillisecondsEma;
@@ -265,7 +266,7 @@ namespace AERISFlightControl.Performance
                 "writer_encode_p95_ms","writer_disk_p95_ms","writer_flush_p95_ms","archive_pending",
                 "archive_completed","archive_failed","archive_deferred",
                 "archive_last_ms","archive_max_ms","gc_positive_delta_ema_bytes",
-                "degradation_reason"
+                "degradation_reason","record_kind","result_depth"
             });
             Volatile.Write(ref current, this);
             AERISFlightDataArchive.NotifyRuntimeAvailable(this);
@@ -676,10 +677,15 @@ namespace AERISFlightControl.Performance
             }
         }
 
-        void WriteTelemetry(double now)
+        void WriteTelemetry(double now, bool finalSchedulerCounters = false)
         {
             if (telemetryWriter == null || !telemetryWriter.Available) return;
-            AERISRuntimeTelemetrySnapshot runtime = runtimeTelemetry;
+            if (!finalSchedulerCounters) lastTelemetryRuntimeSeconds = now;
+            // Dispose runs on the main thread after its last commit drain. Capture
+            // failure and quiescence counters together under the scheduler lock,
+            // rather than reusing the periodic snapshot's potentially stale zero.
+            AERISRuntimeTelemetrySnapshot runtime = finalSchedulerCounters ?
+                scheduler.SnapshotTelemetry() : runtimeTelemetry;
             AERISFileWriterTelemetrySnapshot writer = writerTelemetry;
             telemetryWriter.WriteCsv(new AERISCsvField[] {
                 AERISCsvField.Utc(DateTime.UtcNow),
@@ -806,7 +812,9 @@ namespace AERISFlightControl.Performance
                 AERISCsvField.Fixed(AERISFlightDataArchive.LastDurationMilliseconds),
                 AERISCsvField.Fixed(AERISFlightDataArchive.MaximumDurationMilliseconds),
                 AERISCsvField.Fixed(gcBytesPerFrameEma),
-                AERISCsvField.Quoted(runtime.DegradationReason)
+                AERISCsvField.Quoted(runtime.DegradationReason),
+                AERISCsvField.Quoted(finalSchedulerCounters ?
+                    "FINAL_SCHEDULER_COUNTERS" : "PERIODIC"), runtime.ResultDepth
             });
         }
 
@@ -856,6 +864,10 @@ namespace AERISFlightControl.Performance
             if (navigationDisplay != null) navigationDisplay.Dispose();
             if (navigationTraffic != null) navigationTraffic.Dispose();
             instruments.Dispose();
+            // Observation only: enqueue before the existing ordered close. A
+            // dropped/unflushed final row leaves the external audit pending; do
+            // not drain, wait for workers/disk, or disturb shutdown/control order.
+            try { WriteTelemetry(lastTelemetryRuntimeSeconds, true); } catch { }
             if (telemetryWriter != null) telemetryWriter.Dispose();
             gpu.Dispose();
             AERISFlightDataArchive.NotifyRuntimeStopping(this);
