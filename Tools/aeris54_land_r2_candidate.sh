@@ -11,13 +11,16 @@ cd "$ROOT"
 audit_tool() {
 python3 - "$@" <<'PY'
 import collections
+import csv
 import datetime
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 import time
 
 MARKER = '[AERIS54][LAND_R2]'
@@ -69,13 +72,123 @@ def segment(data, current, previous):
         return data[offset:], 'APPENDED_SEGMENT'
     return data, 'REPLACED_OR_TRUNCATED_LOG'
 
-def audit(text, armed_at, dll_sha):
+def telemetry_start(name):
+    match = re.fullmatch(r'(\d{4}-\d\d-\d\d_\d{6}_\d{3})_performance_runtime\.csv', name)
+    if not match:
+        return None
+    return datetime.datetime.strptime(match[1], '%Y-%m-%d_%H%M%S_%f').replace(
+        tzinfo=datetime.timezone.utc).timestamp()
+
+def scheduler_evidence(text, armed_at, files, existing):
+    """Require one session and unique post-arm CSV covering its work callbacks.
+
+    Performance is constructed before logger initialization; its first Tick/CSV
+    occurs after initialization. The filename and row UTC interval must straddle
+    that boundary. No cross-session counter aggregation or nearest-file fallback.
+    """
+    starts = [line for line in text.splitlines() if 'Dedicated logger initialized. session=' in line]
+    if len(starts) != 1:
+        return False, 0, 'exactly one logger session required; sessions=' + str(len(starts))
+    if files is None or existing is None:
+        return False, 0, 'scheduler telemetry or arm-time inventory missing'
+    try:
+        start = timestamp(starts[0])
+        name = Path(starts[0].split('session=', 1)[1]).name
+        named_start = datetime.datetime.strptime(name, '%Y-%m-%d_%H%M%S_session.log').replace(
+            tzinfo=datetime.timezone.utc).timestamp()
+        if not armed_at < start or not named_start <= start < named_start + 2:
+            return False, 0, 'logger session filename/time mismatch'
+        work = []
+        end = float('inf')
+        for line in text.splitlines():
+            if MARKER in line:
+                kind = line.split(MARKER, 1)[1].strip().split(' ', 1)[0]
+                # Shutdown Reset only invalidates state and emits its summary;
+                # Performance.Dispose stops CSV without a subsequent Tick.
+                if kind not in ('RESET', 'SUMMARY'):
+                    work.append(timestamp(line))
+            if re.search(r'\[INFO\] .* shutdown\.$', line):
+                end = timestamp(line)
+        if not work:
+            return False, 0, 'no LAND_R2 work interval to attribute'
+        matched, rejected = [], []
+        for filename, data in files.items():
+            created = telemetry_start(filename)
+            if filename in existing or created is None or not armed_at < created <= start:
+                continue
+            try:
+                if data is None or not data.endswith(b'\n'):
+                    raise ValueError('missing/incomplete file snapshot')
+                rows = list(csv.reader(io.StringIO(data.decode('utf-8')), strict=True))
+                if len(rows) < 2 or len(set(rows[0])) != len(rows[0]):
+                    raise ValueError('missing rows or duplicate columns')
+                header = rows[0]
+                indices = {key: header.index(key) for key in ('utc', 'failed')}
+                observed = []
+                for row in rows[1:]:
+                    if len(row) != len(header):
+                        raise ValueError('incomplete telemetry row')
+                    utc, failed = row[indices['utc']], row[indices['failed']]
+                    if not re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{7}Z', utc) or \
+                            not re.fullmatch(r'[0-9]+', failed):
+                        raise ValueError('invalid UTC/failed counter')
+                    stamp = datetime.datetime.fromisoformat(utc[:-1] + '+00:00').timestamp()
+                    value = int(failed)
+                    if observed and (stamp <= observed[-1][0] or value < observed[-1][1]):
+                        raise ValueError('nonmonotonic telemetry time/failed counter')
+                    observed.append((stamp, value))
+                # Earlier post-arm runs leave CSVs in Sessions after main-log
+                # rotation. They cannot supply evidence for the latest session.
+                if observed[-1][0] < start:
+                    continue
+                if observed[0][0] < start or observed[-1][0] > end:
+                    raise ValueError('telemetry rows outside logger session')
+                if observed[0][0] > min(work) + 1:
+                    raise ValueError('telemetry starts after LAND_R2 work')
+                matched.append((filename, observed[-1][1], observed[-1][0]))
+            except (ValueError, UnicodeError, csv.Error) as exc:
+                rejected.append(filename + ': ' + str(exc))
+        if len(matched) != 1 or rejected:
+            return False, 0, 'scheduler attribution missing/ambiguous: matched=' + str(len(matched)) + \
+                ('; ' + '; '.join(rejected) if rejected else '')
+        filename, failed, last = matched[0]
+        # SnapshotTelemetry refreshes once per second. A sample at the callback's
+        # timestamp can still precede it; require a later refresh after all work.
+        covered = last >= max(work) + 1
+        return covered, failed, filename + (' covers work interval' if covered else ' lacks post-work refresh')
+    except (ValueError, IndexError) as exc:
+        return False, 0, 'scheduler provenance invalid: ' + str(exc)
+
+def collect_telemetry(log_path, state, text, destination):
+    starts = [timestamp(line) for line in text.splitlines() if 'Dedicated logger initialized. session=' in line]
+    if len(starts) != 1 or 'telemetry_existing' not in state:
+        return None
+    files, provenance = {}, {}
+    for path in sorted((Path(log_path).parent / 'Sessions').glob('*_performance_runtime.csv')):
+        created = telemetry_start(path.name)
+        if path.name in state['telemetry_existing'] or created is None or not state['armed_at'] < created <= starts[0]:
+            continue
+        try:
+            data, identity = log_snapshot(path)
+            files[path.name] = data
+            provenance[path.name] = identity
+            destination.mkdir(exist_ok=True)
+            (destination / path.name).write_bytes(data)
+        except (OSError, ValueError) as exc:
+            files[path.name] = None
+            provenance[path.name] = {'error': str(exc)}
+    destination.mkdir(exist_ok=True)
+    (destination / 'provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
+    return files
+
+def audit(text, armed_at, dll_sha, telemetry=None, existing=None):
     counts = collections.Counter({key: 0 for key in list(EVENTS.values()) + [
         'max_observed_in_flight', 'corridor_complete_true_count', 'missed_clear_true_count',
         'obstacle_complete_true_count', 'pqs_forbidden_marker_count',
         'env4_db_write_suppressed_count', 'suspected_exceptions',
         'terrain_complete_publish_count', 'terrain_incomplete_count',
-        'malformed_record_count', 'priority_violation_count', 'priority_proof_count']})
+        'malformed_record_count', 'priority_violation_count', 'priority_proof_count',
+        'scheduler_failed_count', 'scheduler_telemetry_verified_count', 'terminal_null_count']})
     errors, evidence, queues = [], [], collections.defaultdict(list)
     session, identified, identities = 0, False, 0
     for line in text.splitlines():
@@ -160,6 +273,8 @@ def audit(text, armed_at, dll_sha):
             elif event in ('DIRECTION_PENDING', 'READ_READY', 'READ_INCOMPLETE', 'STALE_REJECT', 'RESET'):
                 if 'reason' not in values:
                     raise ValueError(event + ' missing reason')
+                if event == 'DIRECTION_PENDING' and values['reason'] in ('READ_TERMINAL_NULL', 'COMPUTE_TERMINAL_NULL'):
+                    counts['terminal_null_count'] += 1
                 if event == 'READ_INCOMPLETE' or (event == 'DIRECTION_PENDING' and values['reason'] in
                         ('TERRAIN_INCOMPLETE', 'NO_REQUIRED_TERRAIN')):
                     counts['terrain_incomplete_count'] += 1
@@ -175,6 +290,13 @@ def audit(text, armed_at, dll_sha):
         # logger session. Rank 0/1 means current ARMED/selected at that opportunity.
         if any(entry['priority'] < 2 for entry in entries) and any(entry['priority'] >= 2 for entry in entries):
             counts['priority_proof_count'] += 1
+    verified, scheduler_failed, attribution = scheduler_evidence(text, armed_at, telemetry, existing)
+    counts['scheduler_failed_count'] = scheduler_failed
+    counts['suspected_exceptions'] += scheduler_failed
+    counts['scheduler_telemetry_verified_count'] = int(verified)
+    evidence.append('SCHEDULER_EVIDENCE: ' + attribution)
+    if not verified:
+        errors.append('scheduler evidence pending: ' + attribution)
     forbidden = ('corridor_complete_true_count', 'missed_clear_true_count',
                  'obstacle_complete_true_count', 'pqs_forbidden_marker_count',
                  'env4_db_write_suppressed_count', 'suspected_exceptions',
@@ -184,7 +306,7 @@ def audit(text, armed_at, dll_sha):
                 'terrain_incomplete_count', 'priority_proof_count')
     if any(counts[key] for key in forbidden) or counts['max_observed_in_flight'] > 2:
         verdict = 'FAIL'
-    elif not identities or any(counts[key] < 1 for key in required):
+    elif not identities or session != 1 or not verified or any(counts[key] < 1 for key in required):
         verdict = 'PENDING_RUNTIME_EVIDENCE'
     else:
         verdict = 'PASS_CANDIDATE'
@@ -197,7 +319,7 @@ def self_test():
     def event(kind, details, direction='RWY09'):
         return prefix + MARKER + ' ' + kind + ' direction=' + direction + \
             ' body=Kerbin environment=ENV4 producer_generation=0 ' + details
-    good = '\n'.join([prefix + 'Dedicated logger initialized. session=new',
+    good = '\n'.join([prefix + 'Dedicated logger initialized. session=/KSP/Logs/Sessions/2026-09-18_010001_session.log',
         prefix + '[AERIS23_RUNTIME_CANDIDATE] dll_sha256=' + sha,
         event('QUEUE', 'cycle=1 priority=1 eligible_best_rank=1 in_flight=1'),
         event('QUEUE', 'cycle=1 priority=2 eligible_best_rank=2 in_flight=2', 'RWY27'),
@@ -224,18 +346,96 @@ def self_test():
         ('negative sample count', good.replace('samples=40', 'samples=-4'), 'FAIL'),
         ('unrelated DLL', good.replace(sha, 'b' * 64), 'FAIL'),
         ('old same-DLL session', good.replace('01:00:01.000', '00:59:59.000'), 'FAIL'),
-        ('missing new session', good.replace('Dedicated logger initialized. session=new', 'old log'), 'FAIL'),
+        ('missing new session', good.replace('Dedicated logger initialized. session=', 'old log path='), 'FAIL'),
         ('suppressed DB writes', good + '\nENV4_DB_WRITE_SUPPRESSED', 'FAIL'),
         ('PQS forbidden', good + '\n[AERIS54][LAND_R2] PQS_FORBIDDEN', 'FAIL'),
         ('exception', good + '\nSystem.InvalidOperationException', 'FAIL')]
     lines = good.splitlines()
     lines[2], lines[3] = lines[3], lines[2]
     cases.append(('background before selected', '\n'.join(lines), 'FAIL'))
+    csv_name = '2026-09-18_010000_500_performance_runtime.csv'
+    csv_data = b'utc,failed\n"2026-09-18T01:00:01.0000000Z",0\n"2026-09-18T01:00:02.5000000Z",0\n'
+    telemetry = {csv_name: csv_data}
     for name, data, expected in cases:
-        actual = audit(data, armed, sha)[0]
+        actual = audit(data, armed, sha, telemetry, [])[0]
         if actual != expected:
             raise ValueError(name + ': expected ' + expected + ', got ' + actual)
         print('SELF_TEST PASS: ' + name + ' -> ' + actual)
+    # A missing scheduler CSV cannot establish zero worker/commit failures.
+    # Terminal-null callbacks can also be stale/cancelled, so do not count the
+    # null itself as an exception; require attributed telemetry instead.
+    null_log = good + '\n' + event('DIRECTION_PENDING', 'reason=READ_TERMINAL_NULL')
+    actual = audit(null_log, armed, sha)[0]
+    if actual != 'PENDING_RUNTIME_EVIDENCE':
+        raise ValueError('missing scheduler telemetry: expected PENDING_RUNTIME_EVIDENCE, got ' + actual)
+    print('SELF_TEST PASS: missing scheduler telemetry with terminal null -> ' + actual)
+    shutdown = (event('RESET', 'reason=shutdown', 'ALL') + '\n' +
+                event('SUMMARY', 'in_flight=0 published=0 pending=0 authority=NONE_PILOT', 'ALL') + '\n' +
+                prefix + 'AERIS test build shutdown.').replace('01:00:01.000', '01:00:04.000')
+    lifecycle = good + '\n' + shutdown
+    scheduler_cases = [
+        ('normal shutdown after last telemetry', lifecycle, telemetry, [], 'PASS_CANDIDATE'),
+        ('null with zero covering failures', null_log, telemetry, [], 'PASS_CANDIDATE'),
+        ('worker failure with read null', null_log, {csv_name: csv_data.replace(b'02.5000000Z",0', b'02.5000000Z",1')}, [], 'FAIL'),
+        ('worker failure with compute null', null_log.replace('READ_TERMINAL_NULL', 'COMPUTE_TERMINAL_NULL'),
+         {csv_name: csv_data.replace(b'02.5000000Z",0', b'02.5000000Z",1')}, [], 'FAIL'),
+        ('commit failure without null', good, {csv_name: csv_data.replace(b'02.5000000Z",0', b'02.5000000Z",2')}, [], 'FAIL'),
+        ('missing scheduler file', good, {}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('missing arm inventory', good, telemetry, None, 'PENDING_RUNTIME_EVIDENCE'),
+        ('preexisting scheduler file', good, telemetry, [csv_name], 'PENDING_RUNTIME_EVIDENCE'),
+        ('stale scheduler filename', good, {'2026-09-18_005959_500_performance_runtime.csv': csv_data}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('unrelated later runtime filename', good, {'2026-09-18_010001_500_performance_runtime.csv': csv_data}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('stale scheduler rows', good, {csv_name: csv_data.replace(b'01:00:', b'00:59:')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('latest session ignores earlier post-arm CSV', good,
+         {csv_name: csv_data, '2026-09-18_010000_100_performance_runtime.csv':
+          csv_data.replace(b'01.0000000', b'00.2000000').replace(b'02.5000000', b'00.4000000')}, [], 'PASS_CANDIDATE'),
+        ('unrelated later scheduler rows', good, {csv_name: csv_data.replace(b'01:00:', b'01:01:')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('missing post-work refresh', null_log, {csv_name: csv_data.replace(b'02.5000000', b'01.5000000')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('terminal null after final sample', good + '\n' + event('DIRECTION_PENDING', 'reason=READ_TERMINAL_NULL').replace('01:00:01.000', '01:00:03.000'), telemetry, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('ambiguous scheduler files', good, {csv_name: csv_data, '2026-09-18_010000_600_performance_runtime.csv': csv_data}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('negative failure count', good, {csv_name: csv_data.replace(b'02.5000000Z",0', b'02.5000000Z",-1')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('malformed failure count', good, {csv_name: csv_data.replace(b'02.5000000Z",0', b'02.5000000Z",bad')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('duplicate CSV header', good, {csv_name: csv_data.replace(b'utc,failed', b'utc,failed,failed')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('missing failed CSV column', good, {csv_name: csv_data.replace(b'utc,failed', b'utc,completed')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('incomplete CSV tail', good, {csv_name: csv_data.rstrip()}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('decreasing failure count', good, {csv_name: csv_data.replace(b'01.0000000Z",0', b'01.0000000Z",1')}, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('CSV after session shutdown', lifecycle, {csv_name: csv_data.replace(b'02.5000000', b'05.5000000')}, [], 'PENDING_RUNTIME_EVIDENCE')]
+    partial_a = '\n'.join(line for line in good.splitlines() if ' PUBLISH ' not in line)
+    partial_b = '\n'.join(line for line in good.splitlines() if ' QUEUE ' not in line)
+    scheduler_cases.extend([
+        ('first partial session', partial_a, telemetry, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('second partial session', partial_b, telemetry, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('partial sessions cannot aggregate', partial_a + '\n' + partial_b, telemetry, [], 'PENDING_RUNTIME_EVIDENCE'),
+        ('complete repeated sessions remain pending', good + '\n' + good, telemetry, [], 'PENDING_RUNTIME_EVIDENCE')])
+    for name, data, files, inventory, expected in scheduler_cases:
+        result = audit(data, armed, sha, files, inventory)
+        if result[0] != expected:
+            raise ValueError(name + ': expected ' + expected + ', got ' + result[0] + '; ' + str(result[2]))
+        if name == 'null with zero covering failures':
+            assert result[1]['terminal_null_count'] == 1 and result[1]['suspected_exceptions'] == 0
+        if name == 'worker failure with read null':
+            assert result[1]['scheduler_failed_count'] == 1 and result[1]['suspected_exceptions'] == 1
+        print('SELF_TEST PASS: ' + name + ' -> ' + result[0])
+    # Exercise the actual file collection/provenance seam, using only repository
+    # TMPDIR. An old file with a plausible new-looking name remains ineligible.
+    with tempfile.TemporaryDirectory(prefix='scheduler-evidence-', dir=os.environ['TMPDIR']) as folder:
+        directory = Path(folder)
+        sessions = directory / 'Logs' / 'Sessions'
+        sessions.mkdir(parents=True)
+        (sessions / csv_name).write_bytes(csv_data)
+        stale_name = '2026-09-18_010000_600_performance_runtime.csv'
+        (sessions / stale_name).write_bytes(csv_data)
+        state = dict(armed_at=armed, telemetry_existing=[stale_name])
+        destination = directory / 'evidence'
+        files = collect_telemetry(directory / 'Logs' / 'AERISFlightControl.log', state, lifecycle, destination)
+        assert files == telemetry
+        assert (destination / csv_name).read_bytes() == csv_data
+        provenance = json.loads((destination / 'provenance.json').read_text())
+        assert set(provenance) == {csv_name} and provenance[csv_name]['prefix_sha256'] == digest(csv_data)
+        assert audit(lifecycle, armed, sha, files, state['telemetry_existing'])[0] == 'PASS_CANDIDATE'
+        (sessions / csv_name).unlink()
+        assert collect_telemetry(directory / 'Logs' / 'AERISFlightControl.log', state, lifecycle, destination) == {}
+    print('SELF_TEST PASS: repository CSV collection, inventory exclusion, SHA provenance and missing-file transition')
     old = b'old session\n'
     previous = dict(device=1, inode=2, offset=len(old), prefix_sha256=digest(old))
     assert segment(old + b'new\n', previous, previous) == (b'new\n', 'APPENDED_SEGMENT')
@@ -259,7 +459,9 @@ def main():
     head, sha, log_path = sys.argv[3:6]
     if mode == 'arm':
         _, previous = log_snapshot(log_path)
-        state = dict(head=head, dll_sha256=sha, armed_at=time.time(), log=previous)
+        existing = sorted(path.name for path in (Path(log_path).parent / 'Sessions').glob('*_performance_runtime.csv'))
+        state = dict(head=head, dll_sha256=sha, armed_at=time.time(), log=previous,
+                     telemetry_existing=existing)
         temporary = state_path.with_suffix('.tmp')
         temporary.write_text(json.dumps(state, indent=2) + '\n')
         temporary.replace(state_path)
@@ -273,13 +475,20 @@ def main():
         raise ValueError('runtime log ends mid-record; complete evidence is required')
     text = data.decode('utf-8', errors='strict')
     (state_path.parent / 'runtime-segment.log').write_bytes(data)
-    verdict, counts, errors, evidence = audit(text, state['armed_at'], sha)
+    telemetry = collect_telemetry(log_path, state, text, state_path.parent / 'scheduler-evidence')
+    verdict, counts, errors, evidence = audit(text, state['armed_at'], sha, telemetry, state.get('telemetry_existing'))
     print('log_segment=' + segment_kind)
     print('armed_head=' + head)
     print('installed_dll_sha256=' + sha)
+    print('runtime_session_policy=ONE_COMPLETE_SESSION_NO_AGGREGATION')
     for name, value in counts.items():
         print(str(name) + '=' + str(value))
     print('priority_evidence=' + ('PROVEN' if counts['priority_proof_count'] and not counts['priority_violation_count'] else 'UNPROVEN'))
+    for line in evidence:
+        if line.startswith('SCHEDULER_EVIDENCE:'):
+            print(line)
+    print('terminal_null_attribution=' + ('SCHEDULER_FAILURE' if counts['scheduler_failed_count'] else
+          'ZERO_FAILURES_IN_COVERING_TELEMETRY' if counts['scheduler_telemetry_verified_count'] else 'PENDING_TELEMETRY'))
     if verdict != 'PASS_CANDIDATE':
         print('=== RUNTIME / PRIORITY EVIDENCE (last 160 events) ===')
         for line in evidence[-160:]:
