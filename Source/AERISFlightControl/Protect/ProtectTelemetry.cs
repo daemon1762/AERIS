@@ -147,6 +147,15 @@ namespace AERISFlightControl.Protect
         const float SafeDecayRate = 0.18f;
         const float UnavailableDecayRate = 0.35f;
 
+        // B2 field-polish: preserve every hazardous-side entry threshold, but require
+        // a small recovery margin before annunciation/protection state de-escalates.
+        // This is a Schmitt-trigger style release hysteresis only; it never delays
+        // CAUTION, STALL RISK or STALL DETECTED entry.
+        const float StallRiskReleaseHysteresisDeg = 0.50f;
+        const float CautionReleaseHysteresisDeg = 0.50f;
+        const float CautionPitchRateEntryDegPerSec = 12.0f;
+        const float CautionPitchRateReleaseDegPerSec = 10.0f;
+
         // Adaptive thrust-response shaping. A high-TWR craft needs only a short, modest pulse;
         // a low-output craft keeps the original stronger/longer energy assist.
         const float LowResponseAcceleration = 2.0f;   // m/s² available at full thrust
@@ -290,6 +299,22 @@ namespace AERISFlightControl.Protect
             bool beyondBoundary = StallMarginDegrees < -0.35f;
             bool fastApproach = StallMarginDegrees <= cautionMargin && AoADegrees > 0.0f && PitchRateDegPerSec > 8.0f;
             bool largeSideslip = Mathf.Abs(SideslipDegrees) > 12.0f;
+            bool cautionMarginActive = StallMarginDegrees <= cautionMargin;
+            bool cautionPitchRateActive = AoADegrees > 0.0f &&
+                rateMagnitude > CautionPitchRateEntryDegPerSec;
+
+            // Release hysteresis is deliberately evaluated from the previous Risk.
+            // Higher-risk entry tests below remain authoritative and are evaluated first.
+            bool holdStallRiskForMarginRecovery =
+                Risk == ProtectRiskLevel.StallRisk &&
+                StallMarginDegrees <= riskMargin + StallRiskReleaseHysteresisDeg;
+            bool holdCautionForMarginRecovery =
+                Risk == ProtectRiskLevel.Caution &&
+                StallMarginDegrees <= cautionMargin + CautionReleaseHysteresisDeg;
+            bool holdCautionForPitchRateRecovery =
+                Risk == ProtectRiskLevel.Caution && AoADegrees > 0.0f &&
+                rateMagnitude >= CautionPitchRateReleaseDegPerSec;
+
             // A strong, stable high-q deceleration is not an energy-collapse cue. AA's
             // AoA/G moderation remains fully active; only the additional thrust floor is
             // coordinated away so SPEED or pilot-commanded energy bleed can work.
@@ -311,11 +336,23 @@ namespace AERISFlightControl.Protect
                 Status = "STALL RISK — AA aerodynamic protection active";
                 StallReason = nearBoundary ? "LowAoAMargin" : (largeSideslip ? "RapidPitchUp+HighSideslip" : "SpeedDecay+LowAoAMargin");
             }
-            else if (StallMarginDegrees <= cautionMargin || (AoADegrees > 0.0f && rateMagnitude > 12.0f))
+            else if (holdStallRiskForMarginRecovery)
+            {
+                Risk = ProtectRiskLevel.StallRisk;
+                Status = "STALL RISK — AA aerodynamic protection active";
+                StallReason = "LowAoAMargin";
+            }
+            else if (cautionMarginActive || cautionPitchRateActive)
             {
                 Risk = ProtectRiskLevel.Caution;
                 Status = "CAUTION — stall margin reduced";
-                StallReason = StallMarginDegrees <= cautionMargin ? "ReducedAoAMargin" : "HighPitchRate";
+                StallReason = cautionMarginActive ? "ReducedAoAMargin" : "HighPitchRate";
+            }
+            else if (holdCautionForMarginRecovery || holdCautionForPitchRateRecovery)
+            {
+                Risk = ProtectRiskLevel.Caution;
+                Status = "CAUTION — stall margin reduced";
+                StallReason = holdCautionForMarginRecovery ? "ReducedAoAMargin" : "HighPitchRate";
             }
             else
             {
