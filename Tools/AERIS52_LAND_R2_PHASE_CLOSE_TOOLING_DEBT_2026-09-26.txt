@@ -1,0 +1,42 @@
+AERIS52 LAND-R2 PHASE-CLOSE TOOLING DEBT
+Date: 2026-09-26
+
+Classification:
+KNOWN BASELINE TOOLING FAILURE
+
+Component:
+R015 periodic GC attribution observer build/prebuild selftest wiring
+
+Observed failure:
+R015 selftest wired into prebuild
+
+Current reproduction:
+rc=1
+
+LAND-R2 lineage verification:
+R015-related source/selftest/verifier files are unchanged between:
+Task7 accepted base:
+db7eb69f0eabbc6eb03f63b3af19077bb7874aa8
+
+and B4 accepted checkpoint:
+fdfc286f9c1490115dd2281a5226fc335c12c361
+
+Production regression classification:
+NONE
+
+LAND-R2 action:
+DO NOT modify LAND-R2 production behavior to satisfy this inherited verifier.
+DO NOT classify this inherited assertion as a B1/B2/B3/B4 production failure.
+
+Build-status discipline:
+A direct C# compile may be used when generated build identity is reproduced correctly.
+Such a compile MUST NOT be described as an official build PASS while this inherited
+official-chain R015 assertion remains unresolved.
+
+Deferred action:
+Repair or retire the stale R015 prebuild-wiring assertion in a dedicated tooling
+maintenance scope after LAND-R2 phase closure, with no production behavior changes
+unless independently justified.
+
+LAND-R2 phase-close status:
+TOOLING DEBT RECORDED / NON-BLOCKING
