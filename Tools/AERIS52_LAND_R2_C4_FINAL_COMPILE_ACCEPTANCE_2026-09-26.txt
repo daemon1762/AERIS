@@ -1,0 +1,25 @@
+AERIS52 LAND-R2 C4 FINAL CANDIDATE COMPILE ACCEPTANCE
+date_utc=2026-09-26T12:57:31Z
+
+base_branch=agent/land-r2-phase-close-c3-tooling-debt
+base_head=6bdbe06045541606544d53c1092cbe2043f3a6dd
+ksp_target=DESKTOP
+
+official_chain_rc=1
+official_chain_failure=R015 selftest wired into prebuild
+official_chain_classification=KNOWN_BASELINE_TOOLING_FAILURE
+official_build_pass_claimed=NO
+
+generated_identity_initial=PRESENT
+generated_identity_used_for_direct_compile=YES
+generated_identity_restored=PRESENT
+
+direct_xbuild_rc=0
+direct_compile=PASS
+direct_compile_zero_errors=YES
+
+dll_sha256=fd867a02776fa128d637d99c1f7d883b893e3a10c874e657cdda5e173aaff73f
+dll_size=2332160
+
+production_source_change=NONE
+C4_VERDICT=PASS
