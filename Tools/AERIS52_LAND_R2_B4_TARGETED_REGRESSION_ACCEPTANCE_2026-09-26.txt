@@ -1,0 +1,63 @@
+AERIS52 LAND-R2 B4 TARGETED REGRESSION ACCEPTANCE
+date_utc=2026-09-26T12:48:37Z
+base_head=2ed04c33e01996c524434808ad4730289b70bbde
+
+B1 — ND / RUNWAY_MAP_LOCK
+PASS: runway_map_lock_rejects_over_1px
+PASS: runway_map_lock_reject_log_present
+PASS: runway_map_lock_telemetry_present
+PASS: 318_136_absent_from_production
+PASS: 318_136_present_in_parser_fixture
+B1=PASS
+
+B2 — HF1 regression
+PASS: STALL RISK release hysteresis = 0.50 deg
+PASS: CAUTION margin release hysteresis = 0.50 deg
+PASS: HighPitchRate entry remains 12 deg/s with 10 deg/s release
+PASS: existing STALL RISK margin entry threshold preserved
+PASS: existing STALL DETECTED AoA boundary preserved
+PASS: existing hazardous STALL RISK entry path preserved
+PASS: STALL RISK release hold installed
+PASS: CAUTION entry and separate release holds installed
+PASS: ProtectActive authority remains STALL RISK / STALL DETECTED only
+PASS: scene/unavailable reset still clears risk state
+PASS: hazard entry remains ahead of every de-escalation hysteresis path
+
+[AERIS51 B2 PROTECT HYSTERESIS] 11/11 PASS
+
+B2 — HF2 speed-decay regression
+PASS: SpeedDecay StallRisk release threshold = 3.0 m/s²
+PASS: existing hazardous SpeedDecay entry remains >4.0 m/s²
+PASS: HF2 recovery hold is restricted to prior SpeedDecay StallRisk path
+PASS: HF2 release Schmitt hold is installed
+PASS: existing speed floor and intentional-deceleration exemption preserved
+PASS: SpeedDecay recovery hold remains bounded to caution-margin recovery envelope
+PASS: SpeedDecay StallRisk reason remains stable while HF2 hold is active
+PASS: hazard entry remains authoritative ahead of all HF2/HF1 release holds
+PASS: HF1 margin/pitch hysteresis remains unchanged
+
+[AERIS51 B2 HF2 SPEED DECAY HYSTERESIS] 9/9 PASS
+
+B3 — FlightData canonical path contract
+=== AERIS52 B3 FLIGHTDATA PATH CONTRACT ===
+PASS: current_root_unique
+PASS: legacy_recovery_root_unique
+PASS: session_uses_current_root
+PASS: legacy_not_session_root
+PASS: recovery_receives_both_roots
+PASS: migration_contract_documented
+PASS: excluded_folder_normalized
+PASS: primary_root_normalized
+PASS: legacy_root_normalized
+PASS: archive_folder_normalized
+
+production_contract=PASS
+
+R015 — inherited tooling classification
+rc=1
+classification=KNOWN_BASELINE_TOOLING_FAILURE
+This is not classified as a production regression.
+Official build PASS is not claimed.
+
+production_source_change=NONE
+B4_VERDICT=PASS
