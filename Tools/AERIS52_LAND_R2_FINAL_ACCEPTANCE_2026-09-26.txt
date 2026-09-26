@@ -1,0 +1,69 @@
+AERIS52 LAND-R2 FINAL ACCEPTANCE
+Date: 2026-09-26
+
+Task7 accepted base:
+db7eb69f0eabbc6eb03f63b3af19077bb7874aa8
+
+B2 HF2 runtime-accepted production source:
+4a49d50cb5822d71afd85731d2ad74d8f155646e
+
+C4 final candidate checkpoint:
+297a86d5917902bb3d972ad55c330a2db6d098e4
+
+Final candidate DLL:
+sha256=fd867a02776fa128d637d99c1f7d883b893e3a10c874e657cdda5e173aaff73f
+size=2332160
+
+A — Task7:
+ACCEPTED / CLOSED
+
+B1 — ND / RUNWAY_MAP_LOCK:
+CLOSED AS STALE FIXTURE
+final regression=PASS
+
+B2 — ReducedAoAMargin nuisance chatter:
+CLOSED
+HF1 regression=11/11 PASS
+HF2 regression=9/9 PASS
+runtime=PASS
+final production source equivalent to runtime-accepted HF2=YES
+
+B3 — FlightData canonical path normalization:
+CLOSED
+production defect found=NO
+production source change=NONE
+canonical path contract=PASS
+
+B4 — targeted regression verification:
+CLOSED / PASS
+
+C1 — scoped review:
+PASS
+
+C2 — whole-branch review:
+PASS
+
+C3 — tooling debt:
+R015=KNOWN_BASELINE_TOOLING_FAILURE
+non-blocking for LAND-R2 production acceptance
+
+C4 — final candidate compile:
+direct compile=PASS
+compile errors=0
+official build PASS claimed=NO
+DLL SHA256=fd867a02776fa128d637d99c1f7d883b893e3a10c874e657cdda5e173aaff73f
+
+Frozen subsystem verification:
+Terrain/ND change since Task7=NONE
+Recording change since Task7=NONE
+
+Production acceptance:
+PASS
+
+LAND-R2:
+FORMALLY ACCEPTED / CLOSED
+
+Deferred:
+- R015 tooling maintenance
+- coastline work after LAND
+- NEW_NAV remains gated by post-LAND roadmap decision
