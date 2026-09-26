@@ -156,6 +156,12 @@ namespace AERISFlightControl.Protect
         const float CautionPitchRateEntryDegPerSec = 12.0f;
         const float CautionPitchRateReleaseDegPerSec = 10.0f;
 
+        // B2 HF2: Speed-decay STALL RISK still enters immediately above 4.0 m/s².
+        // Once entered through that path, require recovery below 3.0 m/s² before
+        // allowing de-escalation solely because the filtered decay signal crossed
+        // back under the entry threshold.
+        const float StallRiskSpeedDecayReleaseMps2 = 3.0f;
+
         // Adaptive thrust-response shaping. A high-TWR craft needs only a short, modest pulse;
         // a low-output craft keeps the original stronger/longer energy assist.
         const float LowResponseAcceleration = 2.0f;   // m/s² available at full thrust
@@ -315,6 +321,19 @@ namespace AERISFlightControl.Protect
                 Risk == ProtectRiskLevel.Caution && AoADegrees > 0.0f &&
                 rateMagnitude >= CautionPitchRateReleaseDegPerSec;
 
+            // HF2 remembers the previous classification through StallReason rather
+            // than weakening the hazardous-side entry test below. Intentional
+            // deceleration keeps its existing exemption.
+            bool previousStallRiskWasSpeedDecay =
+                Risk == ProtectRiskLevel.StallRisk &&
+                StallReason == "SpeedDecay+LowAoAMargin";
+            bool holdStallRiskForSpeedDecayRecovery =
+                previousStallRiskWasSpeedDecay &&
+                SurfaceSpeed > 20f &&
+                !IntentionalDecelerationActive &&
+                SpeedDecayPerSecond >= StallRiskSpeedDecayReleaseMps2 &&
+                StallMarginDegrees <= cautionMargin + CautionReleaseHysteresisDeg;
+
             // A strong, stable high-q deceleration is not an energy-collapse cue. AA's
             // AoA/G moderation remains fully active; only the additional thrust floor is
             // coordinated away so SPEED or pilot-commanded energy bleed can work.
@@ -335,6 +354,12 @@ namespace AERISFlightControl.Protect
                 Risk = ProtectRiskLevel.StallRisk;
                 Status = "STALL RISK — AA aerodynamic protection active";
                 StallReason = nearBoundary ? "LowAoAMargin" : (largeSideslip ? "RapidPitchUp+HighSideslip" : "SpeedDecay+LowAoAMargin");
+            }
+            else if (holdStallRiskForSpeedDecayRecovery)
+            {
+                Risk = ProtectRiskLevel.StallRisk;
+                Status = "STALL RISK — AA aerodynamic protection active";
+                StallReason = "SpeedDecay+LowAoAMargin";
             }
             else if (holdStallRiskForMarginRecovery)
             {
