@@ -1,0 +1,16 @@
+AERIS52 LAND-R2 B3
+base_head=4a49d50cb5822d71afd85731d2ad74d8f155646e
+
+=== AERIS52 B3 FLIGHTDATA PATH CONTRACT ===
+PASS: current_root_unique
+PASS: legacy_recovery_root_unique
+PASS: session_uses_current_root
+PASS: legacy_not_session_root
+PASS: recovery_receives_both_roots
+PASS: migration_contract_documented
+PASS: excluded_folder_normalized
+PASS: primary_root_normalized
+PASS: legacy_root_normalized
+PASS: archive_folder_normalized
+
+production_contract=PASS
