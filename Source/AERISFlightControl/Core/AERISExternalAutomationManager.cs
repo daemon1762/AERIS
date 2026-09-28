@@ -166,7 +166,7 @@ namespace AERISFlightControl.Core
                     {
                         Terminate(existing, AERISAutomationState.Cancelled,
                             AERISAutomationResultCode.Busy,
-                            "PREEMPTED BY HIGHER-PRIORITY CLIENT " + normalizedClientId, true, true);
+                            "PREEMPTED BY HIGHER-PRIORITY CLIENT " + normalizedClientId, true, true, false);
                         RemoveSession(existing.Session.SessionId);
                     }
                 }
@@ -333,7 +333,7 @@ namespace AERISFlightControl.Core
             }
             Terminate(record, AERISAutomationState.Cancelled,
                 AERISAutomationResultCode.None,
-                string.IsNullOrEmpty(reason) ? "CANCELLED BY CLIENT" : reason, true, true);
+                string.IsNullOrEmpty(reason) ? "CANCELLED BY CLIENT" : reason, true, true, false);
             result = Accepted("Mission cancelled and authority safely released.");
             return true;
         }
@@ -345,9 +345,9 @@ namespace AERISFlightControl.Core
             if (!TryValidateSession(session, out record, out result)) return false;
             if (!string.IsNullOrEmpty(record.CommandKind))
                 Terminate(record, AERISAutomationState.Cancelled,
-                    AERISAutomationResultCode.None, "SESSION RELEASE", true, true);
+                    AERISAutomationResultCode.None, "SESSION RELEASE", true, true, false);
             else if (record.OwnsControl)
-                ReleaseControl(record, "SESSION RELEASE", true);
+                ReleaseControl(record, "SESSION RELEASE", true, false);
             LogTransition(record, "SESSION RELEASED");
             RemoveSession(record.Session.SessionId);
             result = Accepted("Automation session released.");
@@ -370,7 +370,7 @@ namespace AERISFlightControl.Core
                 {
                     Terminate(record, AERISAutomationState.Faulted,
                         AERISAutomationResultCode.WrongVessel,
-                        "ACTIVE VESSEL CHANGED", false, false);
+                        "ACTIVE VESSEL CHANGED", false, false, false);
                     SaveTerminalSnapshot(record);
                     RemoveSession(record.Session.SessionId);
                     continue;
@@ -507,7 +507,7 @@ namespace AERISFlightControl.Core
             LogTransition(record, detail);
             FinalizeV2MissionRuntime(record, onGround);
             if (onGround)
-                ReleaseControl(record, detail, false);
+                ReleaseControl(record, detail, false, false);
             record.CommandKind = string.Empty;
         }
 
@@ -535,10 +535,13 @@ namespace AERISFlightControl.Core
             // the aircraft absolutely, the active mission is cancelled, all TTL-based
             // feed-forward/advisories are zeroed, and the vessel lease is released.
             record.PilotOverride = true;
+            // Pilot authority is absolute: a hard override or manual AP release also
+            // drops MASTER.  Termination below must never re-arm it through SafeHold.
+            if (core.Master) core.Master = false;
             Terminate(record, AERISAutomationState.SuspendedByPilot,
                 AERISAutomationResultCode.PilotOverrideActive,
                 string.IsNullOrEmpty(reason) ? "PILOT_OVERRIDE" : reason,
-                false, false);
+                false, false, false);
             SaveTerminalSnapshot(record);
             Guid sessionId = record.Session.SessionId;
             LogTransition(record, "PILOT OVERRIDE — MISSION CANCELLED / LEASE RELEASED");
@@ -726,7 +729,7 @@ namespace AERISFlightControl.Core
             catch (Exception ex) { AERISLogger.Warn("[EXT_AUTOMATION] restore failed: " + ex.Message); }
         }
 
-        void ReleaseControl(SessionRecord record, string reason, bool restore)
+        void ReleaseControl(SessionRecord record, string reason, bool restore, bool allowSafeHold)
         {
             if (!record.OwnsControl) return;
             if (restore && record.BeforeMission != null && record.BeforeMission.Valid)
@@ -734,18 +737,26 @@ namespace AERISFlightControl.Core
             else
             {
                 Vessel vessel = FlightGlobals.ActiveVessel;
-                bool airborne = vessel != null && !vessel.LandedOrSplashed;
-                if (airborne) EnterSafeHold(reason);
+                bool leasedVesselActive = vessel != null && record.Session != null &&
+                    record.Session.VesselId == vessel.id;
+                bool airborne = leasedVesselActive && !vessel.LandedOrSplashed;
+                if (allowSafeHold && airborne) EnterSafeHold(record, reason);
                 else ReleaseAllNormalModes(reason);
             }
             record.OwnsControl = false;
             record.BeforeMission = null;
         }
 
-        void EnterSafeHold(string reason)
+        void EnterSafeHold(SessionRecord record, string reason)
         {
             Vessel vessel = FlightGlobals.ActiveVessel;
-            if (vessel == null) return;
+            bool leasedVesselActive = vessel != null && record != null && record.Session != null &&
+                record.Session.VesselId == vessel.id;
+            if (!leasedVesselActive)
+            {
+                ReleaseAllNormalModes(reason);
+                return;
+            }
             string error;
             try
             {
@@ -812,11 +823,12 @@ namespace AERISFlightControl.Core
         }
 
         void Terminate(SessionRecord record, AERISAutomationState state,
-            AERISAutomationResultCode failureCode, string detail, bool restore, bool clearCommand)
+            AERISAutomationResultCode failureCode, string detail, bool restore, bool clearCommand,
+            bool allowSafeHold)
         {
             FinalizeV2MissionRuntime(record, true);
             ClearV2Advisories(record);
-            ReleaseControl(record, detail, restore);
+            ReleaseControl(record, detail, restore, allowSafeHold);
             record.State = state;
             record.Detail = detail;
             record.FailureCode = failureCode;
@@ -833,7 +845,7 @@ namespace AERISFlightControl.Core
         {
             Terminate(record, AERISAutomationState.LeaseExpired,
                 AERISAutomationResultCode.LeaseExpired,
-                "LEASE EXPIRED — SAFE AUTHORITY RELEASE", false, false);
+                "LEASE EXPIRED — SAFE AUTHORITY RELEASE", false, false, true);
             SaveTerminalSnapshot(record);
             RemoveSession(record.Session.SessionId);
         }

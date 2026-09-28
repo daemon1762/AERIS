@@ -2008,7 +2008,7 @@ namespace AERISFlightControl.Core
             record.State = AERISAutomationState.Faulted;
             record.Detail = detail;
             LogTransition(record, detail);
-            ReleaseControl(record, detail, false);
+            ReleaseControl(record, detail, false, true);
             record.CommandKind = string.Empty;
             FinalizeV2MissionRuntime(record, true);
         }
