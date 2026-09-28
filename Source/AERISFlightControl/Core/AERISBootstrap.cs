@@ -410,13 +410,17 @@ namespace AERISFlightControl.Core
    AERISLogger.Info("[SYSTEM/OPTIONS] AERIS settings reset to defaults. AA learned/model data and current FBW values were not reset.");
   }
   void ProcessHotkeys(){
-   if(settings==null || window==null || window.IsCapturingShortcut) return;
+   if(settings==null || window==null) return;
+   // Emergency Disable is an authority escape hatch, not a configurable UI action.
+   // It must remain live even while the OPTIONS page is capturing shortcut keys.
    if(settings.IsShortcutTriggered(AERISShortcutAction.EmergencyDisable)){
     Master=false;
     DisableTrimLearning();
     AERISLogger.Warn("[HOTKEY] "+settings.GetShortcutDisplay(AERISShortcutAction.EmergencyDisable)+" Emergency Disable: MASTER OFF. Auto Takeoff and Ground Stability released; Protect detection stays available while active control is disabled.");
     return;
    }
+   // Suppress non-emergency global shortcuts while capture owns ordinary key input.
+   if(window.IsCapturingShortcut) return;
    if(settings.IsShortcutTriggered(AERISShortcutAction.ToggleMaster)){
     Master=!Master;
     AERISLogger.Info("[HOTKEY] "+settings.GetShortcutDisplay(AERISShortcutAction.ToggleMaster)+" MASTER Toggle: "+(Master?"ON":"OFF"));

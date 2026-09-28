@@ -52,11 +52,11 @@ namespace AERISFlightControl.UI
   int hotkeyCaptureAction=-1; KeyCode capturePrimary=KeyCode.None; KeyCode captureSecondary=KeyCode.None;
   internal bool IsCapturingShortcut { get { return hotkeyCaptureAction>=0; } }
   internal AERISWindow(AERISSettings s,AERISBootstrap c){settings=s;core=c;Visible=s.MainWindowVisible;PreloadStatusVisible=false;tab=3;systemPage=0;rect=new Rect(s.MainWindowX,s.MainWindowY,ClampWidth(s.MainWindowWidth),ClampHeight(s.MainWindowHeight));}
-  internal void ResetArmUiState(){verticalMaster=false;speedMaster=false;takeoffConfigExpanded=false;hotkeyCaptureAction=-1;capturePrimary=KeyCode.None;captureSecondary=KeyCode.None;}
+  internal void ResetArmUiState(){verticalMaster=false;speedMaster=false;takeoffConfigExpanded=false;ClearShortcutCapture();}
   internal bool ToolbarVisibleState { get { return HighLogic.LoadedSceneIsFlight ? Visible : PreloadStatusVisible; } }
   internal void ShowForCurrentScene(){if(HighLogic.LoadedSceneIsFlight)Visible=true;else PreloadStatusVisible=true;}
-  internal void HideForCurrentScene(){if(HighLogic.LoadedSceneIsFlight)Visible=false;else PreloadStatusVisible=false;}
-  internal void OnSceneBoundary(){Visible=false;PreloadStatusVisible=false;}
+  internal void HideForCurrentScene(){if(HighLogic.LoadedSceneIsFlight){CancelShortcutCapture("window hidden");Visible=false;}else PreloadStatusVisible=false;}
+  internal void OnSceneBoundary(){CancelShortcutCapture("scene boundary");Visible=false;PreloadStatusVisible=false;}
   internal void Draw(){
    if(!Visible)return;
    ClampRectToScreen();
@@ -136,7 +136,9 @@ namespace AERISFlightControl.UI
   void Content(){
    GUILayout.Label(UiBuildTitle("FLIGHT CONTROL"));
    DrawMasterSwitch();
+   int previousTab=tab;
    tab=MainTabs(tab);
+   if(tab!=previousTab&&hotkeyCaptureAction>=0)CancelShortcutCapture("main tab changed");
 
    // The footer owns its own layout row.  The scroll view ends above it, so its
    // vertical scrollbar can never overlap the resize hit area.
@@ -149,7 +151,7 @@ namespace AERISFlightControl.UI
 
    GUILayout.BeginHorizontal(GUILayout.Height(ResponsiveHeight(FooterHeight)));
    GUILayout.Label("Resize: drag the dedicated ↘ control",GUILayout.ExpandWidth(true));
-   if(GUILayout.Button("Close",GUILayout.Width(ResponsiveWidth(70f)),GUILayout.Height(CompactControlHeight()))) Visible=false;
+   if(GUILayout.Button("Close",GUILayout.Width(ResponsiveWidth(70f)),GUILayout.Height(CompactControlHeight()))){CancelShortcutCapture("window closed");Visible=false;}
    Rect resizeGrip=GUILayoutUtility.GetRect(ResizeGripWidth,ResizeGripSize,GUILayout.Width(ResizeGripWidth),GUILayout.Height(ResizeGripSize));
    GUILayout.EndHorizontal();
 
@@ -249,7 +251,7 @@ namespace AERISFlightControl.UI
   void DrawMasterSwitch(){
    string standbyReason=string.Empty;bool amber=core.MasterAmber;bool standby=core.Master&&!amber&&core.IsFbwStandby(out standbyReason);Color border=amber?new Color(1.00f,0.72f,0.08f,1f):(standby?new Color(0.55f,0.57f,0.60f,1f):(core.Master?new Color(0.10f,0.85f,0.24f,1f):new Color(0.95f,0.16f,0.16f,1f)));string label=amber?"MASTER ARM  ON   —   GROUND ASSIST ACTIVE":(standby?"MASTER ARM  ON   —   STANDBY":(core.Master?"MASTER ARM  ON   —   AA FBW ACTIVE":"MASTER ARM  OFF   —   CLICK TO ARM AA FBW"));float masterHeight=ResponsiveHeight(MasterButtonHeight);Rect r=GUILayoutUtility.GetRect(1f,masterHeight,GUILayout.ExpandWidth(true),GUILayout.Height(masterHeight));Color oldBackground=GUI.backgroundColor;Color oldColor=GUI.color;try{GUI.backgroundColor=border;if(GUI.Button(r,label,MasterButtonStyle())){bool requested=!core.Master;core.Master=requested;AERISLogger.Info("UI MASTER request: "+(requested?"ON":"OFF"));}GUI.color=border;GUI.DrawTexture(new Rect(r.x,r.y,r.width,1f),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(r.x,r.yMax-1f,r.width,1f),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(r.x,r.y,1f,r.height),Texture2D.whiteTexture);GUI.DrawTexture(new Rect(r.xMax-1f,r.y,1f,r.height),Texture2D.whiteTexture);}finally{GUI.backgroundColor=oldBackground;GUI.color=oldColor;}if(standby&&!string.IsNullOrEmpty(standbyReason))GUILayout.Label("STANDBY: "+standbyReason);GUILayout.Space(2);
   }
-  void DrawSystem(){GUILayout.Label("SYSTEM CONTROL");systemPage=SystemTabs(systemPage);GUILayout.Space(3);if(systemPage==0)DrawSystemStatus();else if(systemPage==1)DrawSystemOptions();else if(systemPage==2)DrawAirfieldsPage();else DrawPreloadTerrainMapsPage();}
+  void DrawSystem(){GUILayout.Label("SYSTEM CONTROL");int previousPage=systemPage;systemPage=SystemTabs(systemPage);if(systemPage!=previousPage&&hotkeyCaptureAction>=0)CancelShortcutCapture("SYSTEM page changed");GUILayout.Space(3);if(systemPage==0)DrawSystemStatus();else if(systemPage==1)DrawSystemOptions();else if(systemPage==2)DrawAirfieldsPage();else DrawPreloadTerrainMapsPage();}
   void DrawSystemStatus(){
    GUILayout.BeginVertical("box");
    GUILayout.Label("SHORTCUTS");
@@ -618,8 +620,10 @@ namespace AERISFlightControl.UI
   void ToggleOption(ref bool value,string label){bool next=GUILayout.Toggle(value,label);if(next!=value){value=next;settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] "+label+"="+next);}}
   void DrawShortcutBinding(string label,AERISShortcutAction action){GUILayout.BeginHorizontal();GUILayout.Label(label,GUILayout.Width(150f));GUILayout.Label(settings.GetShortcutDisplay(action),GUILayout.ExpandWidth(true));bool capturing=hotkeyCaptureAction==(int)action;if(GUILayout.Button(capturing?"CAPTURE":"SET",GUILayout.Width(ResponsiveWidth(76f)),GUILayout.Height(CompactControlHeight())))BeginShortcutCapture(action);if(GUILayout.Button("CLEAR",GUILayout.Width(ResponsiveWidth(58f)),GUILayout.Height(CompactControlHeight()))){settings.ClearShortcut(action);settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut cleared: "+label);}GUILayout.EndHorizontal();}
   void BeginShortcutCapture(AERISShortcutAction action){hotkeyCaptureAction=(int)action;capturePrimary=KeyCode.None;captureSecondary=KeyCode.None;AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut capture started: "+action);}
-  void DrawShortcutCaptureBox(){GUILayout.BeginVertical("box");var action=(AERISShortcutAction)hotkeyCaptureAction;GUILayout.Label("Capturing "+ShortcutLabel(action)+": "+(capturePrimary==KeyCode.None?"press first key":capturePrimary+(captureSecondary==KeyCode.None?" — press optional second key or APPLY":(" + "+captureSecondary))));GUILayout.Label("ENTER applies a one-key or two-key binding. BACKSPACE clears the second key. ESC cancels.");GUILayout.BeginHorizontal();if(SmallButton("APPLY")){string error;if(settings.TrySetShortcut(action,capturePrimary,captureSecondary,out error)){settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut set: "+ShortcutLabel(action)+" = "+settings.GetShortcutDisplay(action));hotkeyCaptureAction=-1;}else AERISLogger.Warn("[SYSTEM/OPTIONS] Shortcut rejected: "+error);}if(SmallButton("CANCEL")){hotkeyCaptureAction=-1;capturePrimary=KeyCode.None;captureSecondary=KeyCode.None;}GUILayout.EndHorizontal();GUILayout.EndVertical();}
-  void ConsumeShortcutCaptureInput(){if(hotkeyCaptureAction<0)return;Event e=Event.current;if(e==null||e.type!=EventType.KeyDown)return;if(e.keyCode==KeyCode.Escape){hotkeyCaptureAction=-1;capturePrimary=KeyCode.None;captureSecondary=KeyCode.None;e.Use();return;}if(e.keyCode==KeyCode.Return||e.keyCode==KeyCode.KeypadEnter){if(capturePrimary!=KeyCode.None){string error;if(settings.TrySetShortcut((AERISShortcutAction)hotkeyCaptureAction,capturePrimary,captureSecondary,out error)){settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut set: "+ShortcutLabel((AERISShortcutAction)hotkeyCaptureAction)+" = "+settings.GetShortcutDisplay((AERISShortcutAction)hotkeyCaptureAction));hotkeyCaptureAction=-1;}else AERISLogger.Warn("[SYSTEM/OPTIONS] Shortcut rejected: "+error);}e.Use();return;}if(e.keyCode==KeyCode.Backspace||e.keyCode==KeyCode.Delete){captureSecondary=KeyCode.None;e.Use();return;}if(capturePrimary==KeyCode.None)capturePrimary=e.keyCode;else if(captureSecondary==KeyCode.None&&e.keyCode!=capturePrimary)captureSecondary=e.keyCode;else if(e.keyCode!=capturePrimary)captureSecondary=e.keyCode;e.Use();}
+  void ClearShortcutCapture(){hotkeyCaptureAction=-1;capturePrimary=KeyCode.None;captureSecondary=KeyCode.None;}
+  void CancelShortcutCapture(string reason){if(hotkeyCaptureAction<0)return;ClearShortcutCapture();AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut capture cancelled: "+reason);}
+  void DrawShortcutCaptureBox(){GUILayout.BeginVertical("box");var action=(AERISShortcutAction)hotkeyCaptureAction;GUILayout.Label("Capturing "+ShortcutLabel(action)+": "+(capturePrimary==KeyCode.None?"press first key":capturePrimary+(captureSecondary==KeyCode.None?" — press optional second key or APPLY":(" + "+captureSecondary))));GUILayout.Label("ENTER applies a one-key or two-key binding. BACKSPACE clears the second key. ESC cancels.");GUILayout.BeginHorizontal();if(SmallButton("APPLY")){string error;if(settings.TrySetShortcut(action,capturePrimary,captureSecondary,out error)){settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut set: "+ShortcutLabel(action)+" = "+settings.GetShortcutDisplay(action));ClearShortcutCapture();}else AERISLogger.Warn("[SYSTEM/OPTIONS] Shortcut rejected: "+error);}if(SmallButton("CANCEL"))CancelShortcutCapture("cancel button");GUILayout.EndHorizontal();GUILayout.EndVertical();}
+  void ConsumeShortcutCaptureInput(){if(hotkeyCaptureAction<0)return;Event e=Event.current;if(e==null||e.type!=EventType.KeyDown)return;if(e.keyCode==KeyCode.Escape){CancelShortcutCapture("escape key");e.Use();return;}if(e.keyCode==KeyCode.Return||e.keyCode==KeyCode.KeypadEnter){if(capturePrimary!=KeyCode.None){string error;if(settings.TrySetShortcut((AERISShortcutAction)hotkeyCaptureAction,capturePrimary,captureSecondary,out error)){settings.Save();AERISLogger.Info("[SYSTEM/OPTIONS] Shortcut set: "+ShortcutLabel((AERISShortcutAction)hotkeyCaptureAction)+" = "+settings.GetShortcutDisplay((AERISShortcutAction)hotkeyCaptureAction));ClearShortcutCapture();}else AERISLogger.Warn("[SYSTEM/OPTIONS] Shortcut rejected: "+error);}e.Use();return;}if(e.keyCode==KeyCode.Backspace||e.keyCode==KeyCode.Delete){captureSecondary=KeyCode.None;e.Use();return;}if(capturePrimary==KeyCode.None)capturePrimary=e.keyCode;else if(captureSecondary==KeyCode.None&&e.keyCode!=capturePrimary)captureSecondary=e.keyCode;else if(e.keyCode!=capturePrimary)captureSecondary=e.keyCode;e.Use();}
   static string ShortcutLabel(AERISShortcutAction action){return action==AERISShortcutAction.ToggleMaster?"Toggle MASTER":(action==AERISShortcutAction.EmergencyDisable?"Emergency disable":"Toggle window");}
   void ApplySettingsGeometry(){rect.width=ClampWidth(settings.MainWindowWidth);rect.height=ClampHeight(settings.MainWindowHeight);rect.x=settings.MainWindowX;rect.y=settings.MainWindowY;ClampRectToScreen();Visible=true;}
 
