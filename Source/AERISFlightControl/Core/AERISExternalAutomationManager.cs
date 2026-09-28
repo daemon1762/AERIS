@@ -214,11 +214,9 @@ namespace AERISFlightControl.Core
             if (!ResolveRequestVessel(request.Vessel, ref request.VesselId, record))
                 return Fail(out result, AERISAutomationResultCode.WrongVessel,
                     "Setpoint request vessel does not match the lease.", false);
-            if (request.AltitudeM <= 0 && Finite(request.AltitudeMeters) && request.AltitudeMeters > 0.0)
-                request.AltitudeM = (int)Math.Round(request.AltitudeMeters);
-            if ((!Finite(request.SurfaceSpeedMps) || request.SurfaceSpeedMps <= 0.0) &&
-                Finite(request.TrueAirspeedMps) && request.TrueAirspeedMps > 0f)
-                request.SurfaceSpeedMps = request.TrueAirspeedMps;
+            NormalizeSetpointTargets(request);
+            bool altitudeRequested = HasAltitudeSetpoint(request);
+            bool speedRequested = HasSpeedSetpoint(request);
             if (!request.UseExplicitHeading)
                 request.HeadingDeg = core.Attitude != null && core.Attitude.InstrumentHeadingValid
                     ? core.Attitude.InstrumentHeadingDeg : 0.0;
@@ -249,17 +247,25 @@ namespace AERISFlightControl.Core
             {
                 if (!core.Hdg.TrySetTarget(request.HeadingDeg.ToString("0.000", CultureInfo.InvariantCulture), out error))
                     return RollbackMissionStart(record, out result, "HDG target rejected: " + error);
-                if (!core.Altitude.TrySetTarget(request.AltitudeM.ToString("0.0", CultureInfo.InvariantCulture), out error))
-                    return RollbackMissionStart(record, out result, "ALT target rejected: " + error);
-                if (!core.Velocity.TrySetTarget(request.SurfaceSpeedMps.ToString("0.0", CultureInfo.InvariantCulture), out error))
-                    return RollbackMissionStart(record, out result, "VEL target rejected: " + error);
+
+                if (altitudeRequested)
+                {
+                    if (!core.Altitude.TrySetTarget(request.AltitudeM.ToString("0.0", CultureInfo.InvariantCulture), out error))
+                        return RollbackMissionStart(record, out result, "ALT target rejected: " + error);
+                    core.Pitch.SetArmed(true, vessel, core.Attitude);
+                    core.VerticalSpeed.SetArmed(true, vessel, core.Attitude, core.Pitch);
+                    core.Altitude.SetArmed(true, vessel, core.Attitude, core.VerticalSpeed, core.Pitch);
+                }
+
+                if (speedRequested)
+                {
+                    if (!core.Velocity.TrySetTarget(request.SurfaceSpeedMps.ToString("0.0", CultureInfo.InvariantCulture), out error))
+                        return RollbackMissionStart(record, out result, "VEL target rejected: " + error);
+                    core.Acceleration.SetArmed(true, vessel, core.Attitude);
+                    core.Velocity.SetArmed(true, vessel, core.Attitude, core.Acceleration);
+                }
 
                 core.Hdg.SetArmed(true, vessel, core.Bank, core.Attitude);
-                core.Pitch.SetArmed(true, vessel, core.Attitude);
-                core.VerticalSpeed.SetArmed(true, vessel, core.Attitude, core.Pitch);
-                core.Altitude.SetArmed(true, vessel, core.Attitude, core.VerticalSpeed, core.Pitch);
-                core.Acceleration.SetArmed(true, vessel, core.Attitude);
-                core.Velocity.SetArmed(true, vessel, core.Attitude, core.Acceleration);
                 if (!core.Master) core.Master = true;
             }
             catch (Exception ex)
@@ -271,7 +277,9 @@ namespace AERISFlightControl.Core
             record.Command = NewCommand(record, "SETPOINT");
             record.CommandKind = "SETPOINT";
             record.State = AERISAutomationState.Configuring;
-            record.Detail = "ATOMIC HDG/ALT/VEL MISSION ACCEPTED";
+            record.Detail = "SETPOINT MISSION ACCEPTED — ALT " +
+                (altitudeRequested ? request.AltitudeM.ToString("0.0", CultureInfo.InvariantCulture) : "UNCHANGED") +
+                " / VEL " + (speedRequested ? request.SurfaceSpeedMps.ToString("0.0", CultureInfo.InvariantCulture) : "UNCHANGED");
             record.FailureCode = AERISAutomationResultCode.None;
             record.ConditionStable = false;
             record.MissionCompleted = false;
@@ -283,10 +291,11 @@ namespace AERISFlightControl.Core
             record.OwnsControl = true;
             command = CloneCommand(record.Command);
             result = Accepted("Setpoint mission accepted atomically.");
-            LogTransition(record, "SETPOINT ACCEPTED alt=" + request.AltitudeM.ToString("0.0") +
-                " speed=" + request.SurfaceSpeedMps.ToString("0.0") +
-                " hdg=" + request.HeadingDeg.ToString("0.0") +
-                " throttleHint=" + Mathf.Clamp01(request.ThrottleHint01).ToString("0.00"));
+            LogTransition(record, "SETPOINT ACCEPTED alt=" +
+                (altitudeRequested ? request.AltitudeM.ToString("0.0", CultureInfo.InvariantCulture) : "UNCHANGED") +
+                " speed=" + (speedRequested ? request.SurfaceSpeedMps.ToString("0.0", CultureInfo.InvariantCulture) : "UNCHANGED") +
+                " hdg=" + request.HeadingDeg.ToString("0.0", CultureInfo.InvariantCulture) +
+                " throttleHint=" + Mathf.Clamp01(request.ThrottleHint01).ToString("0.00", CultureInfo.InvariantCulture));
             return true;
         }
 
@@ -429,7 +438,12 @@ namespace AERISFlightControl.Core
         {
             Vessel vessel = FlightGlobals.ActiveVessel;
             if (vessel == null) return;
-            if (!core.Master || !core.Hdg.Armed || !core.Altitude.Armed || !core.Velocity.Armed)
+            AERISSetpointMissionRequest r = record.SetpointRequest;
+            bool altitudeRequested = HasAltitudeSetpoint(r);
+            bool speedRequested = HasSpeedSetpoint(r);
+            if (!core.Master || !core.Hdg.Armed ||
+                (altitudeRequested && !core.Altitude.Armed) ||
+                (speedRequested && !core.Velocity.Armed))
             {
                 SuspendForPilot(record, "AP MODE OR MASTER WAS RELEASED");
                 return;
@@ -443,12 +457,12 @@ namespace AERISFlightControl.Core
                 return;
             }
 
-            AERISSetpointMissionRequest r = record.SetpointRequest;
             double verticalSpeedSample = core.Attitude != null && core.Attitude.VerticalSpeedValid
                 ? core.Attitude.VerticalSpeedMps : vessel.verticalSpeed;
             double headingSample = core.Attitude != null && core.Attitude.HeadingValid
                 ? core.Attitude.HeadingDeg : (core.Hdg != null ? core.Hdg.CurrentHeading : double.NaN);
-            if (!Finite(vessel.altitude) || !Finite(vessel.srfSpeed) ||
+            if ((altitudeRequested && !Finite(vessel.altitude)) ||
+                (speedRequested && !Finite(vessel.srfSpeed)) ||
                 !Finite(verticalSpeedSample) || !Finite(headingSample))
             {
                 record.ConditionStable = false;
@@ -457,15 +471,16 @@ namespace AERISFlightControl.Core
                 record.Detail = "WAITING FOR VALID SETPOINT TELEMETRY";
                 return;
             }
-            float altitudeError = Mathf.Abs((float)(r.AltitudeM - vessel.altitude));
-            float speedError = Mathf.Abs((float)(r.SurfaceSpeedMps - vessel.srfSpeed));
+            float altitudeError = altitudeRequested ? Mathf.Abs((float)(r.AltitudeM - vessel.altitude)) : 0f;
+            float speedError = speedRequested ? Mathf.Abs((float)(r.SurfaceSpeedMps - vessel.srfSpeed)) : 0f;
             float heading = (float)headingSample;
             float headingError = Mathf.Abs(Mathf.DeltaAngle(heading, (float)r.HeadingDeg));
             float vs = Mathf.Abs((float)verticalSpeedSample);
             float bank = core.Attitude != null && core.Attitude.InstrumentHorizonBankValid
                 ? Mathf.Abs(core.Attitude.InstrumentHorizonBankDeg) : 999f;
-            bool inside = altitudeError <= r.AltitudeToleranceM &&
-                speedError <= r.SpeedToleranceMps && headingError <= r.HeadingToleranceDeg &&
+            bool inside = (!altitudeRequested || altitudeError <= r.AltitudeToleranceM) &&
+                (!speedRequested || speedError <= r.SpeedToleranceMps) &&
+                headingError <= r.HeadingToleranceDeg &&
                 vs <= r.VerticalSpeedToleranceMps && bank <= r.BankToleranceDeg;
             float now = Time.realtimeSinceStartup;
             if (inside)
@@ -481,11 +496,12 @@ namespace AERISFlightControl.Core
 
             record.State = record.ConditionStable ? AERISAutomationState.Stable :
                 (now - record.MissionAcceptedRealtime < 0.5f ? AERISAutomationState.Executing : AERISAutomationState.Stabilizing);
-            record.Detail = "SETPOINT altErr=" + altitudeError.ToString("0.0") +
-                "m speedErr=" + speedError.ToString("0.00") +
-                "m/s hdgErr=" + headingError.ToString("0.0") +
-                "deg vs=" + vs.ToString("0.00") + "m/s bank=" +
-                bank.ToString("0.0") + "deg";
+            record.Detail = "SETPOINT altErr=" +
+                (altitudeRequested ? altitudeError.ToString("0.0", CultureInfo.InvariantCulture) + "m" : "UNCHANGED") +
+                " speedErr=" + (speedRequested ? speedError.ToString("0.00", CultureInfo.InvariantCulture) + "m/s" : "UNCHANGED") +
+                " hdgErr=" + headingError.ToString("0.0", CultureInfo.InvariantCulture) +
+                "deg vs=" + vs.ToString("0.00", CultureInfo.InvariantCulture) + "m/s bank=" +
+                bank.ToString("0.0", CultureInfo.InvariantCulture) + "deg";
 
             bool complete = false;
             if (r.CompletionPolicy == AERISSetpointCompletionPolicy.CaptureOnly)
@@ -587,6 +603,37 @@ namespace AERISFlightControl.Core
             return core.AnyNormalApArmed && !record.OwnsControl;
         }
 
+        static bool HasAltitudeSetpoint(AERISSetpointMissionRequest request)
+        {
+            return request != null && request.AltitudeM != int.MinValue;
+        }
+
+        static bool HasSpeedSetpoint(AERISSetpointMissionRequest request)
+        {
+            return request != null && Finite(request.SurfaceSpeedMps);
+        }
+
+        static void NormalizeSetpointTargets(AERISSetpointMissionRequest request)
+        {
+            if (request == null) return;
+
+            bool legacyAltitudePresent = request.AltitudeM != int.MinValue;
+            bool v2AltitudePresent = Finite(request.AltitudeMeters);
+            if (v2AltitudePresent &&
+                (!legacyAltitudePresent ||
+                 (request.AltitudeM <= 0 && request.AltitudeMeters > 0.0)) &&
+                request.AltitudeMeters >= int.MinValue &&
+                request.AltitudeMeters <= int.MaxValue)
+                request.AltitudeM = (int)Math.Round(request.AltitudeMeters);
+
+            bool surfaceSpeedPresent = Finite(request.SurfaceSpeedMps);
+            bool tasPresent = Finite(request.TrueAirspeedMps);
+            if (tasPresent &&
+                (!surfaceSpeedPresent ||
+                 (request.SurfaceSpeedMps <= 0.0 && request.TrueAirspeedMps > 0f)))
+                request.SurfaceSpeedMps = request.TrueAirspeedMps;
+        }
+
         bool ValidateSetpoint(AERISSetpointMissionRequest request, out AERISAutomationResult result)
         {
             if (request.CompletionPolicy != AERISSetpointCompletionPolicy.CaptureOnly &&
@@ -594,8 +641,17 @@ namespace AERISFlightControl.Core
                 request.CompletionPolicy != AERISSetpointCompletionPolicy.HoldUntilReplaced)
                 return Fail(out result, AERISAutomationResultCode.InvalidRequest,
                     "Setpoint completion policy is not a published ContractVersion 2 value.", false);
-            if (!Finite(request.AltitudeM) || request.AltitudeM < 0.0 || request.AltitudeM > 1000000.0 ||
-                !Finite(request.SurfaceSpeedMps) || request.SurfaceSpeedMps < 0.0 || request.SurfaceSpeedMps > 5000.0 ||
+            bool altitudeRequested = HasAltitudeSetpoint(request);
+            bool speedRequested = HasSpeedSetpoint(request);
+            if (!altitudeRequested && !speedRequested && !request.UseExplicitHeading)
+                return Fail(out result, AERISAutomationResultCode.InvalidRequest,
+                    "Setpoint request contains no explicit ALT, VEL, or heading target.", false);
+            if ((altitudeRequested &&
+                 (request.AltitudeM < 0.0 || request.AltitudeM > 1000000.0)) ||
+                (!altitudeRequested && Finite(request.AltitudeMeters) &&
+                 (request.AltitudeMeters < 0.0 || request.AltitudeMeters > 1000000.0)) ||
+                (speedRequested &&
+                 (!Finite(request.SurfaceSpeedMps) || request.SurfaceSpeedMps < 0.0 || request.SurfaceSpeedMps > 5000.0)) ||
                 !Finite(request.HeadingDeg) || request.HeadingDeg < -3600.0 || request.HeadingDeg > 3600.0)
                 return Fail(out result, AERISAutomationResultCode.InvalidRequest,
                     "Altitude, surface speed, or heading is outside the supported finite range.", false);
