@@ -815,73 +815,96 @@ namespace AERISFlightControl.Core
                     "Active learning corridor vessel is unavailable.", true);
                 return true;
             }
-            float requestedSpeed = Mathf.Max(10f, (float)request.SurfaceSpeedMps);
-            float decel = CorridorPlanningDeceleration();
-            float requiredReserve = CorridorRequiredReserve(requestedSpeed,
-                runtime.CorridorTurnSpeed, decel, runtime.CorridorTurnRadius);
-            float remaining = Mathf.Max(0f, runtime.CorridorLegLength - runtime.AlongTrackMeters);
-            if (!runtime.Turning && !runtime.TurnPreparation &&
-                requiredReserve > remaining + runtime.CorridorTurnMargin)
+            bool altitudeRequested = HasAltitudeSetpoint(request);
+            bool speedRequested = HasSpeedSetpoint(request);
+            float requestedSpeed = runtime.CorridorCruiseSpeed > 0f
+                ? runtime.CorridorCruiseSpeed : core.Velocity.TargetSurfaceSpeedMps;
+            float requiredReserve = runtime.CorridorRequiredTurnReserve;
+            if (speedRequested)
             {
-                Fail(out result, AERISAutomationResultCode.SetpointUnreachable,
-                    "Corridor TAS is incompatible with the remaining turn reserve. required=" +
-                    requiredReserve.ToString("0", CultureInfo.InvariantCulture) + "m available=" +
-                    (remaining + runtime.CorridorTurnMargin).ToString("0", CultureInfo.InvariantCulture) + "m.", true);
-                return true;
+                requestedSpeed = Mathf.Max(10f, (float)request.SurfaceSpeedMps);
+                float decel = CorridorPlanningDeceleration();
+                requiredReserve = CorridorRequiredReserve(requestedSpeed,
+                    runtime.CorridorTurnSpeed, decel, runtime.CorridorTurnRadius);
+                float remaining = Mathf.Max(0f, runtime.CorridorLegLength - runtime.AlongTrackMeters);
+                if (!runtime.Turning && !runtime.TurnPreparation &&
+                    requiredReserve > remaining + runtime.CorridorTurnMargin)
+                {
+                    Fail(out result, AERISAutomationResultCode.SetpointUnreachable,
+                        "Corridor TAS is incompatible with the remaining turn reserve. required=" +
+                        requiredReserve.ToString("0", CultureInfo.InvariantCulture) + "m available=" +
+                        (remaining + runtime.CorridorTurnMargin).ToString("0", CultureInfo.InvariantCulture) + "m.", true);
+                    return true;
+                }
             }
 
             string error;
             float previousAltitudeTarget = core.Altitude.TargetAltitudeMeters;
             float previousSpeedTarget = core.Velocity.TargetSurfaceSpeedMps;
             bool altitudeApplied = false;
+            bool speedApplied = false;
             try
             {
-                if (!core.Altitude.TrySetTarget(request.AltitudeM.ToString("0.0",
-                    CultureInfo.InvariantCulture), out error))
+                if (altitudeRequested)
                 {
-                    Fail(out result, AERISAutomationResultCode.SetpointUnreachable,
-                        "Corridor ALT setpoint rejected: " + error, true);
-                    return true;
+                    if (!core.Altitude.TrySetTarget(request.AltitudeM.ToString("0.0",
+                        CultureInfo.InvariantCulture), out error))
+                    {
+                        Fail(out result, AERISAutomationResultCode.SetpointUnreachable,
+                            "Corridor ALT setpoint rejected: " + error, true);
+                        return true;
+                    }
+                    altitudeApplied = true;
+                    core.Pitch.SetArmed(true, vessel, core.Attitude);
+                    core.VerticalSpeed.SetArmed(true, vessel, core.Attitude, core.Pitch);
+                    core.Altitude.SetArmed(true, vessel, core.Attitude, core.VerticalSpeed, core.Pitch);
                 }
-                altitudeApplied = true;
-                if (!core.Velocity.TrySetTarget(requestedSpeed.ToString("0.0",
-                    CultureInfo.InvariantCulture), out error))
+
+                if (speedRequested)
                 {
-                    RestoreCorridorSetpoints(previousAltitudeTarget, previousSpeedTarget);
-                    Fail(out result, AERISAutomationResultCode.SetpointUnreachable,
-                        "Corridor TAS/surface fallback setpoint rejected; ALT/TAS transaction rolled back: " +
-                        error, true);
-                    return true;
+                    if (!core.Velocity.TrySetTarget(requestedSpeed.ToString("0.0",
+                        CultureInfo.InvariantCulture), out error))
+                    {
+                        RestoreCorridorSetpoints(previousAltitudeTarget, previousSpeedTarget);
+                        Fail(out result, AERISAutomationResultCode.SetpointUnreachable,
+                            "Corridor TAS/surface fallback setpoint rejected; setpoint transaction rolled back: " +
+                            error, true);
+                        return true;
+                    }
+                    speedApplied = true;
+                    core.Acceleration.SetArmed(true, vessel, core.Attitude);
+                    core.Velocity.SetArmed(true, vessel, core.Attitude, core.Acceleration);
                 }
-                core.Pitch.SetArmed(true, vessel, core.Attitude);
-                core.VerticalSpeed.SetArmed(true, vessel, core.Attitude, core.Pitch);
-                core.Altitude.SetArmed(true, vessel, core.Attitude, core.VerticalSpeed, core.Pitch);
-                core.Acceleration.SetArmed(true, vessel, core.Attitude);
-                core.Velocity.SetArmed(true, vessel, core.Attitude, core.Acceleration);
             }
             catch (Exception ex)
             {
-                if (altitudeApplied)
+                if (altitudeApplied || speedApplied)
                     RestoreCorridorSetpoints(previousAltitudeTarget, previousSpeedTarget);
                 Fail(out result, AERISAutomationResultCode.InternalFault,
-                    "Corridor setpoint transaction fault; ALT/TAS transaction rolled back: " +
+                    "Corridor setpoint transaction fault; requested setpoints rolled back: " +
                     ex.Message, true);
                 return true;
             }
-            runtime.CorridorRequest.TargetAltitudeM = request.AltitudeM;
-            runtime.CorridorCruiseSpeed = requestedSpeed;
-            runtime.CorridorRequiredTurnReserve = requiredReserve;
-            runtime.CorridorTurnMargin = Mathf.Max(10000f,
-                Mathf.Min(runtime.CorridorLegLength * 0.45f, requiredReserve));
-            runtime.CorridorRequest.TurnMarginM = runtime.CorridorTurnMargin;
+
+            if (altitudeRequested)
+                runtime.CorridorRequest.TargetAltitudeM = request.AltitudeM;
+            if (speedRequested)
+            {
+                runtime.CorridorCruiseSpeed = requestedSpeed;
+                runtime.CorridorRequiredTurnReserve = requiredReserve;
+                runtime.CorridorTurnMargin = Mathf.Max(10000f,
+                    Mathf.Min(runtime.CorridorLegLength * 0.45f, requiredReserve));
+                runtime.CorridorRequest.TurnMarginM = runtime.CorridorTurnMargin;
+            }
             record.SetpointRequest = SnapshotSetpointRequest(request);
             record.Command = NewCommand(record, "CORRIDOR_SETPOINT");
             record.ConditionStable = false;
             runtime.StableSince = -1f;
             command = CloneCommand(record.Command);
-            result = Accepted("Atomic corridor ALT/TAS setpoint accepted; stock-no-wind surface speed fallback is active.");
-            LogTransition(record, "CORRIDOR SETPOINT alt=" + request.AltitudeM +
-                " speed=" + requestedSpeed.ToString("0.0", CultureInfo.InvariantCulture) +
+            result = Accepted("Corridor setpoint accepted; omitted ALT/VEL dimensions remain unchanged.");
+            LogTransition(record, "CORRIDOR SETPOINT alt=" +
+                (altitudeRequested ? request.AltitudeM.ToString(CultureInfo.InvariantCulture) : "UNCHANGED") +
+                " speed=" + (speedRequested ? requestedSpeed.ToString("0.0", CultureInfo.InvariantCulture) : "UNCHANGED") +
                 " requiredTurnReserve=" + requiredReserve.ToString("0", CultureInfo.InvariantCulture));
             return true;
         }
