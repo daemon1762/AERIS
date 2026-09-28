@@ -134,15 +134,20 @@ namespace AERISFlightControl.API
 
     public sealed class AERISSetpointMissionRequest
     {
-        public Vessel Vessel; public Guid VesselId; public int AltitudeM; public float TrueAirspeedMps;
+        // Omission sentinels are initialized by the request constructor.  This preserves
+        // binary compatibility with existing clients while distinguishing "not supplied"
+        // from the valid numeric setpoints 0 m ASL and 0 m/s.
+        public Vessel Vessel; public Guid VesselId;
+        public int AltitudeM = int.MinValue;
+        public float TrueAirspeedMps = float.NaN;
         public string RouteId; public bool RequireStraightCorridor; public bool RequireStableCondition;
         public float AltitudeToleranceM; public float SpeedToleranceMps;
         public float VerticalSpeedToleranceMps; public float BankToleranceDeg; public float StableSeconds;
 
         // Additive compatibility fields. Contract-v2 clients may omit these; AERIS then
         // retains the current lateral route/heading and uses TAS with a documented fallback.
-        public double AltitudeMeters;
-        public double SurfaceSpeedMps;
+        public double AltitudeMeters = double.NaN;
+        public double SurfaceSpeedMps = double.NaN;
         public double HeadingDeg;
         public bool UseExplicitHeading;
         public float HeadingToleranceDeg;
