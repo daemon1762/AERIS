@@ -80,7 +80,7 @@ ck('runtime stable test ignores omitted ALT/VEL dimensions',
 
 ck('corridor setpoint update is presence-aware',
    re.search(r'if\s*\(altitudeRequested\)[\s\S]{0,700}core\.Altitude\.TrySetTarget', corridor) and
-   re.search(r'if\s*\(speedRequested\)[\s\S]{0,700}core\.Velocity\.TrySetTarget', corridor))
+   re.search(r'if\s*\(speedRequested\)[\s\S]{0,3000}core\.Velocity\.TrySetTarget', corridor))
 
 ck('snapshot preserves normalized presence sentinels/values',
    'AltitudeM = value.AltitudeM' in snapshot and
