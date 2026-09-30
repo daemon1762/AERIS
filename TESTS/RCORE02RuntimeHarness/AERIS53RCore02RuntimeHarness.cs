@@ -14,11 +14,6 @@ namespace AERIS53RCore02RuntimeHarness
         string report = "Ready. Disable user-selected AERIS AP modes, then press RUN ALL 4 CASES.";
         bool running;
 
-        void Awake()
-        {
-            DontDestroyOnLoad(gameObject);
-        }
-
         void OnGUI()
         {
             windowRect = GUILayout.Window(
