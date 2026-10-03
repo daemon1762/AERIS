@@ -43,6 +43,7 @@ namespace AtmosphereAutopilot
         float capturedManualThrottle;
         bool capturedManualThrottleValid;
         bool automaticThrottleOwnedLastFrame;
+        float lastMirroredThrottle;
         // AERIS axis overlays. These are consumed inside StandardFlyByWire so AA remains
         // the single writer of FlightCtrlState and pilot inputs can be selectively blocked.
         // When active, a director has neutralized the physical roll input before this point
@@ -340,6 +341,27 @@ namespace AtmosphereAutopilot
             // controller but with its own acceleration target law.  It is intentionally
             // selected before Protect, so Protect can still raise (never lower) the demand.
             bool externalThrottleActive = ExternalThrottleOverride;
+            bool protectManualIncreaseAccepted = false;
+            if (automaticThrottleOwnedLastFrame && protectFloor > 0f &&
+                !speedControlActive && !externalThrottleActive)
+            {
+                // Protect is a floor: accept a pilot increase above our last echo.
+                // An unchanged mirrored output must never replace the release baseline.
+                try
+                {
+                    if (FlightInputHandler.state != null)
+                    {
+                        float pilotThrottle = Mathf.Clamp01(FlightInputHandler.state.mainThrottle);
+                        if (pilotThrottle > lastMirroredThrottle)
+                        {
+                            capturedManualThrottle = manualThrottle = pilotThrottle;
+                            capturedManualThrottleValid = true;
+                            protectManualIncreaseAccepted = true;
+                        }
+                    }
+                }
+                catch { }
+            }
             float externalThrottle = Mathf.Clamp01(ExternalThrottleDemand);
             float selectedOwnerThrottle = externalThrottleActive ? externalThrottle :
                 (speedControlActive ? speedThrottle : manualThrottle);
@@ -348,7 +370,7 @@ namespace AtmosphereAutopilot
 
             // On the release edge, restore the captured physical/manual setting to both
             // KSP throttle channels. Do not preserve the last AP/PROTECT output.
-            if (!automaticOwnership && automaticThrottleOwnedLastFrame)
+            if (!automaticOwnership && automaticThrottleOwnedLastFrame && !protectManualIncreaseAccepted)
                 finalThrottle = manualThrottle;
 
             cntrl.mainThrottle = finalThrottle;
@@ -357,6 +379,7 @@ namespace AtmosphereAutopilot
                 if (FlightInputHandler.state != null)
                 {
                     FlightInputHandler.state.mainThrottle = finalThrottle;
+                    lastMirroredThrottle = finalThrottle;
                 }
             }
             catch { }
@@ -487,7 +510,10 @@ namespace AtmosphereAutopilot
             try
             {
                 if (FlightInputHandler.state != null)
+                {
                     FlightInputHandler.state.mainThrottle = finalThrottle;
+                    lastMirroredThrottle = finalThrottle;
+                }
             }
             catch { }
             automaticThrottleOwnedLastFrame = automaticOwnership;
