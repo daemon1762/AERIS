@@ -51,7 +51,7 @@ hazard_detected = src.index(
     "if (beyondBoundary && (meaningfulSpeedLoss || demandStillUp || largeSideslip || EnergyCollapseDetected))"
 )
 hazard_risk = src.index(
-    "else if (nearBoundary || (fastApproach && largeSideslip) || (meaningfulSpeedLoss && StallMarginDegrees <= cautionMargin))"
+    "else if (nearBoundary || (fastApproach && largeSideslip) || speedDecayStallRiskEntry)"
 )
 speed_hold = src.index(
     "else if (holdStallRiskForSpeedDecayRecovery)"

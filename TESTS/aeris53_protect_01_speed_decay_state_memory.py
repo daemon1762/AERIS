@@ -78,7 +78,8 @@ check(
 
 risk_block = src[hazard_risk:speed_hold]
 check(
-    "speedDecayStallRiskLatched = speedDecayStallRiskEntry || holdStallRiskForSpeedDecayRecovery;" in risk_block,
+    "speedDecayStallRiskLatched = speedDecayStallRiskEntry || holdStallRiskForSpeedDecayRecovery;"
+    in " ".join(risk_block.split()),
     "StallRisk classification preserves/enters dedicated SpeedDecay memory"
 )
 
