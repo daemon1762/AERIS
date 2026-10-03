@@ -20,8 +20,9 @@ check(
 )
 
 check(
-    'StallReason == "SpeedDecay+LowAoAMargin"' in src,
-    "HF2 recovery hold is restricted to prior SpeedDecay StallRisk path"
+    "bool speedDecayStallRiskLatched;" in src and
+    'StallReason == "SpeedDecay+LowAoAMargin"' not in src,
+    "HF2 recovery memory is dedicated control state, not diagnostic StallReason text"
 )
 
 check(
@@ -41,8 +42,9 @@ check(
 )
 
 check(
-    'StallReason = "SpeedDecay+LowAoAMargin";' in src,
-    "SpeedDecay StallRisk reason remains stable while HF2 hold is active"
+    'StallReason = "SpeedDecay+LowAoAMargin";' in src and
+    "speedDecayStallRiskLatched = true;" in src,
+    "SpeedDecay StallRisk reason remains diagnostic while HF2 latch remains active"
 )
 
 hazard_detected = src.index(
