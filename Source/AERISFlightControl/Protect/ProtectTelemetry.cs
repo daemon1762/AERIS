@@ -176,6 +176,8 @@ namespace AERISFlightControl.Protect
         float lastSampleTime = -1f;
         float controlDeltaTime = 0.02f;
         float filteredSpeedDecay;
+        // PROTECT-01: control-state memory is explicit. StallReason is diagnostic text only.
+        bool speedDecayStallRiskLatched;
         float lastSurfaceSpeed;
         float lastGearCommandTime = -99f;
         bool lastGearTargetKnown;
@@ -290,6 +292,7 @@ namespace AERISFlightControl.Protect
 
             if (!AntiStallEnabled)
             {
+                speedDecayStallRiskLatched = false;
                 Risk = ProtectRiskLevel.Safe;
                 Status = "ANTI-STALL OFF — telemetry only";
                 StallReason = "AntiStallDisabled";
@@ -321,14 +324,12 @@ namespace AERISFlightControl.Protect
                 Risk == ProtectRiskLevel.Caution && AoADegrees > 0.0f &&
                 rateMagnitude >= CautionPitchRateReleaseDegPerSec;
 
-            // HF2 remembers the previous classification through StallReason rather
-            // than weakening the hazardous-side entry test below. Intentional
-            // deceleration keeps its existing exemption.
-            bool previousStallRiskWasSpeedDecay =
-                Risk == ProtectRiskLevel.StallRisk &&
-                StallReason == "SpeedDecay+LowAoAMargin";
+            // PROTECT-01: HF2 release hysteresis uses dedicated control-state memory.
+            // StallReason remains presentation/diagnostic text and may be recomputed
+            // independently without changing the hysteresis state.
             bool holdStallRiskForSpeedDecayRecovery =
-                previousStallRiskWasSpeedDecay &&
+                speedDecayStallRiskLatched &&
+                Risk == ProtectRiskLevel.StallRisk &&
                 SurfaceSpeed > 20f &&
                 !IntentionalDecelerationActive &&
                 SpeedDecayPerSecond >= StallRiskSpeedDecayReleaseMps2 &&
@@ -339,48 +340,58 @@ namespace AERISFlightControl.Protect
             // coordinated away so SPEED or pilot-commanded energy bleed can work.
             bool meaningfulSpeedLoss = SurfaceSpeed > 20f && SpeedDecayPerSecond > 4.0f &&
                 !IntentionalDecelerationActive;
+            bool speedDecayStallRiskEntry =
+                meaningfulSpeedLoss && StallMarginDegrees <= cautionMargin;
             bool severeSpeedLoss = SurfaceSpeed > 20f && SpeedDecayPerSecond >
                 HighAoAEnvelopeSpeedDecayHardMps2 && !IntentionalDecelerationActive;
             bool demandStillUp = PitchRateDegPerSec > 3.0f;
 
             if (beyondBoundary && (meaningfulSpeedLoss || demandStillUp || largeSideslip || EnergyCollapseDetected))
             {
+                speedDecayStallRiskLatched = false;
                 Risk = ProtectRiskLevel.StallDetected;
                 Status = "STALL DETECTED — AA owns aerodynamic recovery";
                 StallReason = severeSpeedLoss ? "AoABoundaryExceeded+SevereSpeedDecay" : "AoABoundaryExceeded+LossOfEnergy";
             }
-            else if (nearBoundary || (fastApproach && largeSideslip) || (meaningfulSpeedLoss && StallMarginDegrees <= cautionMargin))
+            else if (nearBoundary || (fastApproach && largeSideslip) || speedDecayStallRiskEntry)
             {
+                speedDecayStallRiskLatched =
+                    speedDecayStallRiskEntry || holdStallRiskForSpeedDecayRecovery;
                 Risk = ProtectRiskLevel.StallRisk;
                 Status = "STALL RISK — AA aerodynamic protection active";
                 StallReason = nearBoundary ? "LowAoAMargin" : (largeSideslip ? "RapidPitchUp+HighSideslip" : "SpeedDecay+LowAoAMargin");
             }
             else if (holdStallRiskForSpeedDecayRecovery)
             {
+                speedDecayStallRiskLatched = true;
                 Risk = ProtectRiskLevel.StallRisk;
                 Status = "STALL RISK — AA aerodynamic protection active";
                 StallReason = "SpeedDecay+LowAoAMargin";
             }
             else if (holdStallRiskForMarginRecovery)
             {
+                speedDecayStallRiskLatched = false;
                 Risk = ProtectRiskLevel.StallRisk;
                 Status = "STALL RISK — AA aerodynamic protection active";
                 StallReason = "LowAoAMargin";
             }
             else if (cautionMarginActive || cautionPitchRateActive)
             {
+                speedDecayStallRiskLatched = false;
                 Risk = ProtectRiskLevel.Caution;
                 Status = "CAUTION — stall margin reduced";
                 StallReason = cautionMarginActive ? "ReducedAoAMargin" : "HighPitchRate";
             }
             else if (holdCautionForMarginRecovery || holdCautionForPitchRateRecovery)
             {
+                speedDecayStallRiskLatched = false;
                 Risk = ProtectRiskLevel.Caution;
                 Status = "CAUTION — stall margin reduced";
                 StallReason = holdCautionForMarginRecovery ? "ReducedAoAMargin" : "HighPitchRate";
             }
             else
             {
+                speedDecayStallRiskLatched = false;
                 Risk = ProtectRiskLevel.Safe;
                 Status = LowAltitudeHighAoAEnvelopeActive
                     ? "CONTROLLED HIGH-AOA TAKEOFF/LANDING ENVELOPE — monitoring"
@@ -982,6 +993,7 @@ namespace AERISFlightControl.Protect
             SurfaceSpeed = 0f; SpeedDecayPerSecond = 0f; VerticalSpeed = 0f; DynamicPressureKpa = 0f; LowAltitudeHighAoAEnvelopeActive = false; LowAltitudeHighAoAEnvelopeBlend = 0f; HighAoAAllowanceDegrees = 0f; EnergyCollapseDetected = false; SpeedDirectorDecelerationActive = false; HighEnergyDecelerationActive = false; IntentionalDecelerationActive = false; DecelerationThrustInhibitActive = false; ThrustAssistInhibitedByDeceleration = false; UserThrottle = 0f; LastAppliedThrottle = 0f; ThrottleAssistOwnershipActive = false; lastPilotThrottle = 0f; protectedPilotThrottle = 0f; protectedPilotThrottleValid = false; restorePilotThrottlePending = false; lastMirroredInputThrottle = 0f; hasMirroredInputThrottle = false; DesiredAssistThrottle = 0f; RequestedAssistThrottle = 0f; RequestedAssistContribution = 0f; ThrustAssistRecoveryTaper = false;
             AvailableThrust = 0f; RequiredThrust = 0f; TargetRecoveryAcceleration = 0f; ThrustResponseFactor = 1f; AvailableForwardAcceleration = 0f; ThrustAssistActive = false; ThrustAssistSaturated = false; InsufficientThrust = false; PropulsionProviderConnected = false; PropulsionReady = false; PropulsionUnavailable = false; PropulsionMotorResponse = 0f; ActualAvailableForwardThrustN = 0f; EstimatedAvailableForwardThrustN = 0f; PropulsionProviderId = string.Empty; PropulsionStatusDetail = string.Empty; PropulsionReason = PropulsionAvailabilityReason.None; PropulsionResponseStatus = "No provider";
             filteredSpeedDecay = 0f; lastSampleTime = -1f; controlDeltaTime = 0.02f; lastSurfaceSpeed = 0f;
+            speedDecayStallRiskLatched = false;
             Risk = ProtectRiskLevel.Unavailable;
             StallReason = "NoValidSample";
             Status = status;
