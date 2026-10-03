@@ -822,7 +822,9 @@ namespace AERISFlightControl.Core
             float requiredReserve = runtime.CorridorRequiredTurnReserve;
             if (speedRequested)
             {
-                requestedSpeed = Mathf.Max(10f, (float)request.SurfaceSpeedMps);
+                // Zero is a valid explicit VEL setpoint.  Preserve the caller's
+                // numeric value here; CorridorRequiredReserve already handles zero safely.
+                requestedSpeed = Mathf.Max(0f, (float)request.SurfaceSpeedMps);
                 float decel = CorridorPlanningDeceleration();
                 requiredReserve = CorridorRequiredReserve(requestedSpeed,
                     runtime.CorridorTurnSpeed, decel, runtime.CorridorTurnRadius);
