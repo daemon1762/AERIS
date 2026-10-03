@@ -78,9 +78,17 @@ ck('runtime stable test ignores omitted ALT/VEL dimensions',
    re.search(r'!altitudeRequested\s*\|\|\s*altitudeError\s*<=', update) and
    re.search(r'!speedRequested\s*\|\|\s*speedError\s*<=', update))
 
+ck('runtime vertical-speed stability applies only when ALT is requested',
+   re.search(r'altitudeRequested\s*&&\s*!Finite\(verticalSpeedSample\)', update) and
+   re.search(r'!altitudeRequested\s*\|\|\s*vs\s*<=\s*r\.VerticalSpeedToleranceMps', update))
+
 ck('corridor setpoint update is presence-aware',
    re.search(r'if\s*\(altitudeRequested\)[\s\S]{0,700}core\.Altitude\.TrySetTarget', corridor) and
    re.search(r'if\s*\(speedRequested\)[\s\S]{0,3000}core\.Velocity\.TrySetTarget', corridor))
+
+ck('corridor preserves explicit zero VEL instead of applying a hidden minimum',
+   re.search(r'requestedSpeed\s*=\s*Mathf\.Max\(0f,\s*\(float\)request\.SurfaceSpeedMps\)', corridor) and
+   'Mathf.Max(10f, (float)request.SurfaceSpeedMps)' not in corridor)
 
 ck('snapshot preserves normalized presence sentinels/values',
    'AltitudeM = value.AltitudeM' in snapshot and
