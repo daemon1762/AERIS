@@ -463,7 +463,8 @@ namespace AERISFlightControl.Core
                 ? core.Attitude.HeadingDeg : (core.Hdg != null ? core.Hdg.CurrentHeading : double.NaN);
             if ((altitudeRequested && !Finite(vessel.altitude)) ||
                 (speedRequested && !Finite(vessel.srfSpeed)) ||
-                !Finite(verticalSpeedSample) || !Finite(headingSample))
+                (altitudeRequested && !Finite(verticalSpeedSample)) ||
+                !Finite(headingSample))
             {
                 record.ConditionStable = false;
                 record.StableSince = -1f;
@@ -475,13 +476,14 @@ namespace AERISFlightControl.Core
             float speedError = speedRequested ? Mathf.Abs((float)(r.SurfaceSpeedMps - vessel.srfSpeed)) : 0f;
             float heading = (float)headingSample;
             float headingError = Mathf.Abs(Mathf.DeltaAngle(heading, (float)r.HeadingDeg));
-            float vs = Mathf.Abs((float)verticalSpeedSample);
+            float vs = altitudeRequested ? Mathf.Abs((float)verticalSpeedSample) : 0f;
             float bank = core.Attitude != null && core.Attitude.InstrumentHorizonBankValid
                 ? Mathf.Abs(core.Attitude.InstrumentHorizonBankDeg) : 999f;
             bool inside = (!altitudeRequested || altitudeError <= r.AltitudeToleranceM) &&
                 (!speedRequested || speedError <= r.SpeedToleranceMps) &&
                 headingError <= r.HeadingToleranceDeg &&
-                vs <= r.VerticalSpeedToleranceMps && bank <= r.BankToleranceDeg;
+                (!altitudeRequested || vs <= r.VerticalSpeedToleranceMps) &&
+                bank <= r.BankToleranceDeg;
             float now = Time.realtimeSinceStartup;
             if (inside)
             {
@@ -500,7 +502,8 @@ namespace AERISFlightControl.Core
                 (altitudeRequested ? altitudeError.ToString("0.0", CultureInfo.InvariantCulture) + "m" : "UNCHANGED") +
                 " speedErr=" + (speedRequested ? speedError.ToString("0.00", CultureInfo.InvariantCulture) + "m/s" : "UNCHANGED") +
                 " hdgErr=" + headingError.ToString("0.0", CultureInfo.InvariantCulture) +
-                "deg vs=" + vs.ToString("0.00", CultureInfo.InvariantCulture) + "m/s bank=" +
+                "deg vs=" + (altitudeRequested ? vs.ToString("0.00", CultureInfo.InvariantCulture) + "m/s" : "UNCHANGED") +
+                " bank=" +
                 bank.ToString("0.0", CultureInfo.InvariantCulture) + "deg";
 
             bool complete = false;
