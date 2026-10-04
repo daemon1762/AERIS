@@ -25,7 +25,6 @@ test -f "$KSP/KSP_x64_Data/Managed/Assembly-CSharp.dll" || {
 
 echo "=== REG-02 REGRESSION ==="
 python3 TESTS/aeris53_reg_02_facility_provenance.py
-python3 TESTS/aeris53_reg_02_probe.py
 python3 TESTS/aeris53_protect_02_manual_throttle.py
 python3 TESTS/aeris53_protect_01_speed_decay_state_memory.py
 python3 Tools/selftest_aeris51_b2_protect_speed_decay_hysteresis.py
@@ -72,6 +71,3 @@ echo "HEAD=$(git rev-parse HEAD)"
 echo "DLL_SHA256=$(sha256sum "$DLL" | awk '{print $1}')"
 echo "INSTALLED_SHA256=$(sha256sum "$TARGET" | awk '{print $1}')"
 git status -sb
-
-# Temporary, read-only runtime verification; collect retires the probe.
-bash Tools/aeris53_reg_02_repro.sh candidate
