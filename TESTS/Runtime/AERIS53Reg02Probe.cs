@@ -45,6 +45,16 @@ internal static class Reg02Observation
     }
     static string Text(object target, string name) { return Convert.ToString(Member(target, name)) ?? ""; }
     static string Safe(string text) { return text.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' '); }
+    static string Hierarchy(object transform)
+    {
+        var names = new List<string>();
+        for (int depth = 0; transform != null && depth < 8; depth++)
+        {
+            names.Insert(0, Safe(Text(transform, "name")));
+            transform = Member(transform, "parent");
+        }
+        return (transform == null ? "" : "<TRUNCATED>/") + string.Join("/", names.ToArray());
+    }
     static Type Find(string name)
     {
         foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
@@ -144,7 +154,7 @@ internal static class Reg02Observation
         IList isolatedInput = Collect(ksp, recordType, out isolatedStatus);
         IList isolatedCanonical = Canonicalize(identity, isolatedInput);
         var report = new StringBuilder();
-        report.AppendLine("AERIS53 REG-02 READ-ONLY REPRO v1");
+        report.AppendLine("AERIS53 REG-02 READ-ONLY REPRO v2");
         report.AppendLine("UTC=" + DateTime.UtcNow.ToString("o"));
         report.AppendLine("AERIS_ASSEMBLY=" + recordType.Assembly.Location);
         report.AppendLine("KK_DETECTED=" + (manager != null) + "; KK_SITES=" + sites.Count);
@@ -183,6 +193,30 @@ internal static class Reg02Observation
             linkedNonStockRunways == 0 ? "INCONCLUSIVE_NO_LINKED_NON_STOCK_RUNWAY" :
             misclassified > 0 ? "UPSTREAM_MISCLASSIFICATION_REPRODUCED" : "NO_MISCLASSIFICATION_OBSERVED";
         report.AppendLine("REG-02 RESULT=" + result);
+        // Native/unlinked facilities plus one linked mod sample: read the origin
+        // metadata before choosing a production provenance rule. Names alone
+        // are not evidence of ownership. No live facilities are changed.
+        report.AppendLine("ORIGIN_METADATA is raw observation, not a Stock ownership decision.");
+        report.AppendLine("ORIGIN\tKK_OBJECT_LINK\tNAME\tFACILITY_ID\tDISPLAY_NAME\tPQS_NAME\tTRANSFORM_URL\tTRANSFORM_HIERARCHY");
+        bool modSampleWritten = false;
+        foreach (object facility in facilities)
+        {
+            if (facility == null) continue;
+            bool modLinked = false, squadLinked = false;
+            foreach (object site in sites)
+            {
+                if (!ReferenceEquals(Member(site, "spaceCenterFacility"), facility)) continue;
+                object squad = Member(site, "isSquad");
+                if (!(squad is bool)) throw new InvalidOperationException("KK isSquad field unavailable");
+                if ((bool)squad) squadLinked = true; else modLinked = true;
+            }
+            if (modLinked && modSampleWritten) continue;
+            if (modLinked) modSampleWritten = true;
+            report.AppendLine("ORIGIN\t" + (modLinked ? "NON_SQUAD" : squadLinked ? "SQUAD" : "UNLINKED") + "\t" +
+                Safe(Text(facility, "name")) + "\t" + Safe(Text(facility, "facilityName")) + "\t" +
+                Safe(Text(facility, "facilityDisplayName")) + "\t" + Safe(Text(facility, "pqsName")) + "\t" +
+                Safe(Text(facility, "facilityTransformName")) + "\t" + Hierarchy(Member(facility, "facilityTransform")));
+        }
         return report.ToString();
     }
 }

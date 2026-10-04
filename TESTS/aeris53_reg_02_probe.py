@@ -18,8 +18,13 @@ namespace UnityEngine {
 public class KSPAddon : Attribute { public enum Startup { Flight } public KSPAddon(Startup s, bool once) { } }
 public static class FlightGlobals { public static bool ready; }
 public static class KSPUtil { public static string ApplicationRootPath; }
+public class FixtureTransform {
+    public string name;
+    public FixtureTransform parent;
+}
 public class Facility {
     public string facilityDisplayName = "Example Runway", facilityName = "Example Runway";
+    public string name = "Internal Facility", pqsName = "Kerbin", facilityTransformName = "KSC/Runway";
     public object facilityTransform = new object();
     public string source = "Stock";
     public bool squad = true;
@@ -145,6 +150,14 @@ class Test {
             Contains(Reg02Observation.Capture(), "REG-02 RESULT=INCONCLUSIVE_NO_LINKED_NON_STOCK_RUNWAY");
             table.Add(site);
         });
+        Run("raw origin metadata uses object linkage and preserves internal IDs", () => {
+            string report = Reg02Observation.Capture();
+            Contains(report, "READ-ONLY REPRO v2");
+            Contains(report, "ORIGIN\tNON_SQUAD\tInternal Facility\tExample Runway\tExample Runway\tKerbin\tKSC/Runway\t");
+            site.spaceCenterFacility = new Facility();
+            try { Contains(Reg02Observation.Capture(), "ORIGIN\tUNLINKED\tInternal Facility\t"); }
+            finally { site.spaceCenterFacility = facility; }
+        });
         Run("unknown KK ownership fields cannot silently report success", () => {
             table.Clear(); table.Add(new object());
             Throws(() => Reg02Observation.Capture());
@@ -155,8 +168,20 @@ class Test {
             string report = Reg02Observation.Capture();
             Contains(report, "KK_DETECTED=False; KK_SITES=0");
             Contains(report, "REG-02 RESULT=KK_NOT_PRESENT_BASELINE");
+            Contains(report, "ORIGIN\tUNLINKED\tInternal Facility\tExample Runway\tExample Runway\tKerbin\tKSC/Runway\t");
         });
 #endif
+        Run("origin hierarchy is ordered and reports a truncated root", () => {
+            object original = facility.facilityTransform;
+            try {
+                var root = new FixtureTransform { name = "Root" };
+                facility.facilityTransform = new FixtureTransform { name = "Leaf\tName", parent = root };
+                Contains(Reg02Observation.Capture(), "Root/Leaf Name");
+                for (int i = 0; i < 9; i++) root = new FixtureTransform { name = "Node", parent = root };
+                facility.facilityTransform = root;
+                Contains(Reg02Observation.Capture(), "<TRUNCATED>/");
+            } finally { facility.facilityTransform = original; }
+        });
         Run("unready facilities are inconclusive", () => {
             PSystemSetup.Instance.SpaceCenterFacilities = null;
             Throws(() => Reg02Observation.Capture());
