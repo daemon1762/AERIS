@@ -135,10 +135,22 @@ class Test {
         });
         Run("non-stock classification cannot be reported as Stock", () => {
             facility.source = "KerbalKonstructs"; facility.squad = false;
+            var native = new Facility { facilityName="Runway", facilityDisplayName="#autoLOC_300899",
+                facilityTransformName="KSC/SpaceCenter/Runway" };
+            PSystemSetup.Instance.SpaceCenterFacilities = new[] { facility,native };
             string report = Reg02Observation.Capture();
             Contains(report, "REG-02 RESULT=NO_MISCLASSIFICATION_OBSERVED");
             Contains(report, "MISCLASSIFIED_STOCK=0; PROVIDER_PAIR_ELIGIBLE=0; ISOLATED_KSP_ONLY_ELIGIBLE=0");
+            Contains(report, "NATIVE_KSC_RUNWAY_COUNT=1; STOCK=1; AUTO_ELIGIBLE=1");
+            native.source="Unknown"; native.squad=false;
+            Contains(Reg02Observation.Capture(), "REG-02 RESULT=INCONCLUSIVE_NATIVE_BASELINE");
+            PSystemSetup.Instance.SpaceCenterFacilities = new[] { facility };
             facility.source = "Stock"; facility.squad = true;
+        });
+        Run("Unknown source cannot masquerade as corrected KK provenance", () => {
+            facility.source="Unknown"; facility.squad=false;
+            try { Contains(Reg02Observation.Capture(), "REG-02 RESULT=SOURCE_OR_AUTHORITY_MISMATCH"); }
+            finally { facility.source="Stock"; facility.squad=true; }
         });
         Run("Squad sites are not counted as mod runways", () => {
             site.isSquad = true;
@@ -152,7 +164,7 @@ class Test {
         });
         Run("raw origin metadata uses object linkage and preserves internal IDs", () => {
             string report = Reg02Observation.Capture();
-            Contains(report, "READ-ONLY REPRO v2");
+            Contains(report, "READ-ONLY REPRO v3");
             Contains(report, "ORIGIN\tNON_SQUAD\tInternal Facility\tExample Runway\tExample Runway\tKerbin\tKSC/Runway\t");
             site.spaceCenterFacility = new Facility();
             try { Contains(Reg02Observation.Capture(), "ORIGIN\tUNLINKED\tInternal Facility\t"); }

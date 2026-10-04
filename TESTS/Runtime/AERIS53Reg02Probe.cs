@@ -154,7 +154,7 @@ internal static class Reg02Observation
         IList isolatedInput = Collect(ksp, recordType, out isolatedStatus);
         IList isolatedCanonical = Canonicalize(identity, isolatedInput);
         var report = new StringBuilder();
-        report.AppendLine("AERIS53 REG-02 READ-ONLY REPRO v2");
+        report.AppendLine("AERIS53 REG-02 READ-ONLY REPRO v3");
         report.AppendLine("UTC=" + DateTime.UtcNow.ToString("o"));
         report.AppendLine("AERIS_ASSEMBLY=" + recordType.Assembly.Location);
         report.AppendLine("KK_DETECTED=" + (manager != null) + "; KK_SITES=" + sites.Count);
@@ -163,7 +163,7 @@ internal static class Reg02Observation
         report.AppendLine("PROVIDER_PAIR uses detached KSP+KK records without the survey catalog; it is not the live registry.");
         report.AppendLine("ISOLATED_KSP_ONLY is a detached missing-twin test; the live KK table is never changed.");
         report.AppendLine("SITE\tKK_SQUAD\tLINKED_KSP_FACILITY\tAERIS_SOURCE\tAERIS_SQUAD\tKIND\tPROVIDER_PAIR_ELIGIBLE\tISOLATED_KSP_ONLY_ELIGIBLE");
-        int linkedNonStockRunways = 0, misclassified = 0, normalEligible = 0, isolatedEligible = 0;
+        int linkedNonStockRunways = 0, misclassified = 0, normalEligible = 0, isolatedEligible = 0, originMismatch = 0;
         foreach (object site in sites)
         {
             object squad = Member(site, "isSquad");
@@ -179,6 +179,8 @@ internal static class Reg02Observation
             {
                 linkedNonStockRunways++;
                 if (Text(raw, "Source") == "Stock" && (bool)Member(raw, "IsSquadOwned")) misclassified++;
+                if ((bool)Member(raw, "IsSquadOwned") ||
+                    (Text(raw, "Source") != "KerbalKonstructs" && Text(raw, "Source") != "StockLaunchsitesExpansion")) originMismatch++;
                 if (normal) normalEligible++;
                 if (withoutTwin) isolatedEligible++;
             }
@@ -189,9 +191,24 @@ internal static class Reg02Observation
         }
         report.AppendLine("NON_STOCK_LINKED_RUNWAYS=" + linkedNonStockRunways + "; MISCLASSIFIED_STOCK=" + misclassified +
             "; PROVIDER_PAIR_ELIGIBLE=" + normalEligible + "; ISOLATED_KSP_ONLY_ELIGIBLE=" + isolatedEligible);
+        report.AppendLine("NON_STOCK_ORIGIN_MISMATCH=" + originMismatch);
+        int nativeRunways = 0, nativeStock = 0, nativeEligible = 0;
+        foreach (object facility in facilities)
+        {
+            if (Text(facility, "facilityName") != "Runway" ||
+                Text(facility, "facilityTransformName") != "KSC/SpaceCenter/Runway") continue;
+            nativeRunways++;
+            object raw = RecordFor(kspRecords, facility);
+            if (raw != null && Text(raw, "Source") == "Stock" && Text(raw, "IsSquadOwned") == "True") nativeStock++;
+            if (raw != null && Allowed(registry, raw)) nativeEligible++;
+        }
+        report.AppendLine("NATIVE_KSC_RUNWAY_COUNT=" + nativeRunways + "; STOCK=" + nativeStock + "; AUTO_ELIGIBLE=" + nativeEligible);
         string result = manager == null ? "KK_NOT_PRESENT_BASELINE" :
             linkedNonStockRunways == 0 ? "INCONCLUSIVE_NO_LINKED_NON_STOCK_RUNWAY" :
-            misclassified > 0 ? "UPSTREAM_MISCLASSIFICATION_REPRODUCED" : "NO_MISCLASSIFICATION_OBSERVED";
+            misclassified > 0 ? "UPSTREAM_MISCLASSIFICATION_REPRODUCED" :
+            originMismatch > 0 || normalEligible > 0 || isolatedEligible > 0 ? "SOURCE_OR_AUTHORITY_MISMATCH" :
+            nativeRunways != 1 || nativeStock != 1 || nativeEligible != 1 ? "INCONCLUSIVE_NATIVE_BASELINE" :
+            "NO_MISCLASSIFICATION_OBSERVED";
         report.AppendLine("REG-02 RESULT=" + result);
         // Native/unlinked facilities plus one linked mod sample: read the origin
         // metadata before choosing a production provenance rule. Names alone

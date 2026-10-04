@@ -76,6 +76,20 @@ namespace AERISFlightControl.Landing
                 object facilities = GetMemberValue(setup, "SpaceCenterFacilities", "spaceCenterFacilities");
                 IEnumerable enumerable = facilities as IEnumerable;
                 if (enumerable == null) return 0;
+                var kkSites = new List<object>();
+                bool kkTableComplete = false;
+                try
+                {
+                    IEnumerable table = GetStaticMemberValue(
+                        AERISKerbalKonstructsProvider.FindType("KerbalKonstructs.Core.LaunchSiteManager"),
+                        "AllLaunchSites", "allLaunchSites") as IEnumerable;
+                    if (table != null)
+                    {
+                        foreach (object site in table) kkSites.Add(site);
+                        kkTableComplete = true;
+                    }
+                }
+                catch { } // Preserve observed non-Squad links, but not partial Squad authority.
                 foreach (object facility in enumerable)
                 {
                     if (facility == null) continue;
@@ -84,7 +98,8 @@ namespace AERISFlightControl.Landing
                         ReadString(facility, "facilityName"),
                         ReadString(facility, "name"));
                     if (string.IsNullOrEmpty(name)) continue;
-                    AERISFacilityKind kind = Classify(name, ReadString(facility, "editorFacility"));
+                    string facilityId = FirstNonEmpty(ReadString(facility, "facilityName"), ReadString(facility, "name"));
+                    AERISFacilityKind kind = Classify(name + " " + facilityId, ReadString(facility, "editorFacility"));
                     if (kind == AERISFacilityKind.Unknown && !LooksLikeRelevantFacility(name)) continue;
                     object bodyObject = GetMemberValue(facility, "hostBody", "HostBody");
                     CelestialBody body = bodyObject as CelestialBody;
@@ -99,13 +114,17 @@ namespace AERISFlightControl.Landing
                     record.ProviderGroup = name;
                     record.Body = body == null ? "Kerbin" : body.name;
                     record.FacilityKind = kind;
-                    record.Source = IsDlcName(name) ? AERISAirfieldSource.Dlc : AERISAirfieldSource.Stock;
-                    record.SourceMod = record.Source == AERISAirfieldSource.Dlc ? "SquadExpansion" : "Squad";
+                    bool squadOwned;
+                    record.Source = FacilitySource(facility, facilityId, name, kkSites, kkTableComplete, out squadOwned);
+                    record.SourceMod = record.Source == AERISAirfieldSource.Stock ? "Squad" :
+                        record.Source == AERISAirfieldSource.Dlc ? "SquadExpansion" :
+                        record.Source == AERISAirfieldSource.KerbalKonstructs ? "KerbalKonstructs" :
+                        record.Source == AERISAirfieldSource.StockLaunchsitesExpansion ? "StockLaunchsitesExpansion" : string.Empty;
                     try { record.ProviderVersion = typeof(PSystemSetup).Assembly.GetName().Version.ToString(); }
                     catch { record.ProviderVersion = string.Empty; }
                     record.SourcePath = "PSystemSetup.SpaceCenterFacilities";
                     record.ProviderCategory = kind == AERISFacilityKind.Runway ? "Runway" : kind.ToString();
-                    record.IsSquadOwned = true;
+                    record.IsSquadOwned = squadOwned;
                     if (body != null && transform != null)
                     {
                         try
@@ -136,6 +155,50 @@ namespace AERISFlightControl.Landing
                 AERISLogger.Warn("[AIRFIELD_PROVIDER][KSP] " + ex.Message);
                 return output.Count - before;
             }
+        }
+
+        static AERISAirfieldSource FacilitySource(object facility, string facilityId, string displayName,
+            IEnumerable kkSites, bool kkTableComplete, out bool squadOwned)
+        {
+            squadOwned = false;
+            bool dlc = IsDlcName(facilityId) || IsDlcName(displayName);
+            bool linkedSquad = false;
+            // KK inserts its facilities into PSystemSetup too. Only an exact
+            // object link proves KK ownership; a name match is insufficient.
+            if (kkSites != null)
+                foreach (object site in kkSites)
+                {
+                    if (site == null || !ReferenceEquals(GetMemberValue(site, "spaceCenterFacility"), facility)) continue;
+                    if (ReadBool(site, false, "isSquad", "IsSquad")) { linkedSquad = true; continue; }
+                    try
+                    {
+                        AERISProviderFacilityRecord linked = AERISKerbalKonstructsProvider.ParseSite(site);
+                        return linked == null ? AERISAirfieldSource.Unknown : linked.Source;
+                    }
+                    catch { return AERISAirfieldSource.Unknown; }
+                }
+            if (linkedSquad && kkTableComplete)
+            {
+                squadOwned = true;
+                return dlc ? AERISAirfieldSource.Dlc : AERISAirfieldSource.Stock;
+            }
+
+            string registeredPath = ReadString(facility, "facilityTransformName").Trim();
+            if (dlc)
+            {
+                squadOwned = registeredPath.Length > 0;
+                return AERISAirfieldSource.Dlc;
+            }
+            // Missing/unready KK tables must not promote injected facilities.
+            // Native KSC records have stable internal IDs and registered paths,
+            // even when their display names are localization tokens.
+            if ((facilityId == "Runway" || facilityId == "LaunchPad" || facilityId == "VehicleAssemblyBuilding") &&
+                registeredPath == "KSC/SpaceCenter/" + facilityId)
+            {
+                squadOwned = true;
+                return AERISAirfieldSource.Stock;
+            }
+            return AERISAirfieldSource.Unknown;
         }
 
         static bool IsDlcName(string value)
@@ -303,7 +366,7 @@ namespace AERISFlightControl.Landing
             }
         }
 
-        static AERISProviderFacilityRecord ParseSite(object site)
+        internal static AERISProviderFacilityRecord ParseSite(object site)
         {
             if (site == null) return null;
             string name = AERISKspFacilityProvider.ReadString(site, "LaunchSiteName", "FacilityName", "name").Trim();
@@ -461,7 +524,7 @@ namespace AERISFlightControl.Landing
                 text.StartsWith("sle/") || text.Contains("stock launchsites expansion");
         }
 
-        static Type FindType(string fullName)
+        internal static Type FindType(string fullName)
         {
             Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
             for (int i = 0; i < assemblies.Length; i++)

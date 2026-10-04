@@ -21,22 +21,29 @@ case "$MODE" in
     echo "PROBE_RETIRED=$ARCHIVE"
     exit 0
     ;;
-  install) ;;
-  *) echo "usage: bash Tools/aeris53_reg_02_repro.sh [install|collect]"; exit 2 ;;
+  install|candidate) ;;
+  *) echo "usage: bash Tools/aeris53_reg_02_repro.sh [install|candidate|collect]"; exit 2 ;;
 esac
 
 test "$(git branch --show-current)" = "agent/aeris53-reg-02"
 git diff --quiet
 git diff --cached --quiet
-git diff --quiet a12d86aea741769fa0bbbe16c255efd2dbe0affc -- Source
 MANAGED="$KSP/KSP_x64_Data/Managed"
 for name in Assembly-CSharp UnityEngine UnityEngine.CoreModule; do test -f "$MANAGED/$name.dll"; done
 mapfile -d '' TARGETS < <(find "$KSP/GameData/AERISFlightControl" -type f -name AERISFlightControl.dll -print0)
 test "${#TARGETS[@]}" -eq 1
-test "$(sha256sum "${TARGETS[0]}" | awk '{print $1}')" = e174c73c342ef1751931657f55d05d8edcff95d8eeafbdd90a57d1ff35cc9264 || {
-  echo "STOP: installed AERIS DLL differs from the verified PROTECT-02 build."
-  exit 21
-}
+if test "$MODE" = install; then
+  git diff --quiet a12d86aea741769fa0bbbe16c255efd2dbe0affc -- Source
+  test "$(sha256sum "${TARGETS[0]}" | awk '{print $1}')" = e174c73c342ef1751931657f55d05d8edcff95d8eeafbdd90a57d1ff35cc9264 || {
+    echo "STOP: installed AERIS DLL differs from the verified PROTECT-02 build."
+    exit 21
+  }
+else
+  cmp -s "$ROOT/Source/AERISFlightControl/bin/Release/AERISFlightControl.dll" "${TARGETS[0]}" || {
+    echo "STOP: installed AERIS DLL differs from the local REG-02 candidate build."
+    exit 22
+  }
+fi
 
 BUILD="$(mktemp -d)"
 trap 'rm -rf "$BUILD"' EXIT
