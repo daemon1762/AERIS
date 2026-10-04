@@ -5,6 +5,7 @@ Fixture ConfigNode shapes are simulations, not KSP runtime evidence.
 """
 from pathlib import Path
 import importlib.util
+import re
 import subprocess
 import sys
 import tempfile
@@ -153,9 +154,42 @@ with tempfile.TemporaryDirectory(prefix="aeris-gap2-probe-") as folder:
         'System.IO.Path.Combine(KSPUtil.ApplicationRootPath, "GameData/AERISFlightControl/Config/AERISSettings.cfg")')
     assert restored == original, "Save/Load code changed beyond approved isolation"
     print("PASS: isolated copy differs only in namespaces/imports and private path", flush=True)
+    # Model Unity's module boundary: Input is forwarded by UnityEngine.dll.
+    # The former single-assembly fixture could not detect a missing module reference.
+    unity_start = HARNESS.index("namespace UnityEngine {")
+    unity_end = HARNESS.index("public class KSPAddon")
+    unity = HARNESS[unity_start:unity_end]
+    input_start = unity.index("    public static class Input")
+    input_end = unity.index("    public static class Mathf")
+    input_class = unity[input_start:input_end]
+    core = folder / "Core.cs"
+    core.write_text("using System;\n" + unity[:input_start] + unity[input_end:])
+    legacy = folder / "InputLegacy.cs"
+    legacy.write_text("using System;\nnamespace UnityEngine {\n" + input_class + "}\n")
+    facade = folder / "Facade.cs"
+    facade.write_text("[assembly: System.Runtime.CompilerServices.TypeForwardedTo(typeof(UnityEngine.Input))]\n")
+    core_dll = folder / "UnityEngine.CoreModule.dll"
+    legacy_dll = folder / "UnityEngine.InputLegacyModule.dll"
+    facade_dll = folder / "UnityEngine.dll"
+    for source, output, references in (
+        (core, core_dll, []),
+        (legacy, legacy_dll, [core_dll]),
+        (facade, facade_dll, [core_dll, legacy_dll]),
+    ):
+        subprocess.run(["mcs", "-target:library", "-out:" + str(output)] +
+                       ["-r:" + str(ref) for ref in references] + [str(source)], check=True)
     fixture = folder / "Fixture.cs"
-    fixture.write_text(HARNESS)
+    fixture.write_text(HARNESS[:unity_start] + HARNESS[unity_end:])
     exe = folder / "ProbeTests.exe"
-    subprocess.run(["mcs", "-out:" + str(exe), str(fixture), str(folder / "IsolatedSettings.cs"),
-                    str(folder / "IsolatedSupport.cs"), str(ROOT / "TESTS/Runtime/AERIS53Gap201Probe.cs")], check=True)
+    compile_command = ["mcs", "-out:" + str(exe), str(fixture), str(folder / "IsolatedSettings.cs"),
+                       str(folder / "IsolatedSupport.cs"), str(ROOT / "TESTS/Runtime/AERIS53Gap201Probe.cs")]
+    missing_reference = subprocess.run(compile_command + ["-r:" + str(core_dll), "-r:" + str(facade_dll)],
+                                       capture_output=True, text=True)
+    assert missing_reference.returncode != 0 and "CS1070" in missing_reference.stderr and \
+        "UnityEngine.InputLegacyModule" in missing_reference.stderr, "module-boundary failure not reproduced"
+    print("PASS: omitted InputLegacyModule reproduces forwarded Input compile failure", flush=True)
+    helper = (ROOT / "Tools/aeris53_gap2_01_repro.sh").read_text()
+    references = re.findall(r'-r:"\$MANAGED/(UnityEngine(?:\.[A-Za-z0-9]+)?\.dll)"', helper)
+    subprocess.run(compile_command + ["-r:" + str(folder / name) for name in references], check=True)
+    print("PASS: installer Unity module references compile the full isolated Settings copy", flush=True)
     subprocess.run(["mono", str(exe), str(folder / "fake-ksp")], check=True)
