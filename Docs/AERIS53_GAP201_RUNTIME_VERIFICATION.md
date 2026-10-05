@@ -39,22 +39,56 @@ observer checks isolation and error handling in 15 checks. Existing REG-02,
 PROTECT-01/02, B2 hysteresis and R-CORE-01/02 checks contribute another 108.
 The modeled ConfigNode boundary is not a replacement for full KSP verification.
 
-## Pending real KSP verification
+## Verified real KSP build and roundtrip
 
-Run the existing GAP2-01 repro helper with KSP closed. It first runs the
-build/install helper on every installation attempt, so an old Release DLL
-cannot be mistaken for the patched build. The build helper builds against the
-installed KSP assemblies, backs up the production DLL and any existing settings
-file, then installs only the production DLL. It does not replace the CFG.
-After it installs the temporary probe, put a craft on the runway for ten
-seconds, exit KSP, and collect. Keep both the build/install output (HEAD and
-matching built/installed DLL hashes) and the runtime report. The v2 observer requires both cases to retain
-all sentinels without isolated Settings warnings and the real CFG hash to remain
-unchanged during observation: `GAP2-01 RESULT=SETTINGS_ROUNDTRIP_RETAINED`.
-Mismatch, missing payload or an exception is inconclusive, never success.
+The user supplied `貼り付けたテキスト（1）(3).txt`. The candidate at
+`b56ea87e2e63d8a550284dce26c9f9163a2e9ef2` passed all 138 checks and a clean
+Release build against installed KSP assemblies: 77 warnings and zero errors.
+The warning count matches the accepted REG-02 build. Built and installed DLL
+SHA-256 both equal:
 
-The temporary observer has no GUI or flight-control hooks. Collect retires it;
-its source/helper will be removed after runtime verification. No permanent
-audit feature is added. A separate manual UI setting/restart check is still
-needed to claim full game restart persistence. Do not change flight protection
-thresholds merely to exercise persistence.
+`432411b83e764b4b0d42c4756a098edc0b19d54f3c054923ddba713a38faea81`
+
+The build helper backed up the prior DLL and existing settings file to
+`/home/de-mon/.cache/AERIS/gap201-build-backups/20261006-000208-891775870`.
+It installed the production DLL without replacing the CFG. Probe installation
+required this fresh build/install, rather than accepting a stale Release DLL.
+
+The v2 report at `2026-10-05T15:09:00.6311140Z` records Settings source SHA-256
+`35c69c5026a673f36ac8e4fd72cfbbb0fa0a9fac8bfcc209c1d52e9898e250a2`, which
+matches the patched source. Both cases loaded real KSP `ConfigNode` generic
+`root` direct values and retained all four sentinels:
+
+| Value | Saved | Case 1 | Case 2 |
+|---|---:|---:|---:|
+| MainWindowX | 731 | 731 | 731 |
+| ProtectAoAWarningDegrees | 9.5 | 9.5 | 9.5 |
+| ShowSasWarning | False | False | False |
+| FlightDataArchiveLimit | 17 | 17 | 17 |
+
+Result: `SETTINGS_ROUNDTRIP_RETAINED`, with `RETAINED_ROUNDTRIPS=2`.
+Real settings SHA-256 before/after remained
+`65d938645eb4ea1e905f17d5537ba02ed56ee2eefe4abc954d8fcdde8ef98fb7`.
+No isolated Settings warnings or inconclusive result occurred. The report's
+`PRE_FIX_ROOT_GATE_REJECTS=True` describes the former name-only predicate;
+it is not a rejection by the patched loader.
+
+## Finalization and remaining acceptance boundary
+
+The user's collect retired the entire probe directory and scratch data to
+`/home/de-mon/.cache/AERIS/gap201-repro/20261006-001109-698891150`.
+The temporary observer, observer fixture, preparation tool and repro installer
+are removed from the branch. The durable production Settings regression remains.
+The build/install helper now runs 123 checks and installs only the production
+DLL. No permanent audit feature is added. Untracked candidate identity and
+shader artifacts are preserved.
+
+Finalization changes no production source, so the verified installed DLL needs
+no rebuild for this cleanup. The branch remains `agent/aeris53-gap2-01` without
+a main or accepted-branch merge.
+
+The runtime observation exercised the full isolated Settings copy with the
+real KSP API; it did not modify live production Settings or test a UI change
+across a full game restart. A separate manual window-position save/restart check
+is still required to claim full game restart persistence. Flight protection
+thresholds do not need to be changed for that check.

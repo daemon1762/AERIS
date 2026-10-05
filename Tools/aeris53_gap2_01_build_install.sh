@@ -22,7 +22,6 @@ test -f "$KSP/KSP_x64_Data/Managed/Assembly-CSharp.dll" || {
 
 echo "=== GAP2-01 AND EXISTING REGRESSION ==="
 python3 TESTS/aeris53_gap2_01_settings_roundtrip.py
-python3 TESTS/aeris53_gap2_01_probe.py
 python3 TESTS/aeris53_reg_02_facility_provenance.py
 python3 TESTS/aeris53_protect_02_manual_throttle.py
 python3 TESTS/aeris53_protect_01_speed_decay_state_memory.py
