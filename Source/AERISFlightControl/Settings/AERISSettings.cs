@@ -271,7 +271,15 @@ namespace AERISFlightControl.Settings
             {
                 if (!File.Exists(PathName)) return settings;
                 ConfigNode node = ConfigNode.Load(PathName);
-                if (node == null || node.name != "AERIS_SETTINGS") return settings;
+                if (node == null) return settings;
+                if (node.name != "AERIS_SETTINGS")
+                {
+                    ConfigNode child = node.GetNode("AERIS_SETTINGS");
+                    if (child != null) node = child;
+                    // ConfigNode.Save can reload as "root" with direct values.
+                    // Every Settings.Save includes mainWindowX; reject unrelated roots.
+                    else if (node.name != "root" || !node.HasValue("mainWindowX")) return settings;
+                }
                 settings.MainWindowX = Mathf.Clamp(ReadFloat(node, "mainWindowX", settings.MainWindowX), -5000f, 5000f);
                 settings.MainWindowY = Mathf.Clamp(ReadFloat(node, "mainWindowY", settings.MainWindowY), -5000f, 5000f);
                 settings.MainWindowWidth = Mathf.Clamp(ReadFloat(node, "mainWindowWidth", settings.MainWindowWidth), 360f, 1920f);

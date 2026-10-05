@@ -64,14 +64,15 @@ public class ConfigNode {
     public static ConfigNode Load(string path) {
         LoadCount++;
         if(Mode=="load-error") throw new IOException("simulated Load failure");
+        if(Mode=="mixed" && SaveCount==2) return null;
         ConfigNode payload;
         if(!saved.TryGetValue(path,out payload)) return null;
         if(Mode=="lost-value") payload.values.Remove("flightDataArchiveLimit");
         if(Mode=="named-mismatch" && LoadCount%2==0) return new ConfigNode("AERIS_SETTINGS");
         if(Mode=="named" || Mode=="named-mismatch" || (Mode=="mixed" && SaveCount==1)) return payload;
-        if(Mode=="child") { var root=new ConfigNode("ROOT"); root.children["AERIS_SETTINGS"]=payload; return root; }
-        if(Mode=="missing-payload") return new ConfigNode("ROOT");
-        var generic=new ConfigNode("ROOT"); generic.values=payload.values; return generic;
+        if(Mode=="child") { var root=new ConfigNode("root"); root.children["AERIS_SETTINGS"]=payload; return root; }
+        if(Mode=="missing-payload") return new ConfigNode("root");
+        var generic=new ConfigNode("root"); generic.values=payload.values; return generic;
     }
     public static void Reset(string mode) { saved.Clear(); WritePaths.Clear(); Mode=mode; SaveCount=LoadCount=0; }
 }
@@ -95,36 +96,34 @@ class Test {
     static void Contains(string report,string expected) { Assert(report.Contains(expected),"missing "+expected+"\n"+report); }
     static void Inconclusive(string report) {
         Contains(report,"GAP2-01 RESULT=INCONCLUSIVE");
-        Assert(!report.Contains("GAP2-01 RESULT=ROOT_REJECTION_REPRODUCED"),"false reproduction");
+        Assert(!report.Contains("GAP2-01 RESULT=SETTINGS_ROUNDTRIP_RETAINED"),"false retention claim");
     }
     static int Main(string[] args) {
         KSPUtil.ApplicationRootPath=Path.GetFullPath(args[0]);
         protectedPath=Path.Combine(KSPUtil.ApplicationRootPath,"GameData/AERISFlightControl/Config/AERISSettings.cfg");
         Directory.CreateDirectory(Path.GetDirectoryName(protectedPath)); File.WriteAllText(protectedPath,original);
         Run("named root executes full Settings roundtrip without rejection","named",report=> {
-            Contains(report,"GAP2-01 RESULT=NO_REJECTION_OBSERVED");
-            Contains(report,"REPEATED_ROOT_REJECTIONS=0; RETAINED_ROUNDTRIPS=2");
+            Contains(report,"GAP2-01 RESULT=SETTINGS_ROUNDTRIP_RETAINED");
+            Contains(report,"RETAINED_ROUNDTRIPS=2");
             Contains(report,"EXPECTED=731 / 9.5 / False / 17; ACTUAL=731 / 9.5 / False / 17");
         });
-        Run("named child reproduces real Settings gate rejection twice","child",report=> {
+        Run("named child retains saved settings twice","child",report=> {
             Contains(report,"PAYLOAD_SHAPE=NAMED_CHILD");
-            Contains(report,"GAP2-01 RESULT=ROOT_REJECTION_REPRODUCED");
-            Contains(report,"REPEATED_ROOT_REJECTIONS=2; RETAINED_ROUNDTRIPS=0");
+            Contains(report,"GAP2-01 RESULT=SETTINGS_ROUNDTRIP_RETAINED");
+            Contains(report,"RETAINED_ROUNDTRIPS=2");
         });
-        Run("generic root direct values reproduce real Settings gate rejection twice","direct",report=> {
+        Run("generic root direct values retain saved settings twice","direct",report=> {
             Contains(report,"PAYLOAD_SHAPE=DIRECT_VALUES_ON_GENERIC_ROOT");
-            Contains(report,"GAP2-01 RESULT=ROOT_REJECTION_REPRODUCED");
+            Contains(report,"GAP2-01 RESULT=SETTINGS_ROUNDTRIP_RETAINED");
+            Contains(report,"RETAINED_ROUNDTRIPS=2");
         });
-        Run("Save exception cannot masquerade as a root rejection","save-error",Inconclusive);
+        Run("Save exception cannot masquerade as successful retention","save-error",Inconclusive);
         Run("Save without a file is inconclusive","no-file",Inconclusive);
         Run("Load exception is inconclusive","load-error",Inconclusive);
         Run("missing payload is inconclusive","missing-payload",Inconclusive);
         Run("serialization loses a sentinel before Settings load","lost-value",Inconclusive);
-        Run("named-root mismatch does not falsely diagnose root rejection","named-mismatch",Inconclusive);
-        Run("mixed repeated cases remain inconclusive","mixed",report=> {
-            Contains(report,"GAP2-01 RESULT=INCONCLUSIVE_MIXED_RESULTS");
-            Contains(report,"REPEATED_ROOT_REJECTIONS=1; RETAINED_ROUNDTRIPS=1");
-        });
+        Run("named-root mismatch cannot falsely claim retention","named-mismatch",Inconclusive);
+        Run("successful first roundtrip cannot hide a failed second case","mixed",Inconclusive);
         Run("absent production config stays absent","direct",report=> {
             Contains(report,"REAL_SETTINGS_SHA256_BEFORE=ABSENT");
             Contains(report,"REAL_SETTINGS_SHA256_AFTER=ABSENT");

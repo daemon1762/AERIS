@@ -71,14 +71,14 @@ internal static class AERIS53Gap2Observation
         string folder = Path.Combine(Path.Combine(root,"Logs/AERIS53_GAP201"), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         var report = new StringBuilder();
-        report.AppendLine("AERIS53 GAP2-01 ISOLATED SETTINGS ROUNDTRIP v1");
+        report.AppendLine("AERIS53 GAP2-01 ISOLATED SETTINGS ROUNDTRIP v2");
         report.AppendLine("UTC="+DateTime.UtcNow.ToString("o"));
         report.AppendLine("SETTINGS_SOURCE_SHA256="+AERIS53Gap2SourceIdentity.SettingsSha256);
         report.AppendLine("CONFIG_NODE_ASSEMBLY="+typeof(ConfigNode).Assembly.FullName);
         report.AppendLine("PROBE_SCRATCH="+folder);
         report.AppendLine("Full Settings.Save/Load copy with namespace/import/path isolation only; real KSP ConfigNode implementation.");
         report.AppendLine("No production settings or live Settings instances are written. This is an isolated roundtrip, not a restart persistence claim.");
-        int reproduced=0, retained=0;
+        int retained=0;
         try
         {
             for(int i=1;i<=2;i++)
@@ -98,22 +98,21 @@ internal static class AERIS53Gap2Observation
                     throw new InvalidOperationException("isolated Settings warning: "+string.Join("; ",AERIS53Gap2Scratch.Warnings.ToArray()));
                 bool same=loaded.MainWindowX==731f && loaded.ProtectAoAWarningDegrees==9.5f &&
                     !loaded.ShowSasWarning && loaded.FlightDataArchiveLimit==17;
-                bool rejected=raw!=null && raw.name!="AERIS_SETTINGS";
+                bool rejectedBeforeFix=raw!=null && raw.name!="AERIS_SETTINGS";
                 report.AppendLine("CASE="+i+"; LOADED_ROOT="+Safe(raw==null?"<NULL>":raw.name)+"; PAYLOAD_SHAPE="+shape+
-                    "; SERIALIZED_SENTINELS=True; CURRENT_ROOT_GATE_REJECTS="+rejected+"; SETTINGS_RETAINED="+same);
+                    "; SERIALIZED_SENTINELS=True; PRE_FIX_ROOT_GATE_REJECTS="+rejectedBeforeFix+"; SETTINGS_RETAINED="+same);
                 report.AppendLine("EXPECTED=731 / 9.5 / False / 17; ACTUAL="+Number(loaded.MainWindowX)+" / "+
                     Number(loaded.ProtectAoAWarningDegrees)+" / "+loaded.ShowSasWarning+" / "+loaded.FlightDataArchiveLimit);
                 if(same) retained++;
-                else if(rejected) reproduced++;
-                else throw new InvalidOperationException("settings mismatch without root-gate rejection");
+                else throw new InvalidOperationException("saved settings not retained after isolated Load");
             }
             string after=Hash(realPath);
             report.AppendLine("REAL_SETTINGS_SHA256_BEFORE="+before);
             report.AppendLine("REAL_SETTINGS_SHA256_AFTER="+after);
             report.AppendLine("REAL_SETTINGS_SNAPSHOT_UNCHANGED="+(before==after));
             if(before!=after) throw new InvalidOperationException("production settings changed during observation; cannot attribute writer");
-            report.AppendLine("REPEATED_ROOT_REJECTIONS="+reproduced+"; RETAINED_ROUNDTRIPS="+retained);
-            report.AppendLine("GAP2-01 RESULT="+(reproduced==2?"ROOT_REJECTION_REPRODUCED":retained==2?"NO_REJECTION_OBSERVED":"INCONCLUSIVE_MIXED_RESULTS"));
+            report.AppendLine("RETAINED_ROUNDTRIPS="+retained);
+            report.AppendLine("GAP2-01 RESULT="+(retained==2?"SETTINGS_ROUNDTRIP_RETAINED":"INCONCLUSIVE"));
             return report.ToString();
         }
         catch(Exception e)
