@@ -11,7 +11,8 @@ The optimizer, steering formula, discovery cadence and default OFF state remain
 as before. LAND-R2 remains frozen; NEW_NAV remains gated.
 
 Source-level reproduction and local regression results are recorded below.
-A full KSP SDK build and live flight verification are pending user output.
+The user supplied a successful full KSP SDK build/install on 2026-10-06.
+Live flight verification remains pending.
 This is not an accepted/closed runtime finding yet.
 
 ## Reproduction and cause
@@ -93,6 +94,31 @@ backs up the current DLL and settings, installs exactly one DLL and compares it
 with the built file. Settings are backed up but never rewritten by this helper.
 Untracked shader/build-identity files are not deleted. Paste the resulting
 test summaries, build result, HEAD, DLL hashes and backup path.
+
+## User build/install evidence: 2026-10-06 09:47 JST
+
+The user pasted the complete command output for candidate
+`52989b3e59038e8f0105529d8f3963b9b70e5501`:
+
+- New engine-count regression: 12/12 PASS.
+- Existing regressions: 123 checks passed, including Settings restoration in
+  a fresh process; total 135 checks passed.
+- Clean Release build against the user's installed KSP managed assemblies:
+  `Build succeeded`, 77 warnings, 0 errors.
+- Built and installed DLL SHA-256 both:
+  `2919be5e4df61a03d67ab09b195a95fdd696a8e9cb95c85ec9617f5f3e1c8ac9`.
+- Backup directory:
+  `/home/de-mon/.cache/AERIS/raa201-build-backups/20261006-094744-719467502`.
+- Tracked working files were clean. The existing untracked candidate build
+  identity and shader directory remained present.
+
+The initial `fatal: invalid reference` came from trying to switch to a local
+branch that did not exist yet. The authorized fallback created that branch,
+and all subsequent tests, build and installation completed successfully.
+
+This is user-provided build/install evidence, not a claim that this workspace
+compiled against KSP or observed a live flight. Runtime acceptance remains
+pending; this documentation update does not require rebuilding the DLL.
 
 ## Live verification still required
 
