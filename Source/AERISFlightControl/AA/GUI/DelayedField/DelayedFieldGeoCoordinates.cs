@@ -91,7 +91,7 @@ namespace AtmosphereAutopilot
 								val += sign * num / 60.0f;
 								if (dms.Length > 2)
 								{
-									int.TryParse(dms[1], out num);
+									int.TryParse(dms[2], out num);
 									val += sign * num / 3600.0f;
 								}
 							}
