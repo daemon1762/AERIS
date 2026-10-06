@@ -1,0 +1,111 @@
+# AERIS53 R-AA2-01: engine-count changes in thrust balancing
+
+## Scope and status
+
+This finding is isolated on `agent/aeris53-r-aa2-01`, based on GAP2-01
+`e967c45aa503f7216a0eda7ff91cb61bd62a2eed`.
+The only production change is in
+`AA/Models/FlightModel/EngineBalancing.cs`.
+There is no new runtime probe, audit function, UI, telemetry or setting.
+The optimizer, steering formula, discovery cadence and default OFF state remain
+as before. LAND-R2 remains frozen; NEW_NAV remains gated.
+
+Source-level reproduction and local regression results are recorded below.
+A full KSP SDK build and live flight verification are pending user output.
+This is not an accepted/closed runtime finding yet.
+
+## Reproduction and cause
+
+`RotationModel.update_moments()` normally discovers engines at cycle zero,
+then increments the counter to one. `OnPreAutopilot()` initializes balancing
+at counter one, after observing engine torque. Normal enabled rediscovery thus
+already initializes in the same callback.
+
+However, `init_engine_balancing()` returns immediately while balancing is OFF.
+If discovery changes engine count during that interval, enabling before the
+next discovery cycle leaves the previous arrays and optimizer dimensions in use.
+Growth from two to three engines throws `IndexOutOfRangeException`; shrinkage
+from three to two retains the third optimizer parameter. Enabling for the first
+time between discovery cycles also lacks initialized balancing storage.
+
+`Common.Realloc()` retains capacity on shrinkage. Checking capacity alone would
+miss stale optimizer dimensions and could still apply a multi-engine limiter
+to the sole remaining engine. These cases are part of this count-state finding.
+
+## Minimal correction
+
+Record the engine count covered by balancing initialization. Before updating an
+enabled balancer, initialize again if its count differs from the current list.
+Use the live engine count for the two-engine minimum. The post callback skips
+a count mismatch so it cannot partially write old limits before initialization.
+Initialization records zero-constraint cases too, preventing needless repeated
+initialization. It continues to use the original allocation and optimization
+methods; unchanged-count behavior follows the existing path.
+
+This patch addresses count changes. It does not add identity tracking for
+different engine lists of the same count, or alter the existing selection of
+balancing axes and retention of limiter values on ordinary rediscovery.
+
+## Regression boundary
+
+`TESTS/aeris53_r_aa2_01_engine_count.py` compiles the complete production
+`EngineBalancing.cs`, `GradientLP.cs` and `Matrix.cs`, plus the unmodified
+`update_moments()` and `OnPreAutopilot()` method bodies. Only the KSP/Unity
+boundary, engine discovery observations and unrelated model functions are
+stubbed. No game files are touched. This fixture does not establish actual
+KSP event scheduling or live engine physics.
+
+The initial ten cases ran against the unmodified source: five passed and five
+failed. The failures were growth, shrinkage, first enable between discoveries,
+single-engine stale limiting, and a mismatched post callback. The fixed source
+passed all ten. The final fixture additionally covers regrowth within retained
+array capacity and an initially single-engine vessel.
+
+On 2026-10-06 the final twelve-case fixture was also run against an isolated
+copy of the baseline source: 6/12 passed, with all six count-state failures
+reproduced. The fixed production source passed 12/12. The eight existing suites
+passed 123 checks (including the Settings fresh-process check), for 135 total.
+The fixture compiler emitted three unused-field warnings from its stub model;
+the existing REG-02 fixture retained its known five unassigned-field warnings
+in each of its two builds. None of these fixture builds had errors.
+
+A read-only review confirmed the source lifecycle and scope, with no Critical
+or Important findings. The post-only list-change case is defensive callback
+coverage, not a claim that ordinary KSP discovery runs between pre/post calls.
+Shell syntax and whitespace checks passed. No complete KSP assembly build has
+been run in this workspace because the managed KSP SDK is unavailable here.
+
+## User build/install
+
+Exit KSP completely before running:
+
+```bash
+cd /home/de-mon/AERIS42_R042 && \
+git fetch origin refs/heads/agent/aeris53-r-aa2-01 && \
+(git switch agent/aeris53-r-aa2-01 || git switch -c agent/aeris53-r-aa2-01 FETCH_HEAD) && \
+git merge --ff-only FETCH_HEAD && \
+bash Tools/aeris53_r_aa2_01_build_install.sh
+```
+
+The helper verifies branch and production source scope, runs the new and eight
+existing regression suites, builds Release against the installed KSP SDK,
+backs up the current DLL and settings, installs exactly one DLL and compares it
+with the built file. Settings are backed up but never rewritten by this helper.
+Untracked shader/build-identity files are not deleted. Paste the resulting
+test summaries, build result, HEAD, DLL hashes and backup path.
+
+## Live verification still required
+
+First verify normal FBW and engine activation/shutdown with the existing setup.
+Check that manual Shift/Z throttle operation and prior settings persistence
+still behave as accepted. Those checks confirm ordinary runtime regression;
+they do not establish the thrust-balancing-specific fix if balancing is OFF.
+
+The targeted scenario requires the existing AA `FlightModel.balance_engines`
+setting (separate from Protect Thrust Assist): initialize with several engines,
+turn balancing OFF, change the operational engine count, then turn it ON again.
+Observe engine thrust limits and inspect existing KSP/FDR/CVR output for
+exceptions. Exercise both growth and shrinkage, including a single remaining
+engine. No new UI or live helper is installed to expose this setting. If the
+current interface/configuration cannot operate it, report that boundary rather
+than treating an ordinary flight as targeted confirmation.

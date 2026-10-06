@@ -41,6 +41,7 @@ namespace AtmosphereAutopilot
         double[] limiters;
 
         int bal_count = 0;
+        int balancing_engine_count = -1;
 
         void init_engine_balancing()
         {
@@ -97,6 +98,8 @@ namespace AtmosphereAutopilot
                 if (balancing_possible[i])
                     bal_count++;
 
+            balancing_engine_count = engines.Count;
+
             if (bal_count == 0)
                 return;
 
@@ -118,7 +121,15 @@ namespace AtmosphereAutopilot
 
         void update_engine_balancing()
         {
-            if (!balance_engines || limiters == null || limiters.Length < 2 || bal_count == 0)
+            if (!balance_engines)
+                return;
+
+            // Discovery can run while balancing is off. Do not wait for the
+            // next discovery cycle after enabling with a different engine count.
+            if (balancing_engine_count != engines.Count)
+                init_engine_balancing();
+
+            if (limiters == null || engines.Count < 2 || bal_count == 0)
                 return;
 
             max_thrust = 1e-6;
@@ -191,7 +202,8 @@ namespace AtmosphereAutopilot
 
         void postupdate_engine_balancing(FlightCtrlState state)
         {
-            if (!balance_engines || limiters == null || limiters.Length < 2)
+            if (!balance_engines || limiters == null || engines.Count < 2 ||
+                balancing_engine_count != engines.Count)
                 return;
 
             for (int i = 0; i < engines.Count; i++)
