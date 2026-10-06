@@ -16,8 +16,9 @@ serialization, GUI, navigation mode, or audit capability is changed.
 AA's original implementation and author/license notices are preserved.
 LAND-R2 remains frozen and NEW_NAV remains gated.
 
-Actual-source regression verification is described below. A complete KSP SDK
-build/install and live runtime verification of this candidate await user output.
+Actual-source regression verification is described below. The user supplied a
+successful complete KSP SDK build/install on 2026-10-07. Live runtime
+verification of this candidate remains pending.
 
 ## Cause and reproduction
 
@@ -86,6 +87,30 @@ settings, installs the candidate and checks byte equality. Backup location:
 `~/.cache/AERIS/raa202-build-backups/<timestamp>`.
 It does not write settings or remove untracked shaders/build identity files.
 Paste the regression summaries, build result, HEAD, DLL hashes and backup path.
+
+## User build/install evidence: 2026-10-07 01:19 JST
+
+The uploaded terminal output `貼り付けたテキスト（1）(4).txt` records candidate
+`3465b602eb6677fea452c69eb4a94dbfb8cdd166`:
+
+- Coordinate fixture 20/20 PASS; nine prior suites passed 135 checks,
+  including Settings restoration in a fresh process: 155 total checks passed.
+- Clean Release build against the installed KSP SDK: `Build succeeded`,
+  77 warnings, 0 errors.
+- Built and installed DLL SHA-256 both:
+  `a72db94379ba8990684183ed90acb8f9379f5c1a092bf051f4f70e822a084f96`.
+- Backup:
+  `/home/de-mon/.cache/AERIS/raa202-build-backups/20261007-011948-211833826`.
+- Tracked working files were clean; the existing untracked candidate build
+  identity and shaders remained present.
+
+The initial missing-local-branch switch error was followed by successful branch
+creation, tests, build and installation. It did not stop the command sequence.
+This is user-provided build/install evidence; no live KSP GUI behavior is
+established by the build output. The documentation-only record update does not
+require rebuilding the installed candidate.
+
+## Live verification still pending
 
 After installation, ordinary FBW/manual throttle and restart settings checks
 can establish ordinary runtime compatibility. A targeted DMS runtime check
