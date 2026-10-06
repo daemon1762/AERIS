@@ -136,10 +136,16 @@ the individual engine shutdown/restart operation in the dual-engine setup.
 It does not independently observe the internal engine-list count or the
 balancing toggle state.
 
+At 01:03 JST the user further reported `再起動後も設定の保持を確認した`:
+settings retention was observed after restarting. Record this as explicit
+user-reported restart persistence confirmation for the installed candidate.
+The report does not enumerate the individual settings or their values.
+
 Record this as user-reported ordinary dual-engine runtime confirmation for the
-installed candidate. The exact steps performed were not enumerated in that
-report, so it does not individually certify every earlier suggested check
-(FBW, Shift/Z during Protect assist, or settings restoration after restart).
+installed candidate. The original general report did not enumerate steps;
+the follow-ups explicitly confirm individual engine shutdown/restart and
+settings retention after restarting. FBW and Shift/Z during Protect assist
+were not individually specified in these reports.
 No KSP log, FDR or CVR from this run has been reviewed here. This evidence does
 not establish whether AA thrust balancing was enabled or toggled.
 
