@@ -130,6 +130,12 @@ engines individually stoppable/restartable and, while parked with brakes on,
 exercise both engines -> one engine -> both engines. The user subsequently
 reported `問題なし` (no problems).
 
+At 01:01 JST the user clarified `片方エンジン停止→再起動まで完了`:
+one engine was stopped and restarted successfully. This explicitly confirms
+the individual engine shutdown/restart operation in the dual-engine setup.
+It does not independently observe the internal engine-list count or the
+balancing toggle state.
+
 Record this as user-reported ordinary dual-engine runtime confirmation for the
 installed candidate. The exact steps performed were not enumerated in that
 report, so it does not individually certify every earlier suggested check
