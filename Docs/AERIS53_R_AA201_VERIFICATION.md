@@ -12,7 +12,9 @@ as before. LAND-R2 remains frozen; NEW_NAV remains gated.
 
 Source-level reproduction and local regression results are recorded below.
 The user supplied a successful full KSP SDK build/install on 2026-10-06.
-Live flight verification remains pending.
+The user reported no problems with ordinary dual-engine live checks on
+2026-10-07. Targeted balancing OFF/count-change/ON runtime verification remains
+pending.
 This is not an accepted/closed runtime finding yet.
 
 ## Reproduction and cause
@@ -117,15 +119,25 @@ branch that did not exist yet. The authorized fallback created that branch,
 and all subsequent tests, build and installation completed successfully.
 
 This is user-provided build/install evidence, not a claim that this workspace
-compiled against KSP or observed a live flight. Runtime acceptance remains
-pending; this documentation update does not require rebuilding the DLL.
+compiled against KSP or observed a live flight. Targeted runtime acceptance
+remains pending; this documentation update does not require rebuilding the DLL.
 
-## Live verification still required
+## Ordinary live checks: user report, 2026-10-07 00:57 JST
 
-First verify normal FBW and engine activation/shutdown with the existing setup.
-Check that manual Shift/Z throttle operation and prior settings persistence
-still behave as accepted. Those checks confirm ordinary runtime regression;
-they do not establish the thrust-balancing-specific fix if balancing is OFF.
+After the normal-operation instructions, the user said they would build a
+dual-engine vessel. The immediately preceding instruction was to make its
+engines individually stoppable/restartable and, while parked with brakes on,
+exercise both engines -> one engine -> both engines. The user subsequently
+reported `問題なし` (no problems).
+
+Record this as user-reported ordinary dual-engine runtime confirmation for the
+installed candidate. The exact steps performed were not enumerated in that
+report, so it does not individually certify every earlier suggested check
+(FBW, Shift/Z during Protect assist, or settings restoration after restart).
+No KSP log, FDR or CVR from this run has been reviewed here. This evidence does
+not establish whether AA thrust balancing was enabled or toggled.
+
+## Remaining targeted runtime verification
 
 The targeted scenario requires the existing AA `FlightModel.balance_engines`
 setting (separate from Protect Thrust Assist): initialize with several engines,
