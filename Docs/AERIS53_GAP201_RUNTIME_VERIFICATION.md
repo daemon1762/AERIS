@@ -73,7 +73,7 @@ No isolated Settings warnings or inconclusive result occurred. The report's
 `PRE_FIX_ROOT_GATE_REJECTS=True` describes the former name-only predicate;
 it is not a rejection by the patched loader.
 
-## Finalization and remaining acceptance boundary
+## Finalization and manual restart acceptance
 
 The user's collect retired the entire probe directory and scratch data to
 `/home/de-mon/.cache/AERIS/gap201-repro/20261006-001109-698891150`.
@@ -89,6 +89,12 @@ a main or accepted-branch merge.
 
 The runtime observation exercised the full isolated Settings copy with the
 real KSP API; it did not modify live production Settings or test a UI change
-across a full game restart. A separate manual window-position save/restart check
-is still required to claim full game restart persistence. Flight protection
-thresholds do not need to be changed for that check.
+across a full game restart.
+
+On 2026-10-06 (Asia/Tokyo), after the requested window-position change and full
+KSP exit/restart check, the user reported: "肉眼で保持を確認した". This is
+user-reported visual confirmation that the window position persisted across
+the game restart; no additional log or screenshot was required. It complements
+the real-ConfigNode roundtrip evidence, rather than extending restart coverage
+to every Settings field. GAP2-01 acceptance is complete for the reproduced
+root-rejection fault and the observed window-position restart path.
