@@ -51,8 +51,8 @@ unused-field warnings; the new fixture compiles without warnings.
 
 Independent read-only review found no Critical, Important or Minor issues
 and separately confirmed 16/16 new checks, helper shell syntax and
-`git diff --check`. The candidate is suitable for publication; runtime
-acceptance remains pending.
+`git diff --check`. The candidate was judged suitable for publication;
+runtime acceptance was pending at the time of review.
 
 ## Desktop build and runtime status
 
@@ -71,8 +71,8 @@ environment does not contain the KSP managed SDK.
 - Tracked working tree was clean. The existing untracked candidate identity
   file and Shaders directory remain present.
 
-The matching hashes confirm that the generated DLL was installed. They do
-not establish loaded-game behavior; live flight verification is pending.
+The matching hashes confirm that the generated DLL was installed. Loaded
+game behavior is covered by the user report below, rather than these hashes.
 
 `Tools/aeris53_r_aa2_03_build_install.sh` checks the candidate branch and
 tracked cleanliness, permits only `LinearModel.cs` to differ under Source
@@ -97,6 +97,20 @@ unresponsive control. This ordinary check cannot quantitatively isolate the
 transverse-thrust correction or substitute for an instrumented flight test.
 No new instrumentation is required for this candidate.
 
-Live verification remains pending. R-AA2-01's targeted OFF/count-change/ON
-sequence and R-AA2-02's targeted live DMS entry remain unconfirmed; their
-ordinary flight/settings reports and source-fixture results are retained.
+## Ordinary flight report
+
+On 2026-10-08 at 00:16 JST, after the build/install report and the requested
+ordinary flight checks, the user reported **「問題なしだ」** (no problems).
+Record this as an ordinary flight pass reported by the user for the
+installed R-AA2-03 candidate. The report does not separately describe each
+check, aircraft configuration or flight conditions. No FDR/CVR or live
+coefficient capture was supplied or examined for this report.
+
+Source-model verification, desktop SDK build/install, and the user's
+ordinary flight report are now recorded. Quantitative isolation of the
+transverse-thrust correction in live flight remains unverified. No new
+audit feature or production change was made to collect this report.
+
+R-AA2-01's targeted OFF/count-change/ON sequence and R-AA2-02's targeted
+live DMS entry remain unconfirmed; their ordinary flight/settings reports
+and source-fixture results are retained.
