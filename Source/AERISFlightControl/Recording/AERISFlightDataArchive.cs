@@ -85,6 +85,7 @@ namespace AERISFlightControl.Recording
         static readonly Queue<string> Pending = new Queue<string>();
         static readonly HashSet<string> Known = new HashSet<string>(StringComparer.Ordinal);
         static readonly Queue<ArchiveResult> Results = new Queue<ArchiveResult>();
+        static readonly Queue<string> Notifications = new Queue<string>();
         static bool archiveRunning;
         static bool recoveryScanQueued;
         static string activeFolder;
@@ -277,13 +278,25 @@ namespace AERISFlightControl.Recording
                 Pending.Enqueue(normalized);
                 pendingDepth = Pending.Count;
             }
-            AERISLogger.Info("[FDR][ARCHIVE] queued; pending=" + pendingDepth +
+            EnqueueNotification("[FDR][ARCHIVE] queued; pending=" + pendingDepth +
                 "; folder=" + normalized);
             ScheduleNext();
         }
 
         internal static void DrainResults()
         {
+            // Logger events reach CVR and its KSP clock. Emit worker-originated
+            // notices only from this existing main-thread drain, outside Sync.
+            for (int i = 0; i < ResultCapacity; i++)
+            {
+                string message;
+                lock (Sync)
+                {
+                    if (Notifications.Count == 0) break;
+                    message = Notifications.Dequeue();
+                }
+                AERISLogger.Info(message);
+            }
             while (true)
             {
                 ArchiveResult result;
@@ -403,7 +416,7 @@ namespace AERISFlightControl.Recording
                     ScheduleNext();
                 }, false);
             if (accepted)
-                AERISLogger.Info("[FDR][ARCHIVE] scheduler accepted; folder=" + folder);
+                EnqueueNotification("[FDR][ARCHIVE] scheduler accepted; folder=" + folder);
             if (!accepted)
             {
                 lock (Sync)
@@ -1238,6 +1251,16 @@ namespace AERISFlightControl.Recording
         static void EnqueueResult(ArchiveResult result)
         {
             lock (Sync) EnqueueResultLocked(result);
+        }
+
+        static void EnqueueNotification(string message)
+        {
+            lock (Sync)
+            {
+                // Keep routine notices bounded without evicting archive results.
+                if (Notifications.Count >= ResultCapacity) Notifications.Dequeue();
+                Notifications.Enqueue(message);
+            }
         }
 
         static void EnqueueResultLocked(ArchiveResult result)
