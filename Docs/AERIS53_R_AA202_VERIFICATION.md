@@ -17,8 +17,9 @@ AA's original implementation and author/license notices are preserved.
 LAND-R2 remains frozen and NEW_NAV remains gated.
 
 Actual-source regression verification is described below. The user supplied a
-successful complete KSP SDK build/install on 2026-10-07. Live runtime
-verification of this candidate remains pending.
+successful complete KSP SDK build/install on 2026-10-07 and subsequently
+reported no problems with ordinary runtime checks. Targeted live DMS entry
+verification remains unconfirmed.
 
 ## Cause and reproduction
 
@@ -110,7 +111,22 @@ This is user-provided build/install evidence; no live KSP GUI behavior is
 established by the build output. The documentation-only record update does not
 require rebuilding the installed candidate.
 
-## Live verification still pending
+## Ordinary runtime report: 2026-10-07 23:41 JST
+
+Following the instructions to check FBW, manual throttle and restart settings
+retention, and conditionally test DMS entry if a suitable field was available,
+the user reported `問題なし` (no problems).
+
+Record this as user-reported ordinary runtime compatibility for the installed
+R-AA2-02 candidate. The report did not enumerate individual checks or state
+whether a DMS field was available and used, so it does not specifically certify
+live `74 39 12W` conversion. No KSP log, FDR or CVR from this run was reviewed
+here. The actual-source 20/20 fixture and successful full SDK build remain the
+specific evidence for the coordinate correction.
+
+This update records evidence only and does not require rebuilding the DLL.
+
+## Remaining targeted DMS runtime verification
 
 After installation, ordinary FBW/manual throttle and restart settings checks
 can establish ordinary runtime compatibility. A targeted DMS runtime check
