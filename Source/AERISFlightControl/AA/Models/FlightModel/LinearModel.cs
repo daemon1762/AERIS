@@ -180,7 +180,7 @@ namespace AtmosphereAutopilot
                     A[1, 2] = pitch_coeffs.k2;
                     B[1, 0] = (reaction_torque[PITCH] + get_rcs_authority(PITCH)) / MOI[PITCH];
                 }
-                C[0, 0] = -(pitch_gravity_acc + pitch_noninert_acc + pitch_coeffs.Cl0 + pitch_coeffs.et0 / sum_mass) / surface_v_magnitude;
+                C[0, 0] = -(pitch_gravity_acc + pitch_noninert_acc + pitch_coeffs.Cl0 + pitch_coeffs.et0) / surface_v_magnitude;
                 C[1, 0] = pitch_coeffs.k0 + pitch_coeffs.etq0;
             }
             else
