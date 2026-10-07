@@ -56,8 +56,23 @@ acceptance remains pending.
 
 ## Desktop build and runtime status
 
-Full KSP SDK Release build and installation: **pending user execution**.
-The local test environment does not contain the KSP managed SDK.
+Full KSP SDK Release build and installation: **PASS**, based on the user's
+terminal output reported on 2026-10-08 at 00:03 JST. The build began at
+00:03:24. This is desktop evidence supplied by the user; the local test
+environment does not contain the KSP managed SDK.
+
+- Built candidate HEAD: `1032fae72b870ba5381aa8f52c1a65c001aaaa2c`.
+- All **171/171** checks passed on the desktop, including the new 16.
+- Clean Release build: **77 warnings, 0 errors**. The warning count matches
+  the previous R-AA2-02 desktop build; this report does not resolve them.
+- Built DLL SHA256: `240bef62bc17c7b62d7819a2b8b058e78cdabc8fcaced6704de65aa2454a6499`.
+- Installed DLL SHA256: `240bef62bc17c7b62d7819a2b8b058e78cdabc8fcaced6704de65aa2454a6499`.
+- Backup: `/home/de-mon/.cache/AERIS/raa203-build-backups/20261008-000324-881219286`.
+- Tracked working tree was clean. The existing untracked candidate identity
+  file and Shaders directory remain present.
+
+The matching hashes confirm that the generated DLL was installed. They do
+not establish loaded-game behavior; live flight verification is pending.
 
 `Tools/aeris53_r_aa2_03_build_install.sh` checks the candidate branch and
 tracked cleanliness, permits only `LinearModel.cs` to differ under Source
@@ -65,7 +80,7 @@ from the baseline, runs regression checks, performs a clean Release build,
 backs up the installed DLL and existing settings, installs the DLL, and
 compares built/installed bytes and SHA256. Settings are not rewritten.
 
-After exiting KSP completely, run:
+Installation procedure (already completed in the reported run):
 
 ```bash
 cd /home/de-mon/AERIS42_R042 && \
