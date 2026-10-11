@@ -87,9 +87,9 @@ review found no Critical, Important or Minor issues, separately ran the
 final **10/10** fixture, and checked helper syntax and whitespace. The
 candidate is suitable for isolated publication, not a main-branch merge.
 Desktop KSP SDK compilation remains unverified in the supplied evidence.
-The ordinary visual check has a user report below; individual recording/
-archive checks remain unconfirmed. Existing fixture warnings do not originate
-in this correction.
+Ordinary operation and expected storage state have user-reported visual
+passes below. File-content and ZIP-integrity analysis remain unverified.
+Existing fixture warnings do not originate in this correction.
 
 ## Desktop build and live check
 
@@ -131,3 +131,16 @@ available evidence. No log files were supplied for analysis with this report.
 This report does not establish the game clock's thread identity in live KSP
 or a complete formal runtime closure. This update changes documentation only;
 the production candidate and its verification fixture are unchanged.
+
+### Storage follow-up — 01:29 JST
+
+The user then reported: 「保存状態を肉眼で確認 想定通り保存されている」.
+In the context of the requested FDR/CVR and ZIP storage check, record expected
+storage state as visually confirmed by the user. Together with the ordinary
+operation report, this completes the requested ordinary visual checks.
+
+The report does not individually identify files or supply their contents;
+independent FDR/CVR parsing and ZIP-integrity analysis are not claimed.
+The missing desktop build/install log, installed DLL identity and live clock
+thread evidence remain unchanged limitations. No additional audit feature,
+production change or rebuild is required by this documentation update.
