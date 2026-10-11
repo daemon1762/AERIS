@@ -315,6 +315,8 @@ namespace AERISFlightControl.Performance
         static long lastDroppedSequence;
         static long failures;
         static string lastFailure = string.Empty;
+        static long pendingFailureCount;
+        static string pendingFailureDetail = string.Empty;
 
         internal static long Open(string path, bool append,
             AERISFileRecordPriority priority)
@@ -436,6 +438,20 @@ namespace AERISFlightControl.Performance
                 Interlocked.Increment(ref failures);
                 lastFailure = string.IsNullOrEmpty(reason)
                     ? "session marked unsealable" : reason;
+            }
+        }
+
+        // Claim a coalesced notice before logging it. The main-thread caller must
+        // emit outside Sync: Logger can enqueue more writes and invoke the CVR sink.
+        internal static bool TryTakeFailureNotice(out long count, out string detail)
+        {
+            lock (Sync)
+            {
+                count = pendingFailureCount;
+                detail = pendingFailureDetail;
+                pendingFailureCount = 0L;
+                pendingFailureDetail = string.Empty;
+                return count > 0L;
             }
         }
 
@@ -835,10 +851,10 @@ namespace AERISFlightControl.Performance
                 Interlocked.Increment(ref failures);
                 lastFailure = (exception == null ? "Unknown" : exception.GetType().Name) +
                     ": " + (exception == null ? string.Empty : exception.Message);
+                string path = command == null ? string.Empty : command.Path;
                 if (command != null && command.ChannelId > 0L)
                 {
                     FailedChannels.Add(command.ChannelId);
-                    string path = command.Path;
                     if (string.IsNullOrEmpty(path))
                         ChannelPaths.TryGetValue(command.ChannelId, out path);
                     string folder = string.IsNullOrEmpty(path) ? string.Empty :
@@ -851,6 +867,12 @@ namespace AERISFlightControl.Performance
                         failedWriter = writer;
                     }
                 }
+                // Store immutable error text only; never call Logger/Unity/KSP here.
+                // A burst occupies one pending notice, retaining its count and last cause.
+                pendingFailureCount++;
+                pendingFailureDetail = "operation=" +
+                    (command == null ? "Unknown" : command.Kind.ToString()) +
+                    "; path=" + path + "; detail=" + lastFailure;
             }
             // A failing filesystem can make Dispose/Flush slow. Never hold the producer
             // queue lock while touching the failed stream.

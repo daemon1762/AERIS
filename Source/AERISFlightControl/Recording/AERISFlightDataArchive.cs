@@ -285,6 +285,12 @@ namespace AERISFlightControl.Recording
 
         internal static void DrainResults()
         {
+            long failedOperations;
+            string failureDetail;
+            if (AERISBackgroundFileWriter.TryTakeFailureNotice(out failedOperations,
+                out failureDetail))
+                AERISLogger.Warn("[FILE_WRITER] background file operation failed; failures=" +
+                    failedOperations + "; last=" + failureDetail);
             // Logger events reach CVR and its KSP clock. Emit worker-originated
             // notices only from this existing main-thread drain, outside Sync.
             for (int i = 0; i < ResultCapacity; i++)
