@@ -20,6 +20,7 @@ namespace AERISFlightControl.Recording
     {
         const float SampleIntervalSeconds = 0.10f; // 10 Hz Flight Test mode
         const float FlushIntervalSeconds = 1.0f;
+        const float StartRetryIntervalSeconds = 5.0f;
         const int MaxExtensionTelemetryChannels = 256;
         // R016 isolation test: suppress only built-in control-cadence diagnostic CSV producers.
         // Core 10 Hz FDR, CVR, extension telemetry and AA comparison remain untouched.
@@ -242,6 +243,8 @@ namespace AERISFlightControl.Recording
         string folder;
         string vesselId;
         string vesselName;
+        string failedStartVesselId;
+        float nextStartAttempt;
         float nextSample;
         float nextFlush;
         float nextBankDiagnosticsSample;
@@ -379,15 +382,22 @@ namespace AERISFlightControl.Recording
             if (vessel == null || vessel.transform == null) return;
             lock (sync)
             {
+                string requestedId = vessel.id.ToString();
+                if (requestedId == failedStartVesselId &&
+                    Time.realtimeSinceStartup < nextStartAttempt) return;
                 try
                 {
                     BeginFlightCore(vessel);
+                    failedStartVesselId = null;
+                    nextStartAttempt = 0f;
                 }
                 catch (Exception ex)
                 {
                     // Queue admission is not assumed to be atomic. Always close any channel
                     // accepted before the failing one so a later attempt starts cleanly.
                     EndFlight("recorder-open-failed");
+                    failedStartVesselId = requestedId;
+                    nextStartAttempt = Time.realtimeSinceStartup + StartRetryIntervalSeconds;
                     throw new IOException("Could not start the AERIS flight recorder", ex);
                 }
             }
@@ -1277,6 +1287,10 @@ namespace AERISFlightControl.Recording
             string completedFolder = null;
             lock (sync)
             {
+                // An explicit end permits a new flight immediately, including after a
+                // failed start. BeginFlight installs its retry deadline after cleanup.
+                failedStartVesselId = null;
+                nextStartAttempt = 0f;
                 if (cvrWriter == null && fdrWriter == null && telemetryWriters.Count == 0) return;
                 if (cvrWriter != null) { try { RecordCvr("FDR", "INFO", "flight recorder stopped; reason=" + reason); } catch { } }
                 try { WriteAaComparisonConditionSummary(); } catch { }
