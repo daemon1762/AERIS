@@ -121,5 +121,20 @@ Check ordinary controls and expected FDR/CVR and ZIP storage. A healthy session
 should not acquire `[FILE_WRITER]` failure notices. Send any such notice for
 diagnosis. Live disk-fault injection is not required for this check.
 
-Desktop compilation, installed DLL identity and live checks remain pending.
+The requested ordinary live checks have a user-reported pass below. Desktop
+build output and installed DLL identity remain unverified in supplied evidence.
 The candidate is for isolated publication; no main-branch merge is performed.
+
+## User-reported installation and ordinary live check — 2026-10-12 JST
+
+At 01:45 JST the user reported installation completion and proceeding to checks.
+At 01:54 JST the user reported: 「現作業でのすべての動作の正常を確認」.
+In the context of the requested ordinary flight/session and FDR/CVR/ZIP storage
+checks, record those checks as completed normally by the user. This completes
+the requested ordinary desktop check for this candidate.
+
+No build/install log, installed DLL hash or recording files were supplied for
+independent analysis. The report does not claim live disk-fault injection or
+measurement of game-clock thread identity. Fault-notification coverage remains
+the isolated component fixture described above, with its stated boundaries.
+This evidence update changes documentation only; no rebuild is required.
