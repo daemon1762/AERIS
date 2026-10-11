@@ -86,8 +86,10 @@ The final combined local run passed **181/181**. Independent read-only
 review found no Critical, Important or Minor issues, separately ran the
 final **10/10** fixture, and checked helper syntax and whitespace. The
 candidate is suitable for isolated publication, not a main-branch merge.
-Desktop KSP SDK compilation and live checks remain pending. Existing fixture
-warnings do not originate in this correction.
+Desktop KSP SDK compilation remains unverified in the supplied evidence.
+The ordinary visual check has a user report below; individual recording/
+archive checks remain unconfirmed. Existing fixture warnings do not originate
+in this correction.
 
 ## Desktop build and live check
 
@@ -116,3 +118,16 @@ which is not being added for this task.
 R-AA2-01's targeted count-change sequence and R-AA2-02's live DMS entry
 retain their documented limitations. R-AA2-03 has a reported ordinary
 flight pass. R-AA2-04 is excluded legacy code and has no production patch.
+
+## User-reported ordinary check — 2026-10-12 JST
+
+At 01:23 JST the user reported: 「肉眼上問題無しと判断した」.
+Record this as a user-reported ordinary visual pass for the pending R-REC-02
+candidate. The report does not enumerate the flight/session sequence, provide
+a desktop build/install log or DLL identity, or individually confirm readable
+ZIP output and new-session FDR/CVR files. Those items remain unverified by the
+available evidence. No log files were supplied for analysis with this report.
+
+This report does not establish the game clock's thread identity in live KSP
+or a complete formal runtime closure. This update changes documentation only;
+the production candidate and its verification fixture are unchanged.
