@@ -41,6 +41,9 @@ namespace AERISFlightControl.UI
         GUIStyle panelStyle;
         float currentScale = 1f;
         float styleScale = -1f;
+        readonly Dictionary<GUIStyle, GUIStyle> readableLabelStyles =
+            new Dictionary<GUIStyle, GUIStyle>();
+        readonly GUIContent fittingContent = new GUIContent();
         Vector2 detailScrollPosition;
         Rect cachedNavBallRect;
         float nextNavBallRectRefresh;
@@ -220,6 +223,7 @@ namespace AERISFlightControl.UI
         void EnsureStyles(float scale)
         {
             if (labelStyle != null && Mathf.Abs(styleScale - scale) < 0.01f) return;
+            readableLabelStyles.Clear();
             styleScale = scale;
             labelStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter,
                 fontSize = Mathf.Max(7, Mathf.RoundToInt(12f * scale)),
@@ -803,7 +807,15 @@ namespace AERISFlightControl.UI
         void DrawReadableLabel(Rect rect, string text, GUIStyle source, FdiTone tone, int minimumFontSize)
         {
             if (rect.width <= 2f || rect.height <= 2f) return;
-            GUIStyle style = new GUIStyle(source);
+            GUIStyle style;
+            if (!readableLabelStyles.TryGetValue(source, out style))
+            {
+                style = new GUIStyle(source);
+                readableLabelStyles.Add(source, style);
+            }
+            // Fitting may shrink this scratch style; each label starts from the
+            // source font, including short labels after a truncated long label.
+            style.fontSize = source.fontSize;
             string fitted = FitText(style, text ?? string.Empty, rect.width - 2f, minimumFontSize);
             Color old = GUI.color;
             try
@@ -816,20 +828,27 @@ namespace AERISFlightControl.UI
             finally { GUI.color = old; }
         }
 
-        static string FitText(GUIStyle style, string text, float width, int minimumFontSize)
+        string FitText(GUIStyle style, string text, float width, int minimumFontSize)
         {
             if (string.IsNullOrEmpty(text)) return string.Empty;
             int start = Mathf.Max(minimumFontSize, style.fontSize);
             for (int size = start; size >= minimumFontSize; size--)
             {
                 style.fontSize = size;
-                if (style.CalcSize(new GUIContent(text)).x <= width) return text;
+                if (MeasureLabelWidth(style, text) <= width) return text;
             }
             const string ellipsis = "...";
             string value = text;
-            while (value.Length > 1 && style.CalcSize(new GUIContent(value + ellipsis)).x > width)
+            while (value.Length > 1 && MeasureLabelWidth(style, value + ellipsis) > width)
                 value = value.Substring(0, value.Length - 1);
             return value.Length == text.Length ? value : value + ellipsis;
+        }
+
+        float MeasureLabelWidth(GUIStyle style, string text)
+        {
+            fittingContent.text = text;
+            try { return style.CalcSize(fittingContent).x; }
+            finally { fittingContent.text = string.Empty; }
         }
 
         static Color ToneColor(FdiTone tone)
