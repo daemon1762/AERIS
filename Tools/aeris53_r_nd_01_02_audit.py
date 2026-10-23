@@ -44,24 +44,48 @@ def isolated_sources(folder):
     return paths
 
 
-def install():
-    if TARGET.exists():
+def install(retry=False):
+    previous = None
+    if TARGET.exists() and not retry:
         raise SystemExit(f'STOP: audit directory already exists: {TARGET}')
+    if retry:
+        previous = json.loads((TARGET/'audit-install.json').read_text())
+        old_dll = TARGET/'AERIS53NdBatchAudit.dll'
+        if digest(old_dll) != previous['audit_sha256']:
+            raise SystemExit('STOP: existing auditor identity changed; retained')
+        reports = [p for p in REPORTS.glob('*.txt') if p.stat().st_mtime_ns >= previous['installed_ns']]
+        if not reports or 'AUDIT_ERROR=' not in max(reports, key=lambda p: p.stat().st_mtime_ns).read_text():
+            raise SystemExit('STOP: retry requires a failed runtime report; use collect for a completed audit')
     dlls = list((GAME/'GameData/AERISFlightControl').rglob('AERISFlightControl.dll'))
     if len(dlls) != 1:
         raise SystemExit('STOP: expected exactly one production DLL')
     dll = dlls[0]
+    if previous and (Path(previous['production_dll']).resolve() != dll.resolve() or
+                     digest(dll) != previous['production_sha256'] or
+                     any(digest(ROOT/p) != sha for p, sha in previous['sources'].items())):
+        raise SystemExit('STOP: production identity/source changed since failed audit; retained')
     sdk = GAME/'KSP_x64_Data/Managed'
+    references = [sdk/name for name in ['mscorlib.dll', 'System.dll', 'System.Core.dll',
+                  'Assembly-CSharp.dll', 'UnityEngine.dll', 'UnityEngine.CoreModule.dll']]
+    missing = [str(p) for p in references if not p.is_file()]
+    if missing:
+        raise SystemExit('STOP: missing KSP managed reference(s): '+', '.join(missing))
     with tempfile.TemporaryDirectory(prefix='aeris-nd-audit-') as td:
         folder = Path(td)
         output = folder/'AERIS53NdBatchAudit.dll'
         inputs = isolated_sources(folder)
-        subprocess.run(['mcs', '-target:library', '-define:AUDIT_LIB', '-warn:0', '-out:'+str(output),
-                        '-r:'+str(sdk/'Assembly-CSharp.dll'), '-r:'+str(sdk/'UnityEngine.dll'),
-                        '-r:'+str(sdk/'UnityEngine.CoreModule.dll'), *inputs,
+        subprocess.run(['mcs', '-nostdlib', '-target:library', '-define:AUDIT_LIB', '-warn:0', '-out:'+str(output),
+                        *['-r:'+str(p) for p in references], *inputs,
                         str(ROOT/'TESTS/Runtime/AERIS53NdBatchProbe.cs')], check=True)
-        TARGET.mkdir()
+        backup = None
+        if previous:
+            backup = RETIREMENT/('failed-'+str(time.time_ns()))
+            backup.mkdir(parents=True)
+            shutil.move(str(TARGET), str(backup/TARGET.name))
+        created = False
         try:
+            TARGET.mkdir()
+            created = True
             shutil.copy2(output, TARGET/output.name)
             (TARGET/'audit-install.json').write_text(json.dumps({'installed_ns': time.time_ns(),
                 'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
@@ -69,8 +93,13 @@ def install():
                 'sources': {p: digest(ROOT/p) for p in SOURCES},
                 'audit_sha256': digest(TARGET/output.name)}, indent=2)+'\n')
         except Exception:
-            shutil.rmtree(TARGET)
+            if created:
+                shutil.rmtree(TARGET)
+            if backup:
+                shutil.move(str(backup/TARGET.name), str(TARGET))
             raise
+    if previous:
+        print('FAILED_AUDITOR_PRESERVED='+str(backup))
     print('TEMPORARY ND/FDI AUDITOR INSTALLED; audit installation leaves production DLL unchanged.')
     print('KSPでNDとFDIを表示する。TRAFFICをOFFで3秒待ってON、NDをOFFで3秒待って再表示。文字の見た目・サイズ変更・通常飛行を確認し、KSP終了後に collect を実行。')
 
@@ -106,7 +135,9 @@ def collect():
 if __name__ == '__main__':
     if sys.argv[1:] == ['collect']:
         collect()
+    elif sys.argv[1:] == ['retry']:
+        install(retry=True)
     elif not sys.argv[1:]:
         install()
     else:
-        raise SystemExit('usage: aeris53_r_nd_01_02_audit.py [collect]')
+        raise SystemExit('usage: aeris53_r_nd_01_02_audit.py [collect|retry]')

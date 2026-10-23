@@ -157,3 +157,45 @@ test, not a second live KSP claim. A fourth host-boundary case confirms complete
 OFF/ON observation succeeds with a valid zero-entry cache between GUI events;
 initialized styles are checked separately. Final collector checks were repeated
 against the corresponding report schema and retain their five-case PASS result.
+
+## Auditor-only compatibility correction — 2026-10-24 JST
+
+The user supplied a v1 runtime report beginning at
+`2026-10-23T16:30:44.4603959Z` (2026-10-24 01:30:44 JST). All nine traffic cases
+passed, then the auditor stopped with
+`MissingMethodException: string[] string.Split(char,System.StringSplitOptions)`.
+Collection correctly remained INCONCLUSIVE/FAIL and retained the sidecar. This
+run supplies no completed label/live audit acceptance.
+
+The label fixture's color assertion used `.Split('|')`. Compiling it against the
+system Mono API selected `Split(Char, StringSplitOptions)`; emitted-call inspection
+reproduced that binding. Because the assertion shares the Run method with the
+other label cases, JIT resolution can fail before the first label case reports.
+The test assertion now passes an explicit char array, binding only `Split(Char[])`.
+The assertion and expected shadow/tone values are otherwise unchanged. Label tests
+remain 11/11 PASS locally; emitted calls were checked before and after the fix.
+
+The auditor now compiles with `-nostdlib` and explicit KSP Managed references for
+mscorlib, System, System.Core and the existing KSP/Unity assemblies. Missing game
+references stop the install instead of silently using the system API. The report
+header is v2. No production Source change or production DLL replacement is needed.
+
+For this failed installation, exit KSP, fast-forward the same branch and run
+`python3 Tools/aeris53_r_nd_01_02_audit.py retry`. Retry requires a matching existing
+auditor hash, a current failed runtime report and unchanged production DLL/source.
+It compiles first, preserves the old auditor directory/manifest under
+`~/.cache/AERIS/nd0102-audit-retired/failed-<timestamp>/`, installs the replacement,
+and restores the previous auditor if replacement fails. Original reports remain
+under Logs; the new manifest's time boundary excludes them from the new collection.
+Repeat the same ND/TRAFFIC OFF/ON and visual checks, then run collect. Real KSP
+runtime completion and final removal/ordinary acceptance are still pending.
+
+The complete corrected auditor was actually compiled with the new `-nostdlib`
+command against private Mono BCL files and stub KSP/Unity host assemblies; all
+twenty isolated cases passed in one process and the emitted Split calls were
+confirmed as Char[] only. This is not a build/run against the user's actual game
+assemblies. Private installer tests using a real compiler passed initial install,
+retry preservation, compilation-preparation failure, replacement rollback,
+changed-auditor rejection and nonfailed-report rejection; production bytes stayed
+identical. Independent review found no Critical/Important/Minor issue and reran
+labels 11/11 plus retry success/failure flow checks with a mocked compiler.

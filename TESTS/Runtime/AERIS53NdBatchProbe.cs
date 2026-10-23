@@ -23,7 +23,7 @@ public sealed class AERIS53NdBatchProbe : MonoBehaviour
             string root = Path.Combine(KSPUtil.ApplicationRootPath, "Logs", "AERIS53_ND0102");
             Directory.CreateDirectory(root);
             report = Path.Combine(root, DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff") + "-" + Guid.NewGuid().ToString("N") + ".txt");
-            File.WriteAllText(report, "AERIS53 ND-01/02 TEMPORARY AUDIT v1\nUTC=" + DateTime.UtcNow.ToString("o") + "\n");
+            File.WriteAllText(report, "AERIS53 ND-01/02 TEMPORARY AUDIT v2\nUTC=" + DateTime.UtcNow.ToString("o") + "\n");
             Line("FAULT_SCOPE=renamed private traffic scheduler and GUI boundary fixtures; no live injection");
             foreach (string name in AERIS53NdTestHost.TrafficCases.Names)
             {
