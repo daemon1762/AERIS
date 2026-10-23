@@ -28,17 +28,17 @@ finding text. LAND-R2 remains frozen; NEW_NAV stays gated; R-PRELOAD-01 stays re
 
 ## Steps
 
-- [ ] Add retained C# fixtures extracted from real ND/FDI methods. Traffic tests
+- [x] Add retained C# fixtures extracted from real ND/FDI methods. Traffic tests
   use the real scheduler/generation/traffic pipeline with only game-host/logger
   boundaries. Reproduce clear/off, invalid input, viewport exit, dispose, profile
   change, missing runtime, stale queued commit and subsequent healthy resumption.
-- [ ] Add label boundary tests for constructor counts after warmup, long-to-short
+- [x] Add label boundary tests for constructor counts after warmup, long-to-short
   recovery, independent source styles, resize invalidation, unchanged source style,
   font/ellipsis parity, GUI-color restoration including exceptions and tiny rects.
   Run against baseline before changing production.
-- [ ] Apply each minimal production fix and keep separate issue commits. Verify
+- [x] Apply each minimal production fix and keep separate issue commits. Verify
   current findings and existing regressions, including ND auxiliary self-tests.
-- [ ] Prepare a separate temporary runtime auditor. Isolated controlled traffic
+- [x] Prepare a separate temporary runtime auditor. Isolated controlled traffic
   and GUI scenarios must never inject threats or alter live settings/controls.
   Live inspection reads the actual instance; audit output identifies the DLL and
   bounds its claims. Ordinary label appearance still requires user observation.

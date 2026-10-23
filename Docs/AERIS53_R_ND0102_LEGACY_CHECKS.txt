@@ -1,0 +1,31 @@
+Tools/selftest_v01800_cp2_nd_auxiliary.py
+BASELINE and CANDIDATE identical failures:
+FAIL: track-vector contract: Math.Min(60.0
+FAIL: track-vector contract: range * 0.38 / speed
+
+Tools/selftest_v01800_cp35_gate1_presentation_cadence_responsive_ui_candidate1.py
+BASELINE and CANDIDATE identical failures:
+FAIL: old forced recovery full-render increment removed
+FAIL: suppressed forced-recovery demand is observable without rendering
+FAIL: FRONT compatibility loss requests a scheduled BACK refresh
+FAIL: only initial FRONT attempt bypasses cadence
+FAIL: range-aware cadence present: BackRefresh5To20KmSeconds = 0.20f
+FAIL: range-aware cadence present: BackRefresh40KmSeconds = 0.25f
+FAIL: range-aware cadence present: BackRefresh80KmSeconds = 0.33f
+FAIL: range-aware cadence present: BackRefresh160KmSeconds = 0.50f
+FAIL: every BACK attempt arms the next explicit cadence deadline
+FAIL: no executable GUI.matrix temporal terrain warp
+FAIL: automatic word wrapping is disabled in AERIS main window and ND UI
+FAIL: explicit button/control width follows window: if(GUILayout.Button(reloadLabel,responsiveButtonStyle,GUILayout.Width(ReadableButtonWidt
+FAIL: explicit button/control width follows window: if(!takeoff.Armed){if(GUILayout.Button("ARM AUTO TAKEOFF",GUILayout.Width(ReadableButton
+FAIL: explicit button/control width follows window: else if(takeoff.Phase==AutoTakeoffPhase.Armed){if(GUILayout.Button("EXECUTE TAKEOFF",GUI
+FAIL: explicit button/control width follows window: else if(GUILayout.Button("ABORT / TRANSFER",GUILayout.Width(ReadableButtonWidth("ABORT /
+FAIL: explicit button/control width follows window: if(GUILayout.Button(direction.DisplayName+"  "+direction.HeadingDeg.ToString("000.0")+"°
+FAIL: explicit button/control width follows window: bool clicked=GUILayout.Button(label,GUI.skin.button,GUILayout.Width(ReadableButtonWidth(
+FAIL: explicit button/control width follows window: bool SmallButton(string label){ return GUILayout.Button(label,GUILayout.Width(ReadableBu
+FAIL: explicit button/control width follows window: bool ActionButton(string label){ return GUILayout.Button(label,GUILayout.Width(ReadableB
+FAIL: explicit button/control width follows window: void PlannedModeButton(string label){ bool old=GUI.enabled;try{GUI.enabled=false;GUILayo
+FAIL: frozen supply/authority boundary byte-identical: Terrain/AERISTerrainTileContracts.cs
+FAIL: frozen supply/authority boundary byte-identical: Terrain/AERISTerrainGpuTileRasterizer.cs
+FAIL: source/build UI checkpoint updated
+FAIL: AVC identity updated
