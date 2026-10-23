@@ -420,6 +420,16 @@ namespace AERISFlightControl.Performance
                 navigationTraffic.Submit(snapshot);
         }
 
+        internal void ClearNavigationTraffic()
+        {
+            // Invalidate queued/running/completed traffic work before clearing its
+            // publications, so a later commit cannot revive an intentionally cleared alert.
+            scheduler.CancelKey(AERISRuntimeLane.GeneralCompute,
+                AERISNavigationTrafficPipeline.JobKey);
+            AERISPreparedTrafficFrameApi.Clear();
+            AERISTrafficAlertApi.Clear();
+        }
+
         internal void RecordNavigationDisplayEvent(bool repaint, double milliseconds,
             long positiveGcAllocationBytes)
         {

@@ -141,7 +141,7 @@ namespace AERISFlightControl.UI
             capturedDatabaseRevision = -1L;
             capturedSelectionRevision = -1L;
             AERISPreparedNavigationFrameApi.Clear();
-            AERISPreparedTrafficFrameApi.Clear();
+            ClearTrafficSnapshot();
             trailSamples.Clear();
             trafficCaptureScratch.Clear();
             previewRunwayStableId = string.Empty;
@@ -165,7 +165,7 @@ namespace AERISFlightControl.UI
             cachedLandingObservation = null;
             cachedLandingDirection = null;
             AERISPreparedNavigationFrameApi.Clear();
-            AERISPreparedTrafficFrameApi.Clear();
+            ClearTrafficSnapshot();
             trailSamples.Clear();
             trafficCaptureScratch.Clear();
             previewRunwayStableId = string.Empty;
@@ -619,12 +619,23 @@ namespace AERISFlightControl.UI
                 trailSamples.RemoveRange(0, trailSamples.Count - 900);
         }
 
+        void ClearTrafficSnapshot()
+        {
+            if (core != null && core.Performance != null)
+                core.Performance.ClearNavigationTraffic();
+            else
+            {
+                AERISPreparedTrafficFrameApi.Clear();
+                AERISTrafficAlertApi.Clear();
+            }
+        }
+
         void CaptureTrafficSnapshot(Vessel vessel)
         {
             if (vessel == null || vessel.mainBody == null || core.Performance == null ||
                 !settings.NavigationDisplayTrafficEnabled)
             {
-                AERISPreparedTrafficFrameApi.Clear();
+                ClearTrafficSnapshot();
                 trafficCaptureScratch.Clear();
                 return;
             }
@@ -2533,7 +2544,7 @@ namespace AERISFlightControl.UI
             trailVesselPersistentId = 0u;
             trailBodyName = string.Empty;
             nextTrailSampleRealtime = 0f;
-            AERISPreparedTrafficFrameApi.Clear();
+            ClearTrafficSnapshot();
             nextTrafficCaptureRealtime = 0f;
         }
 
