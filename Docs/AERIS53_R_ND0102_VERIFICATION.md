@@ -108,11 +108,15 @@ The actual flight-side observer reads settings, the warning and live label cache
 it never calls production clear/publish/draw or writes a setting/control.
 
 Live observation requires TRAFFIC OFF held for at least a second, ON again, ND
-OFF held for at least a second, ND active again, and a warmed FDI style cache.
-It checks no sampled alert while OFF, cache count at most four and no retained
+OFF held for at least a second, ND active again, and initialized FDI styles while
+FDI is enabled. It checks no sampled alert while OFF, cache count at most four and no retained
 measurement text. This is not a live seeded-threat test: seeded threat and pending
 commit checks remain isolated. It is not a native allocation benchmark. The user
 must judge actual text appearance, resizing and ordinary flight behavior.
+The fitting cache may be empty between GUI events: EnsureStyles can switch from
+the resized panel scale back to gauge scale, clearing it legitimately. The auditor
+accepts that state; object reuse after warmup is proved by the isolated tests,
+not inferred from a positive live cache count.
 
 With KSP fully exited, run `Tools/aeris53_r_nd_01_02_build_install.sh`. It enforces
 the branch/production-file scope, refuses an existing uncollected sidecar, runs
@@ -149,4 +153,7 @@ The actual probe Update was tested against a private reflected host: delayed
 traffic-alert revival, ND-alert revival and ND-viewport reactivation are all
 detected after the initial successful OFF sample. The previous guarded observer
 missed all three; the fixed observer detects all three. This is a host-boundary
-test, not a second live KSP claim.
+test, not a second live KSP claim. A fourth host-boundary case confirms complete
+OFF/ON observation succeeds with a valid zero-entry cache between GUI events;
+initialized styles are checked separately. Final collector checks were repeated
+against the corresponding report schema and retain their five-case PASS result.

@@ -86,7 +86,7 @@ def collect():
     content = report.read_text()
     print(content, end='')
     required = ['ISOLATED_RESULT=20/20 PASS\n', 'TRAFFIC_OFF_ALERT_ABSENT=True\n',
-                'ND_OFF_ALERT_ABSENT=True\n', 'TRAFFIC_ON_AGAIN=True; ND_ON_AGAIN=True; LABEL_CACHE_WARM=True\n',
+                'ND_OFF_ALERT_ABSENT=True\n', 'TRAFFIC_ON_AGAIN=True; ND_ON_AGAIN=True; LABEL_STYLES_READY=True\n',
                 'LIVE_RESULT=PASS\n', 'LIVE_DLL_SHA256='+manifest['production_sha256']+'\n']
     if any(s not in content for s in required) or 'AUDIT_ERROR=' in content:
         raise SystemExit('INCONCLUSIVE/FAIL: incomplete live/isolated audit; auditor retained')

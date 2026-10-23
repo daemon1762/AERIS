@@ -14,7 +14,7 @@ public sealed class AERIS53NdBatchProbe : MonoBehaviour
     const BindingFlags Statics = BindingFlags.Static | BindingFlags.NonPublic;
     string report;
     float nextCheck, trafficOffSince = -1f, ndOffSince = -1f;
-    bool trafficOffObserved, trafficOnAgain, ndOffObserved, ndOnAgain, warmLabels, finished;
+    bool trafficOffObserved, trafficOnAgain, ndOffObserved, ndOnAgain, labelStylesReady, finished;
 
     void Awake()
     {
@@ -95,9 +95,14 @@ public sealed class AERIS53NdBatchProbe : MonoBehaviour
             string heldText = (string)content.GetType().GetProperty("text").GetValue(content, null);
             if (cache.Count > 4 || !string.IsNullOrEmpty(heldText))
                 throw new Exception("live label cache/content invariant failed");
-            if (cache.Count > 0) warmLabels = true;
-            if (!trafficOffObserved || !trafficOnAgain || !ndOffObserved || !ndOnAgain || !warmLabels) return;
-            Line("TRAFFIC_ON_AGAIN=True; ND_ON_AGAIN=True; LABEL_CACHE_WARM=True");
+            // EnsureStyles may clear the fitting cache again when switching from
+            // the resized FDI panel to the gauge scale at the end of a GUI event.
+            // An empty cache between events is valid; do not mistake it for no UI.
+            if (Read(instrument, "labelStyle") != null &&
+                Read(settings, "FlightInstrumentDisplayMode").ToString() != "Off")
+                labelStylesReady = true;
+            if (!trafficOffObserved || !trafficOnAgain || !ndOffObserved || !ndOnAgain || !labelStylesReady) return;
+            Line("TRAFFIC_ON_AGAIN=True; ND_ON_AGAIN=True; LABEL_STYLES_READY=True");
             Line("LABEL_CACHE_COUNT=" + cache.Count + "; FITTING_CONTENT_EMPTY=True");
             Line("LIVE_AERIS_ASSEMBLY=" + hostType.Assembly.Location);
             using (var sha = SHA256.Create())
