@@ -110,8 +110,8 @@ claim is made from this run.
    Confirm ordinary flight and FDR/CVR/ZIP again without the sidecar before closing.
 
 The runtime audit and DLL retirement subsequently passed, as reported below.
-The final ordinary run without the auditor remains **pending**. Neither item is
-formally closed until that final run is confirmed.
+The final ordinary run without the auditor was subsequently confirmed by the
+user, as recorded below. R-REC-03 and R-REC-04 are closed for this repair scope.
 
 ## Independent review
 
@@ -174,5 +174,18 @@ With KSP fully exited, fetch/fast-forward this branch. No production rebuild is
 needed for the removal-only update: the installed production DLL is unchanged,
 and the successful collector already removed the sidecar from GameData. Confirm
 that `GameData/AERIS53RecorderBatchAudit` remains absent, then start KSP and check
-ordinary controls/flight and FDR/CVR/ZIP creation. Confirmation of that run is
-still required before closing R-REC-03 and R-REC-04.
+ordinary controls/flight and FDR/CVR/ZIP creation. The result of that final check
+is recorded below.
+
+## Final ordinary acceptance — 2026-10-24 JST
+
+The user pasted successful fast-forward installation of the removal-only update
+`bfc1eb11ec5a68653df05729356f9b4e9c189421`, including the `監査なし構成 OK`
+result of checking that the auditor directory was absent. After the requested
+ordinary flight and FDR/CVR/ZIP check, the user reported `問題ない 次に進もう`.
+This is user-reported acceptance; no additional raw flight files were supplied.
+
+R-REC-03 and R-REC-04 are **CLOSED** for the agreed fixes. The temporary runtime
+auditor and its installer/collector have been removed, permanent regressions
+remain, and the ordinary build helper no longer reinstalls an auditor. No further
+production rebuild is required for this acceptance-record update.
