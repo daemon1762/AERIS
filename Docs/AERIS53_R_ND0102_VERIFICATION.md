@@ -99,7 +99,7 @@ changed to manufacture a green result. This batch does not change their unrelate
 terrain/UI/version expectations. The ordinary build helper retains the existing
 fourteen current drivers and adds the two executable ND/FDI regression drivers.
 
-## Temporary runtime auditor
+## Temporary runtime auditor (historical candidate procedure)
 
 `AERIS53NdBatchAudit.dll` is a separate sidecar. Actual scheduler/pipeline/generation
 copies and extracted host/GUI fixtures are renamed into private namespaces. No
@@ -138,8 +138,9 @@ identity mismatch, explicit audit error and source mismatch; production bytes st
 
 After accepted live evidence, remove the temporary runtime source and installer/
 collector plus helper invocation, keep ordinary tests/evidence, and verify normal
-behavior once more without the sidecar. Runtime audit, retirement and final
-ordinary acceptance remain **PENDING**. Neither repair is formally closed yet.
+behavior once more without the sidecar. Runtime audit and DLL retirement have
+subsequently passed, as reported below. Final ordinary acceptance remains
+**PENDING**. Neither repair is formally closed yet.
 
 ## Independent review
 
@@ -187,8 +188,8 @@ It compiles first, preserves the old auditor directory/manifest under
 `~/.cache/AERIS/nd0102-audit-retired/failed-<timestamp>/`, installs the replacement,
 and restores the previous auditor if replacement fails. Original reports remain
 under Logs; the new manifest's time boundary excludes them from the new collection.
-Repeat the same ND/TRAFFIC OFF/ON and visual checks, then run collect. Real KSP
-runtime completion and final removal/ordinary acceptance are still pending.
+Repeat the same ND/TRAFFIC OFF/ON and visual checks, then run collect. That retry's
+runtime outcome is recorded below; ordinary acceptance after removal is pending.
 
 The complete corrected auditor was actually compiled with the new `-nostdlib`
 command against private Mono BCL files and stub KSP/Unity host assemblies; all
@@ -199,3 +200,63 @@ retry preservation, compilation-preparation failure, replacement rollback,
 changed-auditor rejection and nonfailed-report rejection; production bytes stayed
 identical. Independent review found no Critical/Important/Minor issue and reran
 labels 11/11 plus retry success/failure flow checks with a mocked compiler.
+
+## Reported v2 live audit and retirement — 2026-10-24 JST
+
+The user supplied the complete collector output for the v2 report beginning at
+`2026-10-23T16:55:42.4528722Z` (2026-10-24 01:55:42 JST). The preceding v2 run
+had completed twenty isolated cases but only observed TRAFFIC OFF. Before the
+rerun, the instructions were clarified to specify `SYSTEM > OPTIONS > DISPLAY >
+ND display > OFF`, followed by ALWAYS, separately from Terrain mode OFF. The cause
+of the earlier missed observation was not independently established. That incomplete
+run was not accepted or retired. The subsequent report contains:
+
+| Observation | Reported result |
+| --- | --- |
+| Isolated traffic checks | 9/9 PASS |
+| Isolated label checks | 11/11 PASS |
+| Combined isolated checks | 20/20 PASS |
+| TRAFFIC OFF warning absent | True |
+| ND OFF warning absent | True |
+| TRAFFIC and ND active again | True |
+| FDI label styles ready | True |
+| Live fitting-cache entries | 2 |
+| Measurement content empty | True |
+| Live observation | LIVE_RESULT=PASS |
+| Collection | ND_BATCH_AUDIT_RESULT=PASS |
+
+Loaded/installed production DLL SHA256 reported by the matching-identity collector:
+`753a9a4366a8f349db24d9c1d5ec81432e064c344406100b5d29e2e1074e9876`.
+
+The collector reported moving the sidecar directory outside GameData to
+`/home/de-mon/.cache/AERIS/nd0102-audit-retired/1792774683188003780`.
+It retains the installation manifest, runtime report and collection record there;
+earlier failed/incomplete reports remain under the ordinary audit Logs path.
+These are user-reported collector results: raw manifest/report files were not
+separately uploaded for independent inspection. Isolated threat injection was
+private; live observation did not inject threats or measure whole-engine GC.
+
+## Auditor removal and final ordinary verification
+
+Following the successful collection, temporary runtime source
+`TESTS/Runtime/AERIS53NdBatchProbe.cs` and installer/collector
+`Tools/aeris53_r_nd_01_02_audit.py` were removed. The ordinary build helper no
+longer references or installs the auditor. Both permanent ND/FDI regressions and
+the existing fourteen current regression drivers remain, along with this evidence
+and the historical-check failure record. Production Source is byte-identical to
+the audited candidate `99b8e2f6993c0495ae93582741b6049caec557a1`.
+
+After removal, all sixteen current regression drivers were rerun: **230/230 PASS**,
+plus the same-process startup repetition. Source comparison, helper/Python syntax
+and whitespace checks pass. Independent removal review found no Critical,
+Important or Minor issue and checked deletion completeness, retained driver
+dependencies and evidence wording. That review checked driver syntax rather than
+rerunning the compiled cases; the coordinator ran the complete current suite.
+The previously recorded historical-check failures remain unchanged and separate.
+
+With KSP fully exited, fast-forward this branch and confirm that
+`GameData/AERIS53NdBatchAudit` remains absent. No production rebuild is needed for
+the removal-only update: the production DLL is unchanged and the collector already
+retired the sidecar. Check ordinary flight, label appearance/resizing and the
+TRAFFIC/ND display switches again without the auditor. User confirmation of that
+ordinary run is still required before closing R-ND-01 and R-ND-02.

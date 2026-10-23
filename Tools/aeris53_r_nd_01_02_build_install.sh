@@ -23,8 +23,6 @@ test -f "$KSP/KSP_x64_Data/Managed/Assembly-CSharp.dll" || {
   exit 11
 }
 
-test ! -e "$KSP/GameData/AERIS53NdBatchAudit" || { echo "STOP: existing auditor must be collected first"; exit 14; }
-
 echo "=== R-ND-01/02 AND EXISTING REGRESSION ==="
 python3 TESTS/aeris53_r_nd_01_traffic_clear.py
 python3 TESTS/aeris53_r_nd_02_label_objects.py
@@ -70,5 +68,3 @@ echo "DLL_SHA256=$(sha256sum "$DLL" | awk '{print $1}')"
 echo "INSTALLED_SHA256=$(sha256sum "${TARGETS[0]}" | awk '{print $1}')"
 echo "BACKUP=$BACKUP_DIR"
 git status -sb
-
-python3 Tools/aeris53_r_nd_01_02_audit.py
