@@ -68,14 +68,15 @@ Baseline 10/15; R-REC-03 alone 13/15; both fixes 15/15. The same 15 cases also
 pass sequentially in a single process, as required by the temporary runtime DLL.
 Existing thirteen regression drivers retain 195/195 PASS; combined 210/210 PASS.
 Shell/Python syntax and `git diff --check` pass. The sidecar compiles with stubbed
-Unity/KSP host boundaries. Actual desktop SDK Release/probe build is pending.
+Unity/KSP host boundaries. At candidate publication, actual desktop SDK
+Release/probe build was pending; the reported live results are recorded below.
 
 Collector checks were exercised on private artificial reports/archives: healthy
 collection retires only the audit directory and preserves raw/ZIP evidence;
 incomplete report, wrong identity, malformed CSV and unexpected disabled file
 retain the auditor and reject acceptance. This does not substitute for live data.
 
-## Temporary auditor and desktop steps
+## Temporary auditor and desktop steps (historical candidate procedure)
 
 The separate `AERIS53RecorderBatchAudit.dll` has no production hooks or logger
 sink. On the KSP main thread it runs the memory-only fixture, then reads the live
@@ -108,8 +109,9 @@ claim is made from this run.
    from the ordinary build helper; retain startup/older regressions and this record.
    Confirm ordinary flight and FDR/CVR/ZIP again without the sidecar before closing.
 
-Runtime evidence, auditor retirement and the final ordinary run are **pending**.
-Do not mark either item formally closed based on the isolated tests alone.
+The runtime audit and DLL retirement subsequently passed, as reported below.
+The final ordinary run without the auditor remains **pending**. Neither item is
+formally closed until that final run is confirmed.
 
 ## Independent review
 
@@ -119,3 +121,58 @@ ran all fifteen individual startup cases and the same-process repetition, shell
 syntax and diff checks. No blocking finding was reported. One report-I/O wording
 clarification was applied above. The reviewer did not claim desktop SDK/runtime
 verification.
+
+## Reported desktop audit and retirement — 2026-10-24 JST
+
+The user pasted the collector output from the desktop. Its runtime report began
+at `2026-10-23T15:46:05.4249200Z` (2026-10-24 00:46:05 JST). This is reported
+collector evidence; the underlying report/manifest/ZIP were not separately
+uploaded for independent inspection here.
+
+| Observation | Reported result |
+| --- | --- |
+| Isolated startup cases | 15/15 PASS |
+| High-rate diagnostics disabled | True |
+| All ten unused diagnostic channels absent | True |
+| Core CVR/FDR channels available | True |
+| FDR sample growth during observation | 85 |
+| Session identity stable | True |
+| Live observation | LIVE_CORE_OBSERVED |
+| Archived main FDR | 102 columns, 428 data rows |
+| Archived CVR | 5 columns, 643 data rows |
+| Collector result | BATCH_AUDIT_RESULT=PASS |
+
+Live production DLL SHA256:
+`fd06c1afc27599de222403968dcacda41c1174d931a8c6c1c08268b96c487608`.
+
+Flight archive SHA256:
+`437c69a65a3047417ef669165bca0353ac4b51d3f3ce350a64d6d85819e01dd0`.
+
+The collector reported moving the auditor directory outside GameData to
+`/home/de-mon/.cache/AERIS/rec0304-audit-retired/1792770765470891241`.
+The original report/manifest and collection record remain there; the production
+flight archive remains in the ordinary FlightData root. This demonstrates reported
+healthy core recording and isolated admission-policy checks, not live disk fault
+injection, control-quality measurements or exhaustive unrelated flight behavior.
+
+## Auditor removal and final ordinary verification
+
+After that audit, the temporary `TESTS/Runtime/AERIS53RecorderBatchProbe.cs` and
+`Tools/aeris53_r_rec_03_04_audit.py` were removed. The ordinary build/install helper
+no longer invokes or reinstalls an auditor. The startup regression and older
+regressions remain. Production Source is byte-identical to the audited candidate
+`57120a6d87b56f420ae1c598c51a15b433d072f4`; no production hooks were present to remove.
+
+After removal, all fourteen retained regression drivers were rerun: 210/210 PASS,
+plus the same-process startup repetition. Shell/Python syntax, whitespace and
+production-source comparison pass. Independent removal review found no Critical,
+Important or Minor issue; it checked deletion completeness, standalone retained
+tests, helper flow and the reported-evidence boundary. That reviewer did not rerun
+the compiled fixtures; the coordinator did. No new desktop SDK build is claimed.
+
+With KSP fully exited, fetch/fast-forward this branch. No production rebuild is
+needed for the removal-only update: the installed production DLL is unchanged,
+and the successful collector already removed the sidecar from GameData. Confirm
+that `GameData/AERIS53RecorderBatchAudit` remains absent, then start KSP and check
+ordinary controls/flight and FDR/CVR/ZIP creation. Confirmation of that run is
+still required before closing R-REC-03 and R-REC-04.

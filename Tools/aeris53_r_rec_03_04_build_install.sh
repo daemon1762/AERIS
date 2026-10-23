@@ -64,5 +64,3 @@ echo "DLL_SHA256=$(sha256sum "$DLL" | awk '{print $1}')"
 echo "INSTALLED_SHA256=$(sha256sum "${TARGETS[0]}" | awk '{print $1}')"
 echo "BACKUP=$BACKUP_DIR"
 git status -sb
-
-python3 Tools/aeris53_r_rec_03_04_audit.py
